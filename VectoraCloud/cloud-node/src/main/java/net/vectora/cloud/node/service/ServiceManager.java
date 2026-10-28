@@ -131,6 +131,8 @@ public final class ServiceManager implements AutoCloseable {
     private final Object lock = new Object();
     private final Map<ServiceId, Service> services = new LinkedHashMap<>();
     private final Map<String, ServiceRecord> blocked = new LinkedHashMap<>();
+    /** Folders of dynamic services whose deletion is queued or running; never handed out meanwhile. */
+    private final Set<Path> cleaning = new HashSet<>();
     private final List<ServiceListener> listeners = new CopyOnWriteArrayList<>();
     private final ExecutorService events;
     private final ExecutorService workers;
@@ -400,6 +402,9 @@ public final class ServiceManager implements AutoCloseable {
                 throw new ServiceException(id + " is already " + existing.state.name().toLowerCase(java.util.Locale.ROOT));
             }
             Path workDirectory = ServicePlanner.workDirectory(home, group, task.mode(), id.value(), index);
+            if (cleaning.contains(workDirectory)) {
+                throw new ServiceException("the folder of " + id + " is still being deleted");
+            }
             String relative = relative(workDirectory);
             if (blocked.containsKey(relative)) {
                 throw new ServiceException("the folder of " + id + " is still used by an earlier process (pid "
@@ -435,8 +440,14 @@ public final class ServiceManager implements AutoCloseable {
     }
 
     private int freeIndex(String group, TaskMode mode) throws ServiceException {
+        Path dynamicRoot = home.resolve(ServicePlanner.DYNAMIC_DIR);
         for (int index = 1; index <= ServiceIds.MAX_INDEX; index++) {
-            Service service = services.get(ServiceIds.of(group, index));
+            ServiceId id = ServiceIds.of(group, index);
+            if (mode == TaskMode.DYNAMIC && cleaning.contains(dynamicRoot.resolve(id.value()))) {
+                // The folder of an earlier service with this id is still being deleted.
+                continue;
+            }
+            Service service = services.get(id);
             if (service == null || (mode == TaskMode.STATIC && !service.isActive())) {
                 return index;
             }
@@ -703,19 +714,32 @@ public final class ServiceManager implements AutoCloseable {
     }
 
     private void restart(ServiceId id, String task, int index) {
-        Service service;
-        synchronized (lock) {
-            service = services.get(id);
-            if (service == null || closing || service.state != ServiceState.CRASHED || service.pendingRestart == null) {
-                return;
-            }
-            // The entry stays, so the attempt count carries over. A dynamic service still gets a
-            // fresh folder: launch() deletes the old one before rendering the template.
-            service.pendingRestart = null;
-        }
         ConfigSnapshot snapshot = config.get();
         try {
-            Service next = prepare(snapshot, task, OptionalInt.of(index));
+            Service next;
+            synchronized (lock) {
+                Service service = services.get(id);
+                if (service == null || closing || service.state != ServiceState.CRASHED
+                        || service.pendingRestart == null) {
+                    return;
+                }
+                // The entry stays, so the attempt count carries over. A dynamic service still gets a
+                // fresh folder: launch() deletes the old one before rendering the template.
+                // Clearing the pending restart and preparing happen under one lock, so a stop()
+                // in between either cancels the restart or finds the service PREPARED.
+                service.pendingRestart = null;
+                try {
+                    next = prepare(snapshot, task, OptionalInt.of(index));
+                } catch (ServiceException e) {
+                    // It stays CRASHED; a dynamic one is forgotten like after its last attempt.
+                    if (!service.spec.isStatic()) {
+                        services.remove(id);
+                        cleanupLater(service.spec.workDirectory());
+                    }
+                    persist();
+                    throw e;
+                }
+            }
             launch(next, snapshot);
         } catch (ServiceException e) {
             LOG.log(System.Logger.Level.ERROR, "Restart of {0} failed: {1}", id, e.getMessage());
@@ -913,8 +937,26 @@ public final class ServiceManager implements AutoCloseable {
         return home.relativize(workDirectory).toString().replace('\\', '/');
     }
 
+    /** Queues the deletion of a dynamic folder; the folder is not handed out until it is gone. Needs the lock. */
     private void cleanupLater(Path folder) {
-        workers.execute(() -> deleteDynamicFolder(folder));
+        if (!cleaning.add(folder)) {
+            return;
+        }
+        Runnable delete = () -> {
+            try {
+                deleteDynamicFolder(folder);
+            } finally {
+                synchronized (lock) {
+                    cleaning.remove(folder);
+                }
+            }
+        };
+        try {
+            workers.execute(delete);
+        } catch (java.util.concurrent.RejectedExecutionException e) {
+            // Closed already; delete on this thread instead of leaving the folder behind.
+            delete.run();
+        }
     }
 
     private void cleanDynamicFolders(Set<Path> keep) {

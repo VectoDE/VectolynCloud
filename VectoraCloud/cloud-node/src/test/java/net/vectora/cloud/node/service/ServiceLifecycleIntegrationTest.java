@@ -231,6 +231,39 @@ class ServiceLifecycleIntegrationTest {
     }
 
     @Test
+    void aDynamicIdIsNotReusedWhileItsOldFolderIsStillBeingDeleted() throws Exception {
+        try (TestNetwork net = TestNetwork.create(dir)) {
+            net.group("minigame", ServerKind.MINIGAME, ServerSoftware.PAPER, TestNetwork.process("normal", "20s", null));
+            net.task("minigame", "minigame", TaskMode.DYNAMIC, 1, 3);
+            try (ServiceManager manager = net.manager().build()) {
+                manager.startConfigured();
+                ServiceId first = new ServiceId("minigame-1");
+                TestNetwork.await("minigame-1 running", WAIT, () -> state(manager, first) == ServiceState.RUNNING);
+                Path oldDir = net.home.resolve("temp/services/minigame-1");
+                ServiceInfo next;
+                // On Windows an open FileInputStream blocks the deletion, so the cleanup of the old
+                // folder is still retrying when the next service is started.
+                java.io.InputStream held = new java.io.FileInputStream(oldDir.resolve("server.properties").toFile());
+                try {
+                    manager.stop(first);
+                    next = manager.start("minigame");
+                    ServiceId id = next.id();
+                    TestNetwork.await(id + " running", WAIT, () -> state(manager, id) == ServiceState.RUNNING);
+                } finally {
+                    held.close();
+                }
+                Path newDir = next.workDirectory();
+                if (!newDir.equals(oldDir)) {
+                    TestNetwork.await("old folder deleted", WAIT, () -> !Files.exists(oldDir));
+                }
+                assertEquals(ServiceState.RUNNING, state(manager, next.id()));
+                assertTrue(Files.isRegularFile(newDir.resolve("world/level.dat")), "the new folder was damaged");
+                assertTrue(Files.isRegularFile(newDir.resolve("server.properties")), "the new folder was damaged");
+            }
+        }
+    }
+
+    @Test
     void aServerThatIgnoresStopIsEndedAfterTheTimeout() throws Exception {
         try (TestNetwork net = TestNetwork.create(dir)) {
             net.group("lobby", ServerKind.LOBBY, ServerSoftware.PAPER, TestNetwork.process("ignore-stop", "1s", null));
