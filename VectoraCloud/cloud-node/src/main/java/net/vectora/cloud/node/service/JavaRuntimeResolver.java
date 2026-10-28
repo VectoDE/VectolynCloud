@@ -37,6 +37,9 @@ public interface JavaRuntimeResolver {
         return new JavaRuntimeResolver() {
             @Override
             public JavaRuntime resolve(String group, GroupConfig config) throws IOException {
+                // Same runtime for every group; the arguments are only checked.
+                Objects.requireNonNull(group, "group");
+                Objects.requireNonNull(config, "config");
                 return JavaRuntime.current();
             }
         };
