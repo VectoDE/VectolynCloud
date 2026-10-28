@@ -142,4 +142,39 @@ class MessageCodecTest {
         payload.accept(out);
         return new Frame(Protocol.PROTOCOL_VERSION, messageId, requestId, out.toByteArray());
     }
+
+    @Test
+    void streamDecodingGivesTheSameMessagesAsTheFramePath() {
+        for (Message message : SampleMessages.typical()) {
+            Envelope envelope = new Envelope(message.requiresRequestId() ? 7 : Envelope.NO_REQUEST, message);
+            byte[] bytes = codec.encode(envelope);
+            Envelope viaFrame = codec.fromFrame(FrameCodec.decode(bytes));
+            Envelope viaStream = codec.tryDecode(ByteBuffer.wrap(bytes)).orElseThrow();
+            assertEquals(viaFrame, viaStream, message.getClass().getSimpleName());
+            assertEquals(envelope, codec.decode(bytes));
+        }
+    }
+
+    @Test
+    void handshakeLimitAppliesToMessages() {
+        Envelope big = Envelope.of(new ChannelMessage(new ChannelName("big"), new byte[Protocol.MAX_HANDSHAKE_FRAME_SIZE]));
+        byte[] bytes = codec.encode(big);
+        assertThrows(ProtocolException.class,
+                () -> codec.tryDecode(ByteBuffer.wrap(bytes), Protocol.MAX_HANDSHAKE_FRAME_SIZE));
+        assertEquals(Optional.of(big), codec.tryDecode(ByteBuffer.wrap(bytes)));
+        // Every handshake message of the largest size fits the small limit.
+        for (Message message : SampleMessages.atTheLimits()) {
+            if (message instanceof Hello || message instanceof AuthResult || message instanceof Disconnect) {
+                assertTrue(codec.toFrame(Envelope.of(message)).bodySize() <= Protocol.MAX_HANDSHAKE_FRAME_SIZE);
+            }
+        }
+    }
+
+    @Test
+    void decodedPayloadDoesNotShareTheInputBytes() {
+        byte[] bytes = codec.encode(Envelope.of(new ChannelMessage(new ChannelName("c"), new byte[] {1, 2, 3})));
+        ChannelMessage message = (ChannelMessage) codec.tryDecode(ByteBuffer.wrap(bytes)).orElseThrow().message();
+        bytes[bytes.length - 1] = 42;
+        assertEquals(3, message.payload()[2]);
+    }
 }

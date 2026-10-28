@@ -4,7 +4,11 @@ import java.util.regex.Pattern;
 
 /**
  * Name of a messaging channel, for example {@code vectora.chat}. 1 to {@value #MAX_LENGTH}
- * characters from {@code [a-z0-9_.-]}.
+ * characters from {@code [a-z0-9_.-]}, starting with a letter, digit or {@code _}.
+ *
+ * <p>The first character rules out {@code .}, {@code ..} and names that look like a hidden file
+ * or a command line option ({@code -x}), in case a channel name ever ends up in a path or an
+ * argument list.
  *
  * @param value the name
  */
@@ -13,7 +17,7 @@ public record ChannelName(String value) {
     /** Largest length in characters. */
     public static final int MAX_LENGTH = 64;
 
-    private static final Pattern PATTERN = Pattern.compile("[a-z0-9_.-]+");
+    private static final Pattern PATTERN = Pattern.compile("[a-z0-9_][a-z0-9_.-]*");
 
     /**
      * Creates a channel name.

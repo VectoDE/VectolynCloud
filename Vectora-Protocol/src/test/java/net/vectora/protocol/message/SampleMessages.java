@@ -40,6 +40,16 @@ final class SampleMessages {
                 new Response(Response.Status.OK, new byte[] {5, 6}));
     }
 
+    /** A valid host of exactly {@link MessageLimits#MAX_HOST_LENGTH} characters: labels of 63. */
+    static String longestHost() {
+        String label = "h".repeat(63);
+        String host = label + "." + label + "." + label + "." + "h".repeat(61);
+        if (host.length() != MessageLimits.MAX_HOST_LENGTH) {
+            throw new AssertionError(host.length());
+        }
+        return host;
+    }
+
     /** Messages with every length field at its upper limit and numbers at their extremes. */
     static List<Message> atTheLimits() {
         String longName = "N".repeat(MessageLimits.MAX_PLAYER_NAME_LENGTH);
@@ -54,7 +64,7 @@ final class SampleMessages {
                 new ServiceStatus(longId, MessageLimits.MAX_PLAYERS, MessageLimits.MAX_PLAYERS,
                         MessageLimits.MAX_TPS, MessageLimits.MAX_MSPT, Long.MAX_VALUE, Long.MAX_VALUE),
                 new ServiceStatus(longId, 0, 0, 0.0, 0.0, 0L, 0L),
-                new RegisterServer(longId, "h".repeat(MessageLimits.MAX_HOST_LENGTH), 65_535,
+                new RegisterServer(longId, longestHost(), 65_535,
                         new GroupName("g".repeat(GroupName.MAX_LENGTH)), true),
                 new RegisterServer(longId, "::1", 1, new GroupName("g"), false),
                 new PlayerJoin(PLAYER, longName, longId, true),

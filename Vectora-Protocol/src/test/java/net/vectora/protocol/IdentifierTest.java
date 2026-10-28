@@ -92,6 +92,17 @@ class IdentifierTest {
         assertThrows(IllegalArgumentException.class, () -> new ChannelName("Vectora"));
         assertThrows(IllegalArgumentException.class, () -> new ChannelName(""));
         assertThrows(IllegalArgumentException.class, () -> new ChannelName("a b"));
+        // No dot names and nothing that looks like a hidden file or an option.
+        assertThrows(IllegalArgumentException.class, () -> new ChannelName("."));
+        assertThrows(IllegalArgumentException.class, () -> new ChannelName(".."));
+        assertThrows(IllegalArgumentException.class, () -> new ChannelName(".hidden"));
+        assertThrows(IllegalArgumentException.class, () -> new ChannelName("-x"));
+        assertThrows(IllegalArgumentException.class, () -> new ChannelName("--help"));
+        // Counter-check: the same characters further inside or at the end stay valid.
+        assertEquals("_internal", new ChannelName("_internal").value());
+        assertEquals("a.", new ChannelName("a.").value());
+        assertEquals("a-", new ChannelName("a-").value());
+        assertEquals("0..x", new ChannelName("0..x").value());
     }
 
     @Test

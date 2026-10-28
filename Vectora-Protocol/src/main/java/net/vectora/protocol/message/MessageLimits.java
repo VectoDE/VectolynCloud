@@ -27,8 +27,17 @@ public final class MessageLimits {
     /** Printable ASCII; no space at the start or end (Floodgate may keep inner spaces). */
     private static final Pattern PLAYER_NAME = Pattern.compile("[\\x21-\\x7E](?:[\\x20-\\x7E]*[\\x21-\\x7E])?");
 
-    /** Host name or IPv4/IPv6 literal without brackets. */
-    private static final Pattern HOST = Pattern.compile("[A-Za-z0-9._:-]+");
+    /** One DNS label: 1 to 63 letters, digits or hyphens, no hyphen at either end. */
+    private static final String LABEL = "[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?";
+
+    /**
+     * Host name (labels separated by single dots, no trailing dot; this covers IPv4 literals)
+     * or an IPv6 literal without brackets and zone id: two to eight groups of up to four hex
+     * digits separated by colons, optionally ending in an IPv4 address, at most 45 characters.
+     */
+    private static final Pattern HOST = Pattern.compile(
+            LABEL + "(?:\\." + LABEL + ")*"
+            + "|(?=.{2,45}$)(?:[0-9A-Fa-f]{0,4}:){2,7}(?:[0-9A-Fa-f]{0,4}|[0-9]{1,3}(?:\\.[0-9]{1,3}){3})");
 
     private MessageLimits() {
     }
