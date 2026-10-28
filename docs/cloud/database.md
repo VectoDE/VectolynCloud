@@ -72,10 +72,10 @@ H2 is dual-licensed under MPL 2.0 and EPL 1.0. MPL 2.0 allows combination with G
 The application user (`database.user`, normally `luckperms`) gets exactly these rights, on its own database only:
 
 ```
-SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, DROP, REFERENCES
+SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX
 ```
 
-These are the rights LuckPerms needs to create and migrate its tables. No `GRANT OPTION`, no global rights, no `FILE`, no `PROCESS`, no access to `mysql.*`. Before granting, the cloud revokes everything else, so a user that had more rights from an older setup loses them. The hand-written `Server-Network/Database/template/init.sql` grants the same list; a test compares both.
+LuckPerms creates its tables and indexes on the first start (`CREATE`, `INDEX`) and afterwards only reads and writes rows. `ALTER` stays for schema migrations of later LuckPerms versions and the Vectora plugin. `DROP` is left out on purpose: it would let the user drop the whole database or `TRUNCATE` tables, and LuckPerms never drops a table. `REFERENCES` is left out because the schema has no foreign keys. No `GRANT OPTION`, no global rights, no `FILE`, no `PROCESS`, no access to `mysql.*`. Before granting, the cloud revokes everything else, so a user that had more rights from an older setup loses them. The hand-written `Server-Network/Database/template/init.sql` grants the same list; a test compares both.
 
 In managed and Docker mode the application user may log in from `127.0.0.1` (managed) or `%` (Docker, because the connection comes through the Docker network). Root keeps only the local hosts `localhost`, `127.0.0.1`, `::1` (plus `%` in Docker, where the container network requires it).
 

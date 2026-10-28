@@ -89,7 +89,7 @@ class ManagedMariaDbIT {
                     "SELECT COUNT(*) FROM mysql.user WHERE User = 'root' AND Host NOT IN ('localhost', '127.0.0.1', '::1')"));
             assertEquals(List.of(), root.query("SHOW DATABASES LIKE 'test'"));
             String grants = root.query("SHOW GRANTS FOR 'luckperms'@'127.0.0.1'").toString();
-            assertTrue(grants.contains("GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, REFERENCES, INDEX, ALTER ON `luckperms`.*"),
+            assertTrue(grants.contains("GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, INDEX, ALTER ON `luckperms`.*"),
                     grants);
             assertFalse(grants.contains("ALL PRIVILEGES"), grants);
         }
@@ -102,6 +102,8 @@ class ManagedMariaDbIT {
             app.execute("INSERT INTO `luckperms`.`probe` VALUES (1)");
             assertEquals(List.of(List.of("1")), app.query("SELECT id FROM `luckperms`.`probe`"));
             assertThrows(SQLException.class, () -> app.execute("CREATE DATABASE other"));
+            assertThrows(SQLException.class, () -> app.execute("DROP TABLE `luckperms`.`probe`"));
+            assertThrows(SQLException.class, () -> app.execute("TRUNCATE TABLE `luckperms`.`probe`"));
             assertThrows(SQLException.class, () -> app.query("SELECT * FROM mysql.user"));
             assertThrows(SQLException.class, () -> app.execute("CREATE USER 'x'@'%' IDENTIFIED BY 'xxxxxxxxxxxxxxxxx'"));
         }

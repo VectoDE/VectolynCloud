@@ -78,7 +78,7 @@ class BootstrapStatementsTest {
                 "CREATE USER IF NOT EXISTS 'luckperms'@'127.0.0.1' IDENTIFIED BY 'AppPasswordForTests45678'",
                 "ALTER USER 'luckperms'@'127.0.0.1' IDENTIFIED BY 'AppPasswordForTests45678'",
                 "REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'luckperms'@'127.0.0.1'",
-                "GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, DROP, REFERENCES ON `luckperms`.* TO"
+                "GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX ON `luckperms`.* TO"
                         + " 'luckperms'@'127.0.0.1'",
                 "FLUSH PRIVILEGES"), statements);
         String all = String.join("\n", statements);

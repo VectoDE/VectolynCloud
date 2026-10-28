@@ -22,12 +22,15 @@ import net.vectora.cloud.config.secret.Secret;
 public final class BootstrapStatements {
 
     /**
-     * Rights of the application user on its own database, nothing else. LuckPerms creates and
-     * migrates its tables itself, so it needs the schema rights too; it does not need
-     * {@code GRANT OPTION}, routines, triggers, events, locks or any global right.
+     * Rights of the application user on its own database, nothing else. LuckPerms creates its
+     * tables and indexes itself ({@code CREATE}, {@code INDEX}) and works with plain row statements.
+     * {@code ALTER} stays for schema migrations of later LuckPerms versions and the Vectora plugin.
+     * Left out on purpose: {@code DROP} (would allow {@code DROP DATABASE} and {@code TRUNCATE} on
+     * the own data; LuckPerms never drops a table), {@code REFERENCES} (no foreign keys),
+     * {@code GRANT OPTION}, routines, triggers, events, locks and every global right.
      */
     public static final List<String> APPLICATION_PRIVILEGES =
-            List.of("SELECT", "INSERT", "UPDATE", "DELETE", "CREATE", "ALTER", "INDEX", "DROP", "REFERENCES");
+            List.of("SELECT", "INSERT", "UPDATE", "DELETE", "CREATE", "ALTER", "INDEX");
 
     /** Host parts of {@code root} that stay: local connections only. */
     public static final Set<String> LOCAL_ROOT_HOSTS = Set.of("localhost", "127.0.0.1", "::1");
