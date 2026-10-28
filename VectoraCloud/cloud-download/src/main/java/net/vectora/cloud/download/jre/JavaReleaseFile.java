@@ -126,7 +126,13 @@ public record JavaReleaseFile(Map<String, String> values) {
         if (!m.matches()) {
             return OptionalInt.empty();
         }
-        int feature = Integer.parseInt(m.group(2) != null ? m.group(2) : m.group(3));
+        int feature;
+        try {
+            feature = Integer.parseInt(m.group(2) != null ? m.group(2) : m.group(3));
+        } catch (NumberFormatException e) {
+            // Cannot happen with at most two digits; kept so the method never throws.
+            return OptionalInt.empty();
+        }
         return feature < 1 ? OptionalInt.empty() : OptionalInt.of(feature);
     }
 }
