@@ -19,6 +19,8 @@ import net.vectora.cloud.console.command.CommandLineParser;
  *   <li>The end of stdin is {@link ReadResult.EndOfInput}. The console then stops reading, but the
  *       cloud keeps running: under systemd or in Docker without {@code -i} stdin is empty from
  *       the start. Stop the cloud with a signal (SIGTERM, {@code docker stop}) instead.</li>
+ *   <li>Secrets cannot be masked. Whatever feeds stdin (a terminal with the output redirected, a
+ *       panel) may show them; {@link #hidesSecrets()} is false, so the question API warns.</li>
  *   <li>Lines longer than {@value CommandLineParser#MAX_LENGTH} characters are cut off there; the
  *       rest of the line is read and dropped, so the command parser reports the length.</li>
  * </ul>
@@ -88,6 +90,11 @@ public final class PlainTerminal implements ConsoleTerminal {
 
     @Override
     public boolean interactive() {
+        return false;
+    }
+
+    @Override
+    public boolean hidesSecrets() {
         return false;
     }
 

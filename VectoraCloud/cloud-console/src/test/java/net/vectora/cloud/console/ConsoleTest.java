@@ -67,6 +67,7 @@ class ConsoleTest {
         assertTrue(out.toString(StandardCharsets.UTF_8).contains("longer than 4096"));
         assertFalse(plain.ansi());
         assertFalse(plain.interactive());
+        assertFalse(plain.hidesSecrets(), "stdin cannot be masked");
 
         ByteArrayOutputStream asked = new ByteArrayOutputStream();
         PlainTerminal questions = new PlainTerminal(new ByteArrayInputStream("x\n".getBytes(StandardCharsets.UTF_8)),

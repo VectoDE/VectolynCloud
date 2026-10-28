@@ -29,6 +29,7 @@ Both native providers call native code. Java 24 and newer warn about that unless
 - History in `<home>/state/console.history`, at most 500 lines, restricted to the owner. Not stored: answers to questions, secrets, lines of commands marked sensitive, lines that start with a space. If the file is a symbolic link, the history stays in memory.
 - History expansion (`!!`) is off, so a `!` in a value stays as typed.
 - Ctrl+C and Ctrl+D run `shutdown`, exactly as if it was typed.
+- Secrets are masked with `ffm` and `jni`. JLine's `dumb` terminal cannot switch off the echo of the operating system, so a secret typed there stays visible; the question warns first (see below).
 
 ### Without a terminal (plain)
 
@@ -36,6 +37,7 @@ Both native providers call native code. Java 24 and newer warn about that unless
 - Lines longer than 4096 characters are refused.
 - The end of stdin only stops reading; the cloud keeps running. Under systemd and in Docker without `-i`, stdin is empty from the start. Stop the cloud with a signal (SIGTERM, `docker stop`), which the node handles.
 - Ctrl+C does not reach the console here. To cancel a question, type `!cancel`.
+- Secrets cannot be masked. Whatever feeds stdin may show them, for example a terminal whose output is piped (`java -jar VectoraCloud.jar | tee cloud.log`) or a panel. The question warns first.
 
 ## Command line syntax
 
@@ -150,9 +152,10 @@ Secret password = ask.ask(Question.secret(Text.of("Database password", "Datenban
 | `number(min, max)` | A whole number in the range. |
 | `yesNo` | `y`, `yes`, `j`, `ja`, `n`, `no`, `nein`, any case. |
 | `choice` | The number in the list or the option key, any case. |
-| `secret` | Any text, typed masked (`*`), returned as `Secret`. Never stored in the history, never shown, not even as default. |
+| `secret` | Any text, typed masked (`*`) where the terminal can hide input, returned as `Secret`. Never stored in the history, never shown, not even as default. |
 | `custom(parser, display)` | Whatever the parser accepts; it throws `InvalidAnswerException` otherwise. |
 
+- On a console that cannot hide input (`ConsoleTerminal.hidesSecrets()` is false: JLine's `dumb` terminal, plain mode) a secret question first warns: "This console cannot hide what you type. To keep the value off the screen, type !cancel and put it into secrets/vectora.env instead."
 - `defaultValue` is taken on Enter. A secret default shows "Enter keeps the current value".
 - `validate` adds checks; a check returns null or a `Text` that says what is expected. Error messages never repeat the answer.
 - `help` prints a line before the question.

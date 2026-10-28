@@ -15,6 +15,7 @@ import org.jline.reader.LineReaderBuilder;
 import org.jline.reader.UserInterruptException;
 import org.jline.reader.impl.history.DefaultHistory;
 import org.jline.terminal.Terminal;
+import org.jline.terminal.impl.DumbTerminal;
 import org.jline.utils.InfoCmp;
 
 /**
@@ -24,7 +25,9 @@ import org.jline.utils.InfoCmp;
  *   <li>History lives in a file in the cloud home (see {@link TerminalFactory}). Only
  *       {@link LineKind#COMMAND} lines that pass the history filter are stored; answers to
  *       questions and secrets never are, and lines starting with a space neither.</li>
- *   <li>Secrets are typed masked ({@code *}).</li>
+ *   <li>Secrets are typed masked ({@code *}) on a native terminal ({@code ffm}, {@code jni}). JLine's
+ *       dumb terminal cannot switch off the echo of the operating system, so there the typed
+ *       secret stays visible; {@link #hidesSecrets()} says so and the question API warns.</li>
  *   <li>{@link #print} uses {@link LineReader#printAbove}, so log lines appear above the line being
  *       typed.</li>
  *   <li>History expansion ({@code !!}, {@code !prefix}) is off, so a {@code !} in a value stays as typed.</li>
@@ -124,6 +127,11 @@ public final class JLineTerminal implements ConsoleTerminal {
     @Override
     public boolean interactive() {
         return true;
+    }
+
+    @Override
+    public boolean hidesSecrets() {
+        return !(terminal instanceof DumbTerminal);
     }
 
     @Override

@@ -32,6 +32,13 @@ public interface ConsoleTerminal extends AutoCloseable {
     /** Whether there is a real terminal (line editing, Ctrl+C reaches the console). */
     boolean interactive();
 
+    /**
+     * Whether a {@link LineKind#SECRET} line is read without showing what is typed. Only a terminal
+     * that can switch off the echo can promise that; JLine's dumb terminal and the plain console
+     * cannot, so the question API warns before a secret there.
+     */
+    boolean hidesSecrets();
+
     /** Clears the screen if {@link #ansi()}; does nothing otherwise. */
     void clearScreen();
 

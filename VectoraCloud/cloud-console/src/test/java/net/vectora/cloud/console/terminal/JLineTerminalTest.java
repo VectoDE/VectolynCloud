@@ -92,6 +92,18 @@ class JLineTerminalTest {
         assertFalse(file.contains("leading-space"), "a leading space keeps a line out of the history");
         assertTrue(file.contains("config get proxy.port"), "ordinary commands are");
         assertFalse(out.toString(StandardCharsets.UTF_8).contains(secret), "the secret is not echoed: " + out);
+        assertFalse(jline.hidesSecrets(), "a dumb terminal cannot switch off the echo of the system");
+        assertTrue(out.toString(StandardCharsets.UTF_8).contains("cannot hide what you type"), "so the question warns: " + out);
+    }
+
+    @Test
+    void aTerminalWithItsOwnLineDisciplineHidesSecrets() throws Exception {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        org.jline.terminal.Terminal external = org.jline.terminal.TerminalBuilder.builder().system(false)
+                .streams(new ByteArrayInputStream(new byte[0]), out).type("xterm").build();
+        JLineTerminal jline = new JLineTerminal(external, line -> List.of(), null, line -> true, "test");
+        assertTrue(jline.hidesSecrets(), "JLine masks the input itself here, as on a native terminal");
+        jline.close();
     }
 
     @Test

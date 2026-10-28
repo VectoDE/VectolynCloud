@@ -119,6 +119,24 @@ class PrompterTest {
     }
 
     @Test
+    void secretOnATerminalThatCannotHideInputIsAskedAfterAWarning() throws Exception {
+        terminal.type("first-secret-value");
+        prompter.ask(Question.secret(Text.of("Token", "Token")));
+        assertFalse(terminal.output().contains("cannot hide"), "a native terminal masks, no warning");
+
+        terminal.hidingSecrets(false).type("second-secret-value");
+        assertEquals("second-secret-value", prompter.ask(Question.secret(Text.of("Token", "Token"))).reveal());
+        assertTrue(terminal.output().contains("This console cannot hide what you type. To keep the value off the screen, "
+                + "type !cancel and put it into secrets/vectora.env instead."), terminal.output());
+        assertFalse(terminal.output().contains("second-secret"));
+
+        terminal.clearOutput();
+        terminal.type("plain answer");
+        prompter.ask(Question.text(Text.of("Name", "Name")));
+        assertFalse(terminal.output().contains("cannot hide"), "only secrets get the warning");
+    }
+
+    @Test
     void cancelWithKeysWordOrEndOfInput() {
         Question<String> name = Question.text(Text.of("Name", "Name"));
         terminal.interrupt();

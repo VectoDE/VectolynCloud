@@ -84,6 +84,6 @@ Der Einrichtungsassistent und andere Assistenten stellen Fragen über dieselbe K
 - Enter übernimmt den Standardwert in eckigen Klammern.
 - Ja/Nein versteht `j`, `ja`, `y`, `yes`, `n`, `nein`, `no`.
 - Bei einer Auswahl gilt die Nummer oder der Name in Klammern.
-- Secrets werden maskiert eingegeben, nie angezeigt und nie in der History gespeichert. „Enter behält den aktuellen Wert“ lässt ein bestehendes Secret unverändert.
+- Secrets werden maskiert eingegeben, nie angezeigt und nie in der History gespeichert. Maskieren kann nur ein natives Terminal (`ffm`, `jni`). Im `dumb`-Terminal von JLine und ohne Terminal bleibt die Eingabe sichtbar; die Frage warnt vorher und empfiehlt, mit `!cancel` abzubrechen und den Wert in `secrets/vectora.env` einzutragen. „Enter behält den aktuellen Wert“ lässt ein bestehendes Secret unverändert.
 - Eine ungültige Antwort zeigt, was erwartet wird, und fragt erneut, höchstens zehnmal hintereinander.
 - Strg+C, Strg+D, das Ende von stdin oder `!cancel` brechen ab.

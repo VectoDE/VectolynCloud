@@ -20,6 +20,7 @@ public final class FakeTerminal implements ConsoleTerminal {
     private final List<Read> reads = new ArrayList<>();
     private final boolean ansi;
     private final boolean interactive;
+    private boolean hidesSecrets = true;
     private int clears;
     private boolean closed;
 
@@ -72,6 +73,17 @@ public final class FakeTerminal implements ConsoleTerminal {
     @Override
     public boolean interactive() {
         return interactive;
+    }
+
+    @Override
+    public boolean hidesSecrets() {
+        return hidesSecrets;
+    }
+
+    /** Whether the fake claims to hide secrets (default true, as a native terminal). */
+    public FakeTerminal hidingSecrets(boolean value) {
+        hidesSecrets = value;
+        return this;
     }
 
     @Override

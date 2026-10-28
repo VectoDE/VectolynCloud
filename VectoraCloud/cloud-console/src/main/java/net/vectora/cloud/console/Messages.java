@@ -68,6 +68,10 @@ public final class Messages {
     public static final Text YES_NO_DEFAULT_NO = Text.of("[y/N]", "[j/N]");
     /** Question: yes/no suffix without default. */
     public static final Text YES_NO = Text.of("[y/n]", "[j/n]");
+    /** Question: warning before a secret on a console that cannot hide the input. */
+    public static final Text SECRET_VISIBLE = Text.of(
+            "This console cannot hide what you type. To keep the value off the screen, type %1$s and put it into secrets/vectora.env instead.",
+            "Diese Konsole kann die Eingabe nicht verbergen. Damit der Wert nicht auf dem Bildschirm steht, mit %1$s abbrechen und ihn stattdessen in secrets/vectora.env eintragen.");
     /** Question: secret with default. */
     public static final Text SECRET_KEEP = Text.of("[Enter keeps the current value]", "[Enter behält den aktuellen Wert]");
     /** Question: choice prompt. */

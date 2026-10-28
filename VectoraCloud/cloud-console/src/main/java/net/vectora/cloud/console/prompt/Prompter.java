@@ -21,7 +21,9 @@ import net.vectora.cloud.console.terminal.ReadResult;
  *       {@link PromptCancelledException}. Without a terminal Ctrl+C does not reach the console, so
  *       {@value #CANCEL_WORD} is the way to cancel there.</li>
  *   <li>Answers are read as {@link ConsoleTerminal.LineKind#ANSWER}, secrets as
- *       {@link ConsoleTerminal.LineKind#SECRET} (masked); neither is ever stored in the history.</li>
+ *       {@link ConsoleTerminal.LineKind#SECRET} (masked); neither is ever stored in the history.
+ *       If the terminal cannot hide the input ({@link ConsoleTerminal#hidesSecrets()}), a warning
+ *       comes before the secret question.</li>
  *   <li>A line break or control character in an answer is rejected.</li>
  * </ul>
  */
@@ -60,6 +62,9 @@ public final class Prompter {
         }
         String prompt = render(question, language);
         boolean secret = question.kind() == Question.Kind.SECRET;
+        if (secret && !terminal.hidesSecrets()) {
+            out.warning(Messages.SECRET_VISIBLE, CANCEL_WORD);
+        }
         ConsoleTerminal.LineKind kind = secret ? ConsoleTerminal.LineKind.SECRET : ConsoleTerminal.LineKind.ANSWER;
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             ReadResult result = terminal.readLine(prompt, kind);
