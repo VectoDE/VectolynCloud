@@ -1,0 +1,91 @@
+name: Managed MariaDB
+
+# Integration test of the managed database mode (cloud-database, see docs/cloud/database.md):
+# downloads the real MariaDB server, initialises a throwaway data directory in a temp folder,
+# starts it on a free port, sets up root, the application database and user, checks bind address,
+# rights and shutdown, then deletes everything. It never touches Server-Network/*/runtime/.
+#
+# Weekly, on demand, and on pull requests that change the database module or this workflow.
+# The normal CI excludes these tests (tag "mariadb"), because they need internet access and take
+# a few minutes.
+
+on:
+  schedule:
+    - cron: '29 4 * * 1'
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'VectoraCloud/cloud-database/**'
+      - 'VectoraCloud/cloud-download/src/main/java/net/vectora/cloud/download/provider/MariaDbProvider.java'
+      - '.github/workflows/managed-mariadb.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: managed-mariadb-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  managed-mariadb:
+    name: Managed MariaDB (${{ matrix.os }}, Java ${{ matrix.java }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        java: ['21', '25']
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The MariaDB Linux archive links against libaio and libncurses. Ubuntu 24.04 ships libaio
+      # only as libaio.so.1t64, so the old soname gets a symlink. See docs/cloud/database.md.
+      - name: Install MariaDB runtime libraries (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libaio1t64 libncurses6
+          if [ ! -e /usr/lib/x86_64-linux-gnu/libaio.so.1 ]; then
+            sudo ln -s /usr/lib/x86_64-linux-gnu/libaio.so.1t64 /usr/lib/x86_64-linux-gnu/libaio.so.1
+          fi
+
+      # Both JDKs are installed; the last one becomes JAVA_HOME and runs Gradle.
+      - name: Set up JDK 21 and 25
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: |
+            21
+            25
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      - name: Run the managed MariaDB test
+        shell: bash
+        env:
+          TEST_JAVA: ${{ matrix.java }}
+        run: >-
+          bash ./gradlew :VectoraCloud:cloud-database:mariadbTest --no-daemon --stacktrace
+          -PtestJava="$TEST_JAVA"
+          -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64,JAVA_HOME_25_X64
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: managed-mariadb-${{ matrix.os }}-java${{ matrix.java }}
+          path: VectoraCloud/cloud-database/build/reports/tests/
+          retention-days: 7

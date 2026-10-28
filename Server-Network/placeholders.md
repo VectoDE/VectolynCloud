@@ -4,7 +4,7 @@ Every `Server-Network/<Server>/template/` holds configuration with placeholders 
 
 ## Only wanted servers are rendered
 
-In the VectoraCloud setup each of the seven servers (and later each minigame group) is marked as wanted or not. The cloud renders and starts only wanted servers. A server that is not wanted is never created, and neither the proxy nor the lobby references it. That is why nothing in a template points to another server by a fixed name or port: the proxy's server list, its `try` order and its forced hosts are placeholders that the cloud fills from the wanted servers only, and every backend gets its port from `VECTORA_SERVER_PORT`.
+In the VectoraCloud setup each of the seven servers and each minigame group is marked as wanted or not; the legacy proxy and its 1.8.8 groups only run when `legacy-proxy.enabled` is set. The cloud renders and starts only wanted servers. A server that is not wanted is never created, and neither the proxy nor the lobby references it. That is why nothing in a template points to another server by a fixed name or port: the proxy's server list, its `try` order and its forced hosts are placeholders that the cloud fills from the wanted servers only, and every backend gets its port from `VECTORA_SERVER_PORT`.
 
 ## Allowed values
 
@@ -22,6 +22,7 @@ These come from `Server-Network/secrets/vectora.env` (gitignored, see `secrets/v
 | `VECTORA_DB_NAME` | LuckPerms database name. | LuckPerms configs, `init.sql` |
 | `VECTORA_DB_USER` | LuckPerms database user. | LuckPerms configs, `init.sql` |
 | `VECTORA_DB_PASSWORD` | Password of `VECTORA_DB_USER`. | LuckPerms configs, `init.sql` |
+| `VECTORA_DB_STORAGE_METHOD` | LuckPerms `storage-method`: `mariadb` (managed, Docker or external MariaDB), `mysql` (external MySQL) or `h2` (database mode `h2`: embedded files per server, for tests). Set by the cloud from the database mode, not from `vectora.env`. | LuckPerms configs |
 | `VECTORA_DB_ROOT_PASSWORD` | Password of the MariaDB `root` user. Only for administration and the cloud's database setup (for example running `init.sql`). | no server template |
 | `VECTORA_MANAGEMENT_SECRET` | `management-server-secret` in `server.properties` (40 alphanumeric characters). The management server itself stays disabled. | `server.properties` (Paper, Mod) |
 | `VECTORA_FLOODGATE_KEY_B64` | Floodgate AES key (16 raw bytes), base64 encoded. Not a text placeholder: the cloud decodes it into `key.pem`. | generated `plugins/floodgate/key.pem` (Proxy, Paper), `config/floodgate/key.pem` (Mod) |
@@ -36,6 +37,7 @@ The cloud assigns these for each service it creates.
 | `VECTORA_SERVER_HOST` | Address the backend binds to. Keep it on loopback or a private network: backends run in offline mode behind Velocity. | `127.0.0.1` |
 | `VECTORA_XMS` | Initial Java heap, e.g. `512M`. | Lobby 256M, Survival 512M, Mod 512M, Creative 256M, End 256M, Proxy 256M |
 | `VECTORA_XMX` | Maximum Java heap. | Lobby 768M, Survival 1536M, Mod 1536M, Creative 512M, End 512M, Proxy 512M |
+| `VECTORA_DB_POOL_SIZE` | `maximum-pool-size` of the LuckPerms connection pool. The cloud sizes it centrally so that all pools together stay below the database's `max_connections` (150 for the managed server, 20 of them kept free): 4 while that fits, smaller when many services run, never below 2 (`minimum-idle`). | 4 |
 
 ## Proxy values
 
@@ -48,9 +50,33 @@ The cloud assigns these for each service it creates.
 | `VECTORA_PROXY_TRY` | Comma-separated, quoted server names tried on login, e.g. `"lobby"`. | `"lobby"` |
 | `VECTORA_PROXY_FORCED_HOSTS` | One TOML line per forced host: `"host" = [ "server" ]`. May be empty. | `"creative.deine-domain.de" = [ "creative" ]` (placeholder domain) |
 
+## Legacy proxy values
+
+The [legacy proxy](Legacy-Proxy/template/README.md) uses the proxy values above (`VECTORA_PROXY_BIND`, `VECTORA_PROXY_SERVERS`, `VECTORA_PROXY_TRY`, `VECTORA_PROXY_FORCED_HOSTS`), filled with the 1.8.8 groups only, plus its own port:
+
+| Placeholder | Meaning | Current local value |
+|---|---|---|
+| `VECTORA_LEGACY_PROXY_PORT` | Java port of the legacy proxy (also its query port), `legacy-proxy.port` in `cloud.yml`. | `25564` |
+
+Its `forwarding.secret` holds a secret of its own, never `VECTORA_FORWARDING_SECRET`: in `bungeeguard` mode Velocity sends it to the backends in plain text.
+
+## Templates
+
+| Folder | Software | Platform for the cloud |
+|---|---|---|
+| `Proxy` | Velocity, modern forwarding | Velocity |
+| `Lobby-Server`, `Survival-Server`, `Creative-Server`, `End-Server` | Paper | Paper |
+| `Mod-Server` | Fabric | Fabric |
+| `Minigame-Server` | Paper, one template for every minigame group until stage 6 | Paper |
+| `Database` | MariaDB (manual start; the managed mode writes its own config) | none |
+| `Legacy-Proxy` | Velocity, `bungeeguard` forwarding, in front of the 1.8.8 groups | Velocity |
+| `Legacy-Server` | PandaSpigot 1.8.8, behind the legacy proxy | Paper |
+
+The new templates (`Minigame-Server`, `Legacy-Proxy`, `Legacy-Server`) have a `README.md` in English and a `README.de.md` in German. Markdown files are never copied into `runtime/`. `.gitignore` keeps every `Server-Network/*/runtime/` out of git, the new folders included.
+
 ## Files the cloud creates instead of copying
 
-- `Proxy/runtime/forwarding.secret` from `VECTORA_FORWARDING_SECRET`.
+- `Proxy/runtime/forwarding.secret` from `VECTORA_FORWARDING_SECRET`; `Legacy-Proxy/runtime/forwarding.secret` from the legacy proxy's own secret.
 - `key.pem` for Floodgate from `VECTORA_FLOODGATE_KEY_B64` (same file on the proxy and on every backend, including the Fabric Mod-Server).
 - `eula.txt` only after the operator accepted the Minecraft EULA in the setup assistant.
 - Server jars, plugin and mod jars, MariaDB binaries: downloaded and checksum-verified by the cloud, never stored in the repository.

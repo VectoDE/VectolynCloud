@@ -2,7 +2,9 @@
 
 MariaDB 11.8 for the network's rank data (LuckPerms). Portable Windows build, listens on 127.0.0.1:3307.
 
-`vectora-mariadb.ini` contains no paths: `start-vectora-database.cmd` passes `--basedir` and `--datadir` relative to its own folder, so the database starts wherever the repository lives. `max_connections` is 150; each LuckPerms instance uses a pool of at most 4 connections. `init.sql` creates the database and user on first setup.
+`vectora-mariadb.ini` contains no paths: `start-vectora-database.cmd` passes `--basedir` and `--datadir` relative to its own folder, so the database starts wherever the repository lives. `max_connections` is 150; each LuckPerms instance uses a pool of at most 4 connections. `init.sql` creates the database and user on first setup, with only the rights LuckPerms needs.
+
+These files serve the manual start until VectoraCloud takes over. In database mode `managed` the cloud writes `vectora-mariadb.ini` itself (same settings, always bound to 127.0.0.1), creates the data directory, sets the generated root password and runs the setup SQL on every start. Mode `docker` writes `compose.database.yml` into `runtime/` instead. Details: [docs/cloud/database.md](../../../docs/cloud/database.md).
 
 ## Placeholders
 
