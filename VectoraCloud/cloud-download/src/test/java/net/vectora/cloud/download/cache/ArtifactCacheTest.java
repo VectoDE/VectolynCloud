@@ -3,13 +3,17 @@ package net.vectora.cloud.download.cache;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import net.vectora.cloud.download.ChecksumMismatchException;
 import net.vectora.cloud.download.hash.Checksum;
 import net.vectora.cloud.download.hash.HashAlgorithm;
@@ -96,6 +100,39 @@ class ArtifactCacheTest {
         // The same name can come up again (temp file names are reused); it must count as orphaned then.
         Files.write(part, CONTENT);
         assertEquals(1, cache.removeStalePartFiles());
+    }
+
+    @Test
+    void cleanupNeverDeletesAPartFileThatIsBeingCreated() throws Exception {
+        ArtifactCache cache = new ArtifactCache(home.resolve("cache"));
+        Files.createDirectories(cache.directory());
+        AtomicBoolean running = new AtomicBoolean(true);
+        AtomicReference<Throwable> cleanupError = new AtomicReference<>();
+        Thread cleaner = new Thread(() -> {
+            try {
+                while (running.get()) {
+                    new ArtifactCache(home.resolve("cache")).removeStalePartFiles();
+                }
+            } catch (IOException | RuntimeException e) {
+                cleanupError.set(e);
+            }
+        });
+        cleaner.start();
+        int lost = 0;
+        try {
+            for (int i = 0; i < 2000; i++) {
+                Path part = cache.newPartFile();
+                if (!Files.exists(part)) {
+                    lost++;
+                }
+                cache.discard(part);
+            }
+        } finally {
+            running.set(false);
+            cleaner.join();
+        }
+        assertNull(cleanupError.get());
+        assertEquals(0, lost, "a concurrent cleanup deleted a part file between its creation and its registration");
     }
 
     @Test

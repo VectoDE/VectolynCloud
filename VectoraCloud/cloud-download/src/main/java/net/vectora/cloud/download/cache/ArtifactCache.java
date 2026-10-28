@@ -46,6 +46,12 @@ public final class ArtifactCache {
     /** Part files of downloads that are running in this JVM, across all cache objects. */
     private static final Set<Path> ACTIVE_PARTS = ConcurrentHashMap.newKeySet();
 
+    /**
+     * Makes creating and registering a part file one step for the cleanup, so it never deletes a
+     * file that exists but is not registered yet.
+     */
+    private static final Object PARTS_LOCK = new Object();
+
     private final Path directory;
 
     /**
@@ -110,9 +116,11 @@ public final class ArtifactCache {
      */
     public Path newPartFile() throws IOException {
         Files.createDirectories(directory);
-        Path part = Files.createTempFile(directory, PART_PREFIX, PART_SUFFIX);
-        ACTIVE_PARTS.add(key(part));
-        return part;
+        synchronized (PARTS_LOCK) {
+            Path part = Files.createTempFile(directory, PART_PREFIX, PART_SUFFIX);
+            ACTIVE_PARTS.add(key(part));
+            return part;
+        }
     }
 
     /**
@@ -143,9 +151,11 @@ public final class ArtifactCache {
         int removed = 0;
         try (DirectoryStream<Path> parts = Files.newDirectoryStream(directory, PART_PREFIX + "*" + PART_SUFFIX)) {
             for (Path part : parts) {
-                if (!ACTIVE_PARTS.contains(key(part)) && Files.isRegularFile(part, LinkOption.NOFOLLOW_LINKS)
-                        && Files.deleteIfExists(part)) {
-                    removed++;
+                synchronized (PARTS_LOCK) {
+                    if (!ACTIVE_PARTS.contains(key(part)) && Files.isRegularFile(part, LinkOption.NOFOLLOW_LINKS)
+                            && Files.deleteIfExists(part)) {
+                        removed++;
+                    }
                 }
             }
         }
