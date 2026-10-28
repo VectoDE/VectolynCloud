@@ -75,3 +75,24 @@ gradlew.bat build      # Windows cmd / PowerShell
 ```
 
 Gradle starts on Java 17 or newer and compiles with a Java 25 toolchain, which it downloads if missing. The bytecode target is Java 21. The jars land in `Vectora-Lobby/build/libs/` and `Vectora-PortalBridge/build/libs/`. Details: [Java compatibility](https://github.com/VectoDE/Vectora-Network/blob/main/docs/java-compatibility.md).
+
+## Plugin reference
+
+Both plugins have no commands and no config you need to touch. This is what they do today. They are replaced by the Vectora plugin in stages 3 and 4.
+
+### VectoraLobby
+
+Install on the Lobby server.
+
+- On the first start it builds the sky-island lobby around `0, 100, 0` in the server's first world, then writes `built: true` to `plugins/VectoraLobby/config.yml`. Set it back to `false` to build the island again on the next start; existing blocks in that area are overwritten.
+- On every start it turns off the daylight and weather cycle in that world and sets the spawn point onto the platform.
+- Players are teleported to the spawn when they join. They take no damage and get no hunger.
+- Breaking and placing blocks is blocked unless the player has the permission `vectora.lobby.build`. The permission is not declared in `plugin.yml`, so only operators or players who get it from a permission plugin have it.
+
+### VectoraPortalBridge
+
+Install on Lobby, Survival and Creative.
+
+- When a player enters an End portal, the plugin cancels the local teleport and sends a `Connect` message on the `BungeeCord` plugin channel, which moves the player to the backend named `end`.
+- This needs `bungee-plugin-message-channel = true` in `velocity.toml` (set in the proxy template) and a server called `end` in its `[servers]` list.
+- If the message cannot be sent, the player sees "The End server is currently unavailable." and the server log gets a warning.

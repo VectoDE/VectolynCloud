@@ -29,7 +29,7 @@ Once fixed, we publish a GitHub Security Advisory and credit you, unless you pre
 
 ## Supported versions
 
-There is no release yet. Until 1.0, only the latest release and the `main` branch receive security fixes.
+Until 1.0, only the latest release and the `main` branch receive security fixes.
 
 | Version | Supported |
 |---|---|
@@ -51,11 +51,11 @@ Release artifacts come with `SHA256SUMS`, a Sigstore bundle per file (`*.sigstor
 
 ```sh
 sha256sum -c SHA256SUMS
-cosign verify-blob Vectora-Paper.jar \
-  --bundle Vectora-Paper.jar.sigstore.json \
-  --certificate-identity-regexp '^https://github.com/VectoDE/Vectora-Network/.github/workflows/release.yml@refs/tags/v' \
+cosign verify-blob VectoraLobby-0.1.0.jar \
+  --bundle VectoraLobby-0.1.0.jar.sigstore.json \
+  --certificate-identity-regexp '^https://github[.]com/VectoDE/Vectora-Network/[.]github/workflows/release[.]yml@refs/tags/v' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
-gh attestation verify Vectora-Paper.jar --repo VectoDE/Vectora-Network
+gh attestation verify VectoraLobby-0.1.0.jar --repo VectoDE/Vectora-Network
 ```
 
 ---
@@ -70,6 +70,6 @@ Hilfreich sind die betroffene Komponente, Version oder Commit, Schritte zum Nach
 
 Ein Mensch pflegt Vectora in seiner Freizeit. Deshalb sind das Zielwerte, keine Zusagen: erste Antwort innerhalb von 7 Tagen, Einschätzung innerhalb von 14 Tagen, Behebung so schnell, wie es die Schwere verlangt. Den Veröffentlichungstermin stimmen wir mit dir ab. Nach der Behebung erscheint ein GitHub Security Advisory, auf Wunsch mit Nennung deines Namens.
 
-Unterstützt werden `main` und das jeweils neueste Release. Ein Release gibt es noch nicht.
+Unterstützt werden `main` und das jeweils neueste Release.
 
 Fehler in Fremdsoftware (Paper, Velocity, Geyser usw.) bitte direkt beim jeweiligen Projekt melden. Teste nur gegen Server, die dir gehören oder für die du eine schriftliche Freigabe hast.

@@ -75,3 +75,24 @@ gradlew.bat build      # Windows cmd / PowerShell
 ```
 
 Gradle startet ab Java 17 und kompiliert mit einer Java-25-Toolchain, die es bei Bedarf herunterlädt. Das Bytecode-Ziel ist Java 21. Die Jars liegen danach in `Vectora-Lobby/build/libs/` und `Vectora-PortalBridge/build/libs/`. Details: [Java-Kompatibilität](https://github.com/VectoDE/Vectora-Network/blob/main/docs/java-compatibility.md).
+
+## Plugin-Referenz
+
+Beide Plugins haben keine Befehle und keine Einstellungen, die du anfassen musst. So verhalten sie sich heute. Ab Etappe 3 und 4 ersetzt sie das Vectora-Plugin.
+
+### VectoraLobby
+
+Gehört auf den Lobby-Server.
+
+- Beim ersten Start baut es die Himmelsinsel-Lobby um `0, 100, 0` in der ersten Welt des Servers und schreibt danach `built: true` in `plugins/VectoraLobby/config.yml`. Steht der Wert wieder auf `false`, baut es die Insel beim nächsten Start neu; vorhandene Blöcke in dem Bereich werden überschrieben.
+- Bei jedem Start schaltet es in dieser Welt Tageszeit- und Wetterwechsel ab und setzt den Spawn auf die Plattform.
+- Spieler werden beim Betreten zum Spawn teleportiert. Sie nehmen keinen Schaden und bekommen keinen Hunger.
+- Blöcke abbauen und setzen geht nur mit der Berechtigung `vectora.lobby.build`. Sie ist nicht in der `plugin.yml` eingetragen, also haben sie nur Operatoren oder Spieler, die sie über ein Rechte-Plugin bekommen.
+
+### VectoraPortalBridge
+
+Gehört auf Lobby, Survival und Creative.
+
+- Betritt ein Spieler ein End-Portal, bricht das Plugin den lokalen Teleport ab und schickt über den Plugin-Kanal `BungeeCord` eine `Connect`-Nachricht, die den Spieler auf den Backend-Server `end` verschiebt.
+- Dafür braucht die `velocity.toml` `bungee-plugin-message-channel = true` (im Proxy-Template gesetzt) und einen Server namens `end` in der Liste `[servers]`.
+- Lässt sich die Nachricht nicht senden, sieht der Spieler „The End server is currently unavailable.“ und im Server-Log steht eine Warnung.
