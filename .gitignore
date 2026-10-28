@@ -4,6 +4,11 @@
 # --- Server runtime (worlds, jars, logs, real secrets) -------------------------
 # Only Server-Network/<Server>/template/ is tracked. runtime/ is rendered from it.
 Server-Network/*/runtime/
+# Further static services (runtime-2, runtime-3, ...) and what the node writes at run time.
+Server-Network/*/runtime-*/
+Server-Network/temp/
+Server-Network/state/
+Server-Network/cache/
 
 # --- Secrets -------------------------------------------------------------------
 Server-Network/secrets/*

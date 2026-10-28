@@ -1,0 +1,16 @@
+{
+  "schema-version" : 1,
+  "node" : "node-1",
+  "services" : [ {
+    "id" : "lobby-1",
+    "group" : "lobby",
+    "task" : "lobby",
+    "index" : 1,
+    "mode" : "static",
+    "state" : "running",
+    "pid" : 4242,
+    "started-at" : 1700000000000,
+    "port" : 30001,
+    "work-directory" : "Lobby-Server/runtime"
+  } ]
+}

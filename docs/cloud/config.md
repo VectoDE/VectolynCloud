@@ -80,7 +80,18 @@ catalog:                     # plugins and mods from the download catalog
     kind: transitional       # plugin, mod or transitional
   - id: vectora-paper
     kind: plugin
+process:                     # optional, see docs/cloud/node.md; every key has a default
+  jvm-flags: [-XX:+UseG1GC]  # up to 64 flags, each -[A-Za-z0-9_.:+=/,@%-]{1,255}
+  stop-command: stop         # omit for the default: shutdown for Velocity, stop otherwise
+  stop-timeout: 60s          # 1s to 600s
+  restart:                   # if given, all four keys are required
+    on-crash: true
+    max-attempts: 5          # 1 to 1000 crashes in a row
+    backoff: 5s              # doubled per crash, at most max-backoff
+    max-backoff: 300s
 ```
+
+`process.jvm-flags` must not set what the node controls: `-Xms`, `-Xmx`, `-jar`, `-cp`/`-classpath`/`--class-path`, `-XX:Flags=`, `-XX:VMOptionsFile=`, and the version and help switches are rejected.
 
 `transitional` marks the third-party plugins the cloud installs until Vectora's own replacement is ready (LuckPerms, TAB, PlaceholderAPI, WorldEdit, WorldGuard, Chunky, spark, ProxyPortal). `mod` entries are only allowed with `fabric`, `plugin` entries only without it. `pandaspigot` only runs `1.8.8`.
 
@@ -157,6 +168,7 @@ Besides types and patterns, `ConfigValidator` checks the configuration as a whol
 - `docker-image` only and always with `mode: docker`.
 - An enabled API on a non-loopback address needs TLS.
 - `setup-complete: true` needs `eula-accepted: true`.
+- `process`: flag count, flag pattern and reserved flags, `stop-command` pattern, `stop-timeout` from 1 s to 600 s, `max-attempts` from 1 to 1000, `backoff` ≤ `max-backoff`.
 
 Not checked here: whether a template folder or a catalog id exists. The template and download modules check that when they use them.
 

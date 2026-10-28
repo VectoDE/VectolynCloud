@@ -19,7 +19,7 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * Unpacks the embedded libraries to {@code <home>/cache/libs} and checks each one against the
+ * Unpacks the embedded libraries to {@code <home>/cache/libs/<version>} and checks each one against the
  * SHA-256 in the {@link LibraryIndex}.
  *
  * <ul>
@@ -55,7 +55,7 @@ public final class LibraryExtractor {
      * Creates an extractor.
      *
      * @param source    where the embedded jars come from
-     * @param directory target directory, normally {@code <home>/cache/libs}
+     * @param directory target directory, normally {@code <home>/cache/libs/<version>}
      */
     public LibraryExtractor(Source source, Path directory) {
         this.source = source;

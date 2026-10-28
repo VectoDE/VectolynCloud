@@ -1,0 +1,1 @@
+{"schema-version":1,"node":"node-1","services":[{"id":"a-9999","group":"a","task":"a","index":9999,"mode":"dynamic","state":"crashed","pid":0,"started-at":0,"port":65535,"work-directory":"temp/services/a-9999"}]}
