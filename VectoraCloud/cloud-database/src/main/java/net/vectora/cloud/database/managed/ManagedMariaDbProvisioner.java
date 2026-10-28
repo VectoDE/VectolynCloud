@@ -49,7 +49,9 @@ import net.vectora.cloud.download.provider.TargetPlatform;
  *   <li>On the first start only: creates the data directory with {@code mariadb-install-db} and
  *       passes an {@code --init-file} that sets the generated root password and removes anonymous
  *       accounts and the {@code test} database before the server accepts its first connection.
- *       The file is readable by the owner only and deleted right after the start.</li>
+ *       The file is readable by the owner only and deleted right after the start. A marker
+ *       ({@link MariaDbLayout#bootstrapPending()}) keeps the init file in use on later starts until
+ *       {@code root} logged in once, so a failed first start never leaves a root without password.</li>
  *   <li>Starts the server through {@link DatabaseProcesses} and waits until {@code root} can log in.</li>
  *   <li>Runs the setup as {@code root} (again on every start, all idempotent): secure, create the
  *       application database and user with minimal rights, set its password.</li>
@@ -217,21 +219,39 @@ public final class ManagedMariaDbProvisioner implements DatabaseProvisioner {
                     + e.getMessage(), e);
         }
 
-        boolean first = !layout.initialized();
-        if (first) {
+        if (!layout.initialized()) {
             initialize(platform, base);
         }
+        // Set by initialize() and kept until root logged in once: a first start that failed leaves
+        // a data directory whose root has no password yet, so the next start runs the init file again.
+        boolean bootstrap = layout.bootstrapPending();
         try {
+            if (bootstrap) {
+                try {
+                    writeOwnerOnly(layout.initFile(), BootstrapStatements.initFile(secrets.root()));
+                } catch (IOException e) {
+                    throw new DatabaseException(Reason.INITIALIZE, "Writing " + layout.initFile() + " failed: "
+                            + e.getMessage(), e);
+                }
+            }
             try {
                 process = processes.start(MariaDbCommands.server(platform, base, layout,
-                        first ? Optional.of(layout.initFile()) : Optional.empty()));
+                        bootstrap ? Optional.of(layout.initFile()) : Optional.empty()));
             } catch (IOException e) {
                 throw new DatabaseException(Reason.START, "Starting MariaDB failed: " + e.getMessage(), e);
             }
             DatabaseProcesses.Running started = process;
-            return openRoot(timeouts.start(), started::isAlive);
+            SqlSession root = openRoot(timeouts.start(), started::isAlive);
+            if (bootstrap) {
+                try {
+                    Files.deleteIfExists(layout.initPendingMarker());
+                } catch (IOException e) {
+                    // The init file is idempotent; the next start simply runs it once more.
+                }
+            }
+            return root;
         } finally {
-            if (first) {
+            if (bootstrap) {
                 try {
                     Files.deleteIfExists(layout.initFile());
                 } catch (IOException e) {
@@ -247,6 +267,13 @@ public final class ManagedMariaDbProvisioner implements DatabaseProvisioner {
                     + " but holds no MariaDB database (no 'mysql' folder). Move it away; the cloud then creates a"
                     + " new one.");
         }
+        try {
+            Files.writeString(layout.initPendingMarker(), "The root password is set on the next start.\n",
+                    StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new DatabaseException(Reason.INITIALIZE, "Writing " + layout.initPendingMarker() + " failed: "
+                    + e.getMessage(), e);
+        }
         int exit;
         try {
             exit = processes.run(MariaDbCommands.initialize(platform, base, layout), timeouts.initialize());
@@ -257,12 +284,6 @@ public final class ManagedMariaDbProvisioner implements DatabaseProvisioner {
         if (exit != 0 || !layout.initialized()) {
             throw new DatabaseException(Reason.INITIALIZE, "mariadb-install-db ended with exit code " + exit
                     + " and created no database in " + layout.dataDir() + "." + hint() + logTail());
-        }
-        try {
-            writeOwnerOnly(layout.initFile(), BootstrapStatements.initFile(secrets.root()));
-        } catch (IOException e) {
-            throw new DatabaseException(Reason.INITIALIZE, "Writing " + layout.initFile() + " failed: "
-                    + e.getMessage(), e);
         }
     }
 

@@ -225,6 +225,32 @@ class ManagedMariaDbProvisionerTest {
     }
 
     @Test
+    void failedFirstStartRunsTheInitFileAgainOnTheNextStart() throws Exception {
+        processes.crashOnStart = true;
+        assertThrows(DatabaseException.class, () -> provisioner(WINDOWS).provision());
+        assertTrue(layout.initialized(), "mariadb-install-db ran");
+        assertTrue(layout.bootstrapPending(), "root has no password yet");
+        assertFalse(Files.exists(layout.initFile()));
+
+        processes.crashOnStart = false;
+        provisioner(WINDOWS).provision();
+        assertEquals(1, processes.runs.size(), "the data directory is not created twice");
+        assertTrue(processes.starts.get(1).contains("--init-file=" + layout.initFile()),
+                "the second start sets the root password");
+        assertFalse(layout.bootstrapPending());
+        assertFalse(Files.exists(layout.initFile()));
+    }
+
+    @Test
+    void anExistingDataDirectoryWithoutMarkerGetsNoInitFile() throws Exception {
+        Files.createDirectories(layout.dataDir().resolve("mysql"));
+        server.passwords.put("root", ROOT_PW);
+        provisioner(WINDOWS).provision();
+        assertTrue(processes.runs.isEmpty());
+        assertTrue(processes.starts.get(0).stream().noneMatch(a -> a.startsWith("--init-file=")));
+    }
+
+    @Test
     void wrongRootPasswordStopsTheServerAndExplains() throws IOException {
         Files.createDirectories(layout.dataDir().resolve("mysql"));
         server.passwords.put("root", "AnotherRootPasswordXYZ12");
