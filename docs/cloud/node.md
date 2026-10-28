@@ -83,7 +83,7 @@ stateDiagram-v2
 - **Exit:** a requested stop or exit code 0 ends in STOPPED, anything else in CRASHED.
 - **Restart after a crash** (`process.restart`): with `on-crash: true` the service is prepared and started again after `backoff`, doubled for each further crash and capped at `max-backoff`. After `max-attempts` crashes in a row it stays CRASHED. A service that ran for 5 minutes starts counting from zero again.
 
-Listeners (`ServiceListener`) get every state change and every output line. Events arrive in order on one thread.
+Listeners (`ServiceListener`) get every state change and every output line and implement both methods (an empty body is fine). State changes arrive in order on one shared thread; output lines arrive in order on the output thread of each service.
 
 ## Configuration
 

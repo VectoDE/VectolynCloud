@@ -34,7 +34,12 @@ public interface JavaRuntimeResolver {
      * @return the default resolver
      */
     static JavaRuntimeResolver current() {
-        return (group, config) -> JavaRuntime.current();
+        return new JavaRuntimeResolver() {
+            @Override
+            public JavaRuntime resolve(String group, GroupConfig config) throws IOException {
+                return JavaRuntime.current();
+            }
+        };
     }
 
     /**

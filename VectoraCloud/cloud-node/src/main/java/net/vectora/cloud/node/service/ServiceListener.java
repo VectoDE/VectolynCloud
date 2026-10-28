@@ -4,8 +4,10 @@ import net.vectora.protocol.ServiceId;
 
 /**
  * Receives what happens to the services of the node, for example the console (stage 2 PR 10) or
- * the API (PR 15). Both methods are called on internal threads of the node and must return
- * quickly; an exception is logged and does not reach other listeners.
+ * the API (PR 15). Both methods are called on internal threads of the node (state changes on one
+ * shared thread, output lines on the output thread of each service) and must return
+ * quickly; an exception is logged and does not reach other listeners. A listener that needs only
+ * one of the two leaves the other one empty.
  */
 public interface ServiceListener {
 
@@ -15,8 +17,7 @@ public interface ServiceListener {
      * @param service  the service after the change
      * @param previous the state before, or {@code null} when the service was just created
      */
-    default void stateChanged(ServiceInfo service, ServiceState previous) {
-    }
+    void stateChanged(ServiceInfo service, ServiceState previous);
 
     /**
      * A service printed a line. The line has passed the log filter: secrets and the service token
@@ -25,6 +26,5 @@ public interface ServiceListener {
      * @param service the service
      * @param line    one line without its line break
      */
-    default void output(ServiceId service, String line) {
-    }
+    void output(ServiceId service, String line);
 }

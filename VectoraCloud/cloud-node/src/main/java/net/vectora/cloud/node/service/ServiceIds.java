@@ -52,6 +52,11 @@ public final class ServiceIds {
         if (!m.matches() || !m.group(1).equals(group)) {
             return OptionalInt.empty();
         }
-        return OptionalInt.of(Integer.parseInt(m.group(2)));
+        try {
+            return OptionalInt.of(Integer.parseInt(m.group(2)));
+        } catch (NumberFormatException e) {
+            // Cannot happen: the pattern allows one to four digits only.
+            return OptionalInt.empty();
+        }
     }
 }
