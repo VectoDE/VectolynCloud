@@ -2,7 +2,7 @@
 
 ## Policy
 
-- Bytecode target for every Vectora module is **Java 21** (`--release 21`). The compiler always runs on a Java 25 toolchain.
+- Bytecode target for every Vectora module is **Java 21** (`--release 21`). The compiler always runs on a Java 25 toolchain. The one exception is the class `Bootstrap` in `cloud-launcher`, which is built with `--release 8` (see below).
 - A module may only raise its release target when a dependency makes 21 impossible. Such a module is marked with a comment in its `build.gradle.kts` and listed in the table below.
 - Code that needs Java 25 at runtime is annotated with `@RequiresJava25`, checks the running version, and always has a Java 21 path. The annotation arrives with the core module in stage 3; no current code needs Java 25 APIs.
 
@@ -15,7 +15,7 @@ The convention plugins in `build-logic/` set the defaults (toolchain 25, release
 | `Build (JDK 25, ubuntu-latest)`, `Build (JDK 25, windows-latest)` | JDK 25, `--release 21` | Java 25 | Full build and every test, on Linux and Windows. Java 25 is the runtime the plugins ship for, because Paper 26.3 needs it. |
 | `Tests on Java 21` | JDK 25, `--release 21` | Java 21 (`-PtestJava=21`) | The compiled code and its resources load and pass their tests on a Java 21 runtime. |
 
-On Java 21 the tests tagged `requires-java25` are skipped. They load paper-api or velocity-api classes (class file version 69), which a Java 21 JVM cannot load. Today these are `PluginDescriptorTest.mainClassIsAJavaPlugin` in both plugin modules, `PortalBridgeTest` (its class under test extends `JavaPlugin`), `PaperBridgeApiTest` and `VelocityBridgeApiTest`. Every module has a `BytecodeLevelTest` that runs on both: it reads a class file without loading it and checks major version 65. The Jazzer fuzz tests in `Vectora-Protocol` run in regression mode on both runtimes.
+On Java 21 the tests tagged `requires-java25` are skipped. They load paper-api or velocity-api classes (class file version 69), which a Java 21 JVM cannot load. Today these are `PluginDescriptorTest.mainClassIsAJavaPlugin` in both plugin modules, `PortalBridgeTest` (its class under test extends `JavaPlugin`), `PaperBridgeApiTest` and `VelocityBridgeApiTest`. Every module has a `BytecodeLevelTest` that runs on both: it reads a class file without loading it and checks major version 65. The Jazzer fuzz tests in `Vectora-Protocol`, `cloud-config`, `cloud-template` and `cloud-download` run in regression mode on both runtimes.
 
 Locally:
 
@@ -34,12 +34,20 @@ Locally:
 | `Vectora-PortalBridge` | 21 | paper-api 26.3 (class files for Java 25) | Java 25 (Paper 26.3) | uses `disableAutoTargetJvm()`, see below |
 | `Vectora-Protocol` | 21 | JDK only | Java 21 | no dependencies |
 | `Vectora-CloudClient` | 21 | Vectora-Protocol | Java 21 | runs inside proxies and servers |
-| `VectoraCloud/cloud-config`, `cloud-template`, `cloud-download`, `cloud-network`, `cloud-database`, `cloud-launcher` | 21 | Jackson 3, Netty 4.2, MariaDB Connector/J 4 (all Java 17 or lower) | Java 21 | |
+| `VectoraCloud/cloud-config`, `cloud-template`, `cloud-download`, `cloud-network`, `cloud-database`, `cloud-launcher` | 21 (`Bootstrap` in `cloud-launcher`: 8) | Jackson 3, Netty 4.2, MariaDB Connector/J 4 (all Java 17 or lower) | Java 21 | |
 | `VectoraCloud/cloud-node` | 21 | as above, plus JLine 3 | Java 21 | JLine `ffm` provider is Java 22+, see below |
 | `VectoraCloud/cloud-bridge-velocity` | 21 | velocity-api 4.3.1 (class files for Java 25) | Java 25 (Velocity 4.3) | uses `disableAutoTargetJvm()` |
 | `VectoraCloud/cloud-bridge-paper` | 21 | paper-api 26.3 (class files for Java 25) | Java 25 (Paper 26.3) | uses `disableAutoTargetJvm()` |
 
 No module currently needs release 25.
+
+## Exception: `Bootstrap` in `cloud-launcher` is built for Java 8
+
+`net.vectora.cloud.launcher.Bootstrap` is the `Main-Class` of `VectoraCloud.jar`. It lives in its own source set `bootstrap` and is compiled with `--release 8`; everything else in the module stays at 21.
+
+The reason: an admin who starts the cloud on Java 8 to 20 has to see a readable "Java too old" message in German or English, with the version found and where to get Java 21, and exit code 3. If the first class the JVM loads had class file version 65, an old runtime would stop with `UnsupportedClassVersionError` before any Vectora code runs. So `Bootstrap` uses only Java 8 API, checks `java.specification.version` and calls `Launcher.main` by reflection once the version is fine. `BootstrapTest` checks major version 52. The build file turns off javac's "release 8 is obsolete" lint for this source set only, because `-Werror` would fail on it. Details in [the launcher page](cloud/launcher.md).
+
+Right after the Java check the launcher refuses to run as root or administrator. If it cannot tell whether the process is elevated (state UNKNOWN), it starts anyway and prints a clearly framed warning that tells an administrator or root to stop and restart as a normal user (maintainer decision of 2026-10-28). A start that is known to be elevated still needs `--allow-root` or `VECTORA_ALLOW_ROOT=true`. See [Root and administrator check](cloud/launcher.md#root-and-administrator-check).
 
 VectoraCloud itself (`java -jar VectoraCloud.jar`) runs on Java 21. The servers it starts get their own JRE per group (8, 17, 21 or 25), so the cloud's runtime does not limit them.
 

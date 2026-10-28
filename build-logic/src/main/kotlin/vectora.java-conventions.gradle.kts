@@ -56,7 +56,18 @@ tasks.withType<Test>().configureEach {
     }
 }
 
+// Implementation-Version lets the code read its own version through
+// Package.getImplementationVersion(), for example for the User-Agent of cloud-download.
+// Outside a jar (tests, IDE) it stays null and the code falls back to "dev".
+val implementationTitle = project.name
+val implementationVersion = project.version.toString()
 tasks.withType<Jar>().configureEach {
     isPreserveFileTimestamps = false
     isReproducibleFileOrder = true
+    manifest {
+        attributes(
+            "Implementation-Title" to implementationTitle,
+            "Implementation-Version" to implementationVersion,
+        )
+    }
 }
