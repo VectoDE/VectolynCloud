@@ -249,14 +249,14 @@ public final class DownloadClient {
             return Optional.empty();
         }
         String trimmed = value.trim();
-        if (!trimmed.isEmpty() && trimmed.length() <= 9 && trimmed.chars().allMatch(c -> c >= '0' && c <= '9')) {
-            return Optional.of(Duration.ofSeconds(Long.parseLong(trimmed)));
-        }
         try {
+            if (!trimmed.isEmpty() && trimmed.length() <= 9 && trimmed.chars().allMatch(c -> c >= '0' && c <= '9')) {
+                return Optional.of(Duration.ofSeconds(Long.parseLong(trimmed)));
+            }
             ZonedDateTime date = ZonedDateTime.parse(trimmed, DateTimeFormatter.RFC_1123_DATE_TIME);
             Duration wait = Duration.between(clock.instant(), date.toInstant());
             return Optional.of(wait.isNegative() ? Duration.ZERO : wait);
-        } catch (DateTimeParseException e) {
+        } catch (NumberFormatException | DateTimeParseException e) {
             return Optional.empty();
         }
     }
