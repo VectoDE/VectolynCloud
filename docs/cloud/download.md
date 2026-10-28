@@ -240,7 +240,7 @@ Runtimes live in `<home>/jre/<vendor>-<feature>-<os>-<arch>/`, for example `jre/
 
 1. unpacks the verified archive with `SafeExtractor` into `jre/.staging-<name>-*`, so the zip-slip, link and size rules above apply. TAR permission bits are kept, so `bin/java` stays executable on Linux and macOS;
 2. finds the Java home: the archive root, its single top-level directory, or `Contents/Home` below it (macOS);
-3. checks that `release` names the expected feature version, that `bin/java` (`bin\java.exe` on Windows) is a regular file and, on POSIX systems, executable;
+3. checks that `release` names the expected feature version, that `bin/java` (`bin\java.exe` on Windows) is a regular file and, for a Linux or macOS runtime on a POSIX file system, executable (a Windows zip has no permission bits, and `java.exe` needs none);
 4. writes `.vectora-jre.properties` (SHA-256 of the archive, relative Java home, version);
 5. moves the staging directory into place. An older install is moved to `jre/.old-<name>-*` first and deleted. If a running server still holds files there (Windows), it is removed on the next install, together with any staging directory an interrupted install left.
 

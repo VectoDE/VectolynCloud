@@ -46,7 +46,8 @@ import net.vectora.cloud.download.provider.TargetPlatform;
  *       so {@code bin/java} stays executable on Linux and macOS.</li>
  *   <li>The Java home is found in the archive: its root, its single top-level directory, or
  *       {@code Contents/Home} below it (macOS). It must have a {@code release} file for the expected
- *       feature version and a regular {@code bin/java} that is executable on POSIX systems.</li>
+ *       feature version and a regular {@code bin/java} that is executable on POSIX systems (not
+ *       checked for Windows runtimes, whose zip has no permission bits).</li>
  *   <li>A marker file {@value #MARKER} records the archive's SHA-256, the relative Java home and the
  *       version. Then the staging directory replaces the target. An older install is moved aside and
  *       deleted; if a running server still holds files there (Windows), it is removed on the next
@@ -198,7 +199,8 @@ public final class JreInstaller {
                             + ", expected Java " + feature);
                 }
                 Path executable = home.resolve("bin").resolve(JavaRuntime.executableName(windows));
-                if (posix(staging) && !Files.isExecutable(executable)) {
+                // Windows runtimes come as zip without permission bits, and java.exe needs none.
+                if (!windows && posix(staging) && !Files.isExecutable(executable)) {
                     throw new JreException(fileName + ": " + staging.relativize(executable)
                             + " is not executable after unpacking");
                 }
