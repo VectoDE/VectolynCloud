@@ -1,0 +1,8 @@
+3schema-version: 1
+nodes:
+  - id: node-1
+    host: 127.0.0.1
+    port: 7010
+    service-ports:
+      first: 30000
+      last: 30999
