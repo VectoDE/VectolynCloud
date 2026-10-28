@@ -135,5 +135,18 @@ class ConsoleTest {
         assertTrue(terminal.printed().get(0).endsWith("INFO Service lobby-1 started with ***"), terminal.printed().get(0));
         assertTrue(terminal.printed().get(1).contains("WARNING Disk almost full (IllegalStateException: only 1 GB left)"));
         assertTrue(terminal.printed().get(1).startsWith("\u001b[33m"), "warnings are yellow on an ANSI terminal");
+
+        handler.publish(new LogRecord(Level.INFO, "file \u001b[2Jname\rforged\u009b line\r\nnext\tcolumn"));
+        assertTrue(terminal.printed().get(2).endsWith("INFO file ?[2Jname?forged? line\nnext\tcolumn"), terminal.printed().get(2));
+    }
+
+    @Test
+    void styledOutputCannotCarryForeignEscapeSequences() {
+        FakeTerminal terminal = new FakeTerminal(true, true);
+        ConsoleOutput out = Console.builder().terminal(terminal).build().output();
+        out.error("bad \u001b]0;title\u0007 name");
+        assertEquals("\u001b[31mbad ?]0;title? name\u001b[0m", terminal.printed().getFirst());
+        out.warning("a\r\nb");
+        assertEquals("\u001b[33ma\nb\u001b[0m", terminal.printed().getLast());
     }
 }

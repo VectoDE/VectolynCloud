@@ -277,6 +277,20 @@ class BuiltinCommandsTest {
     }
 
     @Test
+    @org.junit.jupiter.api.condition.DisabledOnOs(org.junit.jupiter.api.condition.OS.WINDOWS) // no ESC in Windows file names
+    void aFileNameFromTheFolderCannotSendEscapeSequences() throws Exception {
+        FakeTerminal ansi = new FakeTerminal(true, true);
+        Console colored = Console.builder().terminal(ansi).build();
+        BuiltinCommands.register(colored, config, () -> { });
+        Files.writeString(home.resolve("groups/x\u001b]0;owned\u0007.yml"), "schema-version: 1\n");
+        assertEquals(Outcome.FAILED, colored.dispatcher().execute("config reload"));
+        String printed = ansi.output();
+        assertTrue(printed.contains("x?]0;owned?.yml"), printed);
+        assertFalse(printed.replace("\u001b[31m", "").replace("\u001b[0m", "").contains("\u001b"),
+                "only the console's own color codes reach the terminal");
+    }
+
+    @Test
     void shutdownAndExitRunTheActionAndStopTheConsole() {
         assertEquals(Outcome.DONE, run("exit"));
         assertEquals(1, shutdowns.get());

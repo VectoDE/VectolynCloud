@@ -18,7 +18,8 @@ import net.vectora.cloud.console.terminal.ConsoleTerminal;
  *
  * <p>Format: {@code HH:mm:ss LEVEL message}, warnings and errors colored on an ANSI terminal. A
  * thrown exception adds its type and message, not the stack trace (the log file keeps that). Every
- * line runs through the redactor first.
+ * line runs through the redactor first, then control characters other than line breaks and tabs
+ * become {@code ?}, so a logged file name or message cannot send escape sequences to the terminal.
  */
 public final class ConsoleLogHandler extends Handler {
 
@@ -50,7 +51,7 @@ public final class ConsoleLogHandler extends Handler {
             }
             line.append(')');
         }
-        String text = redactor.apply(line.toString());
+        String text = TerminalOutput.printable(redactor.apply(line.toString()));
         Style style = record.getLevel().intValue() >= Level.SEVERE.intValue() ? Style.ERROR
                 : record.getLevel().intValue() >= Level.WARNING.intValue() ? Style.WARNING : Style.PLAIN;
         terminal.print(style.apply(text, terminal.ansi()));

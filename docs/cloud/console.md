@@ -128,6 +128,7 @@ console.commands().register(Command.builder("service")
 - Arguments are positional. Optional ones come last; `takingRest()` collects the remaining words.
 - An executor throws `CommandException` for a user mistake and lets `ConfigException` and `PromptCancelledException` through. Anything else is logged and shown as an internal error, without the exception message.
 - `sensitive()` keeps every line of a command out of the history. Use it for any command that takes a secret as an argument; better still, ask for the secret with the question API.
+- `heading`, `success`, `warning` and `error` of `ConsoleOutput`, and the log handler, replace control characters other than line breaks and tabs with `?` before adding their color. A file name or message from outside therefore cannot send escape sequences to the terminal. `println` passes text unchanged; use it only for text the console built itself.
 - `Console.logHandler(redactor)` gives a `java.util.logging` handler that prints log records above the prompt; pass `RedactingFilter::redact` from cloud-config as redactor.
 
 ## Question API
