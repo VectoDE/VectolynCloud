@@ -9,10 +9,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import net.vectora.cloud.download.DownloadException;
 import net.vectora.cloud.download.HostNotAllowedException;
 import net.vectora.cloud.download.HttpStatusException;
@@ -182,11 +186,78 @@ class DownloadClientTest {
         assertFalse(HOSTS.permits(URI.create("/relative")));
     }
 
+    private static FakeTransport.Response tooManyRequests(String retryAfter) {
+        return new FakeTransport.Response(429, retryAfter == null ? Map.of() : Map.of("Retry-After", retryAfter),
+                new byte[0]);
+    }
+
+    @Test
+    void waitsAsLongAsRetryAfterSays() throws Exception {
+        FakeTransport transport = new FakeTransport().answer(API, tooManyRequests("3")).ok(API, "ok");
+        assertArrayEquals("ok".getBytes(StandardCharsets.UTF_8), client(transport).fetchBytes(URI.create(API), HOSTS, 100));
+        assertEquals(List.of(Duration.ofSeconds(3)), sleeps);
+        assertEquals(2, transport.requests().size());
+    }
+
+    @Test
+    void retryAfterAsHttpDateIsMeasuredAgainstTheClock() throws Exception {
+        Clock clock = Clock.fixed(Instant.parse("2026-10-28T12:00:00Z"), ZoneOffset.UTC);
+        FakeTransport transport = new FakeTransport()
+                .answer(API, tooManyRequests("Wed, 28 Oct 2026 12:00:05 GMT")).ok(API, "ok");
+        new DownloadClient(transport, DownloadSettings.defaults(), sleeps::add, clock).fetchBytes(URI.create(API), HOSTS, 100);
+        assertEquals(List.of(Duration.ofSeconds(5)), sleeps);
+    }
+
+    @Test
+    void retryAfterOverAMinuteFailsAtOnceWithoutQueryInTheMessage() {
+        String url = "https://api.example.org/file?token=secret";
+        FakeTransport transport = new FakeTransport().answer(url, tooManyRequests("3600"));
+        HttpStatusException e = assertThrows(HttpStatusException.class,
+                () -> client(transport).fetchBytes(URI.create(url), HOSTS, 100));
+        assertEquals(429, e.status());
+        assertEquals(Optional.of(Duration.ofHours(1)), e.retryAfter());
+        assertTrue(e.getMessage().contains("api.example.org"), e.getMessage());
+        assertFalse(e.getMessage().contains("secret"), e.getMessage());
+        assertFalse(e.getMessage().contains("/file"), e.getMessage());
+        assertTrue(sleeps.isEmpty());
+        assertEquals(1, transport.requests().size());
+    }
+
+    @Test
+    void givesUpAfterTwoRateLimitRetries() {
+        FakeTransport transport = new FakeTransport().answer(API, tooManyRequests(null));
+        HttpStatusException e = assertThrows(HttpStatusException.class,
+                () -> client(transport).fetchBytes(URI.create(API), HOSTS, 100));
+        assertEquals(429, e.status());
+        assertEquals(3, transport.requests().size());
+        assertEquals(List.of(Duration.ofSeconds(1), Duration.ofSeconds(2)), sleeps);
+    }
+
+    @Test
+    void unreadableRetryAfterFallsBackToTheBackoff() throws Exception {
+        FakeTransport transport = new FakeTransport().answer(API, tooManyRequests("soon")).ok(API, "ok");
+        client(transport).fetchBytes(URI.create(API), HOSTS, 100);
+        assertEquals(List.of(Duration.ofSeconds(1)), sleeps);
+    }
+
+    @Test
+    void parsesRetryAfter() {
+        Clock clock = Clock.fixed(Instant.parse("2026-10-28T12:00:00Z"), ZoneOffset.UTC);
+        assertEquals(Optional.of(Duration.ofSeconds(7)), DownloadClient.parseRetryAfter(" 7 ", clock));
+        assertEquals(Optional.of(Duration.ofSeconds(999_999_999)), DownloadClient.parseRetryAfter("999999999", clock));
+        assertEquals(Optional.empty(), DownloadClient.parseRetryAfter("1000000000", clock));
+        assertEquals(Optional.empty(), DownloadClient.parseRetryAfter("-5", clock));
+        assertEquals(Optional.empty(), DownloadClient.parseRetryAfter("", clock));
+        assertEquals(Optional.empty(), DownloadClient.parseRetryAfter(null, clock));
+        assertEquals(Optional.of(Duration.ZERO),
+                DownloadClient.parseRetryAfter("Wed, 28 Oct 2026 11:00:00 GMT", clock), "a past date means no wait");
+    }
+
     @Test
     void handlerErrorsAreRetriedButSecurityErrorsAreNot() {
         FakeTransport transport = new FakeTransport().ok(API, "data");
         int[] calls = {0};
-        assertThrows(IOException.class, () -> client(transport).get(URI.create(API), HOSTS, 100, (body, length) -> {
+        assertThrows(IOException.class, () -> client(transport).get(URI.create(API), HOSTS, 100, body -> {
             calls[0]++;
             throw new IOException("disk full");
         }));

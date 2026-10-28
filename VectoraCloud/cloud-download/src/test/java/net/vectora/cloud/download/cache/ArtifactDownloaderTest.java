@@ -113,6 +113,44 @@ class ArtifactDownloaderTest {
     }
 
     @Test
+    void wrongSha512AbortsAndDeletesTheDownload() throws Exception {
+        FakeTransport transport = new FakeTransport().ok(URL, "tampered".getBytes(StandardCharsets.UTF_8));
+        assertThrows(ChecksumMismatchException.class,
+                () -> downloader(transport).download(artifact(hash(HashAlgorithm.SHA512, CONTENT)), null));
+        assertEquals(List.of(), cacheFiles(), "neither .part nor final file may remain");
+    }
+
+    @Test
+    void wrongSha1AbortsAndDeletesTheDownload() throws Exception {
+        FakeTransport transport = new FakeTransport().ok(URL, "tampered".getBytes(StandardCharsets.UTF_8));
+        assertThrows(ChecksumMismatchException.class,
+                () -> downloader(transport).download(artifact(hash(HashAlgorithm.SHA1, CONTENT)), null));
+        assertEquals(List.of(), cacheFiles(), "neither .part nor final file may remain");
+    }
+
+    @Test
+    void tofuPinStaysBindingWhenTheSourceStartsPublishingAChecksum() throws Exception {
+        ResolvedArtifact unchecked = artifact(null);
+        LockedArtifact pinned = downloader(new FakeTransport().ok(URL, CONTENT)).download(unchecked, null)
+                .toLocked(unchecked);
+        for (Path file : cacheFiles()) {
+            Files.delete(file);
+        }
+        // The source now serves other bytes and a checksum that fits them; the pin must still win.
+        byte[] other = "something else".getBytes(StandardCharsets.UTF_8);
+        ResolvedArtifact withChecksum = artifact(hash(HashAlgorithm.SHA512, other));
+        assertThrows(TofuMismatchException.class,
+                () -> downloader(new FakeTransport().ok(URL, other)).download(withChecksum, pinned));
+        assertEquals(List.of(), cacheFiles());
+
+        // Same bytes as pinned plus a fitting checksum: accepted, now verified by the source.
+        ResolvedArtifact matching = artifact(hash(HashAlgorithm.SHA512, CONTENT));
+        DownloadedArtifact result = downloader(new FakeTransport().ok(URL, CONTENT)).download(matching, pinned);
+        assertEquals(Trust.SOURCE, result.trust());
+        assertEquals(pinned.sha256(), result.sha256());
+    }
+
+    @Test
     void cachedValidFileIsNotDownloadedAgain() throws Exception {
         Checksum sha256 = hash(HashAlgorithm.SHA256, CONTENT);
         FakeTransport first = new FakeTransport().ok(URL, CONTENT);

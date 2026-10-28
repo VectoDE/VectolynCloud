@@ -53,12 +53,9 @@ class LiveSmokeTest {
      * the first kilobyte and drops the connection. Proves the redirect chain stays on allowed hosts.
      */
     private void probe(ResolvedArtifact artifact) throws Exception {
-        long length = client.get(artifact.url(), registry.allowedHosts(artifact.coordinate().provider()), Long.MAX_VALUE,
-                (body, contentLength) -> {
-                    body.read(new byte[1024]);
-                    return contentLength.orElse(-1);
-                });
-        REPORT.add(String.format("%22s download reachable, Content-Length %d", "", length));
+        int read = client.get(artifact.url(), registry.allowedHosts(artifact.coordinate().provider()), Long.MAX_VALUE,
+                body -> body.read(new byte[1024]));
+        REPORT.add(String.format("%22s download reachable, first read returned %d bytes", "", read));
     }
 
     private ResolvedArtifact resolve(String label, String provider, ArtifactRequest request) throws Exception {

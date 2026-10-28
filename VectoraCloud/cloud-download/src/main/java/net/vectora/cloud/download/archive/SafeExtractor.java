@@ -266,6 +266,11 @@ public final class SafeExtractor {
                     throw new ArchiveException("cannot create symlink " + root.relativize(link) + " here: "
                             + e.getMessage(), e);
                 }
+                // Check each link right away, before a later link or its parent directories are
+                // created through it.
+                if (!realTargetInside(link)) {
+                    throw new ArchiveException("symlink " + root.relativize(link) + " resolves outside the target directory");
+                }
             }
             // Second pass: with every link in place, the real target must still be inside.
             for (Path link : symlinks.keySet()) {
@@ -323,6 +328,13 @@ public final class SafeExtractor {
             if (existing == null) {
                 return false;
             }
+            // A ".." after a missing part would be resolved by the kernel only once that part
+            // exists, possibly as a link; refuse instead of guessing.
+            for (Path part : rest) {
+                if (part.toString().equals("..")) {
+                    return false;
+                }
+            }
             Path real = existing.toRealPath();
             for (Path part : rest) {
                 real = real.resolve(part);
@@ -338,6 +350,15 @@ public final class SafeExtractor {
 
         private void createParents(Path target) throws IOException {
             Path parent = target.getParent();
+            // createDirectories follows links, so check the deepest existing ancestor before
+            // creating anything below it: a link there may already point outside.
+            Path existing = parent;
+            while (existing != null && !Files.exists(existing)) {
+                existing = existing.getParent();
+            }
+            if (existing == null || !existing.toRealPath().startsWith(root)) {
+                throw new ArchiveException("entry escapes the target directory: " + root.relativize(target));
+            }
             Files.createDirectories(parent);
             if (!parent.toRealPath().startsWith(root)) {
                 throw new ArchiveException("entry escapes the target directory: " + root.relativize(target));

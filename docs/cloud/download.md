@@ -23,6 +23,7 @@ The module uses the JDK `HttpClient` and Jackson 3. It has no other dependencies
 - Every request has a size limit. A Content-Length above the limit is refused at once, and the body is counted while it is read. API responses are limited to 16 MiB. A download is limited to the size the source announces, otherwise to 2 GiB.
 - Timeouts: 15 s to connect, 30 s until the response headers arrive, 15 min per attempt in total. A watchdog closes a stalled connection when that time is up.
 - Up to 3 attempts with exponential backoff (1 s, 2 s, at most 10 s) after network errors and 5xx answers. 4xx answers are not retried, and neither are a refused host or an exceeded limit.
+- 429 (Too Many Requests) and 503 count as rate limits and get up to 2 retries of their own. The client waits as long as `Retry-After` asks: whole seconds (at most nine digits) or an HTTP date such as `Wed, 28 Oct 2026 12:00:05 GMT`, measured against the system clock in UTC. A date in the past means no wait. Without the header, or with a value it cannot read, it uses the backoff above. If `Retry-After` asks for more than 60 s, the request fails at once with a message that names the host and the requested wait, without the path or query of the URL.
 - User-Agent: `VectoraCloud/<version> (+https://github.com/VectoDE/Vectora-Network)`. PaperMC and Modrinth ask for a User-Agent that names the application and a contact.
 
 ## Providers
@@ -64,7 +65,7 @@ Two more checks:
 
 ### Trust on first use
 
-For a source without a checksum (only the Fabric launcher so far) the first download is accepted. Its SHA-256 goes into the lockfile with `trust: tofu`, and `hash` equals `sha256`. Every later download for the same coordinate must have the same SHA-256, otherwise `TofuMismatchException` is thrown and the file is deleted. If the change is expected, remove the entry from `software.lock.yml`; the next download pins the new file.
+For a source without a checksum (only the Fabric launcher so far) the first download is accepted. Its SHA-256 goes into the lockfile with `trust: tofu`, and `hash` equals `sha256`. Every later download for the same coordinate must have the same SHA-256, otherwise `TofuMismatchException` is thrown and the file is deleted. That also holds once the source starts to publish a checksum: the file must then match both, and the entry is stored with `trust: source`. If the change is expected, remove the entry from `software.lock.yml`; the next download pins the new file.
 
 ## `software.lock.yml`
 
@@ -169,7 +170,8 @@ Every catalog entry has a source with a checksum except the Fabric launcher. A H
 `SafeExtractor` unpacks zip (MariaDB on Windows, later JREs) and tar.gz (MariaDB on Linux, later JREs) into a directory that does not exist or is empty.
 
 - Entry names must be relative, use `/` and contain no `..`, `\`, `:` or NUL. Anything else is refused (zip slip).
-- Symbolic links (TAR only) are created after all files, so no file is ever written through a link. A link target must be relative and stay inside the directory: first checked on the path, then, once all links exist, on the real path. That catches chains such as `x -> .` plus `a -> x/..`.
+- Symbolic links (TAR only) are created after all files, so no file is ever written through a link. A link target must be relative and stay inside the directory: first checked on the path, then on the real path right after the link is created, and once more when all links exist. That catches chains such as `x -> .` plus `a -> x/..`. A target whose missing part contains `..` (`nonexist/../x`) is refused, because the kernel would resolve it only once that part exists.
+- Before a parent directory is created, the deepest part of its path that already exists is resolved for real and must lie inside the target. So a link can never be used to create directories outside, for example with `s -> .`, `l -> s/..` and `l/newdir/x -> y`.
 - Hard links must point to a file extracted before them and are written as copies.
 - Zip entries are always written as plain files. The JDK's zip API does not expose the Unix mode, so a zip cannot create links here.
 - `ExtractionLimits` caps entries (default 100,000), bytes per file (2 GiB) and bytes in total (8 GiB). The bytes are counted while writing, never taken from the archive's size fields (zip bombs).
@@ -181,9 +183,9 @@ Every catalog entry has a source with a checksum except the Fabric launcher. A H
 ## Tests
 
 - Unit tests run without a network. `FakeTransport` replaces the HTTP layer; the provider tests use stored API answers under `src/test/resources/net/vectora/cloud/download/provider/`, saved on 2026-10-28 and trimmed.
-- Covered: wrong hash aborts and deletes, redirect to a foreign host or to HTTP, zip slip and tar slip, zip bomb by size and by entry count, links out of the target, TOFU mismatch, lockfile round trip and rollback, catalog content.
+- Covered: wrong hash aborts and deletes, redirect to a foreign host or to HTTP, zip slip and tar slip, zip bomb by size and by entry count, links out of the target (also as chains), TOFU mismatch and a TOFU pin that stays binding once the source publishes a checksum, rate limits with `Retry-After`, lockfile round trip and rollback, catalog content.
 - Fuzz tests (Jazzer, regression mode in every test run, fuzzing at night): `TarReaderFuzzTest`, `ProviderJsonFuzzTest` (every JSON mapper) and `SoftwareLockFileFuzzTest`. Seeds include TAR files written by Python's `tarfile` in ustar, GNU and pax format.
-- Three tests need symlinks or POSIX permissions and are skipped on Windows; CI runs them on Linux.
+- Five tests need symlinks or POSIX permissions and are skipped on Windows; CI runs them on Linux.
 
 ### Live smoke test
 

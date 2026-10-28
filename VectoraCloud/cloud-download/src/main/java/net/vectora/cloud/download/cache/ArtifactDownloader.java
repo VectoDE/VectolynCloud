@@ -100,6 +100,7 @@ public final class ArtifactDownloader {
         Checksum expected;
         Checksum pinnedSha256 = null;
         Trust trust;
+        Trust pinTrust = null;
         if (artifact.checksum().isPresent()) {
             expected = artifact.checksum().get();
             trust = Trust.SOURCE;
@@ -109,8 +110,12 @@ public final class ArtifactDownloader {
                 throw new ChecksumMismatchException(label + ": the source now publishes " + expected
                         + ", the lockfile has " + sameCoordinate.checksum() + " for the same version and build");
             }
-            if (sameCoordinate != null && sameCoordinate.checksum().matches(expected)) {
+            // A TOFU pin stays binding when the source starts to publish a checksum: the file must
+            // match both.
+            if (sameCoordinate != null && (sameCoordinate.trust() == Trust.TOFU
+                    || sameCoordinate.checksum().matches(expected))) {
                 pinnedSha256 = sameCoordinate.sha256();
+                pinTrust = sameCoordinate.trust();
             }
         } else {
             trust = Trust.TOFU;
@@ -118,7 +123,7 @@ public final class ArtifactDownloader {
         }
         long maxBytes = artifact.size().isPresent() ? artifact.size().getAsLong() : defaultMaxBytes;
         return fetch(label, artifact.url(), providers.allowedHosts(artifact.coordinate().provider()), expected,
-                pinnedSha256, trust, maxBytes);
+                pinnedSha256, trust, pinTrust == null ? trust : pinTrust, maxBytes);
     }
 
     /**
@@ -132,11 +137,12 @@ public final class ArtifactDownloader {
      */
     public DownloadedArtifact download(LockedArtifact locked) throws IOException, InterruptedException {
         return fetch(locked.coordinate().toString(), locked.url(), providers.allowedHosts(locked.coordinate().provider()),
-                locked.checksum(), locked.sha256(), locked.trust(), locked.size());
+                locked.checksum(), locked.sha256(), locked.trust(), locked.trust(), locked.size());
     }
 
     private DownloadedArtifact fetch(String label, URI url, HostAllowlist hosts, Checksum expected,
-            Checksum expectedSha256, Trust trust, long maxBytes) throws IOException, InterruptedException {
+            Checksum expectedSha256, Trust trust, Trust pinTrust, long maxBytes)
+            throws IOException, InterruptedException {
         Checksum knownSha256 = expectedSha256;
         if (knownSha256 == null && expected != null && expected.algorithm() == HashAlgorithm.SHA256) {
             knownSha256 = expected;
@@ -156,7 +162,7 @@ public final class ArtifactDownloader {
         Path part = cache.newPartFile();
         boolean committed = false;
         try {
-            Map<HashAlgorithm, Checksum> actual = client.get(url, hosts, maxBytes, (body, length) -> {
+            Map<HashAlgorithm, Checksum> actual = client.get(url, hosts, maxBytes, body -> {
                 MultiDigest digest = new MultiDigest(algorithms);
                 try (OutputStream out = Files.newOutputStream(part, StandardOpenOption.WRITE,
                         StandardOpenOption.TRUNCATE_EXISTING)) {
@@ -169,7 +175,7 @@ public final class ArtifactDownloader {
                 throw mismatch(label, trust, expected, actual.get(expected.algorithm()));
             }
             if (knownSha256 != null && !sha256.matches(knownSha256)) {
-                throw mismatch(label, trust, knownSha256, sha256);
+                throw mismatch(label, pinTrust, knownSha256, sha256);
             }
             long size = Files.size(part);
             Path file = cache.commit(part, sha256);

@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -128,9 +129,12 @@ class SafeExtractorTest {
 
     @Test
     void tarSlipIsRejected() {
-        byte[] tar = new TarBuilder().file("../../evil", "x").build();
-        assertThrows(ArchiveException.class, () -> extractTar(tar, temp.resolve("out")));
+        // Relative to temp/out, "../evil" would land in temp/evil.
+        byte[] tar = new TarBuilder().file("ok", "fine").file("../evil", "x").build();
+        Path target = temp.resolve("out");
+        assertThrows(ArchiveException.class, () -> extractTar(tar, target));
         assertFalse(Files.exists(temp.resolve("evil")));
+        assertFalse(Files.exists(target));
     }
 
     @Test
@@ -176,6 +180,29 @@ class SafeExtractorTest {
     void chainedSymlinksThatEscapeAreRejected() {
         // "x" -> "." is fine on its own, but "a" -> "x/.." then points to the parent of the target.
         byte[] tar = new TarBuilder().symlink("x", ".").symlink("a", "x/..").build();
+        Path target = temp.resolve("out");
+        assertThrows(ArchiveException.class, () -> extractTar(tar, target));
+        assertFalse(Files.exists(target));
+    }
+
+    @Test
+    @DisabledOnOs(value = OS.WINDOWS, disabledReason = "creating symlinks needs extra rights on Windows")
+    void symlinkChainCannotCreateDirectoriesOutside() {
+        // "l" -> "s/.." is the parent of the target once "s" -> "." exists. Creating the parent
+        // directories of "l/newdir/x" would then create temp/newdir.
+        byte[] tar = new TarBuilder().symlink("s", ".").symlink("l", "s/..").symlink("l/newdir/x", "y").build();
+        Path target = temp.resolve("out");
+        assertThrows(ArchiveException.class, () -> extractTar(tar, target));
+        assertFalse(Files.exists(temp.resolve("newdir"), LinkOption.NOFOLLOW_LINKS));
+        assertFalse(Files.exists(target));
+    }
+
+    @Test
+    @DisabledOnOs(value = OS.WINDOWS, disabledReason = "creating symlinks needs extra rights on Windows")
+    void symlinkWithDotDotAfterAMissingPartIsRejected() {
+        // Lexically "nonexist/../s/.." is the target itself; the kernel only resolves it once
+        // "nonexist" exists, and through "s" -> "." it then points to the parent.
+        byte[] tar = new TarBuilder().symlink("s", ".").symlink("a", "nonexist/../s/..").build();
         Path target = temp.resolve("out");
         assertThrows(ArchiveException.class, () -> extractTar(tar, target));
         assertFalse(Files.exists(target));
