@@ -1,0 +1,246 @@
+package net.vectora.cloud.template;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.StringReader;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.dataformat.yaml.YAMLMapper;
+
+/**
+ * Renders every real {@code Server-Network/<Server>/template/} of the repository with test values
+ * and checks the result.
+ */
+class RealTemplatesTest {
+
+    private static final byte[] FLOODGATE_BYTES = "vectora-test-16b".getBytes(UTF_8);
+
+    /** The backends the cloud knows; which of them are wanted differs per test. */
+    private static final List<ProxyBackend> BACKENDS = List.of(
+            new ProxyBackend("lobby", "127.0.0.1", 25566, true),
+            new ProxyBackend("survival", "127.0.0.1", 25567, true),
+            new ProxyBackend("mod", "127.0.0.1", 25568, true),
+            new ProxyBackend("creative", "127.0.0.1", 25569, true),
+            new ProxyBackend("end", "127.0.0.1", 25570, true),
+            new ProxyBackend("minigame", "127.0.0.1", 25571, true));
+    private static final List<String> TRY = List.of("lobby", "survival");
+    private static final Map<String, List<String>> FORCED_HOSTS = Map.of(
+            "creative.example.net", List.of("creative"),
+            "survival.example.net", List.of("survival"),
+            "minigames.example.net", List.of("minigame", "lobby"));
+
+    @TempDir
+    Path out;
+
+    static Path serverNetwork() {
+        Path dir = Path.of("").toAbsolutePath();
+        while (dir != null) {
+            if (Files.isRegularFile(dir.resolve("settings.gradle.kts")) && Files.isDirectory(dir.resolve("Server-Network"))) {
+                return dir.resolve("Server-Network");
+            }
+            dir = dir.getParent();
+        }
+        throw new IllegalStateException("Server-Network/ not found above " + Path.of("").toAbsolutePath());
+    }
+
+    static List<Path> templates() throws IOException {
+        try (Stream<Path> servers = Files.list(serverNetwork())) {
+            return servers.map(server -> server.resolve("template")).filter(Files::isDirectory).sorted().toList();
+        }
+    }
+
+    static ServerPlatform platformOf(Path template) {
+        String server = template.getParent().getFileName().toString();
+        return switch (server) {
+            case "Proxy" -> ServerPlatform.VELOCITY;
+            case "Mod-Server" -> ServerPlatform.FABRIC;
+            case "Database" -> ServerPlatform.NONE;
+            default -> ServerPlatform.PAPER;
+        };
+    }
+
+    static PlaceholderValues values(Set<String> wanted) {
+        Map<String, String> values = new HashMap<>();
+        values.put("VECTORA_FORWARDING_SECRET", "forwarding-secret-for-tests");
+        values.put("VECTORA_DB_HOST", "127.0.0.1");
+        values.put("VECTORA_DB_PORT", "3307");
+        values.put("VECTORA_DB_NAME", "vectora_ranks");
+        values.put("VECTORA_DB_USER", "vectora");
+        values.put("VECTORA_DB_PASSWORD", "db-password-for-tests");
+        values.put("VECTORA_DB_ROOT_PASSWORD", "root-password-for-tests");
+        values.put("VECTORA_MANAGEMENT_SECRET", "abcdefghijklmnopqrstuvwxyz0123456789ABCD");
+        values.put("VECTORA_FLOODGATE_KEY_B64", Base64.getEncoder().encodeToString(FLOODGATE_BYTES));
+        values.put("VECTORA_SERVER_PORT", "25566");
+        values.put("VECTORA_SERVER_HOST", "127.0.0.1");
+        values.put("VECTORA_XMS", "256M");
+        values.put("VECTORA_XMX", "768M");
+        values.put("VECTORA_PROXY_BIND", "0.0.0.0");
+        values.put("VECTORA_PROXY_PORT", "25565");
+        values.put("VECTORA_BEDROCK_PORT", "19132");
+        // Later templates (stage 2, PR 12) add these; harmless until then.
+        values.put("VECTORA_DB_POOL_SIZE", "4");
+        values.put("VECTORA_DB_STORAGE_METHOD", "MariaDB");
+        List<ProxyBackend> backends = BACKENDS.stream()
+                .map(b -> new ProxyBackend(b.name(), b.host(), b.port(), wanted.contains(b.name())))
+                .toList();
+        return PlaceholderValues.of(values)
+                .orElse(ProxyServerList.of(backends, TRY, FORCED_HOSTS).placeholderValues());
+    }
+
+    private static final Set<String> ALL_BUT_SURVIVAL = Set.of("lobby", "mod", "creative", "end", "minigame");
+
+    @Test
+    void everyTemplateRendersCompletelyAndStaysParseable() throws Exception {
+        List<Path> templates = templates();
+        assertTrue(templates.size() >= 7, "expected the seven server templates, found " + templates);
+        List<String> problems = new ArrayList<>();
+        for (Path template : templates) {
+            String server = template.getParent().getFileName().toString();
+            Path runtime = out.resolve(server);
+            TemplateInstaller.install(template, runtime, platformOf(template), values(ALL_BUT_SURVIVAL), true);
+            try (Stream<Path> files = Files.walk(runtime)) {
+                for (Path file : files.filter(Files::isRegularFile).toList()) {
+                    String name = server + "/" + runtime.relativize(file).toString().replace('\\', '/');
+                    String problem = check(file);
+                    if (problem != null) {
+                        problems.add(name + ": " + problem);
+                    }
+                }
+            }
+        }
+        assertEquals(List.of(), problems);
+    }
+
+    private static String check(Path file) throws IOException {
+        byte[] bytes = Files.readAllBytes(file);
+        String text = new String(bytes, UTF_8);
+        if (text.contains("{{")) {
+            return "contains {{";
+        }
+        String lower = file.getFileName().toString().toLowerCase(Locale.ROOT);
+        try {
+            if (lower.endsWith(".yml") || lower.endsWith(".yaml")) {
+                new YAMLMapper().readTree(text);
+            } else if (lower.endsWith(".json")) {
+                JsonMapper.builder().build().readTree(text);
+            } else if (lower.endsWith(".properties")) {
+                new Properties().load(new StringReader(text));
+            } else if (lower.endsWith(".toml")) {
+                return TomlCheck.problem(text);
+            }
+        } catch (RuntimeException e) {
+            return "does not parse: " + e.getMessage();
+        }
+        return null;
+    }
+
+    @Test
+    void renderedFilesKeepTheirLineEndings() throws Exception {
+        for (Path template : templates()) {
+            String server = template.getParent().getFileName().toString();
+            Path runtime = out.resolve(server);
+            TemplateInstaller.install(template, runtime, platformOf(template), values(ALL_BUT_SURVIVAL), false);
+            try (Stream<Path> files = Files.walk(template)) {
+                for (Path source : files.filter(Files::isRegularFile).toList()) {
+                    Path target = runtime.resolve(template.relativize(source));
+                    if (!Files.exists(target)) {
+                        continue;
+                    }
+                    String before = Files.readString(source);
+                    String after = Files.readString(target);
+                    assertEquals(before.contains("\r\n"), after.contains("\r\n"), target.toString());
+                    assertEquals(before.replace("\r\n", "").contains("\n"), after.replace("\r\n", "").contains("\n"),
+                            target.toString());
+                }
+            }
+        }
+    }
+
+    @Test
+    void generatedFilesLandWhereTheTemplatesExpectThem() throws Exception {
+        Path network = serverNetwork();
+        Map<String, String> keyPaths = Map.of(
+                "Proxy", "plugins/floodgate/key.pem",
+                "Lobby-Server", "plugins/floodgate/key.pem",
+                "Mod-Server", "config/floodgate/key.pem");
+        for (Map.Entry<String, String> entry : keyPaths.entrySet()) {
+            Path template = network.resolve(entry.getKey()).resolve("template");
+            Path runtime = out.resolve(entry.getKey());
+            TemplateInstaller.install(template, runtime, platformOf(template), values(ALL_BUT_SURVIVAL), true);
+            Path key = runtime.resolve(entry.getValue());
+            assertArrayEquals(FLOODGATE_BYTES, Files.readAllBytes(key), key.toString());
+            // The Floodgate config next to it must point at this file name.
+            Path floodgateConfig = key.resolveSibling("config.yml");
+            assertTrue(Files.readString(floodgateConfig).contains("key-file-name: key.pem"), floodgateConfig.toString());
+        }
+        assertEquals("forwarding-secret-for-tests", Files.readString(out.resolve("Proxy/forwarding.secret")));
+        assertTrue(Files.readString(out.resolve("Proxy/velocity.toml")).contains("forwarding-secret-file = \"forwarding.secret\""));
+        assertFalse(Files.exists(out.resolve("Proxy/eula.txt")));
+        assertTrue(Files.exists(out.resolve("Lobby-Server/eula.txt")));
+        assertTrue(Files.exists(out.resolve("Mod-Server/eula.txt")));
+    }
+
+    @Test
+    void proxyWithoutSurvivalNeverMentionsSurvival() throws Exception {
+        Path template = serverNetwork().resolve("Proxy/template");
+        TemplateInstaller.install(template, out, ServerPlatform.VELOCITY, values(ALL_BUT_SURVIVAL), false);
+        String velocity = Files.readString(out.resolve("velocity.toml"));
+        assertFalse(velocity.toLowerCase(Locale.ROOT).contains("survival"), velocity);
+        assertTrue(velocity.contains("lobby = \"127.0.0.1:25566\""));
+    }
+
+    @ParameterizedTest(name = "{0} wanted servers")
+    @ValueSource(ints = {1, 3, 6})
+    void proxyServerSectionMatchesTheGoldenFile(int count) throws Exception {
+        Set<String> wanted = switch (count) {
+            case 1 -> Set.of("lobby");
+            case 3 -> Set.of("lobby", "survival", "creative");
+            case 6 -> Set.of("lobby", "survival", "mod", "creative", "end", "minigame");
+            default -> throw new IllegalArgumentException();
+        };
+        Path template = serverNetwork().resolve("Proxy/template");
+        TemplateInstaller.install(template, out, ServerPlatform.VELOCITY, values(wanted), false);
+        String velocity = Files.readString(out.resolve("velocity.toml"));
+        int start = velocity.indexOf("[servers]");
+        int end = velocity.indexOf("[advanced]");
+        assertTrue(start >= 0 && end > start, "velocity.toml lost its [servers] or [advanced] table");
+        String actual = velocity.substring(start, end);
+
+        String golden = "golden/velocity-servers-" + count + ".toml";
+        try (InputStream in = getClass().getResourceAsStream(golden)) {
+            String expected = in == null ? null : new String(in.readAllBytes(), UTF_8);
+            if (!actual.equals(expected)) {
+                Path dump = Path.of("build", "golden-actual", "velocity-servers-" + count + ".toml");
+                Files.createDirectories(dump.getParent());
+                Files.writeString(dump, actual);
+                if (expected == null) {
+                    fail("golden file " + golden + " is missing; the actual output is in " + dump.toAbsolutePath());
+                }
+                assertEquals(expected, actual, "actual output written to " + dump.toAbsolutePath());
+            }
+        }
+        assertNull(TomlCheck.problem(velocity));
+    }
+}

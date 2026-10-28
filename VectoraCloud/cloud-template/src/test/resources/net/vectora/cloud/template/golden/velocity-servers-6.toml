@@ -1,0 +1,19 @@
+[servers]
+# Configure your servers here. Each key represents the server's name, and the value
+# represents the IP address of the server to connect to.
+creative = "127.0.0.1:25569"
+end = "127.0.0.1:25570"
+lobby = "127.0.0.1:25566"
+minigame = "127.0.0.1:25571"
+mod = "127.0.0.1:25568"
+survival = "127.0.0.1:25567"
+
+# In what order we should try servers when a player logs in or is kicked from a server.
+try = [ "lobby", "survival" ]
+
+[forced-hosts]
+# Configure your forced hosts here.
+"creative.example.net" = [ "creative" ]
+"minigames.example.net" = [ "minigame", "lobby" ]
+"survival.example.net" = [ "survival" ]
+
