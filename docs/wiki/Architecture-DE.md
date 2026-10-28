@@ -7,7 +7,7 @@
 ## Schichten
 
 ```
- Java 1.8 bis latest      Bedrock
+ Java 1.8 bis 26.3        Bedrock
         │                    │
         ▼                    ▼
  ┌──────────────────────────────────────┐
@@ -68,7 +68,7 @@ Mehrere Gradle-Module (Core, Rechte, Soziales, Moderation, Statistiken, Economy,
 - `Vectora-Velocity.jar`
 - `Vectora-Fabric.jar`
 
-Welche Module eine Server-Gruppe aktiviert, steht in der Cloud-Konfiguration; die Cloud verteilt die passende Jar. Versionsadapter decken Minecraft 1.8.8 bis latest ab. Das Plugin ersetzt LuckPerms, TAB, WorldEdit, WorldGuard, PlaceholderAPI, ProxyPortal und Chunky.
+Welche Module eine Server-Gruppe aktiviert, steht in der Cloud-Konfiguration; die Cloud verteilt die passende Jar. Versionsadapter decken Minecraft 1.8.8 bis 26.3 ab. Das Plugin ersetzt LuckPerms, TAB, WorldEdit, WorldGuard, PlaceholderAPI, ProxyPortal und Chunky.
 
 Heute enthält das Repository zwei frühe Module, `Vectora-Lobby` und `Vectora-PortalBridge`, die der Gradle-Build kompiliert.
 

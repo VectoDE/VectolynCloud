@@ -2,9 +2,9 @@
 
 **Choose your language / Sprache wählen:** [English](Overview) · [Deutsch](Overview-DE)
 
-Vectora is a Minecraft network for Java (1.8 to latest) and Bedrock players, and an open-source kit under GPL-3.0 for running a network like it yourself. The project is in stage 1 of 8.
+Vectora is a Minecraft network for Java (1.8 to 26.3) and Bedrock players, and an open-source kit under GPL-3.0 for running a network like it yourself. The project is in stage 1 of 8.
 
-Vectora ist ein Minecraft-Netzwerk für Java- (1.8 bis latest) und Bedrock-Spieler und zugleich ein Open-Source-Baukasten unter GPL-3.0, mit dem du so ein Netzwerk selbst betreiben kannst. Das Projekt steht bei Etappe 1 von 8.
+Vectora ist ein Minecraft-Netzwerk für Java- (1.8 bis 26.3) und Bedrock-Spieler und zugleich ein Open-Source-Baukasten unter GPL-3.0, mit dem du so ein Netzwerk selbst betreiben kannst. Das Projekt steht bei Etappe 1 von 8.
 
 | English | Deutsch |
 |---|---|

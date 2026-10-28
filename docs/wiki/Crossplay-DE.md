@@ -2,7 +2,7 @@
 
 [English](Crossplay)
 
-Ziel: Java-Clients von 1.8 bis zur neuesten Version und Bedrock-Clients spielen auf denselben Servern.
+Ziel: Java-Clients von 1.8 bis 26.3 und Bedrock-Clients spielen auf denselben Servern.
 
 ## Wie Spieler hereinkommen
 
@@ -26,8 +26,8 @@ All das läuft auf dem Proxy. Die Backends laufen auf der neuesten Minecraft-Ver
 - Menüs sind Inventar-Menüs, die Geyser auch auf Bedrock anzeigt. Bedrock-Formulare nutzen wir nicht, damit beide Editionen dasselbe Menü sehen.
 - Der Mod-Server nutzt nur serverseitige Mods, weil Bedrock-Clients keine Fabric-Mods installieren können.
 - Der geplante Anti-Cheat (Etappe 6) behandelt Bedrock-Bewegungen gesondert, damit Bedrock-Spieler für normales Verhalten nicht auffallen.
-- Das geplante Resourcepack (Etappe 7) gibt es als Java-Pack für jedes `pack_format` von 1.8 bis latest und als Bedrock-Pack für Geyser.
+- Das geplante Resourcepack (Etappe 7) gibt es als Java-Pack für jedes `pack_format` von 1.8 bis 26.3 und als Bedrock-Pack für Geyser.
 
 ## Plugin-Versionen (geplant, Etappe 3)
 
-Das Vectora-Plugin deckt Minecraft 1.8.8 bis latest über Versionsadapter ab. Für 1.8.8-Server-Gruppen wählen wir in Etappe 2 einen modernen Fork, der unter Java 21 läuft.
+Das Vectora-Plugin deckt Minecraft 1.8.8 bis 26.3 über Versionsadapter ab. Für 1.8.8-Server-Gruppen wählen wir in Etappe 2 einen modernen Fork, der unter Java 21 läuft.

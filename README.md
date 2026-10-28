@@ -8,7 +8,7 @@
 
 **English** · [Deutsch](README.de.md)
 
-Vectora is a Minecraft network where Java players (1.8 up to the latest version) and Bedrock players play together. The whole network is open source under GPL-3.0, so you can also use it as a kit for your own network.
+Vectora is a Minecraft network where Java players (1.8 to 26.3) and Bedrock players play together. The whole network is open source under GPL-3.0, so you can also use it as a kit for your own network.
 
 The long-term goal: you run `java -jar VectoraCloud.jar` on Windows, Linux, macOS, in Docker or on Pterodactyl, answer a setup wizard, and the complete network comes up with database, proxy, lobby, game modes and minigames.
 
@@ -33,7 +33,7 @@ The long-term goal: you run `java -jar VectoraCloud.jar` on Windows, Linux, macO
 ## Architecture
 
 ```
- Java 1.8 to latest       Bedrock
+ Java 1.8 to 26.3         Bedrock
         │                    │
         ▼                    ▼
  ┌──────────────────────────────────────┐

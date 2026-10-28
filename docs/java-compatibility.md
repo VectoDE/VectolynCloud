@@ -74,7 +74,7 @@ Risk to keep in mind: if a future paper-api exposes Java 22+ types in signatures
 
 ## Plan for stage 3: Java 21 core plus version adapters
 
-Stage 3 builds the Vectora plugin base so that one plugin supports MC 1.8.8 up to the latest version:
+Stage 3 builds the Vectora plugin base so that one plugin supports MC 1.8.8 up to 26.3:
 
 - **Core** (platform-independent logic, messaging, permissions model): release 21, no dependency on a specific Paper version.
 - **Adapters**, one per MC version range: each compiles against the matching server API and uses the lowest release target that API allows. Adapters for modern Paper (26.x) compile against a Java 25 API, adapters for older versions run on Java 21 or lower.
