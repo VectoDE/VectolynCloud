@@ -17,7 +17,10 @@ import net.vectora.cloud.config.model.DatabaseMode;
 import net.vectora.cloud.config.model.GroupConfig;
 import net.vectora.cloud.config.model.Language;
 import net.vectora.cloud.config.model.NodesConfig;
+import net.vectora.cloud.config.model.ProcessConfig;
+import net.vectora.cloud.config.model.RestartConfig;
 import net.vectora.cloud.config.model.TaskConfig;
+import net.vectora.cloud.config.model.TimeSpan;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.node.ObjectNode;
 
@@ -89,6 +92,42 @@ class ConfigYamlTest {
         assertEquals("mariadb:11.8", cloud.database().dockerImage());
         assertTrue(cloud.servers().lobby());
         assertFalse(cloud.servers().survival(), "a missing server counts as not wanted");
+    }
+
+    @Test
+    void processSectionIsOptionalAndRoundTrips() throws ConfigException {
+        String yaml = new String(ConfigYaml.write(Samples.lobbyGroup()), StandardCharsets.UTF_8);
+        assertFalse(yaml.contains("process"), "a group without process section writes none: " + yaml);
+        assertEquals(ProcessConfig.defaults(), Samples.lobbyGroup().processOrDefaults());
+
+        GroupConfig tuned = Samples.lobbyGroup().withProcess(new ProcessConfig(List.of("-XX:+UseG1GC", "-Dfile.encoding=UTF-8"),
+                "end", TimeSpan.parse("90s"), new RestartConfig(false, 3, TimeSpan.parse("10s"), TimeSpan.parse("2m"))));
+        assertRoundTrip(tuned, ConfigFormat.GROUP);
+        String written = new String(ConfigYaml.write(tuned), StandardCharsets.UTF_8);
+        assertTrue(written.contains("stop-timeout: \"90s\""), written);
+        assertTrue(written.contains("on-crash: false"), written);
+    }
+
+    @Test
+    void partialProcessSectionGetsDefaultsButRestartNeedsEveryField() throws ConfigException {
+        String base = new String(ConfigYaml.write(Samples.lobbyGroup()), StandardCharsets.UTF_8);
+        GroupConfig group = read(base + """
+                process:
+                  jvm-flags: ["-XX:+UseZGC"]
+                """, ConfigFormat.GROUP);
+        assertEquals(List.of("-XX:+UseZGC"), group.process().jvmFlags());
+        assertEquals(TimeSpan.parse("60s"), group.process().stopTimeout());
+        assertEquals(RestartConfig.defaults(), group.process().restart());
+
+        ConfigError error = single(base + """
+                process:
+                  restart:
+                    max-attempts: 3
+                    backoff: 5s
+                    max-backoff: 1m
+                """, ConfigFormat.GROUP);
+        assertEquals(ErrorCode.INVALID_VALUE, error.code());
+        assertTrue(error.path().startsWith("process.restart"), error.path());
     }
 
     @Test

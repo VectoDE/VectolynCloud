@@ -25,7 +25,9 @@ import net.vectora.cloud.config.model.MemorySize;
 import net.vectora.cloud.config.model.NodeConfig;
 import net.vectora.cloud.config.model.NodesConfig;
 import net.vectora.cloud.config.model.PortRange;
+import net.vectora.cloud.config.model.ProcessConfig;
 import net.vectora.cloud.config.model.ProxyConfig;
+import net.vectora.cloud.config.model.RestartConfig;
 import net.vectora.cloud.config.model.ScalingConfig;
 import net.vectora.cloud.config.model.ServerSoftware;
 import net.vectora.cloud.config.model.TaskConfig;
@@ -41,6 +43,43 @@ class ConfigValidatorTest {
     void defaultsAndSamplesAreValid() {
         assertEquals(List.of(), ConfigValidator.validate(ConfigSnapshot.defaults()));
         assertEquals(List.of(), ConfigValidator.validate(valid));
+    }
+
+    @Test
+    void processSectionIsChecked() {
+        GroupConfig lobby = Samples.lobbyGroup();
+        ProcessConfig good = new ProcessConfig(List.of("-XX:+UseG1GC", "-Dvectora.flag=a,b"), "stop", TimeSpan.parse("30s"),
+                RestartConfig.defaults());
+        assertEquals(Set.of(), codes(valid.withGroup("lobby", lobby.withProcess(good))));
+
+        ProcessConfig bad = new ProcessConfig(List.of("-Xmx4G", "-jar", "--class-path=x", "no-dash", "-Dx=a b"), "/stop",
+                TimeSpan.parse("0s"), new RestartConfig(true, 0, TimeSpan.parse("10m"), TimeSpan.parse("1m")));
+        assertEquals(Set.of(
+                "groups/lobby.yml process.jvm-flags[0] INVALID_VALUE",
+                "groups/lobby.yml process.jvm-flags[1] INVALID_VALUE",
+                "groups/lobby.yml process.jvm-flags[2] INVALID_VALUE",
+                "groups/lobby.yml process.jvm-flags[3] PATTERN_MISMATCH",
+                "groups/lobby.yml process.jvm-flags[4] PATTERN_MISMATCH",
+                "groups/lobby.yml process.stop-command PATTERN_MISMATCH",
+                "groups/lobby.yml process.stop-timeout OUT_OF_RANGE",
+                "groups/lobby.yml process.restart.max-attempts OUT_OF_RANGE",
+                "groups/lobby.yml process.restart.backoff MIN_GREATER_THAN_MAX"),
+                codes(valid.withGroup("lobby", lobby.withProcess(bad))));
+
+        List<String> many = java.util.Collections.nCopies(ProcessConfig.MAX_JVM_FLAGS + 1, "-XX:+UseG1GC");
+        assertEquals(Set.of("groups/lobby.yml process.jvm-flags OUT_OF_RANGE"),
+                codes(valid.withGroup("lobby", lobby.withProcess(new ProcessConfig(many, null, null, null)))));
+    }
+
+    @Test
+    void reservedJvmFlagsAreRecognised() {
+        for (String flag : List.of("-Xms1G", "-Xmx1G", "-jar", "-cp", "-classpath", "--class-path", "--class-path=a",
+                "-version", "--version", "-help", "-?", "-X", "-XX:Flags=x", "-XX:VMOptionsFile=x")) {
+            assertTrue(ProcessConfig.isReservedJvmFlag(flag), flag);
+        }
+        for (String flag : List.of("-XX:+UseG1GC", "-Xss1M", "-Dcom.mojang.eula.agree=true", "-javaagent:spark.jar")) {
+            assertEquals(false, ProcessConfig.isReservedJvmFlag(flag), flag);
+        }
     }
 
     @Test

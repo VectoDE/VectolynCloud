@@ -1,20 +1,29 @@
 package net.vectora.cloud.template;
 
 import java.io.IOException;
-import java.io.OutputStream;
-import java.nio.channels.Channels;
-import java.nio.channels.SeekableByteChannel;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.file.AccessDeniedException;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.LinkOption;
 import java.nio.file.OpenOption;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.AclEntry;
+import java.nio.file.attribute.AclEntryPermission;
+import java.nio.file.attribute.AclEntryType;
+import java.nio.file.attribute.AclFileAttributeView;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileAttribute;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
+import java.security.SecureRandom;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -28,8 +37,14 @@ import java.util.Set;
  */
 final class RuntimePaths {
 
-    private static final Set<OpenOption> WRITE_OPTIONS = Set.of(StandardOpenOption.CREATE,
-            StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS);
+    /** Prefix of the temporary files; a leftover one is harmless and never read. */
+    static final String TEMP_PREFIX = ".vectora-";
+    /** Suffix of the temporary files. */
+    static final String TEMP_SUFFIX = ".tmp";
+    private static final int MOVE_ATTEMPTS = 5;
+    private static final SecureRandom RANDOM = new SecureRandom();
+    private static final Set<OpenOption> CREATE_NEW_OPTIONS = Set.of(StandardOpenOption.CREATE_NEW,
+            StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS);
     private static final Set<PosixFilePermission> OWNER_ONLY =
             EnumSet.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE);
 
@@ -109,10 +124,18 @@ final class RuntimePaths {
      * Writes {@code content} to {@code relative} below {@code root}, creating missing folders and
      * replacing an existing file.
      *
+     * <p>The content never goes into the existing file. It is written to a new, hidden temporary
+     * file in the same folder, flushed to disk, and renamed over the target. A crash before the
+     * rename leaves the old file as it was; an existing file is never truncated; and a hard link at
+     * the target is replaced as a directory entry instead of being written through, so the other
+     * names of that file keep their content. For a secret the temporary file is restricted to the
+     * owner (POSIX {@code 600}, or an owner-only access list on Windows) before the first byte of
+     * the secret goes into it.
+     *
      * @param root runtime folder
      * @param relative path below it, separated by {@code /}
      * @param content new file content
-     * @param secret whether only the owner may read the file (applied where POSIX permissions exist)
+     * @param secret whether only the owner may read the file
      * @return the absolute path written
      * @throws TemplateException if the path is unsafe or a link or file blocks it
      * @throws IOException if writing fails
@@ -136,19 +159,104 @@ final class RuntimePaths {
                         + base.relativize(current).toString().replace('\\', '/'));
             }
         }
-        boolean posix = secret && Files.getFileStore(current).supportsFileAttributeView("posix");
-        FileAttribute<?>[] attributes = posix
-                ? new FileAttribute<?>[] {PosixFilePermissions.asFileAttribute(OWNER_ONLY)}
-                : new FileAttribute<?>[0];
-        try (SeekableByteChannel channel = Files.newByteChannel(target, WRITE_OPTIONS, attributes);
-             OutputStream out = Channels.newOutputStream(channel)) {
-            out.write(content);
-        }
-        if (posix) {
-            // The attribute applies only to new files; an existing one keeps its old mode otherwise.
-            Files.setPosixFilePermissions(target, OWNER_ONLY);
+        Path temp = createTemp(current, secret);
+        try {
+            try (FileChannel channel = FileChannel.open(temp, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
+                ByteBuffer buffer = ByteBuffer.wrap(content);
+                while (buffer.hasRemaining()) {
+                    channel.write(buffer);
+                }
+                channel.force(true);
+            }
+            BasicFileAttributes existing = attributesOrNull(target);
+            if (existing != null && (isLink(existing) || !existing.isRegularFile())) {
+                // Appeared after check(); never replace a link or a folder.
+                throw new TemplateException(relative, "target is not a regular file");
+            }
+            move(temp, target);
+            temp = null;
+        } finally {
+            if (temp != null) {
+                Files.deleteIfExists(temp);
+            }
         }
         return target;
+    }
+
+    /**
+     * Creates an empty temporary file next to the target. A secret file gets its owner-only
+     * permissions at creation (POSIX) or before anything is written into it (access list).
+     */
+    private static Path createTemp(Path folder, boolean secret) throws IOException {
+        boolean posix = Files.getFileStore(folder).supportsFileAttributeView("posix");
+        FileAttribute<?>[] attributes = secret && posix
+                ? new FileAttribute<?>[] {PosixFilePermissions.asFileAttribute(OWNER_ONLY)}
+                : new FileAttribute<?>[0];
+        for (int attempt = 0; ; attempt++) {
+            Path temp = folder.resolve(TEMP_PREFIX + Long.toUnsignedString(RANDOM.nextLong(), 36) + TEMP_SUFFIX);
+            try {
+                Files.newByteChannel(temp, CREATE_NEW_OPTIONS, attributes).close();
+            } catch (FileAlreadyExistsException e) {
+                if (attempt >= 10) {
+                    throw e;
+                }
+                continue;
+            }
+            try {
+                if (secret && posix) {
+                    // The umask can only remove bits; set the mode explicitly all the same.
+                    Files.setPosixFilePermissions(temp, OWNER_ONLY);
+                } else if (secret) {
+                    restrictAcl(temp);
+                }
+            } catch (IOException | RuntimeException e) {
+                Files.deleteIfExists(temp);
+                throw e;
+            }
+            return temp;
+        }
+    }
+
+    /** Replaces the access list of a file with a single entry: full control for its owner. */
+    private static void restrictAcl(Path file) throws IOException {
+        AclFileAttributeView acl = Files.getFileAttributeView(file, AclFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
+        if (acl == null) {
+            // Neither POSIX permissions nor access lists (FAT, some network shares): nothing to restrict.
+            return;
+        }
+        acl.setAcl(List.of(AclEntry.newBuilder()
+                .setType(AclEntryType.ALLOW)
+                .setPrincipal(acl.getOwner())
+                .setPermissions(EnumSet.allOf(AclEntryPermission.class))
+                .build()));
+    }
+
+    /**
+     * Renames the temporary file over the target, atomically where the file system can. Windows
+     * refuses a rename for a moment while a virus scanner or an editor holds the target open, so a
+     * denied rename is tried a few more times.
+     */
+    private static void move(Path temp, Path target) throws IOException {
+        for (int attempt = 1; ; attempt++) {
+            try {
+                try {
+                    Files.move(temp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+                } catch (AtomicMoveNotSupportedException e) {
+                    Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
+                }
+                return;
+            } catch (AccessDeniedException e) {
+                if (attempt >= MOVE_ATTEMPTS) {
+                    throw e;
+                }
+                try {
+                    Thread.sleep(50L * attempt);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw e;
+                }
+            }
+        }
     }
 
     /**

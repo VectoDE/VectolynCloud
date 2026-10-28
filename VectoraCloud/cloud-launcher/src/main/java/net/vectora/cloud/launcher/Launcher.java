@@ -195,7 +195,7 @@ public final class Launcher {
 
     private static void startEmbeddedNode(Path home, Map<String, String> settings)
             throws LibraryException, NodeStartException {
-        Path libs = home.resolve("cache").resolve("libs");
+        Path libs = NodeStarter.libsDirectory(home, version());
         ClassLoader loader = NodeStarter.classLoader(Launcher.class.getClassLoader(), libs);
         NodeStarter.start(loader, NodeStarter.NODE_MAIN_CLASS, settings);
     }

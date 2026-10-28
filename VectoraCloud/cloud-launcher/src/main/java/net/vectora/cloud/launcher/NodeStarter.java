@@ -10,8 +10,12 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 import net.vectora.cloud.launcher.libs.LibraryException;
 import net.vectora.cloud.launcher.libs.LibraryExtractor;
 import net.vectora.cloud.launcher.libs.LibraryIndex;
@@ -42,7 +46,44 @@ public final class NodeStarter {
     /** Name of the static entry method, taking a {@code Map<String, String>}. */
     public static final String ENTRY_METHOD = "start";
 
+    /** Version folder names that are used as they are; anything else is replaced by a hash. */
+    private static final Pattern SAFE_VERSION = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._+-]{0,63}");
+
     private NodeStarter() {
+    }
+
+    /**
+     * Returns the library cache of one cloud version: {@code <home>/cache/libs/<version>}.
+     *
+     * <p>Each version gets its own folder because {@link LibraryExtractor} deletes every jar in its
+     * folder that the index does not list. With one shared folder, two versions of
+     * {@code VectoraCloud.jar} using the same home (an update while an old node still runs, or a
+     * rollback) would delete each other's libraries. A version that is not a plain folder name
+     * ({@code [A-Za-z0-9][A-Za-z0-9._+-]{0,63}}, and not {@code .} or {@code ..}) is replaced by
+     * {@code v-} and the first 16 hex digits of its SHA-256, so it can never leave
+     * {@code cache/libs}.
+     *
+     * @param home    absolute cloud home
+     * @param version version of this build, see {@link Launcher#version()}
+     * @return the folder for this version's libraries
+     */
+    public static Path libsDirectory(Path home, String version) {
+        Path libs = home.resolve("cache").resolve("libs");
+        String folder = SAFE_VERSION.matcher(version).matches() ? version : hashedFolder(version);
+        Path result = libs.resolve(folder).normalize();
+        if (!libs.normalize().equals(result.getParent())) {
+            throw new IllegalArgumentException("library folder leaves cache/libs");
+        }
+        return result;
+    }
+
+    private static String hashedFolder(String version) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(version.getBytes(StandardCharsets.UTF_8));
+            return "v-" + HexFormat.of().formatHex(digest, 0, 8);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is required by the Java SE specification", e);
+        }
     }
 
     /**
@@ -52,7 +93,7 @@ public final class NodeStarter {
      * Gradle class path) the launcher's own class loader is returned.
      *
      * @param launcherLoader class loader that loaded the launcher
-     * @param libsDirectory  {@code <home>/cache/libs}
+     * @param libsDirectory  {@code <home>/cache/libs/<version>}
      * @return the class loader for the node
      * @throws LibraryException if the index or a library is invalid
      */

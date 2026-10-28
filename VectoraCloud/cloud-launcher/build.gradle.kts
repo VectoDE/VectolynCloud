@@ -35,7 +35,7 @@ dependencies {
 /**
  * Writes the index of the libraries embedded in VectoraCloud.jar: one line per jar,
  * "<sha256 hex>  <file name>", the same layout as sha256sum. The launcher reads it at startup,
- * unpacks the jars to <home>/cache/libs and checks every hash before loading anything.
+ * unpacks the jars to <home>/cache/libs/<version> and checks every hash before loading anything.
  */
 abstract class EmbeddedLibrariesIndex : DefaultTask() {
 

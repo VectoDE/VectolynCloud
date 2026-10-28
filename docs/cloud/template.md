@@ -87,7 +87,7 @@ Markdown files (`*.md`, case-insensitive, in any folder of the template) are nei
 | `config/floodgate/key.pem` | `FABRIC` | Same key. |
 | `eula.txt` | `PAPER`, `PANDASPIGOT`, `FABRIC` | Only with `eulaAccepted = true`. Without consent nothing is written, and an existing `eula.txt` stays as it is. |
 
-The paths match the Floodgate configs in the templates (`key-file-name: key.pem` next to each `config.yml`). The secrets are checked before anything is written. On file systems with POSIX permissions, `forwarding.secret` and `key.pem` are readable by the owner only.
+The paths match the Floodgate configs in the templates (`key-file-name: key.pem` next to each `config.yml`). The secrets are checked before anything is written. Each generated file is written to a new temporary file next to the target (`.vectora-<random>.tmp`), flushed to disk and then moved over the target. A secret file is therefore never truncated in place, never written through a hard link or symbolic link at the target, and never visible half-written. The temporary file of `forwarding.secret` and `key.pem` is created readable by the owner only: with POSIX permissions `rw-------` from the start, on Windows with an access list that allows only the owner. A failed write leaves the old file and no temporary file behind.
 
 `NONE` (the database template) gets no generated files.
 

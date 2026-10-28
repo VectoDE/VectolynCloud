@@ -23,7 +23,9 @@ import net.vectora.cloud.config.model.GroupConfig;
 import net.vectora.cloud.config.model.HeapConfig;
 import net.vectora.cloud.config.model.NodeConfig;
 import net.vectora.cloud.config.model.NodesConfig;
+import net.vectora.cloud.config.model.ProcessConfig;
 import net.vectora.cloud.config.model.ProxyConfig;
+import net.vectora.cloud.config.model.RestartConfig;
 import net.vectora.cloud.config.model.ScalingConfig;
 import net.vectora.cloud.config.model.ServerSoftware;
 import net.vectora.cloud.config.model.TaskConfig;
@@ -189,6 +191,36 @@ public final class ConfigValidator {
                             lower(ref.kind()), lower(group.software())));
                 }
             }
+        }
+        validateProcess(c, f, group.process());
+    }
+
+    private static void validateProcess(Checks c, String f, ProcessConfig process) {
+        if (process == null) {
+            return;
+        }
+        List<String> flags = process.jvmFlags();
+        c.range(f, "process.jvm-flags", flags.size(), 0, ProcessConfig.MAX_JVM_FLAGS);
+        for (int i = 0; i < flags.size() && i < ProcessConfig.MAX_JVM_FLAGS; i++) {
+            String p = "process.jvm-flags[" + i + "]";
+            if (c.pattern(f, p, flags.get(i), ProcessConfig.JVM_FLAG) && ProcessConfig.isReservedJvmFlag(flags.get(i))) {
+                c.add(ConfigError.of(f, p, ErrorCode.INVALID_VALUE,
+                        "a JVM flag other than -Xms or -Xmx (set under heap), -jar, -cp, -version or -help"));
+            }
+        }
+        if (process.stopCommand() != null) {
+            c.pattern(f, "process.stop-command", process.stopCommand(), ProcessConfig.STOP_COMMAND);
+        }
+        c.range(f, "process.stop-timeout", process.stopTimeout().duration().getSeconds(),
+                ProcessConfig.MIN_STOP_TIMEOUT_SECONDS, ProcessConfig.MAX_STOP_TIMEOUT_SECONDS);
+        RestartConfig restart = process.restart();
+        c.range(f, "process.restart.max-attempts", restart.maxAttempts(), 1, RestartConfig.MAX_ATTEMPTS);
+        boolean backoff = c.required(f, "process.restart.backoff", restart.backoff());
+        boolean maxBackoff = c.required(f, "process.restart.max-backoff", restart.maxBackoff());
+        if (backoff && maxBackoff
+                && restart.backoff().duration().compareTo(restart.maxBackoff().duration()) > 0) {
+            c.add(ConfigError.of(f, "process.restart.backoff", ErrorCode.MIN_GREATER_THAN_MAX,
+                    "process.restart.max-backoff"));
         }
     }
 

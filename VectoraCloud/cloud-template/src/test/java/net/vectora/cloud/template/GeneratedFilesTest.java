@@ -8,12 +8,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.AclEntry;
+import java.nio.file.attribute.AclFileAttributeView;
 import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
+import java.nio.file.attribute.UserPrincipal;
 import java.util.Base64;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -41,6 +46,72 @@ class GeneratedFilesTest {
             EnumSet<PosixFilePermission> ownerOnly = EnumSet.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE);
             assertEquals(ownerOnly, Files.getPosixFilePermissions(runtime.resolve("forwarding.secret")));
             assertEquals(ownerOnly, Files.getPosixFilePermissions(runtime.resolve("plugins/floodgate/key.pem")));
+        }
+    }
+
+    @Test
+    void secretsAreOnlyReadableByTheOwnerWhereAccessListsExist() throws Exception {
+        GeneratedFiles.writeForwardingSecret(runtime, FWD);
+        Path file = runtime.resolve("forwarding.secret");
+        AclFileAttributeView acl = Files.getFileAttributeView(file, AclFileAttributeView.class);
+        if (acl != null && !Files.getFileStore(runtime).supportsFileAttributeView("posix")) {
+            UserPrincipal owner = acl.getOwner();
+            assertFalse(acl.getAcl().isEmpty());
+            for (AclEntry entry : acl.getAcl()) {
+                assertEquals(owner, entry.principal(), "only the owner may have an entry");
+            }
+        }
+    }
+
+    @Test
+    void anExistingWorldReadableSecretIsReplacedNotRewrittenInPlace() throws Exception {
+        Path file = runtime.resolve("forwarding.secret");
+        Files.writeString(file, "old-content-that-is-long-enough");
+        if (Files.getFileStore(runtime).supportsFileAttributeView("posix")) {
+            Files.setPosixFilePermissions(file, PosixFilePermissions.fromString("rw-r--r--"));
+        }
+        GeneratedFiles.writeForwardingSecret(runtime, FWD);
+        assertEquals(FWD, Files.readString(file));
+        if (Files.getFileStore(runtime).supportsFileAttributeView("posix")) {
+            assertEquals(PosixFilePermissions.fromString("rw-------"), Files.getPosixFilePermissions(file));
+        }
+        assertNoTempFiles(runtime);
+    }
+
+    @Test
+    void aHardLinkAtTheTargetIsReplacedAndNotWrittenThrough(@TempDir Path elsewhere) throws Exception {
+        Path outside = elsewhere.resolve("victim.txt");
+        Files.writeString(outside, "must stay as it is");
+        Path link = runtime.resolve("forwarding.secret");
+        try {
+            Files.createLink(link, outside);
+        } catch (UnsupportedOperationException | java.io.IOException e) {
+            Assumptions.assumeTrue(false, "hard links are not supported here: " + e);
+        }
+        GeneratedFiles.writeForwardingSecret(runtime, FWD);
+        assertEquals(FWD, Files.readString(link));
+        assertEquals("must stay as it is", Files.readString(outside), "the other name of the file kept its content");
+        assertNoTempFiles(runtime);
+    }
+
+    @Test
+    void aFailedWriteLeavesTheOldFileAndNoTemporaryFile() throws Exception {
+        Path file = runtime.resolve("forwarding.secret");
+        Files.writeString(file, "previous-forwarding-secret");
+        // A folder where the Floodgate key should go: the write fails after the checks.
+        Files.createDirectories(runtime.resolve("plugins/floodgate/key.pem"));
+        assertThrows(TemplateException.class,
+                () -> GeneratedFiles.writeFloodgateKey(runtime, ServerPlatform.PAPER, KEY_B64));
+        assertEquals("previous-forwarding-secret", Files.readString(file));
+        assertNoTempFiles(runtime);
+        assertNoTempFiles(runtime.resolve("plugins/floodgate"));
+    }
+
+    private static void assertNoTempFiles(Path folder) throws java.io.IOException {
+        try (var files = Files.list(folder)) {
+            List<String> temps = files.map(p -> p.getFileName().toString())
+                    .filter(n -> n.startsWith(RuntimePaths.TEMP_PREFIX)).toList();
+            assertEquals(List.of(), temps);
         }
     }
 
