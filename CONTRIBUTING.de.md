@@ -42,10 +42,11 @@ Vergessen? `git commit --amend -s` für den letzten Commit, `git rebase --signof
 
 ## Code
 
-- Java mit Gradle (Kotlin DSL). Die Toolchain ist Java 25, das Bytecode-Ziel Java 21. Die CI baut und testet mit JDK 25 und führt die Tests zusätzlich auf Java 21 aus (`./gradlew test -PtestJava=21`). Tests, die Paper-Klassen laden, tragen `@Tag("requires-java25")`.
+- Java mit Gradle (Kotlin DSL). Die Toolchain ist Java 25, das Bytecode-Ziel Java 21. Die CI baut und testet mit JDK 25 und führt die Tests zusätzlich auf Java 21 aus (`./gradlew test -PtestJava=21`). Tests, die Paper- oder Velocity-Klassen laden, tragen `@Tag("requires-java25")`. Gemeinsame Build-Einstellungen stehen in den Convention-Plugins unter `build-logic/`.
 - Code, der Java 25 braucht, bekommt `@RequiresJava25`, eine Laufzeitprüfung und einen Java-21-Weg. Details in `docs/java-compatibility.md`.
 - Ein Formatter ist noch nicht eingerichtet. Halte dich an den umgebenden Code: 4 Leerzeichen, keine Wildcard-Imports, klare Namen statt Kommentare.
 - Neue Logik braucht Tests. Zu einem Bugfix gehört, wo es machbar ist, ein Test, der ohne den Fix fehlschlägt.
+- Code, der nicht vertrauenswürdige Eingaben verarbeitet (Netzwerk-Frames, Konfigurationsdateien, Downloads, API-Anfragen), bekommt zusätzlich einen Jazzer-`@FuzzTest`. Siehe [docs/cloud/architecture.md](docs/cloud/architecture.md#fuzz-tests).
 - Keine neuen Fremd-Plugins. Die erlaubte Basis steht im README, alles andere entsteht in diesem Repository.
 - Jeder Spielmodus muss für Bedrock-Spieler funktionieren. Menüs sind Inventar-Menüs, keine Bedrock-Formulare.
 - Nie Secrets, IPs, Spielerdaten, Welten oder Server-Jars committen. Die Ordner unter `Server-Network/` enthalten nur Templates.

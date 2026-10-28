@@ -23,6 +23,11 @@ build/
 !gradle/wrapper/gradle-wrapper.jar
 .kotlin/
 
+# --- Fuzzing (Jazzer) -----------------------------------------------------------
+# Generated corpus of local or nightly fuzz runs. Crashing inputs that should be replayed as
+# regression tests are committed under src/test/resources/<package>/<Class>Inputs/<method>/.
+.cifuzz-corpus/
+
 # --- Java and other binaries -----------------------------------------------------
 *.jar
 !gradle/wrapper/gradle-wrapper.jar
