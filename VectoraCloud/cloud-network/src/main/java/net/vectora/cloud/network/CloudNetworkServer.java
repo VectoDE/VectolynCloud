@@ -312,7 +312,9 @@ public final class CloudNetworkServer implements AutoCloseable {
 
     /** Adds the cloud's handlers to {@code channel}; also used by the tests with an embedded channel. */
     void initPipeline(Channel channel) {
-        customizer.customize(channel);
+        if (customizer != null) {
+            customizer.customize(channel);
+        }
         EnvelopeDecoder decoder = new EnvelopeDecoder(codec);
         channel.pipeline()
                 .addLast(FRAME_DECODER, decoder)
@@ -348,7 +350,7 @@ public final class CloudNetworkServer implements AutoCloseable {
 
     /** Tells the listener about a session after its {@code AuthResult} has been written. */
     void sessionOpened(ServiceSession session) {
-        notifyListener(() -> listener.serviceConnected(session.service(), session.remoteAddress()));
+        notifyListener(new ServiceEvent.Connected(session.service(), session.remoteAddress()));
     }
 
     void sessionClosed(ServiceSession session, Disconnect.Reason handlerReason) {
@@ -358,27 +360,31 @@ public final class CloudNetworkServer implements AutoCloseable {
         if (current && !session.isReplaced()) {
             LOG.log(Level.INFO, "Service {0} disconnected ({1})", session.service().value(),
                     reason == null ? "connection lost" : reason);
-            notifyListener(() -> listener.serviceDisconnected(session.service(), reason));
+            notifyListener(new ServiceEvent.Disconnected(session.service(), reason));
         }
     }
 
     void serviceReady(ServiceSession session) {
-        notifyListener(() -> listener.serviceReady(session.service()));
+        notifyListener(new ServiceEvent.Ready(session.service()));
     }
 
     void serviceStatus(ServiceStatus status) {
-        notifyListener(() -> listener.serviceStatus(status));
+        notifyListener(new ServiceEvent.StatusReported(status));
     }
 
     void messageReceived(ServiceSession session, Message message) {
-        notifyListener(() -> listener.messageReceived(session.service(), message));
+        notifyListener(new ServiceEvent.MessageReceived(session.service(), message));
     }
 
     void channelMessage(ServiceSession from, ChannelMessage message) {
         List<ChannelSubscriber> local = subscribers.get(message.channel());
         if (local != null) {
             for (ChannelSubscriber subscriber : local) {
-                notifyListener(() -> subscriber.received(from.service(), message));
+                try {
+                    subscriber.received(from.service(), message);
+                } catch (RuntimeException e) {
+                    LOG.log(Level.ERROR, "Subscriber of channel " + message.channel() + " failed", e);
+                }
             }
         }
         fanOut(from, message);
@@ -445,9 +451,12 @@ public final class CloudNetworkServer implements AutoCloseable {
         }
     }
 
-    private static void notifyListener(Runnable call) {
+    private void notifyListener(ServiceEvent event) {
+        if (listener == null) {
+            return;
+        }
         try {
-            call.run();
+            listener.onEvent(event);
         } catch (RuntimeException e) {
             LOG.log(Level.ERROR, "Listener of the cloud network failed", e);
         }
@@ -476,21 +485,21 @@ public final class CloudNetworkServer implements AutoCloseable {
 
         private final NetworkSettings settings;
         private final ServiceAuthenticator authenticator;
-        private ServiceListener listener = ServiceListener.NONE;
-        private PipelineCustomizer customizer = PipelineCustomizer.NONE;
+        private ServiceListener listener;
+        private PipelineCustomizer customizer;
 
         private Builder(NetworkSettings settings, ServiceAuthenticator authenticator) {
             this.settings = Objects.requireNonNull(settings, "settings");
             this.authenticator = Objects.requireNonNull(authenticator, "authenticator");
         }
 
-        /** Sets the listener for service events. */
+        /** Sets the listener for service events; without one they are dropped. */
         public Builder listener(ServiceListener value) {
             this.listener = Objects.requireNonNull(value, "listener");
             return this;
         }
 
-        /** Sets the pipeline hook, for example to add TLS. */
+        /** Sets the pipeline hook, for example to add TLS; without one the channel is plain TCP. */
         public Builder pipelineCustomizer(PipelineCustomizer value) {
             this.customizer = Objects.requireNonNull(value, "customizer");
             return this;

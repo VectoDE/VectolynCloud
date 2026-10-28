@@ -1,6 +1,5 @@
 package net.vectora.cloud.network;
 
-import java.net.InetSocketAddress;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -15,28 +14,17 @@ final class RecordingListener implements ServiceListener {
     private final BlockingQueue<String> events = new LinkedBlockingQueue<>();
 
     @Override
-    public void serviceConnected(ServiceId service, InetSocketAddress remote) {
-        events.add("connected " + service.value());
-    }
-
-    @Override
-    public void serviceReady(ServiceId service) {
-        events.add("ready " + service.value());
-    }
-
-    @Override
-    public void serviceStatus(ServiceStatus status) {
-        events.add("status " + status.service().value() + " " + status.playersOnline() + " heapMax=" + status.heapMax());
-    }
-
-    @Override
-    public void messageReceived(ServiceId service, Message message) {
-        events.add("message " + service.value() + " " + message.getClass().getSimpleName());
-    }
-
-    @Override
-    public void serviceDisconnected(ServiceId service, Disconnect.Reason reason) {
-        events.add("disconnected " + service.value() + " " + reason);
+    public void onEvent(ServiceEvent event) {
+        events.add(switch (event) {
+            case ServiceEvent.Connected connected -> "connected " + connected.service().value();
+            case ServiceEvent.Ready ready -> "ready " + ready.service().value();
+            case ServiceEvent.StatusReported(ServiceStatus status) ->
+                    "status " + status.service().value() + " " + status.playersOnline() + " heapMax=" + status.heapMax();
+            case ServiceEvent.MessageReceived(ServiceId service, Message message) ->
+                    "message " + service.value() + " " + message.getClass().getSimpleName();
+            case ServiceEvent.Disconnected(ServiceId service, Disconnect.Reason reason) ->
+                    "disconnected " + service.value() + " " + reason;
+        });
     }
 
     /** Waits up to five seconds for the next event. */

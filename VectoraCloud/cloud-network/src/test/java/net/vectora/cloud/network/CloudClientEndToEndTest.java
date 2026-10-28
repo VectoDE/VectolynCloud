@@ -21,6 +21,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 import net.vectora.cloud.client.CloudClient;
+import net.vectora.cloud.client.CloudClientEvent;
 import net.vectora.cloud.client.CloudClientListener;
 import net.vectora.cloud.client.CloudClientSettings;
 import net.vectora.cloud.client.NotConnectedException;
@@ -226,23 +227,14 @@ class CloudClientEndToEndTest {
         private final BlockingQueue<String> queue = new LinkedBlockingQueue<>();
 
         @Override
-        public void connected() {
-            queue.add("connected");
-        }
-
-        @Override
-        public void disconnected(Disconnect.Reason reason) {
-            queue.add("disconnected " + reason);
-        }
-
-        @Override
-        public void rejected(AuthResult.Outcome outcome) {
-            queue.add("rejected " + outcome);
-        }
-
-        @Override
-        public void messageReceived(Message message) {
-            queue.add("message " + message.getClass().getSimpleName());
+        public void onEvent(CloudClientEvent event) {
+            queue.add(switch (event) {
+                case CloudClientEvent.Connected connected -> "connected";
+                case CloudClientEvent.Disconnected(Disconnect.Reason reason) -> "disconnected " + reason;
+                case CloudClientEvent.Rejected(AuthResult.Outcome outcome) -> "rejected " + outcome;
+                case CloudClientEvent.MessageReceived(Message message) ->
+                        "message " + message.getClass().getSimpleName();
+            });
         }
 
         String next() throws InterruptedException {

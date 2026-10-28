@@ -393,7 +393,7 @@ public final class CloudClient implements AutoCloseable {
                     LOG.log(Level.WARNING, "VectoraCloud refused service {0}: {1}", serviceId().value(),
                             result.outcome());
                     AuthResult.Outcome outcome = result.outcome();
-                    dispatch(() -> listeners.forEach(l -> l.rejected(outcome)));
+                    notifyListeners(new CloudClientEvent.Rejected(outcome));
                 }
             } catch (IncompatibleVersionException e) {
                 LOG.log(Level.ERROR, "VectoraCloud speaks protocol {0}, this client {1}; update the plugin",
@@ -422,8 +422,7 @@ public final class CloudClient implements AutoCloseable {
             }
             if (accepted) {
                 failPending("the connection to the cloud closed");
-                Disconnect.Reason why = reason;
-                dispatch(() -> listeners.forEach(l -> l.disconnected(why)));
+                notifyListeners(new CloudClientEvent.Disconnected(reason));
             }
             if (closed) {
                 break;
@@ -460,7 +459,7 @@ public final class CloudClient implements AutoCloseable {
         if (status != null) {
             send(open, Envelope.of(status));
         }
-        dispatch(() -> listeners.forEach(CloudClientListener::connected));
+        notifyListeners(new CloudClientEvent.Connected());
     }
 
     /** Reads until the cloud sends {@code Disconnect} (returns its reason) or the connection fails. */
@@ -488,7 +487,7 @@ public final class CloudClient implements AutoCloseable {
                     }
                     // Pong needs nothing: any frame resets the read timeout already.
                     if (!(message instanceof Pong)) {
-                        dispatch(() -> listeners.forEach(l -> l.messageReceived(message)));
+                        notifyListeners(new CloudClientEvent.MessageReceived(message));
                     }
                 }
             }
@@ -581,6 +580,18 @@ public final class CloudClient implements AutoCloseable {
                 future.completeExceptionally(new NotConnectedException(why));
             }
         }
+    }
+
+    private void notifyListeners(CloudClientEvent event) {
+        dispatch(() -> {
+            for (CloudClientListener listener : listeners) {
+                try {
+                    listener.onEvent(event);
+                } catch (RuntimeException e) {
+                    LOG.log(Level.ERROR, "A listener of the cloud client failed", e);
+                }
+            }
+        });
     }
 
     private void dispatch(Runnable task) {

@@ -62,8 +62,10 @@ class ConnectionFuzzTest {
         private boolean happened;
 
         @Override
-        public void serviceConnected(ServiceId service, java.net.InetSocketAddress remote) {
-            happened = true;
+        public void onEvent(ServiceEvent event) {
+            if (event instanceof ServiceEvent.Connected) {
+                happened = true;
+            }
         }
     }
 }
