@@ -4,9 +4,8 @@ plugins {
 }
 
 dependencies {
-    api(project(":VectoraCloud:cloud-config"))
-    // Same Jackson as cloud-config (version from the BOM there). cloud-config keeps the YAML
-    // module internal, so the lockfile and the catalog need it here as well.
+    // Same Jackson as cloud-config (version from the shared BOM), for the lockfile, the catalog
+    // and the API responses.
     implementation(platform(libs.jackson.bom))
     implementation(libs.jackson.databind)
     implementation(libs.jackson.dataformat.yaml)

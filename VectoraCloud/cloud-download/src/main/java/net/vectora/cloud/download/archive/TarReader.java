@@ -369,7 +369,11 @@ public final class TarReader {
             if (value.isEmpty() || value.length() > 18 || !value.chars().allMatch(c -> c >= '0' && c <= '9')) {
                 throw new ArchiveException("pax size is not a number");
             }
-            return Long.parseLong(value);
+            try {
+                return Long.parseLong(value);
+            } catch (NumberFormatException e) {
+                throw new ArchiveException("pax size out of range", e);
+            }
         }
     }
 }
