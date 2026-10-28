@@ -1,0 +1,36 @@
+version: 2
+updates:
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: build(deps)
+    labels: [type:chore, area:infra]
+    groups:
+      gradle-minor:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: ci(deps)
+    labels: [type:chore, area:infra]
+    groups:
+      actions:
+        patterns: ['*']
+
+  # Enable once Website/ exists (stage 8).
+  # - package-ecosystem: npm
+  #   directory: /Website
+  #   schedule:
+  #     interval: weekly
+  #     day: monday
+  #   commit-message:
+  #     prefix: build(deps)
+  #   labels: [type:chore, area:website]

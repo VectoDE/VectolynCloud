@@ -1,0 +1,65 @@
+# --- Local backups -----------------------------------------------------------
+.local-backup/
+
+# --- Server runtime (worlds, jars, logs, real secrets) -------------------------
+# Only Server-Network/<Server>/template/ is tracked. runtime/ is rendered from it.
+Server-Network/*/runtime/
+
+# --- Secrets -------------------------------------------------------------------
+Server-Network/secrets/*
+!Server-Network/secrets/*.example
+.env
+.env.*
+!.env.example
+*.secret
+key.pem
+*.key
+*.p12
+*.jks
+
+# --- Gradle --------------------------------------------------------------------
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+.kotlin/
+
+# --- Java and other binaries -----------------------------------------------------
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+*.class
+*.zip
+hs_err_pid*.log
+replay_pid*.log
+
+# --- Logs ------------------------------------------------------------------------
+logs/
+*.log
+*.log.gz
+
+# --- IDEs ------------------------------------------------------------------------
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.settings/
+.project
+.classpath
+.factorypath
+bin/
+*.swp
+*~
+
+# --- OS files --------------------------------------------------------------------
+.DS_Store
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# --- Local worktrees -----------------------------------------------------------------
+.claude/worktrees/

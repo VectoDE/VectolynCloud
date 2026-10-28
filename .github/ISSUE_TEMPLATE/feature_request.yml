@@ -1,0 +1,58 @@
+name: Feature request
+description: Suggest a concrete feature or change. / Eine konkrete Funktion oder Änderung vorschlagen.
+title: "[Feature]: "
+labels: ["type:feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Loose ideas fit better in Discussions (Ideas). Use this form when you can describe the problem and a possible solution.
+
+        _DE: Lose Ideen passen besser in die Discussions (Ideas). Dieses Formular ist für Vorschläge, bei denen Problem und Lösung schon greifbar sind._
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area / Bereich
+      options:
+        - Proxy / crossplay
+        - Lobby
+        - Survival
+        - Creative
+        - Mod server
+        - End server
+        - Minigames
+        - Anti-cheat
+        - VectoraCloud
+        - Vectora plugin
+        - Resource pack
+        - Website / dashboard / Discord bot
+        - Build / CI / docs
+        - Other / Sonstiges
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is missing or annoying today? / Was fehlt oder stört heute?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution / Lösungsvorschlag
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives / Alternativen
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Project rules / Projektregeln
+      description: See the README for details. / Details im README.
+      options:
+        - label: Bedrock players can use it too. / Bedrock-Spieler können es ebenfalls nutzen.
+        - label: It needs no third-party plugin beyond the allowed base. / Es braucht kein Fremd-Plugin außerhalb der erlaubten Basis.
+        - label: It is not pay-to-win. / Es ist kein Pay-to-Win.

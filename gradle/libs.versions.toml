@@ -1,0 +1,12 @@
+[versions]
+# Keep in step with the Paper build that runs on the backends (Server-Network/*/runtime/paper.jar).
+paper-api = "26.3.build.226-stable"
+junit = "5.14.4"
+snakeyaml = "2.7"
+
+[libraries]
+paper-api = { module = "io.papermc.paper:paper-api", version.ref = "paper-api" }
+junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+snakeyaml = { module = "org.yaml:snakeyaml", version.ref = "snakeyaml" }

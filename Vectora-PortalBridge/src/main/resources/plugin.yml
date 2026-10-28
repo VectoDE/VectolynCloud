@@ -1,0 +1,6 @@
+name: VectoraPortalBridge
+version: '${pluginVersion}'
+main: net.vectora.portal.PortalBridge
+api-version: '26.3'
+description: Routes End portals to Vectora's dedicated End backend through Velocity.
+author: Vectora

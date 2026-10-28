@@ -1,0 +1,6 @@
+name: VectoraLobby
+version: '${pluginVersion}'
+main: net.vectora.lobby.VectoraLobby
+api-version: '26.3'
+description: Builds and protects the Vectora sky-island lobby.
+author: Vectora

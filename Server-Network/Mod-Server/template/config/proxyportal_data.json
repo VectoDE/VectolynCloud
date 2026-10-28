@@ -1,0 +1,19 @@
+{
+  "example_portal": {
+    "portalName": "example_portal",
+    "positions": {
+      "dimension": "example:dimension",
+      "pos1": {
+        "x": 0.0,
+        "y": 64.0,
+        "z": 0.0
+      },
+      "pos2": {
+        "x": 5.0,
+        "y": 70.0,
+        "z": 5.0
+      }
+    },
+    "destinationServer": "lobby"
+  }
+}
