@@ -469,9 +469,6 @@ public final class CloudClient implements AutoCloseable {
             Envelope envelope = open.reader.read();
             switch (envelope.message()) {
                 case Ping ping -> send(open, Envelope.of(new Pong(ping.nonce())));
-                case Pong pong -> {
-                    // Any frame resets the read timeout already.
-                }
                 case Disconnect disconnect -> {
                     LOG.log(Level.INFO, "VectoraCloud closed the connection: {0}", disconnect.reason());
                     return disconnect.reason();
@@ -484,11 +481,15 @@ public final class CloudClient implements AutoCloseable {
                         dispatch(() -> future.complete(response));
                     }
                 }
-                case Hello hello -> throw new ProtocolException("Hello from the cloud");
-                case AuthResult result -> throw new ProtocolException("second AuthResult");
                 default -> {
                     Message message = envelope.message();
-                    dispatch(() -> listeners.forEach(l -> l.messageReceived(message)));
+                    if (message instanceof Hello || message instanceof AuthResult) {
+                        throw new ProtocolException(message.getClass().getSimpleName() + " after the handshake");
+                    }
+                    // Pong needs nothing: any frame resets the read timeout already.
+                    if (!(message instanceof Pong)) {
+                        dispatch(() -> listeners.forEach(l -> l.messageReceived(message)));
+                    }
                 }
             }
         }

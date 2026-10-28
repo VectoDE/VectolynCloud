@@ -366,7 +366,7 @@ public final class CloudNetworkServer implements AutoCloseable {
         notifyListener(() -> listener.serviceReady(session.service()));
     }
 
-    void serviceStatus(ServiceSession session, ServiceStatus status) {
+    void serviceStatus(ServiceStatus status) {
         notifyListener(() -> listener.serviceStatus(status));
     }
 

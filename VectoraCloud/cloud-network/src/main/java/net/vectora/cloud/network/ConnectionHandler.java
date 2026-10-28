@@ -28,12 +28,10 @@ import net.vectora.protocol.message.PlayerJoin;
 import net.vectora.protocol.message.PlayerQuit;
 import net.vectora.protocol.message.PlayerSwitch;
 import net.vectora.protocol.message.Pong;
-import net.vectora.protocol.message.RegisterServer;
 import net.vectora.protocol.message.Request;
 import net.vectora.protocol.message.Response;
 import net.vectora.protocol.message.ServiceReady;
 import net.vectora.protocol.message.ServiceStatus;
-import net.vectora.protocol.message.UnregisterServer;
 
 /**
  * State machine of one connection: waiting for {@code Hello}, then authenticated, then closing.
@@ -134,9 +132,6 @@ final class ConnectionHandler extends SimpleChannelInboundHandler<Envelope> {
         Message message = envelope.message();
         switch (message) {
             case Ping ping -> ctx.writeAndFlush(Envelope.of(new Pong(ping.nonce())));
-            case Pong pong -> {
-                // Any inbound frame already resets the idle timer.
-            }
             case Disconnect disconnect -> {
                 closing = true;
                 closeReason = disconnect.reason();
@@ -149,7 +144,7 @@ final class ConnectionHandler extends SimpleChannelInboundHandler<Envelope> {
             }
             case ServiceStatus status -> {
                 if (ownReport(ctx, status.service())) {
-                    server.serviceStatus(session, status);
+                    server.serviceStatus(status);
                 }
             }
             case PlayerJoin join -> server.messageReceived(session, join);
@@ -158,10 +153,13 @@ final class ConnectionHandler extends SimpleChannelInboundHandler<Envelope> {
             case ChannelMessage channelMessage -> server.channelMessage(session, channelMessage);
             case Request request -> server.incomingRequest(session, envelope.requestId(), request);
             case Response response -> session.complete(envelope.requestId(), response);
-            case Hello hello -> violation(ctx, "second Hello");
-            case AuthResult result -> violation(ctx, "AuthResult from a peer");
-            case RegisterServer register -> violation(ctx, "RegisterServer from a peer");
-            case UnregisterServer unregister -> violation(ctx, "UnregisterServer from a peer");
+            default -> {
+                // Pong needs nothing: any inbound frame already resets the idle timer. Hello,
+                // AuthResult, RegisterServer and UnregisterServer never come from a service.
+                if (!(message instanceof Pong)) {
+                    violation(ctx, message.getClass().getSimpleName() + " from a peer");
+                }
+            }
         }
     }
 
