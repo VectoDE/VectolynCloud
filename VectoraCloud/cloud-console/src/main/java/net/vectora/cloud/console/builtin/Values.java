@@ -30,7 +30,11 @@ final class Values {
         if (!text.matches("-?[0-9]{1,9}")) {
             throw invalid(file, path, "a whole number");
         }
-        return Integer.parseInt(text);
+        try {
+            return Integer.parseInt(text); // nine digits always fit; the catch only satisfies the type
+        } catch (NumberFormatException e) {
+            throw invalid(file, path, "a whole number");
+        }
     }
 
     static <E extends Enum<E>> E enumValue(String file, String path, String text, Class<E> type) throws ConfigException {

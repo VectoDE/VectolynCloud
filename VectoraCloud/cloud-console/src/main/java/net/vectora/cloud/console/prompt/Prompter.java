@@ -70,8 +70,8 @@ public final class Prompter {
             ReadResult result = terminal.readLine(prompt, kind);
             String typed = switch (result) {
                 case ReadResult.Line line -> line.text();
-                case ReadResult.Interrupted interrupted -> throw new PromptCancelledException(PromptCancelledException.Reason.CANCELLED);
-                case ReadResult.EndOfInput end -> throw new PromptCancelledException(PromptCancelledException.Reason.END_OF_INPUT);
+                case ReadResult.Interrupted() -> throw new PromptCancelledException(PromptCancelledException.Reason.CANCELLED);
+                case ReadResult.EndOfInput() -> throw new PromptCancelledException(PromptCancelledException.Reason.END_OF_INPUT);
             };
             String text = secret ? typed : typed.strip();
             if (typed.strip().equals(CANCEL_WORD)) {

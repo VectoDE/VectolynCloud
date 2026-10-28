@@ -118,7 +118,12 @@ public final class Question<T> {
             if (!text.matches("[+-]?[0-9]{1,10}")) {
                 throw new InvalidAnswerException(Messages.ANSWER_NUMBER, min, max);
             }
-            long value = Long.parseLong(text);
+            long value;
+            try {
+                value = Long.parseLong(text); // ten digits always fit in a long
+            } catch (NumberFormatException e) {
+                throw new InvalidAnswerException(Messages.ANSWER_NUMBER, min, max);
+            }
             if (value < min || value > max) {
                 throw new InvalidAnswerException(Messages.ANSWER_NUMBER, min, max);
             }
@@ -158,7 +163,12 @@ public final class Question<T> {
         }
         AnswerParser<T> parser = text -> {
             if (text.matches("[0-9]{1,4}")) {
-                int number = Integer.parseInt(text);
+                int number;
+                try {
+                    number = Integer.parseInt(text); // four digits always fit in an int
+                } catch (NumberFormatException e) {
+                    throw new InvalidAnswerException(Messages.ANSWER_CHOICE, copy.size());
+                }
                 if (number >= 1 && number <= copy.size()) {
                     return copy.get(number - 1).value();
                 }

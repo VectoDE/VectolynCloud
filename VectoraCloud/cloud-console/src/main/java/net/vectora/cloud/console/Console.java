@@ -108,8 +108,8 @@ public final class Console implements AutoCloseable {
             }
             switch (result) {
                 case ReadResult.Line line -> dispatcher.execute(line.text());
-                case ReadResult.Interrupted interrupted -> shutdownFromKey();
-                case ReadResult.EndOfInput end -> {
+                case ReadResult.Interrupted() -> shutdownFromKey();
+                case ReadResult.EndOfInput() -> {
                     if (terminal.interactive()) {
                         shutdownFromKey();
                     } else {
