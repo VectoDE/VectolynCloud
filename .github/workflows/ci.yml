@@ -7,12 +7,17 @@ name: CI
 #   (-PtestJava=21). Tests tagged "requires-java25" load paper-api classes (class file
 #   version 69) and are skipped there; everything else, including the bytecode-level check,
 #   must pass on 21.
+# - "Integration" covers VectoraCloud end to end. It does real work only when cloud-related paths
+#   change (or on the nightly schedule), but it always reports a result, so it can become a
+#   required check without blocking unrelated pull requests. See the "changes" job.
 
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    - cron: '17 3 * * *'
   workflow_dispatch:
 
 permissions:
@@ -128,3 +133,86 @@ jobs:
           name: test-reports-java21
           path: '**/build/reports/tests/'
           retention-days: 7
+
+  # Path filter for the integration job. A workflow-level `on.paths` filter would leave the
+  # check without any result on unrelated pull requests, and a required check without a result
+  # blocks the merge. This job always runs and only decides what the integration job does.
+  changes:
+    name: Detect cloud changes
+    runs-on: ubuntu-latest
+    outputs:
+      cloud: ${{ steps.filter.outputs.cloud }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check changed paths
+        id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          pattern='^(VectoraCloud|Server-Network|Vectora-Protocol|Vectora-CloudClient)/'
+          if [ "$EVENT" = schedule ] || [ "$EVENT" = workflow_dispatch ]; then
+            cloud=true
+            echo "Event $EVENT: integration always runs."
+          elif [ -z "$BASE" ] || ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
+            cloud=true
+            echo "No usable base commit: integration runs to be safe."
+          else
+            changed=$(git diff --name-only "$BASE...$HEAD")
+            if printf '%s\n' "$changed" | grep -qE "$pattern"; then
+              cloud=true
+            else
+              cloud=false
+            fi
+            echo "Changed files:"
+            printf '%s\n' "$changed"
+          fi
+          echo "cloud=$cloud" >> "$GITHUB_OUTPUT"
+          echo "cloud=$cloud"
+
+  integration:
+    name: Integration
+    needs: changes
+    # always(): this job must report a result even if "changes" failed, so it fails instead of
+    # being skipped (a skipped required check counts as passed).
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Require the change check
+        if: needs.changes.result != 'success'
+        env:
+          RESULT: ${{ needs.changes.result }}
+        run: |
+          echo "::error::The change check ended with '$RESULT'."
+          exit 1
+
+      - name: No cloud-related changes
+        if: needs.changes.outputs.cloud != 'true'
+        run: echo "Nothing under VectoraCloud/, Server-Network/, Vectora-Protocol/ or Vectora-CloudClient/ changed. Integration is not needed."
+
+      # Scaffold. The real integration test (VectoraCloud.jar starting Velocity and Paper with
+      # H2 storage, plus a fake server jar) replaces this step once the jar exists.
+      - name: Integration tests (scaffold, no tests yet)
+        if: needs.changes.outputs.cloud == 'true'
+        run: |
+          echo "Integration job scaffold: there is no VectoraCloud.jar to start yet."
+          {
+            echo "### Integration"
+            echo "Scaffold only. The integration test arrives together with VectoraCloud.jar."
+          } >> "$GITHUB_STEP_SUMMARY"

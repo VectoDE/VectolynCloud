@@ -1,0 +1,109 @@
+name: Fuzz (nightly)
+
+# Real fuzzing with Jazzer, one job per @FuzzTest method, on Linux.
+# Every normal test run (ci.yml) already replays the stored inputs of each fuzz test in
+# regression mode; this workflow searches for new ones. Setup and local use:
+# build-logic/src/main/kotlin/vectora.fuzz-conventions.gradle.kts
+#
+# A finding fails the job. The crashing input is uploaded as an artifact; commit it under
+# src/test/resources/<package>/<TestClass>Inputs/<method>/ together with the fix, so the normal
+# test run keeps replaying it.
+
+on:
+  schedule:
+    - cron: '43 1 * * *'
+  workflow_dispatch:
+    inputs:
+      max-duration:
+        description: Fuzzing time per target (Jazzer duration, e.g. 30s, 10m, 1h)
+        required: false
+        default: 10m
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-nightly
+  cancel-in-progress: false
+
+jobs:
+  targets:
+    name: List fuzz targets
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.list.outputs.matrix }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Find @FuzzTest methods
+        id: list
+        run: |
+          matrix=$(python3 .github/scripts/list-fuzz-targets.py)
+          echo "$matrix"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  fuzz:
+    name: Fuzz ${{ matrix.target.name }}
+    needs: targets
+    runs-on: ubuntu-latest
+    # Fuzzing time per target plus build time; raise together with max-duration.
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.targets.outputs.matrix) }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Fuzz on Java 21, the lowest runtime VectoraCloud supports.
+      - name: Set up JDK 21 and 25
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: |
+            21
+            25
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-read-only: true
+
+      - name: Fuzz
+        env:
+          PROJECT: ${{ matrix.target.project }}
+          TEST: ${{ matrix.target.test }}
+          MAX_DURATION: ${{ inputs.max-duration || '10m' }}
+        run: >-
+          bash ./gradlew "${PROJECT}:test" --tests "$TEST"
+          --no-daemon --stacktrace --no-configuration-cache
+          -Pfuzz -PfuzzMaxDuration="$MAX_DURATION"
+          -PtestJava=21
+          -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64,JAVA_HOME_25_X64
+
+      - name: Upload findings
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzz-findings-${{ matrix.target.name }}
+          path: |
+            **/src/test/resources/**/*Inputs/**
+            **/build/reports/tests/
+            **/build/test-results/
+          retention-days: 14
