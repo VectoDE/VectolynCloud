@@ -43,8 +43,14 @@ public record ServerVersion(int major, int minor, int patch, boolean mariaDb) {
         if (!m.lookingAt()) {
             return Optional.empty();
         }
-        return Optional.of(new ServerVersion(Integer.parseInt(m.group(1)), Integer.parseInt(m.group(2)),
-                Integer.parseInt(m.group(3)), mariaDb));
+        // The pattern allows at most four ASCII digits per part, so parseInt cannot fail; the catch
+        // keeps the "never throws" contract explicit.
+        try {
+            return Optional.of(new ServerVersion(Integer.parseInt(m.group(1)), Integer.parseInt(m.group(2)),
+                    Integer.parseInt(m.group(3)), mariaDb));
+        } catch (NumberFormatException e) {
+            return Optional.empty();
+        }
     }
 
     /**
