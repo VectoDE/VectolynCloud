@@ -113,4 +113,48 @@ class FrameCodecTest {
         assertFalse(frame.toString().contains("secret"));
         assertTrue(frame.toString().contains("6 bytes"));
     }
+
+    @Test
+    void handshakeLimitRejectsALargerFrameAsSoonAsItsLengthArrives() {
+        ByteBuffer prefixOnly = ByteBuffer.allocate(VarInts.MAX_BYTES);
+        VarInts.write(prefixOnly, Protocol.MAX_HANDSHAKE_FRAME_SIZE + 1);
+        prefixOnly.flip();
+        assertThrows(ProtocolException.class,
+                () -> FrameCodec.tryDecode(prefixOnly, Protocol.MAX_HANDSHAKE_FRAME_SIZE));
+
+        // Counter-check: the same prefix is only "incomplete" under the normal limit.
+        prefixOnly.rewind();
+        assertEquals(Optional.empty(), FrameCodec.tryDecode(prefixOnly));
+        assertEquals(0, prefixOnly.position());
+    }
+
+    @Test
+    void handshakeLimitStillAcceptsAFrameOfExactlyThatSize() {
+        Frame largest = new Frame(V1, 0, 0, new byte[Protocol.MAX_HANDSHAKE_FRAME_SIZE - FrameCodec.MIN_BODY_SIZE]);
+        ByteBuffer in = ByteBuffer.wrap(FrameCodec.encode(largest));
+        assertEquals(Optional.of(largest), FrameCodec.tryDecode(in, Protocol.MAX_HANDSHAKE_FRAME_SIZE));
+        assertFalse(in.hasRemaining());
+    }
+
+    @Test
+    void frameLimitMustBeWithinTheProtocolBounds() {
+        ByteBuffer empty = ByteBuffer.allocate(0);
+        assertThrows(IllegalArgumentException.class, () -> FrameCodec.tryDecode(empty, FrameCodec.MIN_BODY_SIZE - 1));
+        assertThrows(IllegalArgumentException.class, () -> FrameCodec.tryDecode(empty, Protocol.MAX_FRAME_SIZE + 1));
+        assertEquals(Optional.empty(), FrameCodec.tryDecode(empty, FrameCodec.MIN_BODY_SIZE));
+    }
+
+    @Test
+    void bodyViewDoesNotCopyAndCannotBeWritten() {
+        byte[] encoded = FrameCodec.encode(new Frame(V1, 2, 0, new byte[] {5, 6}));
+        ByteBuffer in = ByteBuffer.wrap(encoded);
+        ByteBuffer body = FrameCodec.tryReadBody(in, Protocol.MAX_FRAME_SIZE).orElseThrow();
+        assertTrue(body.isReadOnly());
+        assertEquals(encoded.length - 1, body.remaining());
+        FrameHeader header = FrameHeader.read(new PacketReader(body));
+        assertEquals(new FrameHeader(V1, 2, 0), header);
+        // The view shares the bytes of the input: a change there shows through.
+        encoded[encoded.length - 1] = 9;
+        assertEquals(9, body.get(body.limit() - 1));
+    }
 }

@@ -70,15 +70,27 @@ class MessageValidationTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"", "local host", "host/path", "höst", "[::1]"})
+    @ValueSource(strings = {"", "local host", "host/path", "höst", "[::1]", ".", "..", "-host", "host-", ".host",
+        "host.", "a..b", "a.-b", "a_b", "1.2.3.4:25565", "fe80::1%eth0", ":", "::1::g", "1:2", "host:25565"})
     void rejectsInvalidHosts(String host) {
         assertThrows(IllegalArgumentException.class, () -> new RegisterServer(SURVIVAL, host, 25_565, GROUP, false));
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"localhost", "a", "127.0.0.1", "survival-1.vectora.local", "Paper-Host", "::1", "::",
+        "fe80::1", "2001:db8::ff00:42:8329", "2001:0db8:0000:0000:0000:ff00:0042:8329", "::ffff:192.0.2.1"})
+    void acceptsHostNamesAndAddressLiterals(String host) {
+        assertEquals(host, new RegisterServer(SURVIVAL, host, 25_565, GROUP, false).host());
+    }
+
     @Test
     void hostLengthLimit() {
-        String tooLong = "h".repeat(MessageLimits.MAX_HOST_LENGTH + 1);
+        String longest = SampleMessages.longestHost();
+        assertEquals(longest, new RegisterServer(SURVIVAL, longest, 25_565, GROUP, false).host());
+        String tooLong = longest + "h";
         assertThrows(IllegalArgumentException.class, () -> new RegisterServer(SURVIVAL, tooLong, 25_565, GROUP, false));
+        String longLabel = "h".repeat(64) + ".local";
+        assertThrows(IllegalArgumentException.class, () -> new RegisterServer(SURVIVAL, longLabel, 25_565, GROUP, false));
     }
 
     @ParameterizedTest
@@ -112,7 +124,18 @@ class MessageValidationTest {
         assertThrows(IllegalArgumentException.class, () -> status(1, 10, 20, Double.NaN, 0, 0));
         assertThrows(IllegalArgumentException.class, () -> status(1, 10, 20, MessageLimits.MAX_MSPT + 1, 0, 0));
         assertThrows(IllegalArgumentException.class, () -> status(1, 10, 20, 1, -1, 0));
-        assertThrows(IllegalArgumentException.class, () -> status(1, 10, 20, 1, 0, -1));
+        assertThrows(IllegalArgumentException.class, () -> status(1, 10, 20, 1, 0, -2));
+        assertThrows(IllegalArgumentException.class, () -> status(1, 10, 20, 1, 0, Long.MIN_VALUE));
+        // -1 is only special for the maximum, not for the used heap.
+        assertThrows(IllegalArgumentException.class, () -> status(1, 10, 20, 1, ServiceStatus.UNKNOWN_HEAP_MAX, 0));
+    }
+
+    @Test
+    void statusAcceptsAnUnknownHeapMaximum() {
+        ServiceStatus status = status(1, 10, 20, 1, 512, ServiceStatus.UNKNOWN_HEAP_MAX);
+        assertEquals(-1, status.heapMax());
+        MessageCodec codec = MessageCodec.standard();
+        assertEquals(status, codec.decode(codec.encode(Envelope.of(status))).message());
     }
 
     @Test

@@ -57,45 +57,73 @@ public final class FrameCodec {
     }
 
     /**
-     * Decodes the next frame of a stream. If {@code in} does not yet hold a complete frame, the
-     * position stays where it was and the result is empty; call again when more bytes have
-     * arrived. On success the position moves past the frame.
+     * Decodes the next frame of a stream with the full limit of {@link Protocol#MAX_FRAME_SIZE}.
+     * If {@code in} does not yet hold a complete frame, the position stays where it was and the
+     * result is empty; call again when more bytes have arrived. On success the position moves
+     * past the frame.
      *
      * @throws ProtocolException if the bytes can never become a valid frame; the connection
      *     should then be closed, the buffer position is unspecified
      */
     public static Optional<Frame> tryDecode(ByteBuffer in) {
+        return tryDecode(in, Protocol.MAX_FRAME_SIZE);
+    }
+
+    /**
+     * Like {@link #tryDecode(ByteBuffer)}, but with a smaller limit for the frame body, for
+     * example {@link Protocol#MAX_HANDSHAKE_FRAME_SIZE} before authentication.
+     *
+     * @param maxBodySize largest accepted body, {@value #MIN_BODY_SIZE} to
+     *     {@link Protocol#MAX_FRAME_SIZE}
+     * @throws IllegalArgumentException if {@code maxBodySize} is outside that range
+     * @throws ProtocolException if the bytes can never become a valid frame
+     */
+    public static Optional<Frame> tryDecode(ByteBuffer in, int maxBodySize) {
+        return tryReadBody(in, maxBodySize).map(FrameCodec::decodeBody);
+    }
+
+    /**
+     * Finds the next frame of a stream and returns its body (header and payload) without copying
+     * it. The returned buffer is a read-only view of {@code in} and only valid until the bytes of
+     * {@code in} are overwritten, so decode it right away. Read the header with
+     * {@link FrameHeader#read}.
+     *
+     * <p>The length prefix is checked against {@code maxBodySize} as soon as it is complete, before
+     * any body byte is waited for. If the frame is not complete yet, the position of {@code in}
+     * stays where it was and the result is empty; otherwise the position moves past the frame.
+     *
+     * @param maxBodySize largest accepted body, {@value #MIN_BODY_SIZE} to
+     *     {@link Protocol#MAX_FRAME_SIZE}
+     * @throws IllegalArgumentException if {@code maxBodySize} is outside that range
+     * @throws ProtocolException if the length prefix is invalid or outside the limits
+     */
+    public static Optional<ByteBuffer> tryReadBody(ByteBuffer in, int maxBodySize) {
+        if (maxBodySize < MIN_BODY_SIZE || maxBodySize > Protocol.MAX_FRAME_SIZE) {
+            throw new IllegalArgumentException("frame limit must be " + MIN_BODY_SIZE + " to "
+                    + Protocol.MAX_FRAME_SIZE + ", got " + maxBodySize);
+        }
         int start = in.position();
         if (!holdsCompleteVarInt(in)) {
             return Optional.empty();
         }
         int length = VarInts.read(in);
-        if (length < MIN_BODY_SIZE || length > Protocol.MAX_FRAME_SIZE) {
+        if (length < MIN_BODY_SIZE || length > maxBodySize) {
             throw new ProtocolException("frame length " + length + " is outside " + MIN_BODY_SIZE + " to "
-                    + Protocol.MAX_FRAME_SIZE);
+                    + maxBodySize);
         }
         if (in.remaining() < length) {
             in.position(start);
             return Optional.empty();
         }
-        ByteBuffer body = in.slice(in.position(), length);
+        ByteBuffer body = in.slice(in.position(), length).asReadOnlyBuffer();
         in.position(in.position() + length);
-        return Optional.of(decodeBody(body));
+        return Optional.of(body);
     }
 
     private static Frame decodeBody(ByteBuffer body) {
         PacketReader reader = new PacketReader(body);
-        int major = reader.readUnsignedByte();
-        int minor = reader.readUnsignedByte();
-        int messageId = reader.readVarInt();
-        if (messageId < 0) {
-            throw new ProtocolException("negative message id " + messageId);
-        }
-        int requestId = reader.readVarInt();
-        if (requestId < 0) {
-            throw new ProtocolException("negative request id " + requestId);
-        }
-        return new Frame(new ProtocolVersion(major, minor), messageId, requestId, reader.readRemainingBytes());
+        FrameHeader header = FrameHeader.read(reader);
+        return new Frame(header.version(), header.messageId(), header.requestId(), reader.readRemainingBytes());
     }
 
     /**

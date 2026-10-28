@@ -14,7 +14,7 @@ import net.vectora.protocol.ServiceId;
  * operators who bypass the limit), so the two are not compared.
  *
  * <p>Wire: service (string), players online and max (VarInt each), TPS and MSPT (8-byte double
- * each), heap used and max (VarLong each).
+ * each), heap used and max (VarLong each; heap max may be {@value #UNKNOWN_HEAP_MAX}).
  *
  * @param service the reporting service
  * @param playersOnline players connected now, 0 to {@value MessageLimits#MAX_PLAYERS}
@@ -22,10 +22,14 @@ import net.vectora.protocol.ServiceId;
  * @param tps ticks per second, 0 to {@value MessageLimits#MAX_TPS}; finite
  * @param mspt milliseconds per tick, 0 to {@value MessageLimits#MAX_MSPT}; finite
  * @param heapUsed used heap in bytes, 0 or more
- * @param heapMax maximum heap in bytes, 0 or more
+ * @param heapMax maximum heap in bytes, 0 or more, or {@value #UNKNOWN_HEAP_MAX} if the JVM has no
+ *     limit or does not report one ({@code Runtime.maxMemory()} returns {@code Long.MAX_VALUE} then)
  */
 public record ServiceStatus(ServiceId service, int playersOnline, int maxPlayers, double tps, double mspt,
         long heapUsed, long heapMax) implements Message {
+
+    /** Value of {@link #heapMax()} when the maximum heap is unknown or unlimited. */
+    public static final long UNKNOWN_HEAP_MAX = -1;
 
     /**
      * Creates the message.
@@ -39,7 +43,9 @@ public record ServiceStatus(ServiceId service, int playersOnline, int maxPlayers
         checkRange(tps, MessageLimits.MAX_TPS, "TPS");
         checkRange(mspt, MessageLimits.MAX_MSPT, "MSPT");
         checkNotNegative(heapUsed, "heap used");
-        checkNotNegative(heapMax, "heap max");
+        if (heapMax != UNKNOWN_HEAP_MAX) {
+            checkNotNegative(heapMax, "heap max");
+        }
     }
 
     /** Reads the payload. */

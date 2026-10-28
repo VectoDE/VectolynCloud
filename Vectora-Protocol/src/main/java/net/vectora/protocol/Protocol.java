@@ -15,6 +15,14 @@ public final class Protocol {
      */
     public static final int MAX_FRAME_SIZE = 1 << 20;
 
+    /**
+     * Largest frame body in bytes before authentication, 4 KiB. Until the cloud has answered
+     * {@code Hello} with {@code AuthResult(ACCEPTED)}, both ends decode with this limit
+     * ({@link FrameCodec#tryDecode(java.nio.ByteBuffer, int)}), so an unauthenticated peer cannot
+     * make the other side buffer a 1 MiB frame. The largest {@code Hello} is about 330 bytes.
+     */
+    public static final int MAX_HANDSHAKE_FRAME_SIZE = 4 * 1024;
+
     private Protocol() {
     }
 }

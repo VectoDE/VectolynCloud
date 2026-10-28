@@ -99,4 +99,43 @@ class MessageCodecFuzzTest {
             // The connection would be closed here.
         }
     }
+
+    /**
+     * Counter-check of the copy-free stream path: for any input it accepts exactly what the frame
+     * path accepts, and both give the same message.
+     */
+    @FuzzTest
+    void streamPathAgreesWithFramePath(byte @NotNull [] input) {
+        Envelope viaFrame;
+        try {
+            viaFrame = CODEC.fromFrame(FrameCodec.decode(input));
+        } catch (ProtocolException rejected) {
+            viaFrame = null;
+        }
+        Envelope viaBody;
+        try {
+            viaBody = CODEC.decode(input);
+        } catch (ProtocolException rejected) {
+            viaBody = null;
+        }
+        assertEquals(viaFrame, viaBody);
+    }
+
+    /** Before authentication: the small frame limit never lets more than 4 KiB through. */
+    @FuzzTest
+    void handshakeDecodingStaysWithinItsLimit(byte @NotNull [] input) {
+        ByteBuffer stream = ByteBuffer.wrap(input);
+        try {
+            while (true) {
+                int before = stream.position();
+                Optional<Envelope> next = CODEC.tryDecode(stream, Protocol.MAX_HANDSHAKE_FRAME_SIZE);
+                if (next.isEmpty()) {
+                    return;
+                }
+                assertTrue(stream.position() - before <= Protocol.MAX_HANDSHAKE_FRAME_SIZE + 5);
+            }
+        } catch (ProtocolException expected) {
+            // The connection would be closed here.
+        }
+    }
 }

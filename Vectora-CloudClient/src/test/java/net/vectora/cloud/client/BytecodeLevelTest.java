@@ -16,8 +16,8 @@ class BytecodeLevelTest {
     @Test
     void mainClassIsCompiledForJava21() throws IOException {
         // Reads the class file without loading it, so this also runs on a Java 21 runtime.
-        try (InputStream raw = getClass().getClassLoader().getResourceAsStream("net/vectora/cloud/client/CloudClientModule.class")) {
-            assertNotNull(raw, "net/vectora/cloud/client/CloudClientModule.class must be on the classpath");
+        try (InputStream raw = getClass().getClassLoader().getResourceAsStream("net/vectora/cloud/client/CloudClient.class")) {
+            assertNotNull(raw, "net/vectora/cloud/client/CloudClient.class must be on the classpath");
             DataInputStream in = new DataInputStream(raw);
             assertEquals(0xCAFEBABE, in.readInt(), "not a class file");
             in.readUnsignedShort(); // minor version
