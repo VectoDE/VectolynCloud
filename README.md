@@ -3,6 +3,7 @@
 [![CI](https://github.com/VectoDE/Vectora-Network/actions/workflows/ci.yml/badge.svg)](https://github.com/VectoDE/Vectora-Network/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/VectoDE/Vectora-Network/actions/workflows/codeql.yml/badge.svg)](https://github.com/VectoDE/Vectora-Network/actions/workflows/codeql.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/VectoDE/Vectora-Network/badge)](https://scorecard.dev/viewer/?uri=github.com/VectoDE/Vectora-Network)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/16026/badge)](https://www.bestpractices.dev/projects/16026)
 [![License: GPL-3.0](https://img.shields.io/github/license/VectoDE/Vectora-Network)](LICENSE)
 
 **English** · [Deutsch](README.de.md)
