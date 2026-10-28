@@ -8,22 +8,34 @@ import java.util.Optional;
  */
 public enum ServerPlatform {
 
-    /** Velocity proxy: {@code forwarding.secret} and the Floodgate key, no EULA. */
-    VELOCITY("plugins/floodgate/key.pem", true, false),
-    /** Paper (and forks such as PandaSpigot): Floodgate key and EULA. */
-    PAPER("plugins/floodgate/key.pem", false, true),
+    /**
+     * Main Velocity proxy ({@code modern} forwarding): {@code forwarding.secret} from
+     * {@code VECTORA_FORWARDING_SECRET} and the Floodgate key, no EULA.
+     */
+    VELOCITY("plugins/floodgate/key.pem", "VECTORA_FORWARDING_SECRET", false),
+    /**
+     * Legacy Velocity proxy ({@code bungeeguard} forwarding, in front of the 1.8.8 servers):
+     * {@code forwarding.secret} from {@code VECTORA_LEGACY_FORWARDING_SECRET}, which must differ from
+     * the modern-forwarding secret. No Floodgate key yet: whether Bedrock players reach the 1.8.8
+     * groups through this proxy is decided in stage 2, PR 24.
+     */
+    VELOCITY_LEGACY(null, "VECTORA_LEGACY_FORWARDING_SECRET", false),
+    /** Paper: Floodgate key and EULA. */
+    PAPER("plugins/floodgate/key.pem", null, true),
+    /** PandaSpigot 1.8.8 behind the legacy proxy: EULA only; Floodgate does not run there. */
+    PANDASPIGOT(null, null, true),
     /** Fabric server with Floodgate-Fabric: Floodgate key under {@code config/} and EULA. */
-    FABRIC("config/floodgate/key.pem", false, true),
+    FABRIC("config/floodgate/key.pem", null, true),
     /** No Minecraft software (the database template): nothing is generated. */
-    NONE(null, false, false);
+    NONE(null, null, false);
 
     private final String floodgateKey;
-    private final boolean forwardingSecretFile;
+    private final String forwardingPlaceholder;
     private final boolean eula;
 
-    ServerPlatform(String floodgateKey, boolean forwardingSecretFile, boolean eula) {
+    ServerPlatform(String floodgateKey, String forwardingPlaceholder, boolean eula) {
         this.floodgateKey = floodgateKey;
-        this.forwardingSecretFile = forwardingSecretFile;
+        this.forwardingPlaceholder = forwardingPlaceholder;
         this.eula = eula;
     }
 
@@ -43,7 +55,16 @@ public enum ServerPlatform {
      * @return whether {@code forwarding.secret} is generated
      */
     public boolean usesForwardingSecretFile() {
-        return forwardingSecretFile;
+        return forwardingPlaceholder != null;
+    }
+
+    /**
+     * Returns the placeholder whose value goes into {@code forwarding.secret}.
+     *
+     * @return the placeholder name, or empty if this platform has no {@code forwarding.secret}
+     */
+    public Optional<String> forwardingPlaceholder() {
+        return Optional.ofNullable(forwardingPlaceholder);
     }
 
     /**

@@ -156,6 +156,38 @@ class GeneratedFilesTest {
     }
 
     @Test
+    void installOfTheLegacyProxyWritesItsOwnSecret() throws Exception {
+        Path template = Files.createTempDirectory(runtime, "template");
+        Path out = runtime.resolve("out");
+        String legacy = "LegacySecretForTests0123456789";
+        PlaceholderValues values = PlaceholderValues.of(Map.of(
+                "VECTORA_FORWARDING_SECRET", FWD,
+                "VECTORA_LEGACY_FORWARDING_SECRET", legacy));
+
+        RenderReport report = TemplateInstaller.install(template, out, ServerPlatform.VELOCITY_LEGACY, values, true);
+
+        assertEquals(legacy, Files.readString(out.resolve("forwarding.secret")));
+        assertEquals(java.util.List.of("forwarding.secret"), report.generated());
+    }
+
+    @Test
+    void theLegacyProxyRefusesTheModernSecret() throws Exception {
+        Path template = Files.createTempDirectory(runtime, "template");
+        Path out = runtime.resolve("out");
+        PlaceholderValues same = PlaceholderValues.of(Map.of(
+                "VECTORA_FORWARDING_SECRET", FWD,
+                "VECTORA_LEGACY_FORWARDING_SECRET", FWD));
+        TemplateException e = assertThrows(TemplateException.class,
+                () -> TemplateInstaller.install(template, out, ServerPlatform.VELOCITY_LEGACY, same, true));
+        assertFalse(e.getMessage().contains(FWD), "the message never shows the secret");
+        assertFalse(Files.exists(out.resolve("forwarding.secret")));
+
+        PlaceholderValues missing = PlaceholderValues.of(Map.of("VECTORA_FORWARDING_SECRET", FWD));
+        assertThrows(TemplateException.class,
+                () -> TemplateInstaller.install(template, out, ServerPlatform.VELOCITY_LEGACY, missing, true));
+    }
+
+    @Test
     void installWithoutARequiredSecretFails() throws Exception {
         Path template = Files.createTempDirectory(runtime, "template");
         TemplateException e = assertThrows(TemplateException.class, () -> TemplateInstaller.install(

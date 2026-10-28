@@ -74,7 +74,9 @@ class RealTemplatesTest {
     static ServerPlatform platformOf(Path template) {
         String server = template.getParent().getFileName().toString();
         return switch (server) {
-            case "Proxy", "Legacy-Proxy" -> ServerPlatform.VELOCITY;
+            case "Proxy" -> ServerPlatform.VELOCITY;
+            case "Legacy-Proxy" -> ServerPlatform.VELOCITY_LEGACY;
+            case "Legacy-Server" -> ServerPlatform.PANDASPIGOT;
             case "Mod-Server" -> ServerPlatform.FABRIC;
             case "Database" -> ServerPlatform.NONE;
             default -> ServerPlatform.PAPER;
@@ -84,6 +86,7 @@ class RealTemplatesTest {
     static PlaceholderValues values(Set<String> wanted) {
         Map<String, String> values = new HashMap<>();
         values.put("VECTORA_FORWARDING_SECRET", "forwarding-secret-for-tests");
+        values.put("VECTORA_LEGACY_FORWARDING_SECRET", "legacy-forwarding-secret-for-tests");
         values.put("VECTORA_DB_HOST", "127.0.0.1");
         values.put("VECTORA_DB_PORT", "3307");
         values.put("VECTORA_DB_NAME", "vectora_ranks");
@@ -263,13 +266,15 @@ class RealTemplatesTest {
     @Test
     void legacyProxyForwardsWithBungeeguardOnItsOwnPort() throws Exception {
         Path template = serverNetwork().resolve("Legacy-Proxy/template");
-        TemplateInstaller.install(template, out, ServerPlatform.VELOCITY, values(Set.of("lobby")), false);
+        TemplateInstaller.install(template, out, ServerPlatform.VELOCITY_LEGACY, values(Set.of("lobby")), false);
         String velocity = Files.readString(out.resolve("velocity.toml"));
         assertTrue(velocity.contains("player-info-forwarding-mode = \"bungeeguard\""), velocity);
         assertFalse(velocity.contains("player-info-forwarding-mode = \"modern\""));
         assertTrue(velocity.contains("bind = \"0.0.0.0:25564\""));
         assertFalse(velocity.contains(":25565"), "the main proxy's port must not appear");
-        assertTrue(Files.exists(out.resolve("forwarding.secret")));
+        assertEquals("legacy-forwarding-secret-for-tests", Files.readString(out.resolve("forwarding.secret")),
+                "the legacy proxy gets its own secret, never the modern-forwarding one");
+        assertFalse(Files.exists(out.resolve("plugins/floodgate/key.pem")), "no Floodgate on the legacy proxy yet");
         assertNull(TomlCheck.problem(velocity));
 
         String main = Files.readString(serverNetwork().resolve("Proxy/template/velocity.toml"));
@@ -279,7 +284,10 @@ class RealTemplatesTest {
     @Test
     void legacyServerAcceptsTheLegacyProxyOnly() throws Exception {
         Path template = serverNetwork().resolve("Legacy-Server/template");
-        TemplateInstaller.install(template, out, ServerPlatform.PAPER, values(Set.of()), false);
+        RenderReport report = TemplateInstaller.install(template, out, ServerPlatform.PANDASPIGOT, values(Set.of()),
+                false);
+        assertEquals(List.of(), report.generated(), "no Floodgate key and, without consent, no eula.txt");
+        assertFalse(Files.exists(out.resolve("plugins/floodgate/key.pem")));
         Properties properties = new Properties();
         properties.load(new StringReader(Files.readString(out.resolve("server.properties"))));
         assertEquals("false", properties.getProperty("online-mode"));

@@ -13,8 +13,12 @@ import java.util.Objects;
  * <ul>
  *   <li>{@link ServerPlatform#VELOCITY}: {@code forwarding.secret} from
  *       {@value GeneratedFiles#FORWARDING_PLACEHOLDER}, {@code plugins/floodgate/key.pem}.</li>
+ *   <li>{@link ServerPlatform#VELOCITY_LEGACY}: {@code forwarding.secret} from
+ *       {@value GeneratedFiles#LEGACY_FORWARDING_PLACEHOLDER}, which must differ from
+ *       {@value GeneratedFiles#FORWARDING_PLACEHOLDER}.</li>
  *   <li>{@link ServerPlatform#PAPER}: {@code plugins/floodgate/key.pem}, {@code eula.txt} after
  *       consent.</li>
+ *   <li>{@link ServerPlatform#PANDASPIGOT}: {@code eula.txt} after consent.</li>
  *   <li>{@link ServerPlatform#FABRIC}: {@code config/floodgate/key.pem}, {@code eula.txt} after
  *       consent.</li>
  *   <li>{@link ServerPlatform#NONE}: nothing.</li>
@@ -45,9 +49,17 @@ public final class TemplateInstaller {
         Objects.requireNonNull(platform, "platform");
         Objects.requireNonNull(values, "values");
         String forwardingSecret = null;
-        if (platform.usesForwardingSecretFile()) {
-            forwardingSecret = required(values, GeneratedFiles.FORWARDING_PLACEHOLDER, GeneratedFiles.FORWARDING_SECRET_FILE);
-            GeneratedFiles.checkForwardingSecret(forwardingSecret);
+        if (platform.forwardingPlaceholder().isPresent()) {
+            String placeholder = platform.forwardingPlaceholder().get();
+            forwardingSecret = required(values, placeholder, GeneratedFiles.FORWARDING_SECRET_FILE);
+            GeneratedFiles.checkForwardingSecret(placeholder, forwardingSecret);
+            if (!placeholder.equals(GeneratedFiles.FORWARDING_PLACEHOLDER)
+                    && values.find(GeneratedFiles.FORWARDING_PLACEHOLDER).filter(forwardingSecret::equals).isPresent()) {
+                // bungeeguard sends the secret in plain text to the backends; reusing the modern one
+                // would hand it to every 1.8.8 server.
+                throw new TemplateException(GeneratedFiles.FORWARDING_SECRET_FILE, placeholder + " equals "
+                        + GeneratedFiles.FORWARDING_PLACEHOLDER + "; the legacy proxy needs a secret of its own");
+            }
         }
         String floodgateKey = null;
         if (platform.floodgateKeyPath().isPresent()) {

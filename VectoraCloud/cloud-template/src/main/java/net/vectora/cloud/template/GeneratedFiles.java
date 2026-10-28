@@ -18,6 +18,8 @@ public final class GeneratedFiles {
 
     /** Placeholder holding the Velocity modern-forwarding secret. */
     public static final String FORWARDING_PLACEHOLDER = "VECTORA_FORWARDING_SECRET";
+    /** Placeholder holding the forwarding secret of the legacy proxy ({@code bungeeguard} token). */
+    public static final String LEGACY_FORWARDING_PLACEHOLDER = "VECTORA_LEGACY_FORWARDING_SECRET";
     /** Placeholder holding the Floodgate AES key, base64 encoded. */
     public static final String FLOODGATE_PLACEHOLDER = "VECTORA_FLOODGATE_KEY_B64";
     /** File Velocity reads the forwarding secret from ({@code forwarding-secret-file} in {@code velocity.toml}). */
@@ -92,8 +94,12 @@ public final class GeneratedFiles {
     }
 
     static void checkForwardingSecret(String secret) throws TemplateException {
+        checkForwardingSecret(FORWARDING_PLACEHOLDER, secret);
+    }
+
+    static void checkForwardingSecret(String placeholder, String secret) throws TemplateException {
         Objects.requireNonNull(secret, "secret");
-        PlaceholderValueRules.checkSecret(FORWARDING_PLACEHOLDER, secret, FORWARDING_SECRET_FILE, TemplateException.NO_LINE);
+        PlaceholderValueRules.checkSecret(placeholder, secret, FORWARDING_SECRET_FILE, TemplateException.NO_LINE);
     }
 
     static byte[] decodeFloodgateKey(String path, String base64) throws TemplateException {

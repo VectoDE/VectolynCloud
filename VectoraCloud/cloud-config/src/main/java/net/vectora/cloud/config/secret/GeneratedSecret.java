@@ -13,6 +13,14 @@ public enum GeneratedSecret {
     /** Velocity modern-forwarding secret, same on the proxy and every backend. */
     FORWARDING_SECRET("VECTORA_FORWARDING_SECRET", Form.ALPHANUMERIC, 48,
             "Velocity modern-forwarding secret, same on proxy and all backends"),
+    /**
+     * Forwarding secret of the legacy proxy ({@code bungeeguard} mode). Velocity sends it to the 1.8.8
+     * backends as {@code bungeeguard-token} in plain text inside the handshake, so it is a secret of
+     * its own and never the modern-forwarding secret.
+     */
+    LEGACY_FORWARDING_SECRET("VECTORA_LEGACY_FORWARDING_SECRET", Form.ALPHANUMERIC, 48,
+            "Forwarding secret of the legacy proxy (bungeeguard token for the 1.8.8 servers). Never the same as"
+                    + " VECTORA_FORWARDING_SECRET"),
     /** Password of the LuckPerms database user. */
     DB_PASSWORD("VECTORA_DB_PASSWORD", Form.ALPHANUMERIC, 32, "Password of the LuckPerms database user"),
     /** Password of the MariaDB {@code root} user (administration and cloud setup only). */

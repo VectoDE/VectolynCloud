@@ -46,7 +46,7 @@ legacy-proxy:                # second Velocity (bungeeguard) for the 1.8.8 group
   enabled: false
   port: 25564
 database:
-  mode: managed              # managed, docker, external or h2 (tests only)
+  mode: managed              # managed, docker, external or h2 (embedded fallback, see database.md)
   host: 127.0.0.1
   port: 3307
   name: luckperms
@@ -231,6 +231,7 @@ On the first start `SecretStore.ensureGenerated` creates every missing secret wi
 | Key | Value |
 |---|---|
 | `VECTORA_FORWARDING_SECRET` | 48 characters `A-Z a-z 0-9` |
+| `VECTORA_LEGACY_FORWARDING_SECRET` | 48 characters `A-Z a-z 0-9`, generated independently of `VECTORA_FORWARDING_SECRET` |
 | `VECTORA_DB_PASSWORD` | 32 characters `A-Z a-z 0-9` |
 | `VECTORA_DB_ROOT_PASSWORD` | 32 characters `A-Z a-z 0-9` |
 | `VECTORA_MANAGEMENT_SECRET` | 40 characters `A-Z a-z 0-9` |
