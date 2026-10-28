@@ -9,7 +9,7 @@ import net.vectora.protocol.message.Message;
 import net.vectora.protocol.message.ServiceStatus;
 
 /** Records every listener call as a line of text, in order. */
-final class RecordingListener implements ServiceListener {
+final class RecordingListener implements ChannelListener {
 
     private final BlockingQueue<String> events = new LinkedBlockingQueue<>();
 

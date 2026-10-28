@@ -10,7 +10,6 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -38,6 +37,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
+import net.vectora.cloud.config.model.CloudConfig;
 import net.vectora.cloud.config.model.ConfigSnapshot;
 import net.vectora.cloud.config.model.DatabaseMode;
 import net.vectora.cloud.config.model.GroupConfig;
@@ -52,6 +52,8 @@ import net.vectora.cloud.config.secret.EnvFile;
 import net.vectora.cloud.config.secret.EnvFormatException;
 import net.vectora.cloud.config.secret.RedactingFilter;
 import net.vectora.cloud.config.secret.Secret;
+import net.vectora.cloud.network.ServiceAuthenticator;
+import net.vectora.cloud.network.ServiceTokens;
 import net.vectora.cloud.node.state.ServiceRecord;
 import net.vectora.cloud.node.state.ServiceStateStore;
 import net.vectora.cloud.node.state.ServiceStates;
@@ -61,6 +63,8 @@ import net.vectora.cloud.template.ProxyBackend;
 import net.vectora.cloud.template.ServerPlatform;
 import net.vectora.cloud.template.TemplateException;
 import net.vectora.cloud.template.TemplateInstaller;
+import net.vectora.protocol.AuthToken;
+import net.vectora.protocol.ServiceEnvironment;
 import net.vectora.protocol.ServiceId;
 
 /**
@@ -74,8 +78,10 @@ import net.vectora.protocol.ServiceId;
  * <p>What other parts of the cloud use:
  * <ul>
  *   <li>console and API: {@link #services()}, {@link #find(ServiceId)}, {@link #start(String)},
- *       {@link #stop(ServiceId)}, {@link #sendCommand(ServiceId, String)}, {@link #addListener};</li>
- *   <li>cloud channel: {@link #verifyToken(ServiceId, String)}, {@link #markReady(ServiceId)};</li>
+ *       {@link #stop(ServiceId)}, {@link #restart(ServiceId)}, {@link #sendCommand(ServiceId, String)},
+ *       {@link #addListener};</li>
+ *   <li>cloud channel: {@link #authenticator()} (the tokens this manager issues for every start and
+ *       revokes when the process ends), {@link #markReady(ServiceId)};</li>
  *   <li>JRE management, downloads, database: the {@link Builder} seams
  *       {@link JavaRuntimeResolver}, {@link ServerSoftwareProvider}, {@link PlaceholderContributor}.</li>
  * </ul>
@@ -105,6 +111,21 @@ public final class ServiceManager implements AutoCloseable {
     }
 
     /**
+     * Runs before services are started with {@link #start(String)} or {@link #startConfigured()},
+     * for example to set up the database first. Not called for restarts after a crash.
+     */
+    @FunctionalInterface
+    public interface StartGate {
+
+        /**
+         * Checks that services may start now, and prepares what they need.
+         *
+         * @throws ServiceException if they may not; the message says why
+         */
+        void beforeStart() throws ServiceException;
+    }
+
+    /**
      * Result of {@link #recoverOrphans()}.
      *
      * @param terminated   services whose process was still running from an earlier run and was ended
@@ -125,7 +146,10 @@ public final class ServiceManager implements AutoCloseable {
     private final ServiceStateStore store;
     private final Duration destroyGrace;
     private final Clock clock;
-    private final SecureRandom random;
+    private final ServiceTokens tokens = new ServiceTokens();
+    private String channelHost;
+    private int channelPort;
+    private final StartGate startGate;
     private final String nodeId;
 
     private final Object lock = new Object();
@@ -150,10 +174,12 @@ public final class ServiceManager implements AutoCloseable {
         this.store = new ServiceStateStore(home);
         this.destroyGrace = b.destroyGrace;
         this.clock = b.clock;
-        this.random = b.random;
+        this.startGate = b.startGate;
         ConfigSnapshot snapshot = config.get();
         this.nodeId = snapshot.cloud().nodeId();
         NodeConfig node = thisNode(snapshot);
+        this.channelHost = node.host();
+        this.channelPort = node.port();
         this.ports = new PortAllocator(node.servicePorts(), fixedPorts(snapshot, node),
                 b.portProbe != null ? b.portProbe : PortAllocator.PortProbe.binding(node.host()));
         this.events = Executors.newSingleThreadExecutor(daemon("vectora-service-events"));
@@ -219,23 +245,16 @@ public final class ServiceManager implements AutoCloseable {
     }
 
     /**
-     * Checks the token a service presents on the cloud channel. Only the token of the current
-     * start of a service with a running process matches; it is compared in constant time.
+     * The check for the cloud channel. This manager is the only place that issues and revokes
+     * service tokens: a new token for every start (handed to the process in
+     * {@value ServiceEnvironment#SERVICE_TOKEN}), revoked as soon as the process has ended or
+     * could not be started. So only the current start of a service with a process can log in;
+     * tokens are compared in constant time.
      *
-     * @param id    the service the client claims to be
-     * @param token the presented token
-     * @return whether it matches
+     * @return the authenticator to pass to {@code CloudNetworkServer.builder}
      */
-    public boolean verifyToken(ServiceId id, String token) {
-        ServiceToken expected;
-        synchronized (lock) {
-            Service service = services.get(id);
-            if (service == null || !service.state.hasProcess() || service.token == null) {
-                return false;
-            }
-            expected = service.token;
-        }
-        return expected.matches(token);
+    public ServiceAuthenticator authenticator() {
+        return tokens;
     }
 
     // ------------------------------------------------------------------ orphans
@@ -325,10 +344,21 @@ public final class ServiceManager implements AutoCloseable {
      * group is wanted. Backends start before proxies, so the proxy's server list already contains
      * them. A service that cannot be started is logged and does not stop the others.
      *
+     * <p>Nothing starts while the setup is not complete or the EULA is not accepted
+     * ({@code setup-complete} and {@code eula-accepted} in {@code cloud.yml}), or while the
+     * {@link StartGate} refuses; that is logged as a warning.
+     *
      * @return the services after the start attempt
      */
     public List<ServiceInfo> startConfigured() {
         ConfigSnapshot snapshot = config.get();
+        try {
+            checkStartAllowed(snapshot.cloud());
+            startGate.beforeStart();
+        } catch (ServiceException e) {
+            LOG.log(System.Logger.Level.WARNING, "No server is started: {0}", e.getMessage());
+            return services();
+        }
         List<Service> prepared = new ArrayList<>();
         for (ServicePlanner.Planned planned : ServicePlanner.plan(snapshot, nodeId)) {
             try {
@@ -356,14 +386,94 @@ public final class ServiceManager implements AutoCloseable {
      *
      * @param task task name
      * @return the started service
-     * @throws ServiceException if the task is unknown, its group is not wanted or runs elsewhere,
-     *                          {@code max-services} is reached, or the start fails
+     * @throws ServiceException if the setup is not complete or the EULA not accepted, the
+     *                          {@link StartGate} refuses, the task is unknown, its group is not
+     *                          wanted or runs elsewhere, {@code max-services} is reached, or the
+     *                          start fails
      */
     public ServiceInfo start(String task) throws ServiceException {
         ConfigSnapshot snapshot = config.get();
+        checkStartAllowed(snapshot.cloud());
+        startGate.beforeStart();
         Service service = prepare(snapshot, task, OptionalInt.empty());
         launch(service, snapshot);
         return service.info();
+    }
+
+    /**
+     * Stops a service and starts it again. A static service comes back with the same id, folder
+     * and (if still free) port; a dynamic one gets a fresh folder and the lowest free index of its
+     * group, because its old folder is being deleted.
+     *
+     * @param id the service
+     * @return the new start
+     * @throws ServiceException if the service is unknown or cannot be started again, for the same
+     *                          reasons as {@link #start(String)}
+     */
+    public ServiceInfo restart(ServiceId id) throws ServiceException {
+        ServiceSpec spec;
+        synchronized (lock) {
+            Service service = services.get(id);
+            if (service == null) {
+                throw new ServiceException("unknown service " + id);
+            }
+            spec = service.spec;
+        }
+        stop(id);
+        ConfigSnapshot snapshot = config.get();
+        checkStartAllowed(snapshot.cloud());
+        startGate.beforeStart();
+        Service next = prepare(snapshot, spec.taskName(),
+                spec.isStatic() ? OptionalInt.of(spec.index()) : OptionalInt.empty());
+        launch(next, snapshot);
+        return next.info();
+    }
+
+    /**
+     * Stops, in the background, every service whose group is not wanted any more, for example
+     * after {@code servers.lobby} was switched off in {@code cloud.yml}. Their pending restarts are
+     * cancelled, and {@link #start(String)} refuses them from now on. The node calls this on every
+     * configuration change.
+     *
+     * @return the services that are being stopped
+     */
+    public List<ServiceId> stopUnwanted() {
+        ConfigSnapshot snapshot = config.get();
+        List<ServiceId> unwanted = new ArrayList<>();
+        synchronized (lock) {
+            if (closing) {
+                return List.of();
+            }
+            for (Service service : services.values()) {
+                GroupConfig group = snapshot.groups().getOrDefault(service.spec.groupName(), service.spec.group());
+                boolean active = service.isActive() && !service.stopRequested;
+                if (active && !ServicePlanner.isWanted(group, snapshot.cloud())) {
+                    unwanted.add(service.spec.id());
+                }
+            }
+        }
+        for (ServiceId id : unwanted) {
+            LOG.log(System.Logger.Level.INFO, "{0} is stopped: its group is not wanted any more", id);
+            try {
+                workers.execute(() -> {
+                    try {
+                        stop(id);
+                    } catch (ServiceException e) {
+                        // Gone in the meantime.
+                    }
+                });
+            } catch (java.util.concurrent.RejectedExecutionException e) {
+                // Closing; close() stops it anyway.
+            }
+        }
+        return List.copyOf(unwanted);
+    }
+
+    private static void checkStartAllowed(CloudConfig cloud) throws ServiceException {
+        if (!cloud.setupComplete() || !cloud.eulaAccepted()) {
+            throw new ServiceException("the setup is not complete (cloud.yml: setup-complete and eula-accepted "
+                    + "must be true), so no server may start");
+        }
     }
 
     /**
@@ -378,8 +488,9 @@ public final class ServiceManager implements AutoCloseable {
         if (group == null) {
             throw new ServiceException("group " + task.group() + " of task " + taskName + " does not exist");
         }
-        if (!ServicePlanner.isWanted(group, snapshot.cloud().servers())) {
-            throw new ServiceException("group " + task.group() + " is not wanted (cloud.yml servers)");
+        if (!ServicePlanner.isWanted(group, snapshot.cloud())) {
+            throw new ServiceException("group " + task.group() + " is not wanted (cloud.yml "
+                    + (ServicePlanner.isLegacy(group) ? "legacy-proxy.enabled)" : "servers)"));
         }
         if (!ServicePlanner.runsOn(task, nodeId)) {
             throw new ServiceException("task " + taskName + " does not run on node " + nodeId);
@@ -416,16 +527,20 @@ public final class ServiceManager implements AutoCloseable {
                 }
             }
             int port;
+            boolean allocated = false;
             if (group.software() == ServerSoftware.VELOCITY) {
-                port = snapshot.cloud().proxy().port();
+                boolean legacy = ServicePlanner.isLegacy(group);
+                port = legacy ? snapshot.cloud().legacyProxy().port() : snapshot.cloud().proxy().port();
                 for (Service other : services.values()) {
-                    if (other != existing && other.isActive() && other.spec.isProxy()) {
-                        throw new ServiceException("only one proxy per node: port " + port + " is used by "
-                                + other.spec.id());
+                    if (other != existing && other.isActive() && other.spec.isProxy()
+                            && other.spec.isLegacyProxy() == legacy) {
+                        throw new ServiceException("only one " + (legacy ? "legacy proxy" : "proxy") + " per node: port "
+                                + port + " is used by " + other.spec.id());
                     }
                 }
             } else {
                 port = ports.allocate(existing == null ? 0 : existing.spec.port());
+                allocated = true;
             }
             ServiceSpec spec = new ServiceSpec(id, task.group(), taskName, index, group, task.mode(),
                     ServicePlanner.kindOf(group), home.resolve(group.template()).resolve("template"), workDirectory, port);
@@ -433,6 +548,7 @@ public final class ServiceManager implements AutoCloseable {
             int attempts = service.restartAttempts;
             service.reset(spec);
             service.restartAttempts = attempts;
+            service.portHeld = allocated;
             services.put(id, service);
             transition(service, ServiceState.PREPARED);
             return service;
@@ -461,7 +577,13 @@ public final class ServiceManager implements AutoCloseable {
     private void launch(Service service, ConfigSnapshot snapshot) throws ServiceException {
         ServiceSpec spec = service.spec;
         Writer log = null;
+        AuthToken token = null;
         try {
+            synchronized (lock) {
+                if (service.stopRequested || closing) {
+                    throw new ServiceException("stopped before it was started");
+                }
+            }
             NodeConfig node = thisNode(snapshot);
             EnvFile env;
             try {
@@ -473,24 +595,28 @@ public final class ServiceManager implements AutoCloseable {
             List<String> tryOrder = new ArrayList<>();
             if (spec.isProxy()) {
                 synchronized (lock) {
-                    proxyBackends(node, backends, tryOrder);
+                    proxyBackends(spec, node, backends, tryOrder);
                 }
             }
             PlaceholderValues values = ServicePlaceholders.build(spec, snapshot, node, env, backends, tryOrder,
                     contributors);
             if (!spec.isStatic()) {
+                checkDynamicRoot();
                 deleteDynamicFolder(spec.workDirectory());
             }
-            TemplateInstaller.install(spec.templateDir(), spec.workDirectory(), platformOf(spec.group().software()),
+            TemplateInstaller.install(spec.templateDir(), spec.workDirectory(), platformOf(spec.group()),
                     values, snapshot.cloud().eulaAccepted());
             JavaRuntimeResolver.JavaRuntime runtime = javaRuntimes.resolve(spec.groupName(), spec.group());
             String jar = software.provide(spec, spec.workDirectory());
-            ServiceToken token = ServiceToken.generate(random);
+            token = tokens.issue(spec.id());
             List<Secret> redact = new ArrayList<>(env.entries().stream().map(EnvFile.Entry::value).toList());
-            redact.add(token.secret());
+            redact.add(Secret.of(token.value()));
             RedactingFilter filter = RedactingFilter.of(redact);
             List<String> command = command(runtime, spec, jar);
-            Map<String, String> environment = environment(spec, token, node);
+            Map<String, String> environment;
+            synchronized (lock) {
+                environment = environment(spec, token, channelHost, channelPort);
+            }
             log = ServiceOutput.openLog(home.resolve(ServiceOutput.LOG_DIR), spec.id().value());
 
             Process process;
@@ -500,7 +626,6 @@ public final class ServiceManager implements AutoCloseable {
                 }
                 process = processes.start(command, spec.workDirectory(), environment);
                 service.process = process;
-                service.token = token;
                 service.stdin = process.getOutputStream();
                 service.pid = process.pid();
                 service.startedAt = processes.startTime(process.toHandle()).orElse(clock.instant());
@@ -517,10 +642,10 @@ public final class ServiceManager implements AutoCloseable {
             pump.start();
             process.onExit().whenCompleteAsync((p, e) -> onExit(service, process, pump), workers);
         } catch (IOException | TemplateException | RuntimeException e) {
-            fail(service, e.getMessage() == null ? e.toString() : e.getMessage());
+            fail(service, token, e.getMessage() == null ? e.toString() : e.getMessage());
             throw new ServiceException("cannot start " + spec.id() + ": " + e.getMessage(), e);
         } catch (ServiceException e) {
-            fail(service, e.getMessage());
+            fail(service, token, e.getMessage());
             throw e;
         } finally {
             if (log != null) {
@@ -533,14 +658,17 @@ public final class ServiceManager implements AutoCloseable {
         }
     }
 
-    private void fail(Service service, String reason) {
+    private void fail(Service service, AuthToken token, String reason) {
         synchronized (lock) {
-            LOG.log(System.Logger.Level.WARNING, "{0} could not be started: {1}", service.spec.id(), reason);
+            if (token != null && service.process == null) {
+                tokens.revoke(service.spec.id());
+            }
             if (service.state == ServiceState.PREPARED) {
+                LOG.log(System.Logger.Level.WARNING, "{0} could not be started: {1}", service.spec.id(), reason);
                 transition(service, service.stopRequested ? ServiceState.STOPPED : ServiceState.CRASHED);
             }
             releasePort(service);
-            if (!service.spec.isStatic()) {
+            if (!service.spec.isStatic() && services.get(service.spec.id()) == service && !service.isActive()) {
                 services.remove(service.spec.id());
                 cleanupLater(service.spec.workDirectory());
                 persist();
@@ -548,17 +676,25 @@ public final class ServiceManager implements AutoCloseable {
         }
     }
 
-    private void proxyBackends(NodeConfig node, List<ProxyBackend> backends, List<String> tryOrder) {
+    /**
+     * The backends a proxy lists: for the main proxy every static backend except the 1.8.8 ones,
+     * for the legacy proxy only the 1.8.8 ones (PandaSpigot). Needs the lock.
+     */
+    private void proxyBackends(ServiceSpec proxy, NodeConfig node, List<ProxyBackend> backends, List<String> tryOrder) {
+        boolean legacyProxy = proxy.isLegacyProxy();
         for (Service other : services.values()) {
             ServiceSpec s = other.spec;
             if (s.isProxy() || !s.isStatic() || !other.isActive()) {
+                continue;
+            }
+            if ((s.group().software() == ServerSoftware.PANDASPIGOT) != legacyProxy) {
                 continue;
             }
             // The first static service of a group appears under the group name, so plugins can keep
             // addressing "lobby" or "end"; further ones under their service id.
             String name = s.index() == 1 ? s.groupName() : s.id().value();
             backends.add(new ProxyBackend(name, node.host(), s.port(), true));
-            if (s.kind().orElse(null) == ServerKind.LOBBY) {
+            if (s.kind().orElse(null) == ServerKind.LOBBY || legacyProxy) {
                 tryOrder.add(name);
             }
         }
@@ -665,7 +801,8 @@ public final class ServiceManager implements AutoCloseable {
             service.exitCode = exit;
             service.process = null;
             service.stdin = null;
-            service.token = null;
+            // The token dies with the process: a new start gets a new one.
+            tokens.revoke(service.spec.id());
             releasePort(service);
             boolean requested = service.stopRequested;
             ServiceState next = requested || exit == 0 ? ServiceState.STOPPED : ServiceState.CRASHED;
@@ -782,6 +919,18 @@ public final class ServiceManager implements AutoCloseable {
             service.stopRequested = true;
             process = service.process;
             finished = service.finished;
+            if (service.state == ServiceState.PREPARED) {
+                // Not started yet: launch() sees stopRequested and does not start the process.
+                transition(service, ServiceState.STOPPED);
+                releasePort(service);
+                ServiceInfo info = service.info();
+                if (!service.spec.isStatic()) {
+                    services.remove(id);
+                    cleanupLater(service.spec.workDirectory());
+                }
+                persist();
+                return info;
+            }
             if (process == null || !service.state.hasProcess()) {
                 return service.info();
             }
@@ -907,8 +1056,10 @@ public final class ServiceManager implements AutoCloseable {
         }
     }
 
+    /** Gives the port back once; a second call does nothing, so it cannot free a port handed out again. Needs the lock. */
     private void releasePort(Service service) {
-        if (!service.spec.isProxy()) {
+        if (service.portHeld) {
+            service.portHeld = false;
             ports.release(service.spec.port());
         }
     }
@@ -987,6 +1138,12 @@ public final class ServiceManager implements AutoCloseable {
             LOG.log(System.Logger.Level.ERROR, "Refusing to delete {0}: not inside temp/services", target);
             return;
         }
+        try {
+            checkDynamicRoot();
+        } catch (IOException e) {
+            LOG.log(System.Logger.Level.ERROR, "Refusing to delete {0}: {1}", target, e.getMessage());
+            return;
+        }
         // Windows keeps files of a process that just ended locked for a moment (the jar, open
         // logs), so a failed delete is retried a few times before giving up.
         for (int attempt = 1; ; attempt++) {
@@ -1006,6 +1163,27 @@ public final class ServiceManager implements AutoCloseable {
                 LOG.log(System.Logger.Level.WARNING, "Interrupted while deleting {0}", target);
                 return;
             }
+        }
+    }
+
+    /**
+     * Makes sure that {@code temp} and {@code temp/services} are real folders inside the home and
+     * not links or junctions to somewhere else: dynamic folders are created and deleted below
+     * them, and a link there would let the node delete files outside the home.
+     */
+    private void checkDynamicRoot() throws IOException {
+        Path root = home.resolve(ServicePlanner.DYNAMIC_DIR).normalize();
+        if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) {
+            Path temp = root.getParent();
+            if (Files.exists(temp, LinkOption.NOFOLLOW_LINKS)
+                    && !temp.toRealPath().equals(home.toRealPath().resolve(temp.getFileName()))) {
+                throw new IOException(home.relativize(temp) + " is a link, not a folder of the home");
+            }
+            return;
+        }
+        Path expected = home.toRealPath().resolve(ServicePlanner.DYNAMIC_DIR).normalize();
+        if (!root.toRealPath().equals(expected)) {
+            throw new IOException(ServicePlanner.DYNAMIC_DIR + " is a link, not a folder of the home");
         }
     }
 
@@ -1048,10 +1226,16 @@ public final class ServiceManager implements AutoCloseable {
         });
     }
 
-    static ServerPlatform platformOf(ServerSoftware software) {
-        return switch (software) {
-            case VELOCITY -> ServerPlatform.VELOCITY;
-            case PAPER, PANDASPIGOT -> ServerPlatform.PAPER;
+    /**
+     * The template platform of a group: the legacy proxy (template {@code Legacy-Proxy}) is
+     * {@link ServerPlatform#VELOCITY_LEGACY} with its own forwarding secret, PandaSpigot is
+     * {@link ServerPlatform#PANDASPIGOT} (EULA, no Floodgate key).
+     */
+    static ServerPlatform platformOf(GroupConfig group) {
+        return switch (group.software()) {
+            case VELOCITY -> ServicePlanner.isLegacy(group) ? ServerPlatform.VELOCITY_LEGACY : ServerPlatform.VELOCITY;
+            case PAPER -> ServerPlatform.PAPER;
+            case PANDASPIGOT -> ServerPlatform.PANDASPIGOT;
             case FABRIC -> ServerPlatform.FABRIC;
         };
     }
@@ -1084,21 +1268,54 @@ public final class ServiceManager implements AutoCloseable {
      * The environment of a service: the cloud's own environment without any {@code VECTORA_*}
      * variable, plus the service's id, group, port, token and where the cloud channel listens.
      */
-    static Map<String, String> environment(ServiceSpec spec, ServiceToken token, NodeConfig node) {
+    static Map<String, String> environment(ServiceSpec spec, AuthToken token, String channelHost, int channelPort) {
         Map<String, String> env = new HashMap<>();
         System.getenv().forEach((key, value) -> {
-            if (!key.toUpperCase(java.util.Locale.ROOT).startsWith("VECTORA_")) {
+            if (!key.toUpperCase(java.util.Locale.ROOT).startsWith(ServiceEnvironment.PREFIX)) {
                 env.put(key, value);
             }
         });
-        env.put("VECTORA_SERVICE_ID", spec.id().value());
-        env.put("VECTORA_SERVICE_GROUP", spec.groupName());
-        env.put("VECTORA_SERVICE_TASK", spec.taskName());
-        env.put("VECTORA_SERVICE_PORT", Integer.toString(spec.port()));
-        env.put(ServiceToken.ENV, token.secret().reveal());
-        env.put("VECTORA_CLOUD_HOST", node.host());
-        env.put("VECTORA_CLOUD_PORT", Integer.toString(node.port()));
+        env.put(ServiceEnvironment.SERVICE_ID, spec.id().value());
+        env.put(ServiceEnvironment.SERVICE_GROUP, spec.groupName());
+        env.put(ServiceEnvironment.SERVICE_TASK, spec.taskName());
+        env.put(ServiceEnvironment.SERVICE_PORT, Integer.toString(spec.port()));
+        env.put(ServiceEnvironment.SERVICE_TOKEN, token.value());
+        env.put(ServiceEnvironment.CLOUD_HOST, channelHost(channelHost));
+        env.put(ServiceEnvironment.CLOUD_PORT, Integer.toString(channelPort));
         return env;
+    }
+
+    /**
+     * Sets where the cloud channel listens, as the node's network server has bound it. Services
+     * started afterwards get it in {@value ServiceEnvironment#CLOUD_HOST} and
+     * {@value ServiceEnvironment#CLOUD_PORT}. Default: host and port of this node in
+     * {@code nodes.yml}.
+     *
+     * @param host the host or address
+     * @param port the port
+     */
+    public void channelAddress(String host, int port) {
+        Objects.requireNonNull(host, "host");
+        if (port < 1 || port > 65535) {
+            throw new IllegalArgumentException("port out of range");
+        }
+        synchronized (lock) {
+            this.channelHost = host;
+            this.channelPort = port;
+        }
+    }
+
+    /**
+     * Where a service on this machine reaches the channel: the node's host, or the loopback
+     * address if the channel listens on every address ({@code 0.0.0.0}, {@code ::}), which is
+     * not an address to connect to.
+     */
+    static String channelHost(String host) {
+        return switch (host) {
+            case "0.0.0.0" -> "127.0.0.1";
+            case "::", "[::]", "0:0:0:0:0:0:0:0" -> "::1";
+            default -> host;
+        };
     }
 
     private Duration stopTimeout(GroupConfig group) {
@@ -1144,7 +1361,7 @@ public final class ServiceManager implements AutoCloseable {
         ServiceState state;
         Process process;
         OutputStream stdin;
-        ServiceToken token;
+        boolean portHeld;
         long pid;
         Instant startedAt;
         Integer exitCode;
@@ -1158,7 +1375,6 @@ public final class ServiceManager implements AutoCloseable {
             spec = next;
             process = null;
             stdin = null;
-            token = null;
             stopRequested = false;
             pendingRestart = null;
             finished = CompletableFuture.completedFuture(null);
@@ -1188,7 +1404,7 @@ public final class ServiceManager implements AutoCloseable {
         private final List<PlaceholderContributor> contributors = new ArrayList<>();
         private Duration destroyGrace = Duration.ofSeconds(10);
         private Clock clock = Clock.systemUTC();
-        private SecureRandom random = new SecureRandom();
+        private StartGate startGate = () -> { };
 
         private Builder(Path home, Supplier<ConfigSnapshot> config, SecretSource secrets) {
             this.home = Objects.requireNonNull(home, "home").toAbsolutePath().normalize();
@@ -1260,6 +1476,18 @@ public final class ServiceManager implements AutoCloseable {
          */
         public Builder destroyGrace(Duration value) {
             this.destroyGrace = Objects.requireNonNull(value, "value");
+            return this;
+        }
+
+        /**
+         * Sets what runs before services are started (default: nothing), for example the
+         * database setup.
+         *
+         * @param value the gate
+         * @return this builder
+         */
+        public Builder startGate(StartGate value) {
+            this.startGate = Objects.requireNonNull(value, "value");
             return this;
         }
 

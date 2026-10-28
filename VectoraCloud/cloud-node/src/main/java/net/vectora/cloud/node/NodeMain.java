@@ -37,7 +37,7 @@ public final class NodeMain {
             if (current != null) {
                 throw new IllegalStateException("a node already runs in this JVM");
             }
-            CloudNode node = CloudNode.open(parsed, builder -> { });
+            CloudNode node = CloudNode.open(parsed, options -> { });
             try {
                 node.start();
             } catch (IOException | RuntimeException e) {

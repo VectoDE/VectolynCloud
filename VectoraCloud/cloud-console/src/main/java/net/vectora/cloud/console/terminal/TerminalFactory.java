@@ -44,6 +44,10 @@ public final class TerminalFactory {
                     .system(true)
                     .provider(selection.provider())
                     .dumb(true)
+                    // Ctrl+C outside a prompt (while a command runs) must not reach the JVM's
+                    // default handler, which would end the cloud at once. At the prompt the line
+                    // reader installs its own handler and reports it as Interrupted.
+                    .signalHandler(Terminal.SignalHandler.SIG_IGN)
                     .build();
             String description = "jline (provider " + selection.provider() + ", type " + terminal.getType() + ")";
             return new JLineTerminal(terminal, completer, historyFile, historyAllowed, description);

@@ -18,6 +18,8 @@ public final class FakeSqlServer implements SqlConnector {
 
     /** Whether the server accepts connections. */
     public volatile boolean up = true;
+    /** Value of {@code @@max_connections}, or null if the query fails. */
+    public String maxConnections = "151";
     /** Version string it reports. */
     public String version = "11.8.9-MariaDB";
     /** Accepted logins. */
@@ -65,11 +67,17 @@ public final class FakeSqlServer implements SqlConnector {
             }
 
             @Override
-            public List<List<String>> query(String sql) {
+            public List<List<String>> query(String sql) throws SQLException {
                 synchronized (FakeSqlServer.this) {
                     log.add(user + ": " + sql);
                     if (sql.startsWith("SELECT User, Host")) {
                         return List.copyOf(accounts);
+                    }
+                    if (sql.equals("SELECT @@max_connections")) {
+                        if (maxConnections == null) {
+                            throw new SQLException("no such variable", "HY000", 1193);
+                        }
+                        return List.of(List.of(maxConnections));
                     }
                     return List.of(List.of("1"));
                 }

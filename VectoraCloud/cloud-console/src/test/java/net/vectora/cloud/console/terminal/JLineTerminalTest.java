@@ -119,10 +119,10 @@ class JLineTerminalTest {
     }
 
     @Test
-    void ctrlCAndCtrlDRunShutdown() throws Exception {
+    void aSecondCtrlCOrCtrlDRunsShutdown() throws Exception {
         for (String key : List.of("\u0003", "\u0004")) {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
-            String typed = key + "never\n";
+            String typed = key + key + "never\n";
             JLineTerminal jline = new JLineTerminal(key.equals("\u0003") ? terminalWithSignals(typed, out) : terminal(typed, out),
                     line -> List.of(), null, line -> true, "test");
             Console console = Console.builder().terminal(jline).build();
@@ -135,10 +135,29 @@ class JLineTerminalTest {
                 console.stop();
             }).build());
             console.run();
-            assertEquals(1, shutdowns[0], "key " + (int) key.charAt(0) + " runs shutdown once");
+            assertEquals(1, shutdowns[0], "key " + (int) key.charAt(0) + " twice runs shutdown once");
             assertFalse(console.isRunning());
             console.close();
         }
+    }
+
+    @Test
+    void aSingleCtrlCOnlyAsks() throws Exception {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        JLineTerminal jline = new JLineTerminal(terminalWithSignals("\u0003next\n", out), line -> List.of(), null,
+                line -> true, "test");
+        Console console = Console.builder().terminal(jline).build();
+        List<String> calls = new java.util.ArrayList<>();
+        console.commands().register(Command.builder("next").description(Text.of("n", "n")).executes(c -> {
+            calls.add("next");
+            console.stop();
+        }).build());
+        console.commands().register(Command.builder("shutdown").description(Text.of("s", "s"))
+                .executes(c -> calls.add("shutdown")).build());
+        console.run();
+        assertEquals(List.of("next"), calls, "one Ctrl+C must not shut down");
+        assertTrue(out.toString(java.nio.charset.StandardCharsets.UTF_8).contains("Ctrl+C again"));
+        console.close();
     }
 
     @Test

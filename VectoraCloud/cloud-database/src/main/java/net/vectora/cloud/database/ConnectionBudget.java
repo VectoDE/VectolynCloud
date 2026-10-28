@@ -49,6 +49,25 @@ public record ConnectionBudget(int maxConnections, int reserved) {
     }
 
     /**
+     * The budget of a server whose {@code max_connections} was read from it (external mode):
+     * {@value #DEFAULT_RESERVED} connections are kept free, or a fifth of them on a server with
+     * fewer than 100.
+     *
+     * @param maxConnections {@code @@max_connections} of the server
+     * @return the budget
+     * @throws DatabaseException if the server allows too few connections for a single pool
+     */
+    public static ConnectionBudget forServer(int maxConnections) throws DatabaseException {
+        int reserved = Math.min(DEFAULT_RESERVED, Math.max(0, maxConnections) / 5);
+        if (maxConnections - reserved < MIN_POOL_SIZE) {
+            throw new DatabaseException(DatabaseException.Reason.CONNECTION_BUDGET, "The database server allows "
+                    + maxConnections + " connections (max_connections), too few for the connection pools of the"
+                    + " servers. Raise max_connections on the server.");
+        }
+        return new ConnectionBudget(maxConnections, reserved);
+    }
+
+    /**
      * Returns how many connections the pools may use together.
      *
      * @return {@code maxConnections - reserved}

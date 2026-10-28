@@ -59,7 +59,7 @@ import net.vectora.protocol.message.ServiceStatus;
  *       channel and to every other connected service.</li>
  * </ul>
  *
- * <p>The node wires it to its service core through {@link ServiceListener} and
+ * <p>The node wires it to its service core through {@link ChannelListener} and
  * {@link ServiceAuthenticator}. Callbacks run on network threads. All public methods are
  * thread-safe. See {@code docs/cloud/network.md}.
  */
@@ -85,7 +85,7 @@ public final class CloudNetworkServer implements AutoCloseable {
 
     private final NetworkSettings settings;
     private final ServiceAuthenticator authenticator;
-    private final ServiceListener listener;
+    private final ChannelListener listener;
     private final PipelineCustomizer customizer;
     private final MessageCodec codec = MessageCodec.standard();
     private final EnvelopeEncoder encoder = new EnvelopeEncoder(codec);
@@ -485,7 +485,7 @@ public final class CloudNetworkServer implements AutoCloseable {
 
         private final NetworkSettings settings;
         private final ServiceAuthenticator authenticator;
-        private ServiceListener listener;
+        private ChannelListener listener;
         private PipelineCustomizer customizer;
 
         private Builder(NetworkSettings settings, ServiceAuthenticator authenticator) {
@@ -494,7 +494,7 @@ public final class CloudNetworkServer implements AutoCloseable {
         }
 
         /** Sets the listener for service events; without one they are dropped. */
-        public Builder listener(ServiceListener value) {
+        public Builder listener(ChannelListener value) {
             this.listener = Objects.requireNonNull(value, "listener");
             return this;
         }

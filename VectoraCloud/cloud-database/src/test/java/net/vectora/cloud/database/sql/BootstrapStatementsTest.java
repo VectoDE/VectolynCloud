@@ -53,7 +53,7 @@ class BootstrapStatementsTest {
                 "DROP USER IF EXISTS ''@'localhost'",
                 "DROP USER IF EXISTS ''@'build-host'",
                 "DROP DATABASE IF EXISTS `test`",
-                "DELETE FROM mysql.db WHERE Db = 'test' OR Db = 'test\\\\_%'",
+                "DELETE FROM mysql.db WHERE Db = 'test' OR Db = CONCAT('test', CHAR(92 USING utf8mb4), '_%')",
                 "FLUSH PRIVILEGES"), statements);
     }
 

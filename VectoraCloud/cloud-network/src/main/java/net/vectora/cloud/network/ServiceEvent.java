@@ -8,7 +8,7 @@ import net.vectora.protocol.message.ServiceStatus;
 
 /**
  * Something a service did or that happened to its connection, as passed to
- * {@link ServiceListener#onEvent}. The set is closed, so a {@code switch} over it can cover every
+ * {@link ChannelListener#onEvent}. The set is closed, so a {@code switch} over it can cover every
  * case:
  * <pre>{@code
  * switch (event) {

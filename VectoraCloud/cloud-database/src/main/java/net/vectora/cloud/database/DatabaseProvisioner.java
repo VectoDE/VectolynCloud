@@ -60,6 +60,18 @@ public interface DatabaseProvisioner {
     }
 
     /**
+     * Returns how many connections the pools of all services may use together. Valid after
+     * {@link #provision()}. The cloud's own servers (managed, Docker) allow
+     * {@value ConnectionBudget#MANAGED_MAX_CONNECTIONS}; an external server is asked for its
+     * {@code max_connections}.
+     *
+     * @return the budget
+     */
+    default ConnectionBudget connectionBudget() {
+        return ConnectionBudget.managed();
+    }
+
+    /**
      * Stops what this provisioner started. Does nothing for modes that start nothing.
      *
      * @throws InterruptedException if interrupted while waiting for the server to stop

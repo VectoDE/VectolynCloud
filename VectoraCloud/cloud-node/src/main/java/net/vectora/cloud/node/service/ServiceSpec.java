@@ -62,4 +62,14 @@ public record ServiceSpec(ServiceId id, String groupName, String taskName, int i
     public boolean isProxy() {
         return group.software() == ServerSoftware.VELOCITY;
     }
+
+    /**
+     * Tells whether the service is the legacy proxy (Velocity on the template
+     * {@value ServicePlanner#LEGACY_PROXY_TEMPLATE}, in front of the 1.8.8 groups).
+     *
+     * @return true for the legacy proxy
+     */
+    public boolean isLegacyProxy() {
+        return isProxy() && ServicePlanner.LEGACY_PROXY_TEMPLATE.equals(group.template());
+    }
 }

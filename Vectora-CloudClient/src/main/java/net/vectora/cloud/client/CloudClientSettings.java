@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.util.Objects;
 import java.util.function.UnaryOperator;
 import net.vectora.protocol.AuthToken;
+import net.vectora.protocol.ServiceEnvironment;
 import net.vectora.protocol.ServiceId;
 
 /**
@@ -30,16 +31,16 @@ public record CloudClientSettings(String host, int port, ServiceId service, Auth
         Duration maxBackoff) {
 
     /** Environment variable with the host of the cloud channel. */
-    public static final String ENV_HOST = "VECTORA_CLOUD_HOST";
+    public static final String ENV_HOST = ServiceEnvironment.CLOUD_HOST;
 
     /** Environment variable with the port of the cloud channel. */
-    public static final String ENV_PORT = "VECTORA_CLOUD_PORT";
+    public static final String ENV_PORT = ServiceEnvironment.CLOUD_PORT;
 
     /** Environment variable with the service id. */
-    public static final String ENV_SERVICE_ID = "VECTORA_SERVICE_ID";
+    public static final String ENV_SERVICE_ID = ServiceEnvironment.SERVICE_ID;
 
     /** Environment variable with the service token. */
-    public static final String ENV_TOKEN = "VECTORA_SERVICE_TOKEN";
+    public static final String ENV_TOKEN = ServiceEnvironment.SERVICE_TOKEN;
 
     /** System property that overrides {@link #ENV_HOST}. */
     public static final String PROPERTY_HOST = "vectora.cloud.host";

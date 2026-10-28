@@ -44,7 +44,8 @@ class NodeStartTest {
     @Test
     void anIncompleteSetupCreatesSecretsButStartsNoServer(@TempDir Path dir) throws Exception {
         NodeSettings settings = NodeSettings.parse(Map.of("home", dir.toAbsolutePath().toString()));
-        CloudNode node = CloudNode.open(settings, builder -> { });
+        CloudNode node = CloudNode.open(settings, options -> options.noConsole()
+                .network(network -> network.withAddress("127.0.0.1", 0)));
         try {
             assertTrue(Files.isRegularFile(dir.resolve("secrets").resolve("vectora.env")), "secrets generated");
             node.start();
