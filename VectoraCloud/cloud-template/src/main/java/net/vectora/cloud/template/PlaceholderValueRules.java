@@ -83,7 +83,11 @@ final class PlaceholderValueRules {
         if (!PORT.matcher(value).matches()) {
             return false;
         }
-        int port = Integer.parseInt(value);
-        return port >= 1 && port <= 65535;
+        try {
+            int port = Integer.parseInt(value);
+            return port >= 1 && port <= 65535;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 }
