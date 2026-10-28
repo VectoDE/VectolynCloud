@@ -132,7 +132,7 @@ public final class ManagedMariaDbProvisioner implements DatabaseProvisioner {
             Timeouts timeouts) {
         this.config = Objects.requireNonNull(config, "config");
         if (config.mode() != DatabaseMode.MANAGED) {
-            throw new IllegalArgumentException("not a managed database: " + config.mode());
+            throw new IllegalArgumentException("database mode managed expected, got " + config.mode());
         }
         this.secrets = Objects.requireNonNull(secrets, "secrets");
         this.layout = Objects.requireNonNull(layout, "layout");

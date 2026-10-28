@@ -40,7 +40,7 @@ public final class DockerComposeFile {
      */
     public static String render(DatabaseConfig config) {
         if (config.mode() != DatabaseMode.DOCKER) {
-            throw new IllegalArgumentException("not a Docker database: " + config.mode());
+            throw new IllegalArgumentException("database mode docker expected, got " + config.mode());
         }
         String image = config.dockerImage() == null ? DatabaseConfig.DEFAULT_DOCKER_IMAGE : config.dockerImage();
         if (!IMAGE.matcher(image).matches()) {

@@ -58,7 +58,7 @@ public final class DownloadingMariaDbBinaries implements MariaDbBinaries {
             Path home, String version) {
         this.provider = Objects.requireNonNull(provider, "provider");
         if (!MariaDbProvider.ID.equals(provider.id())) {
-            throw new IllegalArgumentException("not the MariaDB provider: " + provider.id());
+            throw new IllegalArgumentException("MariaDB provider expected, got " + provider.id());
         }
         this.downloader = Objects.requireNonNull(downloader, "downloader");
         this.extractor = Objects.requireNonNull(extractor, "extractor");

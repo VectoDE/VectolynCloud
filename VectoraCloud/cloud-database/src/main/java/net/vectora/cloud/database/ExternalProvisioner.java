@@ -31,7 +31,7 @@ public final class ExternalProvisioner implements DatabaseProvisioner {
     public ExternalProvisioner(DatabaseConfig config, Secret password, SqlConnector connector) {
         this.config = Objects.requireNonNull(config, "config");
         if (config.mode() != DatabaseMode.EXTERNAL) {
-            throw new IllegalArgumentException("not an external database: " + config.mode());
+            throw new IllegalArgumentException("database mode external expected, got " + config.mode());
         }
         this.password = Objects.requireNonNull(password, "password");
         this.connector = Objects.requireNonNull(connector, "connector");

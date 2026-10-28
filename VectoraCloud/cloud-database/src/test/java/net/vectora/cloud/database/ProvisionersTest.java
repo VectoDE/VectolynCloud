@@ -116,6 +116,27 @@ class ProvisionersTest {
         assertFalse(SECRETS.toString().contains(APP.reveal()));
     }
 
+    @Test
+    void managedOnAPlatformWithoutMariaDbBuildFallsBackToH2() throws Exception {
+        for (TargetPlatform system : List.of(
+                new TargetPlatform(TargetPlatform.Os.MAC, TargetPlatform.Arch.AARCH64, TargetPlatform.Libc.NONE),
+                new TargetPlatform(TargetPlatform.Os.LINUX, TargetPlatform.Arch.AARCH64, TargetPlatform.Libc.GLIBC),
+                new TargetPlatform(TargetPlatform.Os.LINUX, TargetPlatform.Arch.X64, TargetPlatform.Libc.MUSL))) {
+            DatabaseProvisioner p = DatabaseProvisioners.create(config(DatabaseMode.MANAGED, "127.0.0.1"), SECRETS,
+                    home, server, new DatabaseProvisioners.Managed(platform -> home, new NoProcesses(), system));
+            assertInstanceOf(EmbeddedProvisioner.class, p, system.toString());
+            DatabaseEndpoint endpoint = p.provision();
+            assertEquals(StorageMethod.H2, endpoint.storageMethod());
+            assertEquals("luckperms", endpoint.database());
+            String notice = p.notice().orElseThrow();
+            assertTrue(notice.contains(system.toString()) && notice.contains("'external'"), notice);
+            assertFalse(notice.startsWith("Not") || notice.startsWith("No"), notice);
+            assertTrue(p.health().healthy());
+        }
+        assertEquals(0, server.attempts, "the fallback connects to nothing");
+        assertTrue(new EmbeddedProvisioner(config(DatabaseMode.H2, "127.0.0.1")).notice().isEmpty());
+    }
+
     /** Fails every call; for code paths that must not start anything. */
     static final class NoProcesses implements DatabaseProcesses {
         @Override

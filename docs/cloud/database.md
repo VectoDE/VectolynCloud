@@ -32,7 +32,7 @@ The module does not start processes itself. In managed mode it says what to run,
 
 Home: `Server-Network/Database/runtime/`. It holds the unpacked server, `data/`, `vectora-mariadb.ini` and `mariadb.log`. Git ignores the folder.
 
-1. **Platform.** `ManagedPlatform.of(...)` accepts Windows x64 and Linux x86_64 with glibc, the two platforms MariaDB publishes server archives for. On every other platform (Linux on ARM or with musl, macOS, Windows on ARM) the error names the platform and says: switch to another database mode, `external`, `docker` or `h2`.
+1. **Platform.** `ManagedPlatform.of(...)` accepts Windows x64 and Linux x86_64 with glibc, the two platforms MariaDB publishes server archives for. On every other platform (Linux on ARM or with musl, macOS, Windows on ARM) `DatabaseProvisioners.create` returns the embedded H2 fallback instead, so the cloud still starts. Its `notice()` names the platform and says how to get a shared database (`external` or `docker`); `cloud-node` logs it as a warning. `ManagedMariaDbProvisioner` used directly still fails there with `MANAGED_PLATFORM`.
 2. **Binaries.** `DownloadingMariaDbBinaries` gets the archive from the `mariadb` provider in [downloads](download.md) (checksum, cache, safe extraction). It unpacks into a temporary folder and then moves it into place, so a broken download never leaves a half folder. `mariadb-install.properties` records folder, version and SHA-256. A matching install is reused.
 3. **Config.** `MariaDbConfigFile` writes `vectora-mariadb.ini`: `bind-address=127.0.0.1`, `skip-name-resolve`, `max_connections=150`, `innodb_buffer_pool_size=256M`, `utf8mb4`, the port from `cloud.yml`. On Linux the socket goes to the temp directory. A test checks that every setting of the hand-written `Server-Network/Database/template/vectora-mariadb.ini` is kept.
 4. **Initialise.** Only when `data/mysql` is missing. Windows: `bin/mariadb-install-db.exe`, with `bin/mysql_install_db.exe` as fallback for older archives. Linux: `scripts/mariadb-install-db --no-defaults --auth-root-authentication-method=normal --skip-name-resolve`. A non-empty `data/` without `mysql/` is someone else's data. The cloud stops there instead of overwriting it.
@@ -63,7 +63,7 @@ For a MariaDB or MySQL server the operator runs. The cloud only connects as the 
 
 ### H2 (embedded)
 
-Fallback for tests and for a single small setup without any database server. LuckPerms ships its own H2 driver and file storage, so the cloud adds no dependency and starts nothing. Each service then has its own rank data; nothing is shared between servers. For a network, use one of the other modes.
+The embedded fallback: chosen with `database.mode: h2`, and used automatically when `managed` is configured on a platform without a MariaDB server build. Good for tests and for a single small setup without any database server. LuckPerms ships its own H2 driver and file storage, so the cloud adds no dependency and starts nothing. Each service then has its own rank data; nothing is shared between servers. For a network, use one of the other modes.
 
 H2 is dual-licensed under MPL 2.0 and EPL 1.0. MPL 2.0 allows combination with GPL code (section 3.3, "Secondary License"), so the choice is compatible with Vectora's GPL-3.0. Vectora does not distribute H2 anyway; LuckPerms downloads it at runtime.
 

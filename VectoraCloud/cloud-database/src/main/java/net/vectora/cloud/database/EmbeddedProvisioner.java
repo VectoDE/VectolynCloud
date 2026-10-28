@@ -16,6 +16,7 @@ import net.vectora.cloud.config.model.DatabaseMode;
 public final class EmbeddedProvisioner implements DatabaseProvisioner {
 
     private final DatabaseConfig config;
+    private final Optional<String> notice;
 
     /**
      * Creates the provisioner.
@@ -23,10 +24,31 @@ public final class EmbeddedProvisioner implements DatabaseProvisioner {
      * @param config database settings, mode {@code h2}; name and user still fill the templates
      */
     public EmbeddedProvisioner(DatabaseConfig config) {
-        this.config = Objects.requireNonNull(config, "config");
+        this(config, Optional.empty());
         if (config.mode() != DatabaseMode.H2) {
-            throw new IllegalArgumentException("not an embedded database: " + config.mode());
+            throw new IllegalArgumentException("database mode h2 expected, got " + config.mode());
         }
+    }
+
+    private EmbeddedProvisioner(DatabaseConfig config, Optional<String> notice) {
+        this.config = Objects.requireNonNull(config, "config");
+        this.notice = notice;
+    }
+
+    /**
+     * The embedded fallback for a configured mode that cannot run on this system, for example
+     * {@code managed} on a platform without a MariaDB server build. The cloud starts anyway; the
+     * notice tells the operator what changed and how to get a shared database.
+     *
+     * @param config the configured database settings; name and user still fill the templates
+     * @param reason why the configured mode cannot run, ends with a full stop
+     * @return the provisioner
+     */
+    public static EmbeddedProvisioner fallback(DatabaseConfig config, String reason) {
+        Objects.requireNonNull(reason, "reason");
+        return new EmbeddedProvisioner(config, Optional.of(reason + " The cloud uses the embedded H2 fallback: every"
+                + " server keeps its own LuckPerms files, so ranks are not shared between servers. For a shared"
+                + " database set database.mode in cloud.yml to 'external' (your own MariaDB or MySQL) or 'docker'."));
     }
 
     @Override
@@ -42,7 +64,14 @@ public final class EmbeddedProvisioner implements DatabaseProvisioner {
 
     @Override
     public HealthReport health() {
-        return new HealthReport(true, Duration.ZERO, "embedded H2, one set of files per server");
+        return new HealthReport(true, Duration.ZERO, notice.isPresent()
+                ? "embedded H2 fallback, one set of files per server"
+                : "embedded H2, one set of files per server");
+    }
+
+    @Override
+    public Optional<String> notice() {
+        return notice;
     }
 
     @Override

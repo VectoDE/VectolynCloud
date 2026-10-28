@@ -50,6 +50,16 @@ public interface DatabaseProvisioner {
     HealthReport health();
 
     /**
+     * Returns a note for the operator that {@code cloud-node} logs as a warning after
+     * {@link #provision()}, for example that the embedded fallback replaced the configured mode.
+     *
+     * @return the note, or empty
+     */
+    default java.util.Optional<String> notice() {
+        return java.util.Optional.empty();
+    }
+
+    /**
      * Stops what this provisioner started. Does nothing for modes that start nothing.
      *
      * @throws InterruptedException if interrupted while waiting for the server to stop

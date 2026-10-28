@@ -66,7 +66,7 @@ public final class DockerProvisioner implements DatabaseProvisioner {
             Duration wait) {
         this.config = Objects.requireNonNull(config, "config");
         if (config.mode() != DatabaseMode.DOCKER) {
-            throw new IllegalArgumentException("not a Docker database: " + config.mode());
+            throw new IllegalArgumentException("database mode docker expected, got " + config.mode());
         }
         this.secrets = Objects.requireNonNull(secrets, "secrets");
         this.home = Objects.requireNonNull(home, "home");
