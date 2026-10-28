@@ -6,6 +6,10 @@ Every `Server-Network/<Server>/template/` holds configuration with placeholders 
 
 In the VectoraCloud setup each of the seven servers (and later each minigame group) is marked as wanted or not. The cloud renders and starts only wanted servers. A server that is not wanted is never created, and neither the proxy nor the lobby references it. That is why nothing in a template points to another server by a fixed name or port: the proxy's server list, its `try` order and its forced hosts are placeholders that the cloud fills from the wanted servers only, and every backend gets its port from `VECTORA_SERVER_PORT`.
 
+## Allowed values
+
+No value may contain a line break or another control character, except `VECTORA_PROXY_SERVERS` and `VECTORA_PROXY_FORCED_HOSTS`. Secrets (`*_SECRET`, `*_PASSWORD`) need at least 16 characters from `A-Z a-z 0-9 . _ ~ + / = -`, ports (`*_PORT`) are numbers from 1 to 65535. The cloud refuses to render anything else. Details in [`docs/cloud/template.md`](../docs/cloud/template.md#allowed-values).
+
 ## Global values
 
 These come from `Server-Network/secrets/vectora.env` (gitignored, see `secrets/vectora.env.example`).

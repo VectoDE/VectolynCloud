@@ -3,8 +3,7 @@ package net.vectora.cloud.template;
 /**
  * Renders {@code Server-Network/<Server>/template/} into {@code runtime/}, with placeholders and secrets.
  *
- * <p>Placeholder from the stage-2 scaffold. The module structure and its planned
- * content are described in docs/cloud/architecture.md.
+ * <p>Entry point: {@link TemplateInstaller}. Details in docs/cloud/template.md.
  */
 public final class CloudTemplateModule {
 

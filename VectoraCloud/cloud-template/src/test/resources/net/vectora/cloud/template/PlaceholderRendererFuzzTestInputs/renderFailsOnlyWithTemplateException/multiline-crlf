@@ -1,0 +1,3 @@
+[servers]
+{{VECTORA_PROXY_SERVERS}}
+try = [ ]
