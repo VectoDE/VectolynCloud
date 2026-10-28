@@ -31,6 +31,10 @@ final class EmbeddedConnection implements AutoCloseable {
         return channel.isOpen();
     }
 
+    EmbeddedChannel channel() {
+        return channel;
+    }
+
     /** Runs scheduled tasks (timeouts) that are due now. */
     void runPendingTasks() {
         channel.runPendingTasks();

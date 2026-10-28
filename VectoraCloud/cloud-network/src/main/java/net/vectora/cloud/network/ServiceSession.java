@@ -65,9 +65,18 @@ final class ServiceSession {
         return closedByCloud;
     }
 
-    /** Sends {@code Disconnect} with {@code reason} and closes the connection once it is written. */
+    /**
+     * Sends {@code Disconnect} with {@code reason} and closes the connection once it is written.
+     * Reading stops at once; a peer that does not take the message within a second is cut anyway.
+     */
     ChannelFuture disconnect(Disconnect.Reason reason) {
         closedByCloud = reason;
+        channel.config().setAutoRead(false);
+        if (!channel.eventLoop().isShuttingDown()) {
+            channel.eventLoop().schedule(() -> {
+                channel.close();
+            }, ConnectionHandler.CLOSE_GRACE_MILLIS, TimeUnit.MILLISECONDS);
+        }
         return channel.writeAndFlush(Envelope.of(new Disconnect(reason))).addListener(ChannelFutureListener.CLOSE);
     }
 

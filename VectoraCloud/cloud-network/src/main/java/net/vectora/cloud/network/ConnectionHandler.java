@@ -46,7 +46,7 @@ final class ConnectionHandler extends SimpleChannelInboundHandler<Envelope> {
     private static final System.Logger LOG = System.getLogger(ConnectionHandler.class.getName());
 
     /** Time a closing connection gets to flush its last message before it is cut. */
-    private static final long CLOSE_GRACE_MILLIS = 1_000;
+    static final long CLOSE_GRACE_MILLIS = 1_000;
 
     private final CloudNetworkServer server;
     private final EnvelopeDecoder decoder;
@@ -87,7 +87,9 @@ final class ConnectionHandler extends SimpleChannelInboundHandler<Envelope> {
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, Envelope envelope) {
-        if (closing) {
+        // A connection the cloud is closing (replaced by a newer one, disconnected, shut down) may
+        // still have frames in flight; they no longer speak for the service.
+        if (closing || session != null && session.closedByCloud() != null) {
             return;
         }
         if (session == null) {
@@ -170,6 +172,20 @@ final class ConnectionHandler extends SimpleChannelInboundHandler<Envelope> {
         }
         violation(ctx, "report for another service");
         return false;
+    }
+
+    /**
+     * Backpressure: while more than the high water mark is queued for the peer, the cloud stops
+     * reading from it. A peer that sends pings or requests but never reads the answers can
+     * therefore not make the cloud buffer without limit; if it stays stuck, the idle timeout ends
+     * the connection.
+     */
+    @Override
+    public void channelWritabilityChanged(ChannelHandlerContext ctx) throws Exception {
+        if (!closing && (session == null || session.closedByCloud() == null)) {
+            ctx.channel().config().setAutoRead(ctx.channel().isWritable());
+        }
+        super.channelWritabilityChanged(ctx);
     }
 
     @Override

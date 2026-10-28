@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.channel.embedded.EmbeddedChannel;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.List;
@@ -74,6 +76,34 @@ class ConnectionPipelineTest {
             }
             assertEquals(1, connection.sent().size());
             assertTrue(connection.isOpen());
+        }
+    }
+
+    @Test
+    void stopsReadingWhileThePeerDoesNotTakeItsAnswers() {
+        try (EmbeddedConnection connection = new EmbeddedConnection(server)) {
+            connection.receive(CODEC.encode(Envelope.of(new Hello(Protocol.PROTOCOL_VERSION, LOBBY, token))));
+            EmbeddedChannel channel = connection.channel();
+            assertTrue(channel.config().isAutoRead());
+            // The same signal Netty gives when more than the high water mark is queued.
+            channel.unsafe().outboundBuffer().setUserDefinedWritability(1, false);
+            channel.runPendingTasks();
+            assertFalse(channel.config().isAutoRead(), "reading stops while the peer is not writable");
+            channel.unsafe().outboundBuffer().setUserDefinedWritability(1, true);
+            channel.runPendingTasks();
+            assertTrue(channel.config().isAutoRead(), "reading resumes once the queue has drained");
+        }
+    }
+
+    @Test
+    void pipelineCustomizerRunsFirst() {
+        CloudNetworkServer customized = CloudNetworkServer.builder(NetworkSettings.defaults(), tokens)
+                .pipelineCustomizer(channel -> channel.pipeline().addLast("tls", new ChannelInboundHandlerAdapter()))
+                .build();
+        try (EmbeddedConnection connection = new EmbeddedConnection(customized)) {
+            List<String> names = connection.channel().pipeline().names();
+            assertTrue(names.indexOf("tls") >= 0, names.toString());
+            assertTrue(names.indexOf("tls") < names.indexOf(CloudNetworkServer.FRAME_DECODER), names.toString());
         }
     }
 

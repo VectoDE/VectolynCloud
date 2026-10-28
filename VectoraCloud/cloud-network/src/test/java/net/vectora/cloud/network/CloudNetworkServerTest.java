@@ -382,6 +382,27 @@ class CloudNetworkServerTest {
         assertEquals("disconnected lobby-1 null", listener.next());
     }
 
+    @Test
+    void replacedConnectionIsCutEvenIfItsPeerDoesNotRead() throws Exception {
+        start();
+        try (TestPeer old = TestPeer.authenticated(address, LOBBY, lobbyToken)) {
+            assertEquals("connected lobby-1", listener.next());
+            // The old peer reads nothing; fill its socket buffers so Disconnect(REPLACED) cannot be written.
+            byte[] payload = new byte[60 * 1024];
+            for (int i = 0; i < 256; i++) {
+                server.send(LOBBY, new ChannelMessage(new ChannelName("fill"), payload));
+            }
+            try (TestPeer fresh = TestPeer.authenticated(address, LOBBY, lobbyToken)) {
+                assertEquals("connected lobby-1", listener.next());
+                fresh.send(new Ping(7));
+                // Cut after the close grace of one second, long before the idle timeout of ten.
+                awaitOpenConnections(1);
+                assertTrue(server.isConnected(LOBBY));
+            }
+            old.abort();
+        }
+    }
+
     // ---- requests and messaging ----
 
     @Test
