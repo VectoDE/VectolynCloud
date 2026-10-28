@@ -33,7 +33,7 @@ Backends start before proxies, so the proxy's server list is complete when it re
 |---|---|
 | Service id | `<group>-<index>`, index 1 to 9999, the lowest free index of the group. Example: `lobby-1`. |
 | Folder, static task | index 1: `<home>/<template>/runtime`, index n: `<home>/<template>/runtime-<n>`. Kept after the stop: worlds and player data stay. |
-| Folder, dynamic task | `<home>/temp/services/<id>`. Cleared before the start and deleted after the stop. Only direct children of `temp/services` are deleted, and links are not followed. |
+| Folder, dynamic task | `<home>/temp/services/<id>`. Cleared before the start and deleted after the stop. Only direct children of `temp/services` are deleted, and links are not followed. While the folder of a stopped service is still being deleted (on Windows a locked file can delay this by a few seconds), its id is not handed out again; the next start takes the next free index. |
 | Port, proxy | `cloud.proxy.port` (the software `velocity` marks a proxy). One proxy per node. |
 | Port, other services | the first free port in the node's `service-ports`, skipping the node's fixed ports (proxy, Bedrock, legacy proxy, API, database, channel) and ports another program already has bound. Never two services on one port. |
 
@@ -47,7 +47,7 @@ The node starts the server JVM directly with `ProcessBuilder`, without a wrapper
 <java> -Xms<heap.min> -Xmx<heap.max> <process.jvm-flags> [-Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8] -jar <software jar> [--nogui]
 ```
 
-- `<java>` comes from the `JavaRuntimeResolver`. Today that is the JVM the node runs on; PR 7 plugs in the JRE management.
+- `<java>` comes from the `JavaRuntimeResolver`. Today that is the JVM the node runs on. The JRE management (`JreManager` in `cloud-download`, PR 7) is wired in by a later pull request.
 - The encoding flags are added from Java 18 on. `--nogui` is added for everything except Velocity.
 - No shell is involved; flags are single arguments. Flags that would change heap, class path or the main jar (`-Xms…`, `-Xmx…`, `-jar`, `-cp`, `-XX:Flags=`, `-XX:VMOptionsFile=`, `-version`, `-help`, …) are rejected by the validator.
 - The environment is the node's own without any `VECTORA_*` variable, plus:
@@ -144,7 +144,7 @@ Afterwards the leftover folders in `temp/services/` are deleted, except blocked 
 
 | Interface | Default | Who plugs in |
 |---|---|---|
-| `service.JavaRuntimeResolver` (`resolve(group, config)` returns `JavaRuntime(executable, featureVersion)`) | `JavaRuntimeResolver.current()`, the node's own JVM | PR 7, JRE management |
+| `service.JavaRuntimeResolver` (`resolve(group, config)` returns `JavaRuntime(executable, featureVersion)`) | `JavaRuntimeResolver.current()`, the node's own JVM | `JreManager` from PR 7, wired in later |
 | `service.ServerSoftwareProvider` (`provide(spec, folder)` returns the jar name) | `existingJar()`: the jar must already be in the folder | PR 14, downloads |
 | `service.PlaceholderContributor` (extra placeholder values; the node's own values win) | none | PR 12 (database), PR 24 (legacy proxy) |
 | `ServiceManager.addListener(ServiceListener)` | none | PR 10 (console output), PR 11 (monitoring), PR 9 (events on the channel) |
