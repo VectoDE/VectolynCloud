@@ -23,7 +23,18 @@ The channel carries no secrets beyond the service tokens, but a peer that gets i
 | Open requests | 256 per connection and direction. Beyond that the cloud answers `DENIED`. | `NetworkSettings` |
 | Protocol violations | `Disconnect(PROTOCOL_ERROR)` and close. That covers undecodable bytes, anything before `Hello` except `Hello`, a second `Hello`, messages meant for the other direction (`AuthResult`, `RegisterServer`, `UnregisterServer`) and a `ServiceReady` or `ServiceStatus` about another service. | `ConnectionHandler` |
 | Closing | After the last message the connection stops reading. If the peer does not take the last message within a second, the connection is cut. | `ConnectionHandler` |
+| Backpressure | When more than 2 MiB are queued for a peer, the cloud stops reading from it until the queue is below 512 KiB. A peer that sends pings or requests without reading the answers therefore cannot make the cloud buffer without limit; if it stays stuck, the idle timeout ends it. | `ConnectionHandler` |
 | Cluster nodes | Refused (`UNKNOWN_PEER`) until the cluster exists. | PR 20 |
+
+### What an authenticated service can do
+
+The token proves which service a connection belongs to, nothing more. It sits in the environment of the server process, and every plugin in that process can read it. The cloud therefore treats an authenticated service as a semi-trusted peer:
+
+- **Its own reports only.** `ServiceReady` and `ServiceStatus` must name the authenticated service, otherwise the connection ends. Player events from a proxy are passed on as they are; the node has to check them against what it knows (PR 8).
+- **No system messages.** `RegisterServer`, `UnregisterServer` and `AuthResult` go from the cloud to services only; a service that sends one is disconnected. A service cannot make another service receive them: `send` and `request` are methods of the cloud, services do not route to each other.
+- **Channel messages are not authenticated between services.** A service may publish on any channel, and every other service receives every channel message (they filter by channel on their side). The receiving service cannot see who sent it, so a plugin in one service can read and forge any channel. Cloud subscribers get the authenticated sender (`ChannelSubscriber.received(ServiceId, ...)`). Anything that has to be trusted (server lists, permissions, transfers) uses its own message type or a request to the cloud, never a channel message between services.
+- **Takeover by the token holder.** Whoever has the token can connect as the service and replace its connection (`REPLACED`). That needs the token, which only the process of that start has; the cloud revokes it when the process ends (`ServiceTokens.revoke`). Tokens are not single-use, so a token read from a running process stays valid until then.
+- **Limits per connection.** 1 MiB per frame, 256 open requests in each direction, backpressure as above. One service can still load the cloud within those limits, for example by publishing large channel messages that are fanned out to every service; the fan-out skips services that do not keep up.
 
 **No TLS yet.** The channel is plain TCP. On loopback that is fine. If `host` in `nodes.yml` is set to another address, the cloud logs a warning at start; such a setup needs a firewall that only lets the cloud's own machines in. TLS 1.3 with mutual authentication follows with the cluster (stage 2, PR 20). The server has a hook for it already: a `PipelineCustomizer` runs first for every accepted connection and can add an `SslHandler` in front of the handler named `CloudNetworkServer.FRAME_DECODER`. The client accepts any `javax.net.SocketFactory`, so an `SSLSocketFactory` fits without changes to the client.
 
@@ -49,7 +60,7 @@ The network module knows nothing about groups or processes. The node connects it
 | Interface | Direction | Purpose |
 |---|---|---|
 | `ServiceAuthenticator` | network asks node | `authenticate(PeerId, AuthToken)` returns an `AuthResult.Outcome`. `ServiceTokens` is the ready-made implementation with `issue`, `register` and `revoke`. |
-| `ServiceListener` | network tells node | `serviceConnected`, `serviceReady`, `serviceStatus`, `messageReceived` (`PlayerJoin`, `PlayerQuit`, `PlayerSwitch`), `serviceDisconnected`. All default to doing nothing. |
+| `ServiceListener` | network tells node | `onEvent(ServiceEvent)` with one of the records `Connected`, `Ready`, `StatusReported`, `MessageReceived` (`PlayerJoin`, `PlayerQuit`, `PlayerSwitch`) and `Disconnected`. `ServiceEvent` is sealed, so a `switch` can cover every case. Without a listener the events are dropped. |
 
 And the node talks to services through the server:
 
@@ -66,8 +77,8 @@ Rules for implementers:
 
 - Callbacks run on Netty threads and must return quickly. Hand longer work to an executor of your own. An exception from a callback is logged and does not close the connection.
 - `close()` waits for the event loops and must not be called from a callback.
-- A service that reconnects while its old connection is still open replaces it: the old one gets `Disconnect(REPLACED)`, `serviceConnected` is called again, and `serviceDisconnected` is not called for the replaced connection. A token is valid for one process start only, so only the same process can do this.
-- `serviceDisconnected` gets the reason the service sent or the cloud closed with, or `null` if the connection simply broke.
+- A service that reconnects while its old connection is still open replaces it: the old one gets `Disconnect(REPLACED)` and stops being read at once (frames still in flight are dropped), `Connected` comes again, and no `Disconnected` comes for the replaced connection. If the old peer does not take the `Disconnect` within a second, its connection is cut.
+- `Disconnected` carries the reason the service sent or the cloud closed with, or `null` if the connection simply broke.
 
 ### Messaging
 
@@ -81,7 +92,7 @@ Requests can go in both directions. The sender picks a request id that is not 0 
 
 ```java
 CloudClient client = CloudClient.create(CloudClientSettings.fromEnvironment());
-client.addListener(listener);      // connected, disconnected, rejected, RegisterServer and so on
+client.addListener(event -> { }); // CloudClientEvent: Connected, Disconnected, Rejected, MessageReceived (RegisterServer and so on)
 client.installShutdownHook();      // Disconnect(SHUTDOWN) even if the server is killed with SIGTERM
 client.start();                    // connects in the background, returns at once
 
@@ -111,7 +122,7 @@ The names are constants in `CloudClientSettings` (`ENV_HOST`, `ENV_PORT`, `ENV_S
 
 ### Behaviour
 
-- **Reconnect:** after a failed attempt or a lost connection the client waits and tries again. The wait starts at 1 s and doubles up to 30 s, with jitter (half to all of the step), so a restarted cloud is not hit by every service at once. After a successful connection the wait starts at 1 s again. A refused token is retried as well, with the same waits; the listener's `rejected` method is called each time.
+- **Reconnect:** after a failed attempt or a lost connection the client waits and tries again. The wait starts at 1 s and doubles up to 30 s, with jitter (half to all of the step), so a restarted cloud is not hit by every service at once. After a successful connection the wait starts at 1 s again. A refused token is retried as well, with the same waits; listeners get a `Rejected` event each time.
 - **State after a reconnect:** `ServiceReady` (if `markReady` was called) and the last status report are sent again. Player events and channel messages sent while disconnected are lost; the methods return `false`. Requests fail at once with `NotConnectedException`, open requests fail when the connection drops.
 - **Heartbeat:** `Ping` every 10 s. If nothing arrives for 30 s, the client sends `Disconnect(TIMEOUT)` and reconnects.
 - **Handshake:** 5 s for connect plus `AuthResult`. Until `AuthResult(ACCEPTED)` the client also accepts frames of 4 KiB at most.
@@ -127,7 +138,7 @@ The names are constants in `CloudClientSettings` (`ENV_HOST`, `ENV_PORT`, `ENV_S
 | `markReady()` | Paper: when the server has finished starting. Velocity: when the proxy is initialised. |
 | `reportStatus(...)` | Periodic task with players, TPS and MSPT of the platform. |
 | `send(PlayerJoin / PlayerQuit / PlayerSwitch)` | Velocity bridge, from the proxy's player events. |
-| `CloudClientListener.messageReceived` | Velocity bridge: `RegisterServer` and `UnregisterServer` add and remove backend servers. |
+| `CloudClientListener` with `CloudClientEvent.MessageReceived` | Velocity bridge: `RegisterServer` and `UnregisterServer` add and remove backend servers. |
 | `publish`, `subscribe`, `request`, `handleRequests` | Plugin messaging between services, the replacement for BungeeCord plugin channels. |
 
 ### Why the client uses plain JDK sockets and no Netty
@@ -144,9 +155,9 @@ The client uses option 3. `Vectora-CloudClient` depends on `Vectora-Protocol` on
 
 | Test | What it covers |
 |---|---|
-| `CloudNetworkServerTest` (cloud-network) | Real loopback connections with a hand-driven peer: loopback default, valid and wrong token, unknown service, revoked token, cluster node refused, oversized frame before authentication (and the same size accepted after it), message before `Hello`, garbage, other major version, slowloris and silent new connection, idle timeout and the counter-check with a peer that answers pings, limits per address and in total, own and foreign status reports, replacement on reconnect, requests in both directions with timeout and disconnect, channel messages between services, `send` restrictions, shutdown, port in use. |
+| `CloudNetworkServerTest` (cloud-network) | Real loopback connections with a hand-driven peer: loopback default, valid and wrong token, unknown service, revoked token, cluster node refused, oversized frame before authentication (and the same size accepted after it), message before `Hello`, garbage, other major version, slowloris and silent new connection, idle timeout and the counter-check with a peer that answers pings, limits per address and in total, own and foreign status reports, replacement on reconnect (also when the old peer does not read), requests in both directions with timeout and disconnect, channel messages between services, `send` restrictions, shutdown, port in use. |
 | `CloudClientEndToEndTest` (cloud-network) | `CloudClient` against the real server: ready and status repeated after a reconnect, cloud started after the client and restarted on the same port, wrong token, messaging between two clients, requests in both directions, `RegisterServer` to the listener, `Disconnect(SHUTDOWN)` on close. |
-| `ConnectionPipelineTest` (cloud-network) | The pipeline on Netty's `EmbeddedChannel`: frame limits before and after authentication, frames split into single bytes. |
+| `ConnectionPipelineTest` (cloud-network) | The pipeline on Netty's `EmbeddedChannel`: frame limits before and after authentication, frames split into single bytes, reading paused while the peer is not writable, `PipelineCustomizer` in front of the decoder. |
 | `CloudClientTest`, `FrameReaderTest`, `CloudClientSettingsTest`, `BackoffTest` (CloudClient) | The client against a scripted JDK server socket: `Hello` contents, oversized frame before `AuthResult`, silent cloud, clamped status values, misuse, close; reading in single bytes; the variables; backoff steps. |
 | `ConnectionFuzzTest` (cloud-network), `FrameReaderFuzzTest` (CloudClient) | Jazzer: arbitrary bytes into the server pipeline (only valid frames come back, and before a correct `Hello` only `AuthResult` or `Disconnect`) and into the client's reader (only `EOFException` or `ProtocolException`). Seed inputs include a valid `Hello` followed by a session, so the fuzzer reaches the authenticated state. |
 
