@@ -9,9 +9,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -77,15 +81,19 @@ class TemplateRendererTest {
     }
 
     @Test
-    void templateReadmeIsNotCopied() throws Exception {
+    void markdownFilesAreNeverCopied() throws Exception {
         write(template().resolve("README.md"), "Uses `{{VECTORA_DB_PASSWORD}}` in config.yml\n");
         write(template().resolve("docs/notes.md"), "port {{VECTORA_SERVER_PORT}}\n");
+        write(template().resolve("plugins/x/CHANGES.MD"), "{{VECTORA_DB_PASSWORD}}\n");
+        write(template().resolve("a.txt"), "a\n");
 
         RenderReport report = TemplateRenderer.render(template(), runtime(), VALUES);
 
         assertFalse(Files.exists(runtime().resolve("README.md")));
-        assertEquals("port 25566\n", Files.readString(runtime().resolve("docs/notes.md")));
-        assertEquals(List.of("README.md"), report.skipped());
+        assertFalse(Files.exists(runtime().resolve("docs")));
+        assertFalse(Files.exists(runtime().resolve("plugins")));
+        assertEquals(List.of("README.md", "docs/notes.md", "plugins/x/CHANGES.MD"), report.skipped());
+        assertEquals(List.of("a.txt"), report.rendered());
     }
 
     @Test
@@ -171,13 +179,66 @@ class TemplateRendererTest {
     @Test
     void textFileTypes() {
         for (String name : List.of("a.yml", "a.yaml", "a.toml", "a.properties", "a.json", "a.conf", "a.txt",
-                "a.cfg", "a.ini", "a.sql", "a.md", "start.bat", "start.cmd", "x.Properties")) {
+                "a.cfg", "a.ini", "a.sql", "start.bat", "start.cmd", "x.Properties")) {
             assertTrue(TemplateRenderer.isRenderedFile(name), name);
         }
-        for (String name : List.of("paper.jar", "icon.png", "level.dat", "key.pem", "forwarding.secret", "yml", ".yml.bak",
+        for (String name : List.of("paper.jar", "icon.png", "level.dat", "key.pem", "forwarding.secret", "yml", ".yml.bak", "a.md",
                 "start.sh", "noext")) {
             assertFalse(TemplateRenderer.isRenderedFile(name), name);
         }
+    }
+
+    @Test
+    void junctionsInTheTemplateAreNotFollowed() throws Exception {
+        assumeTrue(isWindows(), "junctions exist on Windows only");
+        Path outside = write(dir.resolve("outside/secret.txt"), "secret {{VECTORA_SERVER_PORT}}\n");
+        Path template = template();
+        write(template.resolve("a.txt"), "a\n");
+        Path link = template.resolve("linkdir");
+        junction(link, outside.getParent());
+        try {
+            RenderReport report = TemplateRenderer.render(template, runtime(), VALUES);
+
+            assertFalse(Files.exists(runtime().resolve("linkdir"), LinkOption.NOFOLLOW_LINKS));
+            assertEquals(List.of("linkdir"), report.skipped());
+            assertEquals(List.of("a.txt"), report.rendered());
+        } finally {
+            Files.delete(link);
+        }
+    }
+
+    @Test
+    void junctionInTheRuntimeIsNotWrittenThrough() throws Exception {
+        assumeTrue(isWindows(), "junctions exist on Windows only");
+        Path outside = Files.createDirectories(dir.resolve("outside"));
+        write(template().resolve("plugins/x/config.yml"), "a: 1\n");
+        Path runtime = Files.createDirectories(runtime());
+        Path link = runtime.resolve("plugins");
+        junction(link, outside);
+        try {
+            TemplateException e = assertThrows(TemplateException.class,
+                    () -> TemplateRenderer.render(template(), runtime, VALUES));
+
+            assertTrue(e.getMessage().contains("junction"), e.getMessage());
+            assertFalse(Files.exists(outside.resolve("x")));
+        } finally {
+            Files.delete(link);
+        }
+    }
+
+    static boolean isWindows() {
+        return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).startsWith("windows");
+    }
+
+    /** Creates a Windows junction: a folder reparse point that Java does not report as a symbolic link. */
+    static void junction(Path link, Path target) throws IOException, InterruptedException {
+        Process process = new ProcessBuilder("cmd", "/c", "mklink", "/J", link.toString(), target.toString())
+                .redirectErrorStream(true)
+                .start();
+        String output = new String(process.getInputStream().readAllBytes(), Charset.defaultCharset());
+        assertEquals(0, process.waitFor(), output);
+        BasicFileAttributes attributes = Files.readAttributes(link, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+        assertFalse(attributes.isSymbolicLink(), "the test needs a junction, not a symbolic link");
     }
 
     static boolean trySymlink(Path link, Path target) {

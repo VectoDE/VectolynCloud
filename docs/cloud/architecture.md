@@ -36,7 +36,6 @@ graph TD
     node --> download[cloud-download]
     node --> network[cloud-network]
     node --> database[cloud-database]
-    template --> config
     download --> config
     database --> config
     database --> download

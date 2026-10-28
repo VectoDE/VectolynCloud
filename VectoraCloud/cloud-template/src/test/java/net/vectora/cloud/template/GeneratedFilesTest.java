@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.Base64;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -20,20 +21,21 @@ class GeneratedFilesTest {
 
     private static final byte[] KEY = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, (byte) 0xFF};
     private static final String KEY_B64 = Base64.getEncoder().encodeToString(KEY);
+    private static final String FWD = "forwarding-secret-for-tests";
 
     @TempDir
     Path runtime;
 
     @Test
     void forwardingSecretIsWrittenAsIs() throws Exception {
-        GeneratedFiles.writeForwardingSecret(runtime, "s3cr3t-ÄÖ");
-        assertArrayEquals("s3cr3t-ÄÖ".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+        GeneratedFiles.writeForwardingSecret(runtime, "s3cr3t+forwarding/key=");
+        assertArrayEquals("s3cr3t+forwarding/key=".getBytes(java.nio.charset.StandardCharsets.UTF_8),
                 Files.readAllBytes(runtime.resolve("forwarding.secret")));
     }
 
     @Test
     void secretsAreOnlyReadableByTheOwnerWherePosixPermissionsExist() throws Exception {
-        GeneratedFiles.writeForwardingSecret(runtime, "abc");
+        GeneratedFiles.writeForwardingSecret(runtime, FWD);
         GeneratedFiles.writeFloodgateKey(runtime, ServerPlatform.PAPER, KEY_B64);
         if (Files.getFileStore(runtime).supportsFileAttributeView("posix")) {
             EnumSet<PosixFilePermission> ownerOnly = EnumSet.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE);
@@ -43,10 +45,30 @@ class GeneratedFilesTest {
     }
 
     @Test
-    void blankForwardingSecretIsAnError() {
-        assertThrows(TemplateException.class, () -> GeneratedFiles.writeForwardingSecret(runtime, " "));
-        assertThrows(TemplateException.class, () -> GeneratedFiles.writeForwardingSecret(runtime, "a\nb"));
+    void unsafeForwardingSecretIsAnErrorWithoutTheValue() {
+        for (String bad : List.of(" ", "abcdefghijklmnop\nq", "abc #comment\"'", "abcdefghijklmnop #x",
+                "abcdefghijklmnop'", "s3cr3t-ÄÖ-s3cr3t-ÄÖ", "fwd")) {
+            TemplateException e = assertThrows(TemplateException.class,
+                    () -> GeneratedFiles.writeForwardingSecret(runtime, bad), bad);
+            assertTrue(e.getMessage().contains("VECTORA_FORWARDING_SECRET"), e.getMessage());
+            if (!bad.isBlank()) {
+                assertFalse(e.getMessage().contains(bad), e.getMessage());
+            }
+        }
         assertFalse(Files.exists(runtime.resolve("forwarding.secret")));
+    }
+
+    @Test
+    void installRefusesAnUnsafeForwardingSecretBeforeWriting() throws Exception {
+        Path template = Files.createTempDirectory(runtime, "template");
+        Files.writeString(template.resolve("velocity.toml"), "bind = \"0.0.0.0:25565\"\n");
+        Path out = runtime.resolve("out");
+        PlaceholderValues values = PlaceholderValues.of(Map.of(
+                "VECTORA_FORWARDING_SECRET", "abc #comment\"'",
+                "VECTORA_FLOODGATE_KEY_B64", KEY_B64));
+        assertThrows(TemplateException.class,
+                () -> TemplateInstaller.install(template, out, ServerPlatform.VELOCITY, values, true));
+        assertFalse(Files.exists(out));
     }
 
     @Test
@@ -106,7 +128,7 @@ class GeneratedFilesTest {
         Path out = runtime.resolve("out");
         PlaceholderValues values = PlaceholderValues.of(Map.of(
                 "VECTORA_SERVER_PORT", "25566",
-                "VECTORA_FORWARDING_SECRET", "fwd",
+                "VECTORA_FORWARDING_SECRET", FWD,
                 "VECTORA_FLOODGATE_KEY_B64", KEY_B64));
 
         RenderReport report = TemplateInstaller.install(template, out, ServerPlatform.PAPER, values, true);
@@ -123,12 +145,12 @@ class GeneratedFilesTest {
         Path template = Files.createTempDirectory(runtime, "template");
         Path out = runtime.resolve("out");
         PlaceholderValues values = PlaceholderValues.of(Map.of(
-                "VECTORA_FORWARDING_SECRET", "fwd",
+                "VECTORA_FORWARDING_SECRET", FWD,
                 "VECTORA_FLOODGATE_KEY_B64", KEY_B64));
 
         RenderReport report = TemplateInstaller.install(template, out, ServerPlatform.VELOCITY, values, true);
 
-        assertEquals("fwd", Files.readString(out.resolve("forwarding.secret")));
+        assertEquals(FWD, Files.readString(out.resolve("forwarding.secret")));
         assertFalse(Files.exists(out.resolve("eula.txt")));
         assertEquals(java.util.List.of("forwarding.secret", "plugins/floodgate/key.pem"), report.generated());
     }

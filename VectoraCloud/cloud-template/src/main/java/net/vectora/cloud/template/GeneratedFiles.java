@@ -41,9 +41,9 @@ public final class GeneratedFiles {
      * break).
      *
      * @param runtime runtime folder of the proxy
-     * @param secret the forwarding secret
+     * @param secret the forwarding secret: at least 16 characters from {@code A-Z a-z 0-9 . _ ~ + / = -}
      * @return the written path relative to {@code runtime}
-     * @throws TemplateException if the secret is blank or contains a line break, or the path is unsafe
+     * @throws TemplateException if the secret breaks that rule, or the path is unsafe
      * @throws IOException if writing fails
      */
     public static String writeForwardingSecret(Path runtime, String secret) throws TemplateException, IOException {
@@ -93,10 +93,7 @@ public final class GeneratedFiles {
 
     static void checkForwardingSecret(String secret) throws TemplateException {
         Objects.requireNonNull(secret, "secret");
-        if (secret.isBlank() || secret.indexOf('\n') >= 0 || secret.indexOf('\r') >= 0) {
-            throw new TemplateException(FORWARDING_SECRET_FILE,
-                    FORWARDING_PLACEHOLDER + " must not be blank or contain a line break");
-        }
+        PlaceholderValueRules.checkSecret(FORWARDING_PLACEHOLDER, secret, FORWARDING_SECRET_FILE, TemplateException.NO_LINE);
     }
 
     static byte[] decodeFloodgateKey(String path, String base64) throws TemplateException {

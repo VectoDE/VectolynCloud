@@ -8,7 +8,8 @@
  * servers. Values come in through {@link net.vectora.cloud.template.PlaceholderValues}, so this
  * module does not depend on how the cloud stores its configuration.
  *
- * <p>Writes never follow a symbolic link below the runtime folder and never leave it. Details in
+ * <p>Writes never follow a symbolic link or junction below the runtime folder and never leave it.
+ * Placeholder values are checked before they are inserted. Details in
  * docs/cloud/template.md.
  */
 package net.vectora.cloud.template;

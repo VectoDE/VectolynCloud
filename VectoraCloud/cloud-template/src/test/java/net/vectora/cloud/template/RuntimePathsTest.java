@@ -44,6 +44,23 @@ class RuntimePathsTest {
     }
 
     @Test
+    void writeRefusesJunctionsOnTheWay() throws Exception {
+        assumeTrue(TemplateRendererTest.isWindows(), "junctions exist on Windows only");
+        Path root = Files.createDirectories(runtime.resolve("runtime"));
+        Path outside = Files.createDirectories(runtime.resolve("outside"));
+        Path link = root.resolve("plugins");
+        TemplateRendererTest.junction(link, outside);
+        try {
+            assertThrows(TemplateException.class, () -> RuntimePaths.check(root, "plugins/floodgate/key.pem"));
+            assertThrows(TemplateException.class,
+                    () -> RuntimePaths.write(root, "plugins/floodgate/key.pem", new byte[16], true));
+            assertFalse(Files.exists(outside.resolve("floodgate")));
+        } finally {
+            Files.delete(link);
+        }
+    }
+
+    @Test
     void writeReplacesAnExistingFile() throws Exception {
         Files.writeString(runtime.resolve("eula.txt"), "eula=false and some more text\n");
         RuntimePaths.write(runtime, "eula.txt", "eula=true\n".getBytes(java.nio.charset.StandardCharsets.UTF_8), false);

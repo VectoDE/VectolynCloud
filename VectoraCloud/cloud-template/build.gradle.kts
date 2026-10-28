@@ -5,9 +5,7 @@ plugins {
 }
 
 dependencies {
-    api(project(":VectoraCloud:cloud-config"))
-
-    // Only to check that every rendered YAML file of the real templates still parses.
-    // The version comes from the Jackson BOM that cloud-config exports.
+    // Only to check that every rendered YAML and JSON file of the real templates still parses.
+    testImplementation(platform(libs.jackson.bom))
     testImplementation(libs.jackson.dataformat.yaml)
 }

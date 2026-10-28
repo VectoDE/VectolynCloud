@@ -35,6 +35,16 @@ RenderReport report = TemplateInstaller.install(
 - Errors name the file and line, for example `plugins/LuckPerms/config.yml:12: unknown placeholder {{VECTORA_DB_HOST}} (no value given)`. They never contain a value, because values include secrets.
 - Values are inserted once and not scanned again.
 
+### Allowed values
+
+A value must not be able to change the structure of the file it lands in: a second YAML key, a new TOML table, another SQL statement. The renderer therefore checks every value before it inserts it and fails with a `TemplateException` that names the placeholder and the line, never the value:
+
+- No value may contain a line break (`\n`, `\r`) or any other control character (tab, NUL, everything `Character.isISOControl` reports). The only exceptions are `VECTORA_PROXY_SERVERS` and `VECTORA_PROXY_FORCED_HOSTS`: they may span lines, but still contain no other control character. `ProxyServerList` builds both from checked names and hosts.
+- Secrets, that is every placeholder whose name ends in `_SECRET` or `_PASSWORD` (today `VECTORA_FORWARDING_SECRET`, `VECTORA_MANAGEMENT_SECRET`, `VECTORA_DB_PASSWORD`, `VECTORA_DB_ROOT_PASSWORD`), must match `[A-Za-z0-9._~+/=-]{16,}`. Alphanumeric and base64 secrets, as the cloud generates them, fit. Quotes, `#`, spaces and backslashes do not, so a secret can neither end a quoted string nor start a comment.
+- Ports, every placeholder whose name ends in `_PORT`, must be a decimal number from 1 to 65535.
+
+`VECTORA_FLOODGATE_KEY_B64` is no text placeholder; it must be base64 of exactly 16 bytes (see below).
+
 ### Writing a literal `{{`
 
 Write four opening braces: `{{{{` becomes `{{`. To get the text `{{VECTORA_X}}` into a rendered file, write `{{{{VECTORA_X}}`. A single `{` and any `}}` need no escape.
@@ -43,7 +53,7 @@ No current template needs this. It is there for a future config format that uses
 
 ## Which files are rendered
 
-Files with one of these extensions (case-insensitive) are rendered: `yml`, `yaml`, `toml`, `properties`, `json`, `conf`, `txt`, `cfg`, `ini`, `sql`, `md`, `bat`, `cmd`.
+Files with one of these extensions (case-insensitive) are rendered: `yml`, `yaml`, `toml`, `properties`, `json`, `conf`, `txt`, `cfg`, `ini`, `sql`, `bat`, `cmd`.
 
 `bat` and `cmd` are on the list because the current start scripts (`start.bat`, `start-vectora-database.cmd`) carry `VECTORA_XMS`, `VECTORA_XMX` and `VECTORA_DB_PORT`. The scripts go away once the cloud starts the servers itself.
 
@@ -55,15 +65,15 @@ Rendered files keep their encoding and line endings:
 - Everything outside a placeholder stays as it is, including CRLF in `.bat` files.
 - A multi-line value such as `VECTORA_PROXY_SERVERS` is written with the line ending of the file (its first line break, `\n` if it has none).
 
-`README.md` directly in a template folder is not copied. It documents the template and quotes the placeholders by name, so rendering it would put real values, passwords included, into `runtime/`.
+Markdown files (`*.md`, case-insensitive, in any folder of the template) are neither rendered nor copied and are listed in `RenderReport.skipped()`. They document the template and quote the placeholders by name, so rendering them would put real values, passwords included, into `runtime/`. No server reads a Markdown file.
 
 ## Template to runtime
 
 - Files that come from the template overwrite their copy in `runtime/`.
 - Everything else in `runtime/` stays untouched: worlds, jars, logs, player data, LuckPerms files. Nothing is deleted. A file that is removed from a template therefore stays in existing runtime folders until someone deletes it.
 - All text files are rendered in memory before the first write. An unknown placeholder or a broken file leaves `runtime/` as it was.
-- Symbolic links in the template are skipped and listed in `RenderReport.skipped()`.
-- Symbolic links inside `runtime/` are never written through. A link where a folder or a target file should be is an error. The `runtime/` folder itself may be a link.
+- Symbolic links and Windows junctions in the template are skipped, not followed, and listed in `RenderReport.skipped()`. The template folder itself may be a link.
+- Symbolic links and Windows junctions inside `runtime/` are never written through. A link or junction where a folder or a target file should be is an error. The `runtime/` folder itself may be a link. Java does not report a junction as a symbolic link but as "other"; both count as a link here.
 - Target paths are plain relative paths. `..`, `.`, empty parts, absolute paths, drive letters, backslashes and control characters are rejected, and the resolved path must stay inside `runtime/`.
 - The template and runtime folders must not contain each other.
 
@@ -71,7 +81,7 @@ Rendered files keep their encoding and line endings:
 
 | File | Platform | Source |
 |---|---|---|
-| `forwarding.secret` | `VELOCITY` | `VECTORA_FORWARDING_SECRET`, written as UTF-8 without a line break. Must not be blank or contain a line break. |
+| `forwarding.secret` | `VELOCITY` | `VECTORA_FORWARDING_SECRET`, written as UTF-8 without a line break. Must follow the secret rule above (16 or more characters from `A-Z a-z 0-9 . _ ~ + / = -`). |
 | `plugins/floodgate/key.pem` | `VELOCITY`, `PAPER` | `VECTORA_FLOODGATE_KEY_B64`, decoded to the raw 16 bytes. Floodgate reads raw bytes despite the file name. |
 | `config/floodgate/key.pem` | `FABRIC` | Same key. |
 | `eula.txt` | `PAPER`, `FABRIC` | Only with `eulaAccepted = true`. Without consent nothing is written, and an existing `eula.txt` stays as it is. |
@@ -103,4 +113,4 @@ Names must be 1 to 64 letters, digits, `_` or `-`, and unique ignoring case. Hos
   ./gradlew :VectoraCloud:cloud-template:test --tests 'net.vectora.cloud.template.PlaceholderRendererFuzzTest.renderFailsOnlyWithTemplateException' -Pfuzz -PfuzzMaxDuration=2m
   ```
 
-Tests that need symbolic links are skipped where the OS does not allow creating them (Windows without developer mode).
+Tests that need symbolic links are skipped where the OS does not allow creating them (Windows without developer mode). The junction tests run on Windows only and create the junction with `mklink /J`, which needs no extra rights.

@@ -8,14 +8,16 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class PlaceholderRendererTest {
 
+    private static final String PASSWORD = "hunter2-hunter2-hunter2";
     private static final PlaceholderValues VALUES = PlaceholderValues.of(Map.of(
             "VECTORA_SERVER_PORT", "25566",
-            "VECTORA_DB_PASSWORD", "hunter2",
+            "VECTORA_DB_PASSWORD", PASSWORD,
             "VECTORA_PROXY_SERVERS", "lobby = \"127.0.0.1:25566\"\nend = \"127.0.0.1:25570\""));
 
     private static String render(String text) throws TemplateException {
@@ -24,7 +26,7 @@ class PlaceholderRendererTest {
 
     @Test
     void replacesEveryPlaceholder() throws TemplateException {
-        assertEquals("server-port=25566\npw=hunter2 25566\n",
+        assertEquals("server-port=25566\npw=" + PASSWORD + " 25566\n",
                 render("server-port={{VECTORA_SERVER_PORT}}\npw={{VECTORA_DB_PASSWORD}} {{VECTORA_SERVER_PORT}}\n"));
     }
 
@@ -79,6 +81,70 @@ class PlaceholderRendererTest {
         TemplateException e = assertThrows(TemplateException.class,
                 () -> render("pw={{VECTORA_DB_PASSWORD}}\n{{VECTORA_MISSING}}"));
         assertFalse(e.getMessage().contains("hunter2"), e.getMessage());
+    }
+
+    private static void rejected(String name, String value) {
+        PlaceholderValues values = PlaceholderValues.of(Map.of(name, value));
+        TemplateException e = assertThrows(TemplateException.class,
+                () -> PlaceholderRenderer.render("a=1\nb={{" + name + "}}\n", "x.yml", values), name);
+        assertEquals("x.yml", e.file());
+        assertEquals(2, e.line());
+        assertTrue(e.getMessage().contains(name), e.getMessage());
+        if (!value.isEmpty()) {
+            assertFalse(e.getMessage().contains(value), e.getMessage());
+        }
+    }
+
+    @Test
+    void lineBreaksAndControlCharactersInValuesAreRejected() {
+        rejected("VECTORA_SERVER_HOST", "127.0.0.1\nonline-mode: false");
+        rejected("VECTORA_DB_NAME", "ranks\r\n[evil]");
+        rejected("VECTORA_DB_USER", "vectora'\r-- x");
+        rejected("VECTORA_XMX", "768M\t");
+        rejected("VECTORA_DB_HOST", "host\u0000");
+        // The try order is a single line, unlike the server list and the forced hosts.
+        rejected(ProxyServerList.TRY, "\"lobby\"\n[evil]");
+    }
+
+    @Test
+    void onlyTheServerListAndTheForcedHostsMaySpanLines() throws TemplateException {
+        PlaceholderValues values = PlaceholderValues.of(Map.of(
+                ProxyServerList.SERVERS, "a = \"h:1\"\r\nb = \"h:2\"",
+                ProxyServerList.FORCED_HOSTS, "\"x\" = [ \"a\" ]\n\"y\" = [ \"b\" ]"));
+        assertEquals("a = \"h:1\"\nb = \"h:2\"\n\"x\" = [ \"a\" ]\n\"y\" = [ \"b\" ]\n", PlaceholderRenderer.render(
+                "{{VECTORA_PROXY_SERVERS}}\n{{VECTORA_PROXY_FORCED_HOSTS}}\n", "v.toml", values));
+        rejected(ProxyServerList.SERVERS, "a = \"h:1\"\tb");
+    }
+
+    @Test
+    void secretsMustComeFromTheSafeCharacterSet() throws TemplateException {
+        for (String name : List.of("VECTORA_DB_PASSWORD", "VECTORA_FORWARDING_SECRET", "VECTORA_MANAGEMENT_SECRET")) {
+            rejected(name, "abcdefghijklmnop'");
+            rejected(name, "abcdefghijklmnop#comment");
+            rejected(name, "abcdefgh ijklmnop");
+            rejected(name, "abcdefghijklmn\"op");
+            rejected(name, "abcdefghijklmn\\op");
+            rejected(name, "abc #comment\"'");
+            rejected(name, "short-secret");
+            rejected(name, "");
+        }
+        String base64 = "q83vEjRWeJCrze8SNFZ4kA==";
+        String alphanumeric = "abcdefghijklmnopqrstuvwxyz0123456789ABCD";
+        assertEquals(base64 + " " + alphanumeric, PlaceholderRenderer.render(
+                "{{VECTORA_DB_PASSWORD}} {{VECTORA_MANAGEMENT_SECRET}}", "x",
+                PlaceholderValues.of(Map.of("VECTORA_DB_PASSWORD", base64, "VECTORA_MANAGEMENT_SECRET", alphanumeric))));
+    }
+
+    @Test
+    void portsMustBeNumbersFromOneTo65535() throws TemplateException {
+        for (String bad : List.of("0", "65536", "99999", "-1", "+80", "80a", " 80", "", "080000")) {
+            assertThrows(TemplateException.class, () -> PlaceholderRenderer.render("{{VECTORA_DB_PORT}}", "x",
+                    PlaceholderValues.of(Map.of("VECTORA_DB_PORT", bad))), bad);
+        }
+        for (String good : List.of("1", "3307", "65535")) {
+            assertEquals(good, PlaceholderRenderer.render("{{VECTORA_BEDROCK_PORT}}", "x",
+                    PlaceholderValues.of(Map.of("VECTORA_BEDROCK_PORT", good))));
+        }
     }
 
     @Test

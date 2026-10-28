@@ -22,8 +22,9 @@ import java.util.Set;
  *
  * <p>Relative paths use {@code /} as separator and must stay inside the runtime folder: no
  * {@code ..}, no {@code .}, no empty parts, no absolute paths, no drive letters, no backslashes, no
- * control characters. Symbolic links below the runtime folder are never followed: a link where a
- * folder or the target file should be is an error. The runtime folder itself may be a link.
+ * control characters. Symbolic links and other reparse points (Windows junctions) below the runtime
+ * folder are never followed: a link where a folder or the target file should be is an error. The
+ * runtime folder itself may be a link.
  */
 final class RuntimePaths {
 
@@ -91,8 +92,8 @@ final class RuntimePaths {
             if (attributes == null) {
                 break;
             }
-            if (attributes.isSymbolicLink()) {
-                throw new TemplateException(relative, "refusing to write through the symbolic link "
+            if (isLink(attributes)) {
+                throw new TemplateException(relative, "refusing to write through the symbolic link or junction "
                         + base.relativize(current).toString().replace('\\', '/'));
             }
             boolean last = current.equals(target);
@@ -129,9 +130,9 @@ final class RuntimePaths {
             BasicFileAttributes attributes = attributesOrNull(current);
             if (attributes == null) {
                 Files.createDirectory(current);
-            } else if (attributes.isSymbolicLink() || !attributes.isDirectory()) {
+            } else if (isLink(attributes) || !attributes.isDirectory()) {
                 // Appeared after check(); do not follow it.
-                throw new TemplateException(relative, "not a folder or a symbolic link: "
+                throw new TemplateException(relative, "not a folder, or a symbolic link or junction: "
                         + base.relativize(current).toString().replace('\\', '/'));
             }
         }
@@ -148,6 +149,14 @@ final class RuntimePaths {
             Files.setPosixFilePermissions(target, OWNER_ONLY);
         }
         return target;
+    }
+
+    /**
+     * Tells whether {@code attributes} (read without following links) belong to a link. A Windows
+     * junction is no symbolic link to Java but "other", and may report itself as a folder as well.
+     */
+    static boolean isLink(BasicFileAttributes attributes) {
+        return attributes.isSymbolicLink() || attributes.isOther();
     }
 
     private static BasicFileAttributes attributesOrNull(Path path) {

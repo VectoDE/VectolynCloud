@@ -28,6 +28,9 @@ import java.util.Optional;
  *   <li>Everything outside placeholders is kept as it is, including line endings and a byte order
  *       mark. Line breaks inside a value ({@code \n}, {@code \r\n} or {@code \r}) are written with
  *       the line ending the file uses (its first line break; {@code \n} if it has none).</li>
+ *   <li>Every value is checked before it is inserted (see {@link PlaceholderValueRules}): no line
+ *       breaks or other control characters except in the proxy's server list and forced hosts,
+ *       secrets from a fixed character set, ports from 1 to 65535.</li>
  *   <li>Values are inserted once and are not scanned for placeholders again.</li>
  * </ul>
  *
@@ -54,7 +57,8 @@ public final class PlaceholderRenderer {
      * @param file file name used in error messages, relative to the template folder
      * @param values placeholder values
      * @return the rendered text; {@code text} itself if it contains no <code>&#123;&#123;</code>
-     * @throws TemplateException if a placeholder is unknown, has no value or is malformed
+     * @throws TemplateException if a placeholder is unknown, has no value or is malformed, or a value
+     *     breaks the value rules
      */
     public static String render(String text, String file, PlaceholderValues values) throws TemplateException {
         Objects.requireNonNull(text, "text");
@@ -89,6 +93,7 @@ public final class PlaceholderRenderer {
                     throw new TemplateException(file, lineOf(text, open),
                             "unknown placeholder {{" + name + "}} (no value given)");
                 }
+                PlaceholderValueRules.check(name, value.get(), file, lineOf(text, open));
                 appendWithLineEnding(out, value.get(), lineEnding);
                 from = nameEnd + CLOSE.length();
             }
@@ -113,10 +118,10 @@ public final class PlaceholderRenderer {
         Objects.requireNonNull(content, "content");
         Objects.requireNonNull(file, "file");
         String text = decode(content, file);
-        String rendered = render(text, file, values);
-        if (rendered == text) {
+        if (text.indexOf(OPEN) < 0) {
             return content.clone();
         }
+        String rendered = render(text, file, values);
         CharsetEncoder encoder = UTF_8.newEncoder()
                 .onMalformedInput(CodingErrorAction.REPORT)
                 .onUnmappableCharacter(CodingErrorAction.REPORT);
