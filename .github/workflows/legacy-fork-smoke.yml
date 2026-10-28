@@ -1,0 +1,124 @@
+name: Legacy fork smoke test
+
+# Checks that the newest PandaSpigot (1.8.8 fork) build still starts on Temurin Java 21
+# and answers a 1.8 server list ping (protocol 47). Background: docs/cloud/legacy-1.8.8.md.
+
+on:
+  schedule:
+    - cron: '23 4 * * 1' # weekly, Monday 04:23 UTC
+  workflow_dispatch:
+    inputs:
+      build:
+        description: PandaSpigot build number (empty = newest)
+        required: false
+        default: ''
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/legacy-fork-smoke.yml
+      - .github/scripts/legacy_fork_smoke.py
+      - .github/scripts/legacy_status_ping.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: legacy-fork-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pandaspigot:
+    name: PandaSpigot on Java 21
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      API: https://downloads.hpfxd.com/v2/projects/pandaspigot/versions/1.8.8
+      SERVER_PORT: '25599'
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Download PandaSpigot and verify sha256
+        env:
+          REQUESTED_BUILD: ${{ inputs.build }}
+        run: |
+          set -euo pipefail
+          SERVER_DIR="${RUNNER_TEMP}/pandaspigot"
+          echo "SERVER_DIR=${SERVER_DIR}" >> "${GITHUB_ENV}"
+          if [ -n "${REQUESTED_BUILD}" ]; then
+            build="${REQUESTED_BUILD}"
+          else
+            # The API does not return the build list sorted, so take the maximum.
+            build="$(curl -fsSL "${API}" | jq '.builds | max')"
+          fi
+          case "${build}" in ''|*[!0-9]*) echo "invalid build number: ${build}" >&2; exit 1 ;; esac
+          meta="$(curl -fsSL "${API}/builds/${build}")"
+          sha256="$(jq -r '.downloads.paperclip.sha256' <<<"${meta}")"
+          echo "PandaSpigot build ${build}, commit $(jq -r '.changes[0].commit // "n/a"' <<<"${meta}"), sha256 ${sha256}"
+          mkdir -p "${SERVER_DIR}"
+          curl -fsSL -o "${SERVER_DIR}/pandaspigot.jar" "${API}/builds/${build}/downloads/paperclip"
+          echo "${sha256}  ${SERVER_DIR}/pandaspigot.jar" | sha256sum -c -
+          {
+            echo "### PandaSpigot build ${build}"
+            echo
+            echo "sha256 \`${sha256}\` verified."
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Write test server configuration
+        run: |
+          set -euo pipefail
+          cd "${SERVER_DIR}"
+          # Accepting the Minecraft EULA is required to start the server. This happens only
+          # here, inside this throwaway CI workspace, for this smoke test. Nothing is hosted
+          # or distributed; the directory is discarded after the job.
+          echo 'eula=true' > eula.txt
+          cat > server.properties <<EOF
+          online-mode=false
+          server-ip=127.0.0.1
+          server-port=${SERVER_PORT}
+          level-type=FLAT
+          generate-structures=false
+          spawn-monsters=false
+          max-players=5
+          EOF
+          # Same setting the backends use behind the legacy Velocity (bungeeguard forwarding).
+          printf 'settings:\n  bungeecord: true\n' > spigot.yml
+
+      - name: Start, wait for "Done (", ping with protocol 47, stop
+        run: |
+          set -euo pipefail
+          java -version
+          python3 -I .github/scripts/legacy_fork_smoke.py \
+            "$(command -v java)" "${SERVER_DIR}/pandaspigot.jar" "${SERVER_DIR}" "${SERVER_PORT}" 300
+
+      - name: Check log for Java version problems
+        run: |
+          set -euo pipefail
+          log="${SERVER_DIR}/console.log"
+          if grep -nE 'UnsupportedClassVersionError|NoSuchMethodError|NoClassDefFoundError|InaccessibleObjectException|IllegalAccessError' "${log}"; then
+            echo "::error::Java compatibility problem in the server log"
+            exit 1
+          fi
+          grep -nE 'WARN|Exception' "${log}" || true
+
+      - name: Upload server log
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pandaspigot-console-log
+          path: ${{ runner.temp }}/pandaspigot/console.log
+          if-no-files-found: ignore
+          retention-days: 7
