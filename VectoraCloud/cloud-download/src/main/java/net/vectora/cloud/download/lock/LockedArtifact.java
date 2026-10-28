@@ -12,7 +12,7 @@ import net.vectora.cloud.download.provider.ArtifactCoordinate;
  *
  * @param coordinate provider, project, version and build
  * @param url the HTTPS URL it was downloaded from
- * @param fileName the file name the source uses
+ * @param fileName the file name the source uses; a plain base name ({@link net.vectora.cloud.download.FileNames})
  * @param checksum the checksum the file was verified with; for {@link Trust#TOFU} the pinned SHA-256
  * @param sha256 the SHA-256 of the file, its address in {@code cache/artifacts/}
  * @param trust where the checksum comes from
@@ -47,7 +47,7 @@ public record LockedArtifact(
         if (!"https".equalsIgnoreCase(url.getScheme())) {
             throw new IllegalArgumentException("url must be HTTPS: " + url);
         }
-        Objects.requireNonNull(fileName, "fileName");
+        net.vectora.cloud.download.FileNames.requireSafeBaseName(fileName, "fileName");
         Objects.requireNonNull(checksum, "checksum");
         Objects.requireNonNull(sha256, "sha256");
         Objects.requireNonNull(trust, "trust");

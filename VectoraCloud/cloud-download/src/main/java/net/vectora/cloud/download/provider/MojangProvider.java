@@ -78,7 +78,7 @@ public final class MojangProvider implements ArtifactProvider {
                 "Mojang has no server download for Minecraft " + details.id()));
         ApiSupport.checkDownloadUrl(server.url(), HOSTS, "Mojang server " + details.id());
         return new ResolvedArtifact(new ArtifactCoordinate(ID, request.project(), details.id(), null),
-                server.url(), "minecraft_server." + details.id() + ".jar", Optional.of(server.sha1()),
+                server.url(), ApiSupport.fileName("minecraft_server." + details.id() + ".jar", ID), Optional.of(server.sha1()),
                 server.size() >= 0 ? OptionalLong.of(server.size()) : OptionalLong.empty(),
                 details.javaMajor(), Map.of());
     }

@@ -90,6 +90,17 @@ jobs:
           path: '**/build/reports/tests/'
           retention-days: 7
 
+      # Always uploaded, so it is visible which tests ran and which were skipped on each runner
+      # (some need POSIX permissions or symlinks and only run on Linux).
+      - name: Upload JUnit XML
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: junit-xml-${{ matrix.os }}
+          path: '**/build/test-results/test/*.xml'
+          if-no-files-found: ignore
+          retention-days: 14
+
   test-java21:
     name: Tests on Java 21
     runs-on: ubuntu-latest
@@ -133,6 +144,15 @@ jobs:
           name: test-reports-java21
           path: '**/build/reports/tests/'
           retention-days: 7
+
+      - name: Upload JUnit XML
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: junit-xml-java21
+          path: '**/build/test-results/test/*.xml'
+          if-no-files-found: ignore
+          retention-days: 14
 
   # Path filter for the integration job. A workflow-level `on.paths` filter would leave the
   # check without any result on unrelated pull requests, and a required check without a result

@@ -15,7 +15,7 @@ import java.util.TreeMap;
  * @param platform where the artifact runs: Modrinth loader, Geyser download key, Hangar platform
  * @param gameVersion the Minecraft version the artifact must support, or {@code null}
  * @param channel the release channel, or {@code null} for the provider's stable channel
- * @param system operating system and CPU for native artifacts (MariaDB, later JREs)
+ * @param system operating system and CPU for native artifacts (MariaDB, JREs)
  * @param options provider-specific extras, for example {@code loader} and {@code installer} for Fabric
  */
 public record ArtifactRequest(

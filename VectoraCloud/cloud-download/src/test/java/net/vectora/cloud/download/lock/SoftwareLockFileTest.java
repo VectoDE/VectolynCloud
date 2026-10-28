@@ -75,7 +75,10 @@ class SoftwareLockFileTest {
             "-1", ".5", "1_000", "2026-10-28", "a: b", "#x", "[1]", "{a}", "*ref", "&anchor", "!tag", "' '", "@x", "`x"}) {
             Checksum sha256 = new Checksum(HashAlgorithm.SHA256, SHA256_A);
             lock = lock.put("tricky-" + i++, new LockedArtifact(new ArtifactCoordinate("papermc", "paper", tricky, tricky),
-                    URI.create("https://fill-data.papermc.io/x.jar"), tricky, sha256, sha256, Trust.SOURCE, 1, null));
+                    URI.create("https://fill-data.papermc.io/x.jar"),
+                    // File names must be base names; ':' and '*' are not allowed there.
+                    net.vectora.cloud.download.FileNames.isSafeBaseName(tricky) ? tricky : "f" + i + ".jar",
+                    sha256, sha256, Trust.SOURCE, 1, null));
         }
         assertEquals(lock, SoftwareLockFile.parse(SoftwareLockFile.format(lock)));
     }
@@ -133,5 +136,20 @@ class SoftwareLockFileTest {
     void namesAreValidated() {
         assertThrows(IllegalArgumentException.class, () -> SoftwareLock.of(Map.of("../evil", fabric())));
         assertThrows(IllegalArgumentException.class, () -> SoftwareLock.empty().put("Paper", fabric()));
+    }
+
+    @Test
+    void fileNameWithAPathIsRefused() throws Exception {
+        Checksum sha256 = new Checksum(HashAlgorithm.SHA256, SHA256_A);
+        String yaml = SoftwareLockFile.format(SoftwareLock.empty().put("paper", new LockedArtifact(
+                new ArtifactCoordinate("papermc", "paper", "26.3", "227"), URI.create("https://fill-data.papermc.io/x.jar"),
+                "paper.jar", sha256, sha256, Trust.SOURCE, 1, null)));
+        assertTrue(yaml.contains("file-name: paper.jar"), yaml);
+        assertEquals(1, SoftwareLockFile.parse(yaml).entries().size());
+        for (String bad : new String[] {"../../paper.jar", "plugins/paper.jar", "nul.jar", "'..'"}) {
+            LockFileException e = assertThrows(LockFileException.class,
+                    () -> SoftwareLockFile.parse(yaml.replace("file-name: paper.jar", "file-name: " + bad)));
+            assertTrue(e.getMessage().contains("fileName"), e.getMessage());
+        }
     }
 }

@@ -1,5 +1,5 @@
 /**
- * Downloads server software, plugins, mods and later JREs over HTTPS from allowlisted hosts and
+ * Downloads server software, plugins, mods and JREs over HTTPS from allowlisted hosts and
  * verifies their checksums.
  *
  * <ul>
@@ -9,6 +9,7 @@
  *   <li>{@link net.vectora.cloud.download.lock} – the {@code software.lock.yml} lockfile</li>
  *   <li>{@link net.vectora.cloud.download.catalog} – the catalog of standard artifacts</li>
  *   <li>{@link net.vectora.cloud.download.archive} – safe extraction of zip and tar.gz</li>
+ *   <li>{@link net.vectora.cloud.download.jre} – JREs per server group: system Java or Temurin from Adoptium</li>
  * </ul>
  *
  * <p>The format and the trust rules are described in docs/cloud/download.md.

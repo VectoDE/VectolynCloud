@@ -9,8 +9,8 @@ import net.vectora.cloud.download.http.HostAllowlist;
  *
  * <p>Implementations: {@link PaperFillProvider}, {@link FabricMetaProvider}, {@link MojangProvider},
  * {@link BibliothekProvider} (GeyserMC, PandaSpigot), {@link ModrinthProvider}, {@link HangarProvider},
- * {@link MariaDbProvider}. JREs from Adoptium follow as another implementation; such a provider
- * reads {@link ArtifactRequest#system()} and options like {@code image-type}.
+ * {@link MariaDbProvider}, {@link AdoptiumProvider} (JREs; reads {@link ArtifactRequest#system()} and
+ * options like {@code image-type}).
  */
 public interface ArtifactProvider {
 

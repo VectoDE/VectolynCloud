@@ -35,6 +35,9 @@ import net.vectora.cloud.download.provider.ResolvedArtifact;
  *   <li>Only a verified file is moved, atomically, to {@code cache/artifacts/<sha256>}.</li>
  * </ol>
  *
+ * <p>Before a download, orphaned {@code .part} files of an earlier run are deleted
+ * ({@link ArtifactCache#removeStalePartFiles()}).
+ *
  * <p>Sources without a checksum (Fabric server launcher) are trusted on first use: the first
  * download is accepted and its SHA-256 goes into the lockfile marked {@code tofu}. Every later
  * download for the same coordinate must match it, or {@link TofuMismatchException} is thrown.
@@ -159,6 +162,7 @@ public final class ArtifactDownloader {
         if (expected != null) {
             algorithms.add(expected.algorithm());
         }
+        cache.removeStalePartFiles();
         Path part = cache.newPartFile();
         boolean committed = false;
         try {
@@ -183,7 +187,7 @@ public final class ArtifactDownloader {
             return new DownloadedArtifact(file, expected == null ? sha256 : expected, sha256, trust, size, false);
         } finally {
             if (!committed) {
-                Files.deleteIfExists(part);
+                cache.discard(part);
             }
         }
     }

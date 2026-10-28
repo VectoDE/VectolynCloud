@@ -94,7 +94,7 @@ public final class FabricMetaProvider implements ArtifactProvider {
         metadata.put("installer", installer);
         return new ResolvedArtifact(
                 new ArtifactCoordinate(ID, request.project(), game, "loader-" + loader + "+installer-" + installer),
-                url, "fabric-server-mc." + game + "-loader." + loader + "-launcher." + installer + ".jar",
+                url, ApiSupport.fileName("fabric-server-mc." + game + "-loader." + loader + "-launcher." + installer + ".jar", ID),
                 Optional.empty(), OptionalLong.empty(), OptionalInt.empty(), metadata);
     }
 

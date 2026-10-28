@@ -266,4 +266,14 @@ class ArtifactDownloaderTest {
             throw new AssertionError(e);
         }
     }
+
+    @Test
+    void removesOrphanedPartFilesBeforeADownload() throws Exception {
+        Path dir = Files.createDirectories(home.resolve("cache/artifacts"));
+        Path orphan = Files.write(dir.resolve("download-4711.part"), "half a jar".getBytes(StandardCharsets.UTF_8));
+        DownloadedArtifact file = downloader(new FakeTransport().ok(URL, CONTENT))
+                .download(artifact(hash(HashAlgorithm.SHA256, CONTENT)), null);
+        assertFalse(Files.exists(orphan), "an aborted download of an earlier run is cleaned up");
+        assertEquals(List.of(file.file()), cacheFiles());
+    }
 }

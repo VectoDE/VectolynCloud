@@ -7,10 +7,15 @@ import java.nio.charset.StandardCharsets;
 import java.util.zip.GZIPOutputStream;
 
 /** Writes small TAR archives for tests, including hostile ones the real tar tools refuse to make. */
-final class TarBuilder {
+public final class TarBuilder {
 
     private final ByteArrayOutputStream out = new ByteArrayOutputStream();
     private boolean gnu;
+
+    /** Starts an empty archive. */
+    public TarBuilder() {
+        // Nothing to set up.
+    }
 
     TarBuilder gnu() {
         this.gnu = true;
@@ -21,15 +26,36 @@ final class TarBuilder {
         return entry(name, '0', content.getBytes(StandardCharsets.UTF_8), "", 0644);
     }
 
-    TarBuilder file(String name, byte[] content, int mode) {
+    /**
+     * Adds a regular file.
+     *
+     * @param name the entry name
+     * @param content the content
+     * @param mode the permission bits
+     * @return this
+     */
+    public TarBuilder file(String name, byte[] content, int mode) {
         return entry(name, '0', content, "", mode);
     }
 
-    TarBuilder directory(String name) {
+    /**
+     * Adds a directory.
+     *
+     * @param name the entry name
+     * @return this
+     */
+    public TarBuilder directory(String name) {
         return entry(name, '5', new byte[0], "", 0755);
     }
 
-    TarBuilder symlink(String name, String target) {
+    /**
+     * Adds a symbolic link.
+     *
+     * @param name the entry name
+     * @param target the link target
+     * @return this
+     */
+    public TarBuilder symlink(String name, String target) {
         return entry(name, '2', new byte[0], target, 0777);
     }
 
@@ -114,7 +140,12 @@ final class TarBuilder {
         return out.toByteArray();
     }
 
-    byte[] buildGzip() {
+    /**
+     * Ends the archive and compresses it.
+     *
+     * @return the .tar.gz bytes
+     */
+    public byte[] buildGzip() {
         ByteArrayOutputStream gz = new ByteArrayOutputStream();
         try (GZIPOutputStream gzip = new GZIPOutputStream(gz)) {
             gzip.write(build());

@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.StringJoiner;
 import java.util.regex.Pattern;
 import net.vectora.cloud.download.ArtifactNotAvailableException;
+import net.vectora.cloud.download.FileNames;
 import net.vectora.cloud.download.HostNotAllowedException;
 import net.vectora.cloud.download.HttpStatusException;
 import net.vectora.cloud.download.MalformedResponseException;
@@ -62,6 +63,20 @@ final class ApiSupport {
             }
             throw e;
         }
+    }
+
+    /**
+     * Checks a file name taken from an API response: it must be a plain base name
+     * ({@link FileNames#isSafeBaseName}), never a path or a Windows device name.
+     */
+    static String fileName(String name, String source) throws MalformedResponseException {
+        if (!FileNames.isSafeBaseName(name)) {
+            throw new MalformedResponseException(source + ": file name is not a plain base name: "
+                    + (name == null ? "null" : name.codePoints().limit(80)
+                            .collect(StringBuilder::new, (b, cp) -> b.appendCodePoint(Character.isISOControl(cp) ? '?' : cp),
+                                    StringBuilder::append)));
+        }
+        return name;
     }
 
     /** Makes sure a download URL taken from an API response stays on the source's hosts. */

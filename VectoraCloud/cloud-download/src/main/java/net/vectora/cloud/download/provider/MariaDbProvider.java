@@ -101,7 +101,7 @@ public final class MariaDbProvider implements ArtifactProvider {
         Map<String, String> metadata = new LinkedHashMap<>();
         metadata.put("package", wanted.name().toLowerCase(Locale.ROOT));
         return new ResolvedArtifact(new ArtifactCoordinate(ID, request.project(), release.id(), null), url,
-                file.name(), Optional.of(checksum), OptionalLong.empty(), OptionalInt.empty(), metadata);
+                ApiSupport.fileName(file.name(), ID), Optional.of(checksum), OptionalLong.empty(), OptionalInt.empty(), metadata);
     }
 
     /** The archive types the cloud can use. */
