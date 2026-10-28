@@ -1,7 +1,9 @@
 package net.vectora.protocol.message;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.ByteBuffer;
 import java.util.Optional;
@@ -9,6 +11,7 @@ import java.util.function.Consumer;
 import net.vectora.protocol.ChannelName;
 import net.vectora.protocol.Frame;
 import net.vectora.protocol.FrameCodec;
+import net.vectora.protocol.GroupName;
 import net.vectora.protocol.IncompatibleVersionException;
 import net.vectora.protocol.PacketWriter;
 import net.vectora.protocol.Protocol;
@@ -61,7 +64,7 @@ class MessageCodecTest {
     @Test
     void constructorRejectionsBecomeProtocolExceptions() {
         assertThrows(ProtocolException.class, () -> codec.fromFrame(frame(0x11, 0, out -> out
-                .writeString("Lobby-1", ServiceId.MAX_LENGTH)
+                .writeString("lobby-1", ServiceId.MAX_LENGTH)
                 .writeVarInt(1).writeVarInt(10)
                 .writeDouble(Double.NaN).writeDouble(1)
                 .writeVarLong(0).writeVarLong(0))));
@@ -69,24 +72,35 @@ class MessageCodecTest {
                 out -> out.writeString("bad id", ServiceId.MAX_LENGTH))));
     }
 
+    /**
+     * Every case here would also fail in the record constructor. The check on the cause and the
+     * message makes sure the reader stops the oversized field first, before it is copied: a
+     * constructor rejection arrives as a {@link ProtocolException} with an
+     * {@link IllegalArgumentException} as cause.
+     */
     @Test
     void lengthsAboveTheLimitsAreRejectedOnTheWire() {
         int tooLarge = MessageLimits.MAX_PAYLOAD_SIZE + 1;
-        assertThrows(ProtocolException.class, () -> codec.fromFrame(frame(0x40, 0, out -> out
-                .writeString("vectora.x", ChannelName.MAX_LENGTH).writeVarInt(tooLarge).writeBytes(new byte[tooLarge]))));
+        assertRejectedByReaderLimit(MessageLimits.MAX_PAYLOAD_SIZE, frame(0x40, 0, out -> out
+                .writeString("vectora.x", ChannelName.MAX_LENGTH).writeVarInt(tooLarge).writeBytes(new byte[tooLarge])));
 
         String longName = "n".repeat(MessageLimits.MAX_PLAYER_NAME_LENGTH + 1);
-        assertThrows(ProtocolException.class, () -> codec.fromFrame(frame(0x30, 0, out -> out
+        assertRejectedByReaderLimit(MessageLimits.MAX_PLAYER_NAME_LENGTH, frame(0x30, 0, out -> out
                 .writeUuid(SampleMessages.PLAYER).writeString(longName, 64)
-                .writeString("Lobby-1", ServiceId.MAX_LENGTH).writeBoolean(false))));
+                .writeString("lobby-1", ServiceId.MAX_LENGTH).writeBoolean(false)));
 
         String longHost = "h".repeat(MessageLimits.MAX_HOST_LENGTH + 1);
-        assertThrows(ProtocolException.class, () -> codec.fromFrame(frame(0x20, 0, out -> out
-                .writeString("Lobby-1", ServiceId.MAX_LENGTH).writeString(longHost, 300)
-                .writeShort(25_565).writeString("Lobby", 32).writeBoolean(false))));
+        assertRejectedByReaderLimit(MessageLimits.MAX_HOST_LENGTH, frame(0x20, 0, out -> out
+                .writeString("lobby-1", ServiceId.MAX_LENGTH).writeString(longHost, 300)
+                .writeShort(25_565).writeString("lobby", GroupName.MAX_LENGTH).writeBoolean(false)));
+
+        String longGroup = "g".repeat(GroupName.MAX_LENGTH + 1);
+        assertRejectedByReaderLimit(GroupName.MAX_LENGTH, frame(0x20, 0, out -> out
+                .writeString("lobby-1", ServiceId.MAX_LENGTH).writeString("127.0.0.1", MessageLimits.MAX_HOST_LENGTH)
+                .writeShort(25_565).writeString(longGroup, 100).writeBoolean(false)));
 
         String longId = "a".repeat(ServiceId.MAX_LENGTH + 1);
-        assertThrows(ProtocolException.class, () -> codec.fromFrame(frame(0x10, 0, out -> out.writeString(longId, 100))));
+        assertRejectedByReaderLimit(ServiceId.MAX_LENGTH, frame(0x10, 0, out -> out.writeString(longId, 100)));
     }
 
     @Test
@@ -115,6 +129,12 @@ class MessageCodecTest {
         assertEquals(0x02, frame.messageId());
         assertEquals(0, frame.requestId());
         assertEquals(Envelope.of(new Ping(5)), codec.fromFrame(FrameCodec.decode(FrameCodec.encode(frame))));
+    }
+
+    private void assertRejectedByReaderLimit(int limit, Frame frame) {
+        ProtocolException e = assertThrows(ProtocolException.class, () -> codec.fromFrame(frame));
+        assertNull(e.getCause(), () -> "rejected by a constructor, not by the reader: " + e.getMessage());
+        assertTrue(e.getMessage().endsWith(" bytes, limit " + limit), e.getMessage());
     }
 
     private static Frame frame(int messageId, int requestId, Consumer<PacketWriter> payload) {

@@ -101,11 +101,13 @@ Ids are grouped by area: `0x0_` connection, `0x1_` service state, `0x2_` server 
 
 | Value | Rule |
 |---|---|
-| `ServiceId`, `NodeId` | 1 to 64 characters, `[A-Za-z0-9][A-Za-z0-9_-]*`. No dots or slashes, because ids become directory names. |
-| `GroupName` | 1 to 32 characters, same pattern. |
+| `GroupName`, `NodeId` | 1 to 32 characters, `[a-z0-9][a-z0-9_-]*`. Not a Windows device name (see below). |
+| `ServiceId` | 1 to 64 characters, same pattern and the same device-name rule. A service id is usually `<group>-<index>`, so a group name of full length still fits. |
 | `ChannelName` | 1 to 64 characters, `[a-z0-9_.-]`. |
 | `AuthToken` | 16 to 256 printable ASCII characters without spaces. `toString()` prints `AuthToken[redacted]`; compare with `matches`, which runs in constant time. |
 | Player name | 1 to 32 printable ASCII characters, no space at either end. Java names have at most 16; the rest leaves room for a Floodgate prefix and Bedrock gamertags with inner spaces. |
+
+Group names, node ids and service ids become file and directory names. That is why they have no dots or slashes and only lower-case letters: Windows and macOS do not tell upper and lower case apart in file names, so `Lobby` and `lobby` would be two names for one directory. For the same reason the Windows device names `con`, `prn`, `aux`, `nul`, `com0` to `com9` and `lpt0` to `lpt9` are rejected; Windows cannot create a file or directory with such a name. The check is exact, so `con1` or `console` are fine.
 
 `ChannelMessage`, `Request`, `Response` and `Frame` copy their byte arrays in and out and print only the length in `toString()`, so a payload never ends up in a log by accident.
 
@@ -145,8 +147,8 @@ Version history:
 |---|---|
 | Frame body | 1 MiB (`Protocol.MAX_FRAME_SIZE`) |
 | `ChannelMessage`, `Request`, `Response` payload | 64 KiB (`MessageLimits.MAX_PAYLOAD_SIZE`) |
-| Service id, node id, channel name | 64 characters |
-| Group name | 32 characters |
+| Service id, channel name | 64 characters |
+| Group name, node id | 32 characters |
 | Player name | 32 characters |
 | Host | 253 characters |
 | Token | 16 to 256 characters |

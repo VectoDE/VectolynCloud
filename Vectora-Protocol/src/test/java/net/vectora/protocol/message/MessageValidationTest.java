@@ -21,7 +21,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 class MessageValidationTest {
 
     private static final ChannelName CHANNEL = new ChannelName("vectora.test");
-    private static final GroupName GROUP = new GroupName("Survival");
+    private static final GroupName GROUP = new GroupName("survival");
 
     @Test
     void payloadLimitIsSixtyFourKibibytes() {

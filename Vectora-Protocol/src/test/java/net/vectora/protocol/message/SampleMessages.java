@@ -13,8 +13,8 @@ import net.vectora.protocol.ServiceId;
 final class SampleMessages {
 
     static final UUID PLAYER = UUID.fromString("069a79f4-44e9-4726-a5be-fca90e38aaf5");
-    static final ServiceId LOBBY = new ServiceId("Lobby-1");
-    static final ServiceId SURVIVAL = new ServiceId("Survival-1");
+    static final ServiceId LOBBY = new ServiceId("lobby-1");
+    static final ServiceId SURVIVAL = new ServiceId("survival-1");
     static final AuthToken TOKEN = new AuthToken("test-token-not-a-real-secret-000000");
 
     private SampleMessages() {
@@ -30,7 +30,7 @@ final class SampleMessages {
                 new Disconnect(Disconnect.Reason.SHUTDOWN),
                 new ServiceReady(LOBBY),
                 new ServiceStatus(LOBBY, 12, 100, 19.98, 3.25, 512L << 20, 2048L << 20),
-                new RegisterServer(SURVIVAL, "127.0.0.1", 30_002, new GroupName("Survival"), false),
+                new RegisterServer(SURVIVAL, "127.0.0.1", 30_002, new GroupName("survival"), false),
                 new UnregisterServer(SURVIVAL),
                 new PlayerJoin(PLAYER, "Notch", LOBBY, false),
                 new PlayerQuit(PLAYER, "Notch", LOBBY, false),
@@ -43,7 +43,7 @@ final class SampleMessages {
     /** Messages with every length field at its upper limit and numbers at their extremes. */
     static List<Message> atTheLimits() {
         String longName = "N".repeat(MessageLimits.MAX_PLAYER_NAME_LENGTH);
-        ServiceId longId = new ServiceId("S".repeat(ServiceId.MAX_LENGTH));
+        ServiceId longId = new ServiceId("s".repeat(ServiceId.MAX_LENGTH));
         byte[] fullPayload = new byte[MessageLimits.MAX_PAYLOAD_SIZE];
         ChannelName longChannel = new ChannelName("c".repeat(ChannelName.MAX_LENGTH));
         return List.of(
