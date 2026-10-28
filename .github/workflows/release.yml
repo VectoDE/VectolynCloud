@@ -77,9 +77,21 @@ jobs:
 
       - name: Sign with cosign (keyless)
         working-directory: dist
+        # Retries: v0.1.0 failed once with a Rekor 409 (cosign retried an upload that had
+        # already landed). A fresh attempt signs again with a new certificate and succeeds.
         run: |
           for f in *.jar SHA256SUMS; do
-            cosign sign-blob --yes --bundle "$f.sigstore.json" "$f"
+            for attempt in 1 2 3; do
+              if cosign sign-blob --yes --bundle "$f.sigstore.json" "$f"; then
+                break
+              fi
+              if [ "$attempt" -eq 3 ]; then
+                echo "::error::signing $f failed three times"
+                exit 1
+              fi
+              echo "::warning::signing $f failed (attempt $attempt), retrying"
+              sleep $((attempt * 10))
+            done
           done
 
       - name: Attest build provenance
@@ -140,7 +152,8 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           prerelease=""
-          case "$TAG" in *-*) prerelease="--prerelease" ;; esac
+          # 0.x versions and tags with a suffix (v1.0.0-rc.1) are pre-releases.
+          case "$TAG" in v0.*|*-*) prerelease="--prerelease" ;; esac
           gh release create "$TAG" dist/* \
             --repo "$GITHUB_REPOSITORY" \
             --title "$TAG" \
