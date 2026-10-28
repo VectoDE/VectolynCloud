@@ -1,0 +1,12 @@
+2schema-version: 1
+group: lobby
+mode: dynamic
+scaling:
+  min-services: 1
+  max-services: 4
+  players-per-service: 50
+  scale-up-at: 80
+  scale-down-after: 5 minutes
+  cooldown: 60s
+nodes:
+  - node-1

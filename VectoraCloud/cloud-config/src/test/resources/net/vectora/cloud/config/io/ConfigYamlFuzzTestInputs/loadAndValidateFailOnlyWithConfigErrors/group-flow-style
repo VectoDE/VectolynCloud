@@ -1,0 +1,8 @@
+1schema-version: 1
+template: Mod-Server
+software: fabric
+minecraft-version: "26.3"
+java: 25
+heap: {min: 512M, max: 2G}
+combat: legacy
+catalog: [{id: lithium, kind: mod}]

@@ -1,0 +1,3 @@
+0schema-version: 1
+proxy: &p {bind: a, port: 1, bedrock-port: 2}
+legacy-proxy: *p
