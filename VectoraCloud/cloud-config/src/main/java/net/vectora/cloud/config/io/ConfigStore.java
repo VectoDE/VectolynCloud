@@ -143,8 +143,19 @@ public final class ConfigStore {
     private <T> T readSingle(String file, ConfigFormat<T> format, List<ConfigError> errors, Set<String> missing,
                              Map<String, Integer> migrated) {
         Path path = home.root().resolve(file);
-        if (!Files.exists(path)) {
+        RegularPaths.Kind kind;
+        try {
+            kind = RegularPaths.kind(path);
+        } catch (IOException e) {
+            errors.add(ConfigError.of(file, "", ErrorCode.FILE_ACCESS));
+            return null;
+        }
+        if (kind == RegularPaths.Kind.MISSING) {
             missing.add(file);
+            return null;
+        }
+        if (kind != RegularPaths.Kind.FILE) {
+            errors.add(ConfigError.of(file, "", ErrorCode.NOT_REGULAR));
             return null;
         }
         return readFile(file, path, format, errors, migrated);
@@ -154,7 +165,18 @@ public final class ConfigStore {
                                           Map<String, Integer> migrated) {
         Map<String, T> result = new TreeMap<>();
         Path dir = home.root().resolve(folder);
-        if (!Files.isDirectory(dir)) {
+        RegularPaths.Kind dirKind;
+        try {
+            dirKind = RegularPaths.kind(dir);
+        } catch (IOException e) {
+            errors.add(ConfigError.of(folder + "/", "", ErrorCode.FILE_ACCESS));
+            return result;
+        }
+        if (dirKind == RegularPaths.Kind.MISSING) {
+            return result;
+        }
+        if (dirKind != RegularPaths.Kind.DIRECTORY) {
+            errors.add(ConfigError.of(folder + "/", "", ErrorCode.NOT_REGULAR));
             return result;
         }
         List<Path> entries = new ArrayList<>();
@@ -167,13 +189,17 @@ public final class ConfigStore {
         entries.sort(null);
         for (Path entry : entries) {
             String fileName = entry.getFileName().toString();
-            if (fileName.startsWith(".") || !Files.isRegularFile(entry, LinkOption.NOFOLLOW_LINKS)) {
+            if (fileName.startsWith(".") || Files.isDirectory(entry, LinkOption.NOFOLLOW_LINKS)) {
                 continue; // hidden files (editor swap files, our own temp files) and folders
             }
             String relative = folder + "/" + fileName;
             boolean yml = fileName.endsWith(".yml");
             if (!yml && !fileName.endsWith(".yaml")) {
                 continue; // backups and notes next to the files
+            }
+            if (!Files.isRegularFile(entry, LinkOption.NOFOLLOW_LINKS)) {
+                errors.add(ConfigError.of(relative, "", ErrorCode.NOT_REGULAR));
+                continue; // a link or special file named like a configuration file
             }
             String name = fileName.substring(0, fileName.lastIndexOf('.'));
             if (!yml || !ConfigNames.isValidName(name)) {

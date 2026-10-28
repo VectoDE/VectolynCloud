@@ -3,6 +3,7 @@ package net.vectora.cloud.config;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.time.Duration;
+import java.util.ArrayDeque;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +32,10 @@ import net.vectora.cloud.config.validation.ConfigValidator;
  * {@link ConfigListener#reloadFailed}.
  *
  * <p>Thread-safe. Reads ({@link #snapshot()}) never block; changes and reloads are serialized.
+ *
+ * <p>Events are delivered in the order of the changes, to every listener. A listener that calls
+ * {@link #apply} itself gets the result at once, but the event of that nested change is queued and
+ * delivered only after every listener has seen the change that triggered it.
  */
 public final class ConfigService implements AutoCloseable {
 
@@ -40,6 +45,9 @@ public final class ConfigService implements AutoCloseable {
     private final ConfigStore store;
     private final ReentrantLock lock = new ReentrantLock();
     private final List<ConfigListener> listeners = new CopyOnWriteArrayList<>();
+    /** Events waiting for delivery; only touched while {@link #lock} is held. */
+    private final ArrayDeque<Runnable> pendingEvents = new ArrayDeque<>();
+    private boolean dispatching;
     private volatile ConfigSnapshot current;
     private ConfigWatcher watcher;
     private boolean closed;
@@ -163,7 +171,10 @@ public final class ConfigService implements AutoCloseable {
         try {
             ensureOpen();
             if (watcher == null) {
-                watcher = ConfigWatcher.start(store.home(), this::reloadFromWatcher, QUIET_PERIOD);
+                watcher = ConfigWatcher.start(store.home(), this::reloadFromWatcher,
+                        (folder, error) -> notifyFailed(new ConfigException(
+                                ConfigError.of(folder, "", ErrorCode.FILE_ACCESS), error)),
+                        QUIET_PERIOD);
             }
         } finally {
             lock.unlock();
@@ -211,6 +222,40 @@ public final class ConfigService implements AutoCloseable {
     }
 
     private void notifyChanged(ConfigChanged change) {
+        dispatch(() -> deliverChanged(change));
+    }
+
+    private void notifyFailed(ConfigException error) {
+        lock.lock();
+        try {
+            dispatch(() -> deliverFailed(error));
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Queues an event and, unless a delivery is already running on this thread (a listener called
+     * {@link #apply}), delivers every queued event in order. Called with {@link #lock} held.
+     */
+    private void dispatch(Runnable event) {
+        pendingEvents.add(event);
+        if (dispatching) {
+            return;
+        }
+        dispatching = true;
+        try {
+            Runnable next;
+            while ((next = pendingEvents.poll()) != null) {
+                next.run();
+            }
+        } finally {
+            dispatching = false;
+            pendingEvents.clear(); // only non-empty if an Error escaped a listener
+        }
+    }
+
+    private void deliverChanged(ConfigChanged change) {
         for (ConfigListener listener : listeners) {
             try {
                 listener.configChanged(change);
@@ -220,7 +265,7 @@ public final class ConfigService implements AutoCloseable {
         }
     }
 
-    private void notifyFailed(ConfigException error) {
+    private void deliverFailed(ConfigException error) {
         for (ConfigListener listener : listeners) {
             try {
                 listener.reloadFailed(error);

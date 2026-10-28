@@ -5,8 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -78,6 +81,68 @@ class ConfigWatcherTest {
             assertEquals(ConfigChanged.Origin.OPERATION, recorder.changes.take().origin());
             ConfigChanged echo = recorder.changes.poll(2, TimeUnit.SECONDS);
             assertEquals(null, echo, "the watcher sees the file equal to memory and stays quiet");
+        }
+    }
+
+    @Test
+    void deletedGroupsFolderIsWatchedAgainAfterItsKeyBecameInvalid() throws Exception {
+        try (ConfigService service = ConfigService.open(CloudHome.of(root))) {
+            Recorder recorder = new Recorder();
+            service.addListener(recorder);
+            service.startWatching();
+
+            // Deleting the folder invalidates its watch key (key.reset() returns false).
+            Files.delete(root.resolve("groups"));
+            awaitDirectory(root.resolve("groups"));
+
+            Files.write(root.resolve("groups/lobby.yml"), ConfigYaml.write(Samples.lobbyGroup()));
+            ConfigChanged change = recorder.awaitChange(c -> c.current().groups().containsKey("lobby"));
+            assertTrue(change.files().contains("groups/lobby.yml"), "changes in the new folder are seen again");
+        }
+    }
+
+    @Test
+    void folderThatCannotBeWatchedAgainIsReported() throws Exception {
+        // groups/ replaced by a regular file: the folder can neither be created nor watched again.
+        try (ConfigService service = ConfigService.open(CloudHome.of(root))) {
+            Recorder recorder = new Recorder();
+            service.addListener(recorder);
+            service.startWatching();
+
+            replaceFolderWithFile(root.resolve("groups"));
+
+            ConfigException error = recorder.awaitFailure(e -> e.errors().stream()
+                    .anyMatch(err -> err.code() == ErrorCode.FILE_ACCESS && err.file().equals("groups/")));
+            assertNotNull(error);
+        }
+    }
+
+    /**
+     * Deletes {@code dir} and puts a file in its place. The watcher races to create the folder
+     * again (fast on Linux); if it wins, the write fails and the folder is deleted once more, which
+     * invalidates the new key as well. As soon as the file is in place, the pending re-watch fails.
+     */
+    private static void replaceFolderWithFile(Path dir) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(WAIT_SECONDS);
+        while (true) {
+            try {
+                if (Files.isDirectory(dir, LinkOption.NOFOLLOW_LINKS)) {
+                    Files.delete(dir);
+                }
+                Files.writeString(dir, "not a folder", StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
+                return;
+            } catch (FileSystemException e) {
+                assertTrue(System.nanoTime() < deadline, "could not replace " + dir + " with a file: " + e);
+                Thread.sleep(10);
+            }
+        }
+    }
+
+    private static void awaitDirectory(Path dir) throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(WAIT_SECONDS);
+        while (!Files.isDirectory(dir)) {
+            assertTrue(System.nanoTime() < deadline, "the watcher did not create " + dir + " again");
+            Thread.sleep(50);
         }
     }
 

@@ -61,6 +61,48 @@ class OwnerOnlyPermissionsTest {
 
     @Test
     @EnabledOnOs(OS.WINDOWS)
+    void windowsAclIsProtectedSoParentInheritanceCannotWidenIt() throws Exception {
+        Path secrets = Files.createDirectories(root.resolve("secrets"));
+        Path file = Files.writeString(secrets.resolve("vectora.env"), "KEY=value\n");
+        OwnerOnlyPermissions.restrictDirectory(secrets);
+        OwnerOnlyPermissions.restrictFile(file);
+        assertTrue(isProtected(secrets), "folder ACL must be protected");
+        assertTrue(isProtected(file), "file ACL must be protected");
+
+        // An administrator grants "Users: read" on the home and lets it inherit: the folder keeps its list.
+        run("icacls", root.toString(), "/grant", "*S-1-5-32-545:(OI)(CI)R");
+        assertTrue(OwnerOnlyPermissions.isOwnerOnly(secrets), "protected folder keeps its owner-only list");
+
+        // Counter-check: a second file in the folder, restricted the old way (setAcl only). Windows
+        // records its owner entry as inherited from the folder, so the list is not protected.
+        Path legacy = Files.writeString(secrets.resolve("legacy.env"), "KEY=value\n");
+        AclFileAttributeView view = Files.getFileAttributeView(legacy, AclFileAttributeView.class);
+        view.setAcl(List.of(AclEntry.newBuilder().setType(AclEntryType.ALLOW).setPrincipal(view.getOwner())
+                .setPermissions(java.util.EnumSet.allOf(java.nio.file.attribute.AclEntryPermission.class)).build()));
+        assertFalse(isProtected(legacy));
+
+        // Someone widens the secrets folder itself: only the unprotected file takes the new entry.
+        run("icacls", secrets.toString(), "/grant", "*S-1-5-32-545:(OI)(CI)R");
+        assertFalse(OwnerOnlyPermissions.isOwnerOnly(legacy), "without protection the grant is inherited");
+        assertTrue(OwnerOnlyPermissions.isOwnerOnly(file), "protected file keeps its owner-only list");
+    }
+
+    private static boolean isProtected(Path path) throws Exception {
+        String literal = path.toString().replace("'", "''");
+        return run("powershell", "-NoProfile", "-NonInteractive", "-Command",
+                "(Get-Acl -LiteralPath '" + literal + "').AreAccessRulesProtected").strip().equalsIgnoreCase("True");
+    }
+
+    private static String run(String... command) throws Exception {
+        Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
+        process.getOutputStream().close();
+        String output = new String(process.getInputStream().readAllBytes(), java.nio.charset.Charset.defaultCharset());
+        assertEquals(0, process.waitFor(), String.join(" ", command) + ": " + output);
+        return output;
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
     void windowsInheritedAccessIsRemoved() throws Exception {
         Path file = Files.writeString(root.resolve("plain.txt"), "x");
         assertFalse(OwnerOnlyPermissions.isOwnerOnly(file), "a temp file normally inherits SYSTEM and Administrators");

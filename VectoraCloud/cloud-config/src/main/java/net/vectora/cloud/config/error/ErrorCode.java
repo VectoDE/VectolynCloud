@@ -24,6 +24,9 @@ public enum ErrorCode {
     FILE_MISSING("The file is missing.", "Die Datei fehlt."),
     /** The file could not be read or written. */
     FILE_ACCESS("The file could not be accessed.", "Auf die Datei konnte nicht zugegriffen werden."),
+    /** A symbolic link, junction, special file or the wrong kind (file for folder) where a real file or folder belongs. */
+    NOT_REGULAR("Must be a regular file or folder, not a symbolic link, junction or special file.",
+            "Muss eine normale Datei bzw. ein normaler Ordner sein, keine symbolische Verknüpfung, kein Junction und keine Spezialdatei."),
     /** The name of a group, task or node file does not match the name pattern. */
     INVALID_FILE_NAME("The file name must match %1$s.", "Der Dateiname muss %1$s entsprechen."),
     /** {@code schema-version} is missing. */

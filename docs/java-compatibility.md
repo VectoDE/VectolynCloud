@@ -15,7 +15,7 @@ The convention plugins in `build-logic/` set the defaults (toolchain 25, release
 | `Build (JDK 25, ubuntu-latest)`, `Build (JDK 25, windows-latest)` | JDK 25, `--release 21` | Java 25 | Full build and every test, on Linux and Windows. Java 25 is the runtime the plugins ship for, because Paper 26.3 needs it. |
 | `Tests on Java 21` | JDK 25, `--release 21` | Java 21 (`-PtestJava=21`) | The compiled code and its resources load and pass their tests on a Java 21 runtime. |
 
-On Java 21 the tests tagged `requires-java25` are skipped. They load paper-api or velocity-api classes (class file version 69), which a Java 21 JVM cannot load. Today these are `PluginDescriptorTest.mainClassIsAJavaPlugin` in both plugin modules, `PortalBridgeTest` (its class under test extends `JavaPlugin`), `PaperBridgeApiTest` and `VelocityBridgeApiTest`. Every module has a `BytecodeLevelTest` that runs on both: it reads a class file without loading it and checks major version 65. The Jazzer fuzz tests in `Vectora-Protocol`, `Vectora-CloudClient`, `cloud-config`, `cloud-template`, `cloud-download`, `cloud-network`, `cloud-database` and `cloud-node` run in regression mode on both runtimes, and so do the loopback tests of the cloud channel.
+On Java 21 the tests tagged `requires-java25` are skipped. They load paper-api or velocity-api classes (class file version 69), which a Java 21 JVM cannot load. Today these are `PluginDescriptorTest.mainClassIsAJavaPlugin` in both plugin modules, `PortalBridgeTest` (its class under test extends `JavaPlugin`), `PaperBridgeApiTest` and `VelocityBridgeApiTest`. Every module has a `BytecodeLevelTest` that runs on both: it reads a class file without loading it and checks major version 65. The Jazzer fuzz tests in `Vectora-Protocol`, `Vectora-CloudClient`, `cloud-config`, `cloud-template`, `cloud-download`, `cloud-network`, `cloud-database`, `cloud-node` and `cloud-console` run in regression mode on both runtimes, and so do the loopback tests of the cloud channel.
 
 Every run uploads the JUnit XML of its tests as an artifact (`junit-xml-ubuntu-latest`, `junit-xml-windows-latest`, `junit-xml-java21`). That shows which tests ran on which runner, including the ones that need POSIX permissions or symlinks and are skipped on Windows.
 
@@ -37,7 +37,8 @@ Locally:
 | `Vectora-Protocol` | 21 | JDK only | Java 21 | no dependencies |
 | `Vectora-CloudClient` | 21 | Vectora-Protocol | Java 21 | runs inside proxies and servers; JDK sockets only, no Netty (see [network.md](cloud/network.md)) |
 | `VectoraCloud/cloud-config`, `cloud-template`, `cloud-download`, `cloud-network`, `cloud-database`, `cloud-launcher` | 21 (`Bootstrap` in `cloud-launcher`: 8) | Jackson 3, Netty 4.2, MariaDB Connector/J 4 (all Java 17 or lower) | Java 21 | |
-| `VectoraCloud/cloud-node` | 21 | as above, plus JLine 3 | Java 21 | JLine `ffm` provider is Java 22+, see below |
+| `VectoraCloud/cloud-console` | 21 | cloud-config, JLine 3 | Java 21 | JLine `ffm` provider only on Java 22+, see below |
+| `VectoraCloud/cloud-node` | 21 | as above, plus JLine 3 | Java 21 | |
 | `VectoraCloud/cloud-bridge-velocity` | 21 | velocity-api 4.3.1 (class files for Java 25) | Java 25 (Velocity 4.3) | uses `disableAutoTargetJvm()` |
 | `VectoraCloud/cloud-bridge-paper` | 21 | paper-api 26.3 (class files for Java 25) | Java 25 (Paper 26.3) | uses `disableAutoTargetJvm()` |
 
@@ -70,10 +71,14 @@ An installed system Java is used if its feature version is exactly the chosen on
 
 ## Marked Java 22+ spot: JLine terminal provider `ffm`
 
-JLine 3 talks to the terminal through a provider. `jline-terminal-ffm` uses the Foreign Function & Memory API, which is final only since Java 22; its classes cannot load on Java 21. It is in the version catalog, but `cloud-node` does not ship it yet.
+JLine 3 talks to the terminal through a provider. `jline-terminal-ffm` uses the Foreign Function & Memory API, which is final only since Java 22; its classes cannot load on Java 21. `cloud-console` ships both `jline-terminal-ffm` and `jline-terminal-jni` and picks one at start (`TerminalSelector`):
 
-- **Java 21 path:** `jline-terminal-jni` (native helper bundled for Windows, Linux and macOS). Without a usable terminal (Docker without TTY, Pterodactyl, systemd) the console falls back to JLine's `dumb` terminal.
-- **Java 22+:** `ffm` may be added as an alternative once the console is built. It must be chosen by a runtime version check (the `@RequiresJava25`-style marking from the policy above, with `jni` as the default), never by class-path order alone, and a test on Java 21 must prove the console still starts there.
+- **Java 22+:** `ffm` first. The choice is a check of the running version (`Runtime.version().feature() >= 22`), never class-path order, so the ffm classes are not even touched on Java 21.
+- **Java 21 path:** `jni` (native helper bundled for Windows, Linux and macOS). If no native provider loads, JLine's `dumb` terminal. Without a terminal at all (Docker without TTY, Pterodactyl, systemd) the console reads stdin line by line.
+- **Tests:** `TerminalSelectorTest.ffmProviderLoadsOnJava25` is tagged `requires-java25` and is skipped on Java 21. On Java 21, `ffmProviderCannotLoadOnJava21` proves the ffm classes do not load there and `detectInATestRunNeverPicksFfmBelowJava22` that the selector never picks them; `jniProviderLoadsOnEveryRuntime` runs on both. The selection logic itself is tested for every combination of version, request and available providers.
+- Both native providers warn on Java 24+ unless native access is allowed. `VectoraCloud.jar` has to carry `Enable-Native-Access: ALL-UNNAMED` in its manifest; the console tests pass `--enable-native-access=ALL-UNNAMED`.
+
+See [console.md](cloud/console.md#terminal).
 
 ## Why paper-api 26.3 does not force release 25
 

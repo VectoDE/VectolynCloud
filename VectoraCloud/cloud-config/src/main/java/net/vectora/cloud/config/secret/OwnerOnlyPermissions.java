@@ -1,6 +1,7 @@
 package net.vectora.cloud.config.secret;
 
 import java.io.IOException;
+import java.io.InterruptedIOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -15,7 +16,9 @@ import java.nio.file.attribute.PosixFilePermissions;
 import java.nio.file.attribute.UserPrincipal;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Restricts files and folders to their owner.
@@ -24,9 +27,9 @@ import java.util.Set;
  *   <li>POSIX (Linux, macOS): folders {@code 700}, files {@code 600}.</li>
  *   <li>Windows (ACL): the access list is replaced by a single entry that gives the owner full
  *       control; on folders it is inherited by new files. Inherited entries of the parent folder
- *       (for example "Users: read") are dropped. Note: Windows applies this as an explicit list but
- *       does not mark it protected, so an administrator who later re-applies inheritance on a parent
- *       folder can widen it again.</li>
+ *       (for example "Users: read") are dropped. The list is then marked protected
+ *       ({@code icacls /inheritance:d}), so entries an administrator later adds to a parent folder
+ *       are not inherited. Java's ACL API cannot set that flag itself.</li>
  *   <li>Other file systems (FAT, some network shares): nothing can be restricted;
  *       {@link #isOwnerOnly(Path)} then returns {@code false}.</li>
  * </ul>
@@ -80,6 +83,45 @@ public final class OwnerOnlyPermissions {
                 entry.setFlags(AclEntryFlag.FILE_INHERIT, AclEntryFlag.DIRECTORY_INHERIT);
             }
             acl.setAcl(List.of(entry.build()));
+            if (isWindows()) {
+                protectAcl(path);
+            }
+        }
+    }
+
+    private static boolean isWindows() {
+        return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).startsWith("windows");
+    }
+
+    /**
+     * Marks the access list of {@code path} protected, so it no longer takes entries inherited from
+     * the parent folder. {@code /inheritance:d} keeps the current entries as explicit ones. It must
+     * not be {@code /inheritance:r}: when the parent folder already passes the same owner entry
+     * down, Windows records the entry set by {@link AclFileAttributeView#setAcl} as inherited, and
+     * {@code /inheritance:r} would leave an empty list that locks out the owner too. Java's
+     * {@code setAcl} clears the flag on files again, so this runs after it. icacls is called by its full path in
+     * {@code %SystemRoot%\System32}, without a shell; the path is a single argument.
+     */
+    private static void protectAcl(Path path) throws IOException {
+        String systemRoot = System.getenv("SystemRoot");
+        Path icacls = Path.of(systemRoot == null || systemRoot.isBlank() ? "C:\\Windows" : systemRoot, "System32", "icacls.exe");
+        Process process = new ProcessBuilder(icacls.toString(), path.toAbsolutePath().toString(), "/inheritance:d", "/q")
+                .redirectErrorStream(true)
+                .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                .start();
+        try {
+            process.getOutputStream().close();
+            if (!process.waitFor(30, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                throw new IOException("icacls did not finish in time while protecting " + path);
+            }
+        } catch (InterruptedException e) {
+            process.destroyForcibly();
+            Thread.currentThread().interrupt();
+            throw new InterruptedIOException("interrupted while protecting " + path);
+        }
+        if (process.exitValue() != 0) {
+            throw new IOException("icacls could not protect the access list of " + path + " (exit code " + process.exitValue() + ")");
         }
     }
 

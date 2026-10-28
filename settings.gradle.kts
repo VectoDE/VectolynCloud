@@ -39,6 +39,7 @@ include(
     "VectoraCloud:cloud-template",
     "VectoraCloud:cloud-download",
     "VectoraCloud:cloud-network",
+    "VectoraCloud:cloud-console",
     "VectoraCloud:cloud-database",
     "VectoraCloud:cloud-node",
     "VectoraCloud:cloud-bridge-velocity",

@@ -115,6 +115,50 @@ class ConfigServiceTest {
     }
 
     @Test
+    void nestedApplyFromAListenerKeepsTheEventOrderForEveryListener() throws Exception {
+        try (ConfigService service = ConfigService.open(CloudHome.of(root))) {
+            List<String> first = new CopyOnWriteArrayList<>();
+            List<String> second = new CopyOnWriteArrayList<>();
+            // The first listener reacts to the EULA by switching the language, inside the callback.
+            service.addListener(change -> {
+                first.add(describe(change));
+                if (change.operations().contains(new AcceptEula())) {
+                    try {
+                        ConfigChanged nested = service.apply(new SetLanguage(Language.DE));
+                        assertEquals(Set.of("cloud.yml"), nested.files(), "the nested change is applied at once");
+                        assertEquals(Language.DE, service.snapshot().cloud().language());
+                    } catch (ConfigException | IOException e) {
+                        throw new AssertionError(e);
+                    }
+                }
+            });
+            service.addListener(change -> second.add(describe(change)));
+
+            service.apply(new AcceptEula());
+
+            List<String> expected = List.of("eula", "language");
+            assertEquals(expected, first);
+            assertEquals(expected, second, "a later listener must not see the nested change first");
+        }
+    }
+
+    @Test
+    void withoutNestingEventsStillArriveOnePerChange() throws Exception {
+        // Counter-check for the queue: two plain changes give two events, in order, to each listener.
+        try (ConfigService service = ConfigService.open(CloudHome.of(root))) {
+            List<String> events = new CopyOnWriteArrayList<>();
+            service.addListener(change -> events.add(describe(change)));
+            service.apply(new AcceptEula());
+            service.apply(new SetLanguage(Language.DE));
+            assertEquals(List.of("eula", "language"), events);
+        }
+    }
+
+    private static String describe(ConfigChanged change) {
+        return change.operations().getFirst() instanceof AcceptEula ? "eula" : "language";
+    }
+
+    @Test
     void concurrentChangesAreSerialized() throws Exception {
         try (ConfigService service = ConfigService.open(CloudHome.of(root))) {
             int groups = 8;
