@@ -87,7 +87,7 @@ Values follow the file rules: `true` or `false` only, whole numbers, enum values
 | `group info <name>` | All fields of one group. |
 | `group create <name> <template> <software> <minecraft-version>` | New `groups/<name>.yml` with `java: auto`, heap 512M to 1G, combat `legacy` for `pandaspigot`, otherwise `modern`. Fails if the group exists. |
 | `group set <name> <field> <value>` | Fields: `template`, `software`, `minecraft-version`, `java`, `heap.min`, `heap.max`, `combat`. |
-| `group delete <name>`, `group remove <name>` | Deletes the file. Fails while a task uses the group. |
+| `group delete <name> [--yes]`, `group remove <name> [--yes]` | Deletes the file after asking. Fails while a task uses the group. |
 | `group wanted <name> <on\|off>` | Switches the server kind of the group in `cloud.yml` (`servers:`). |
 
 ### `task`
@@ -98,8 +98,10 @@ Values follow the file rules: `true` or `false` only, whole numbers, enum values
 | `task info <name>` | All fields of one task. |
 | `task create <name> <group> [static\|dynamic]` | New `tasks/<name>.yml` with one service on any node. The group must exist. |
 | `task set <name> <field> <value>` | Fields: `group`, `mode`, `min-services`, `max-services`, `players-per-service`, `scale-up-at`, `scale-down-after`, `cooldown`, `nodes` (comma list, `""` for any node). |
-| `task delete <name>`, `task remove <name>` | Deletes the file. |
+| `task delete <name> [--yes]`, `task remove <name> [--yes]` | Deletes the file after asking. |
 | `task wanted <name> <on\|off>` | Switches the server kind of the task's group. |
+
+Before deleting, the console checks the deletion with the same rules as `ConfigService.apply` and then asks `Really delete groups/<name>.yml? [y/N]`. Enter, `n` or Ctrl+C keep the file. Without a terminal the next line of stdin is the answer. Scripts skip the question with `--yes` or `-y` after the name.
 
 `wanted` is stored per server kind, not per group: a group belongs to the kind whose template folder it uses (`Lobby-Server` is `lobby`). Switching it affects every group with that template. A group with another template has no switch; the command says so.
 

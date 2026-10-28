@@ -57,7 +57,7 @@ Werte wie in der Datei: nur `true` oder `false`, ganze Zahlen, Enum-Werte klein 
 | `group info <Name>` | Alle Felder einer Gruppe. |
 | `group create <Name> <Template> <Software> <Minecraft-Version>` | Neue `groups/<Name>.yml` mit `java: auto`, Heap 512M bis 1G, Kampfsystem `legacy` bei `pandaspigot`, sonst `modern`. Scheitert, wenn es die Gruppe schon gibt. |
 | `group set <Name> <Feld> <Wert>` | Felder: `template`, `software`, `minecraft-version`, `java`, `heap.min`, `heap.max`, `combat`. |
-| `group delete <Name>`, `group remove <Name>` | Löscht die Datei. Scheitert, solange ein Task die Gruppe nutzt. |
+| `group delete <Name> [--yes]`, `group remove <Name> [--yes]` | Löscht die Datei nach Rückfrage. Scheitert, solange ein Task die Gruppe nutzt. |
 | `group wanted <Name> <on\|off>` | Schaltet die Serverart der Gruppe in `cloud.yml` (`servers:`) ein oder aus. |
 
 ### `task`
@@ -68,8 +68,10 @@ Werte wie in der Datei: nur `true` oder `false`, ganze Zahlen, Enum-Werte klein 
 | `task info <Name>` | Alle Felder eines Tasks. |
 | `task create <Name> <Gruppe> [static\|dynamic]` | Neue `tasks/<Name>.yml` mit einem Dienst auf beliebigem Node. Die Gruppe muss existieren. |
 | `task set <Name> <Feld> <Wert>` | Felder: `group`, `mode`, `min-services`, `max-services`, `players-per-service`, `scale-up-at`, `scale-down-after`, `cooldown`, `nodes` (Liste mit Kommas, `""` für beliebigen Node). |
-| `task delete <Name>`, `task remove <Name>` | Löscht die Datei. |
+| `task delete <Name> [--yes]`, `task remove <Name> [--yes]` | Löscht die Datei nach Rückfrage. |
 | `task wanted <Name> <on\|off>` | Schaltet die Serverart der Gruppe des Tasks ein oder aus. |
+
+Vor dem Löschen prüft die Konsole, ob es nach denselben Regeln wie `ConfigService.apply` klappen würde, und fragt dann `groups/<Name>.yml wirklich löschen? [j/N]`. Enter, `n` oder Strg+C lassen die Datei stehen. Ohne Terminal gilt die nächste Zeile von stdin als Antwort. In Skripten entfällt die Frage mit `--yes` oder `-y` hinter dem Namen.
 
 `wanted` gilt je Serverart, nicht je Gruppe. Eine Gruppe gehört zu der Serverart, deren Template-Ordner sie nutzt (`Lobby-Server` ist `lobby`). Der Schalter wirkt also auf alle Gruppen mit diesem Template. Für eine Gruppe mit anderem Template gibt es keinen Schalter, der Befehl meldet das.
 

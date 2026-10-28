@@ -19,6 +19,7 @@ import net.vectora.cloud.console.Console;
 import net.vectora.cloud.console.FakeTerminal;
 import net.vectora.cloud.console.command.CommandDispatcher;
 import net.vectora.cloud.console.command.CommandDispatcher.Outcome;
+import net.vectora.cloud.console.terminal.ConsoleTerminal.LineKind;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -167,8 +168,69 @@ class BuiltinCommandsTest {
         assertEquals(Outcome.DONE, run("group wanted lobby on"));
         assertTrue(config.snapshot().cloud().servers().isWanted(ServerKind.LOBBY));
 
-        assertEquals(Outcome.DONE, run("group delete lobby"));
+        assertEquals(Outcome.DONE, run("group delete lobby --yes"));
         assertFalse(Files.exists(home.resolve("groups/lobby.yml")));
+    }
+
+    @Test
+    void deleteAsksFirstAndEnterOrNoKeepsTheFile() throws Exception {
+        run("group create lobby Lobby-Server paper 26.3");
+        run("task create lobby lobby");
+        Path group = home.resolve("groups/lobby.yml");
+        Path task = home.resolve("tasks/lobby.yml");
+
+        terminal.type("n");
+        assertEquals(Outcome.DONE, run("task delete lobby"));
+        assertTrue(Files.exists(task), "no keeps the file");
+        assertEquals("Really delete tasks/lobby.yml? [y/N]: ", terminal.reads().getLast().prompt());
+        assertEquals(LineKind.ANSWER, terminal.reads().getLast().kind());
+        assertTrue(terminal.output().contains("Nothing was deleted."), terminal.output());
+
+        terminal.type("");
+        assertEquals(Outcome.DONE, run("task remove lobby"));
+        assertTrue(Files.exists(task), "Enter means no");
+
+        terminal.interrupt();
+        assertEquals(Outcome.CANCELLED, run("task delete lobby"));
+        assertTrue(Files.exists(task), "Ctrl+C keeps the file");
+
+        terminal.type("y");
+        assertEquals(Outcome.DONE, run("task delete lobby"));
+        assertFalse(Files.exists(task));
+        assertTrue(terminal.output().contains("Deleted: tasks/lobby.yml"), terminal.output());
+
+        terminal.type("ja");
+        assertEquals(Outcome.DONE, run("group delete lobby"));
+        assertFalse(Files.exists(group));
+        assertEquals(0, terminal.pending());
+    }
+
+    @Test
+    void deleteWithYesSkipsTheQuestionForScripts() throws Exception {
+        run("group create lobby Lobby-Server paper 26.3");
+        run("group create hub Lobby-Server paper 26.3");
+        int reads = terminal.reads().size();
+        assertEquals(Outcome.DONE, run("group delete lobby -y"));
+        assertEquals(Outcome.DONE, run("group delete hub --yes"));
+        assertEquals(reads, terminal.reads().size(), "nothing was asked");
+        assertTrue(config.snapshot().groups().isEmpty());
+    }
+
+    @Test
+    void deleteRefusesOtherFlagsAndChecksBeforeAsking() throws Exception {
+        run("group create lobby Lobby-Server paper 26.3");
+        run("task create lobby lobby");
+        int reads = terminal.reads().size();
+
+        assertEquals(Outcome.FAILED, run("group delete lobby --force"));
+        assertTrue(terminal.output().contains("Only --yes or -y may follow the name."), terminal.output());
+        assertEquals(Outcome.FAILED, run("group delete lobby"), "a task still uses the group");
+        assertEquals(Outcome.FAILED, run("group delete nobody"));
+        assertEquals(Outcome.FAILED, run("task delete nobody --yes"));
+        assertTrue(terminal.output().contains("Task \"nobody\" does not exist."), terminal.output());
+        assertEquals(reads, terminal.reads().size(), "a deletion that cannot work is not asked about");
+        assertTrue(Files.exists(home.resolve("groups/lobby.yml")));
+        assertTrue(Files.exists(home.resolve("tasks/lobby.yml")));
     }
 
     @Test
@@ -205,10 +267,10 @@ class BuiltinCommandsTest {
         assertEquals(Outcome.DONE, run("task wanted lobby off"));
         assertFalse(config.snapshot().cloud().servers().isWanted(ServerKind.LOBBY));
 
-        assertEquals(Outcome.FAILED, run("group delete lobby"), "a task still uses the group");
+        assertEquals(Outcome.FAILED, run("group delete lobby --yes"), "a task still uses the group");
         assertTrue(Files.exists(home.resolve("groups/lobby.yml")));
-        assertEquals(Outcome.DONE, run("task delete lobby"));
-        assertEquals(Outcome.DONE, run("group delete lobby"));
+        assertEquals(Outcome.DONE, run("task delete lobby --yes"));
+        assertEquals(Outcome.DONE, run("group delete lobby --yes"));
         terminal.clearOutput();
         run("task list");
         assertTrue(terminal.output().contains("No tasks yet."));

@@ -29,11 +29,15 @@ import net.vectora.cloud.config.operation.RemoveGroup;
 import net.vectora.cloud.config.operation.RemoveTask;
 import net.vectora.cloud.config.operation.SetServerWanted;
 import net.vectora.cloud.config.validation.ConfigNames;
+import net.vectora.cloud.config.validation.ConfigValidator;
 import net.vectora.cloud.console.ConsoleOutput;
 import net.vectora.cloud.console.Text;
 import net.vectora.cloud.console.command.Argument;
 import net.vectora.cloud.console.command.Command;
+import net.vectora.cloud.console.command.CommandContext;
 import net.vectora.cloud.console.command.CommandException;
+import net.vectora.cloud.console.prompt.PromptCancelledException;
+import net.vectora.cloud.console.prompt.Question;
 
 /**
  * {@code group} and {@code task}: list, show, create, change, delete and switch {@code wanted}.
@@ -54,6 +58,7 @@ final class GroupCommands {
     private static final List<String> TASK_FIELDS = List.of("group", "mode", "min-services", "max-services",
             "players-per-service", "scale-up-at", "scale-down-after", "cooldown", "nodes");
     private static final List<String> ON_OFF = List.of("on", "off");
+    private static final List<String> YES_FLAGS = List.of("--yes", "-y");
 
     private GroupCommands() {
     }
@@ -107,12 +112,18 @@ final class GroupCommands {
                         }))
                 .subcommand(Command.builder("delete")
                         .aliases("remove")
-                        .description(Text.of("Deletes a group; no task may use it.", "Löscht eine Gruppe; kein Task darf sie nutzen."))
+                        .description(Text.of("Deletes a group after asking; no task may use it.",
+                                "Löscht eine Gruppe nach Rückfrage; kein Task darf sie nutzen."))
                         .argument(name)
+                        .argument(confirmation())
                         .executes(context -> {
                             String group = context.argument("name");
-                            ConfigChanged change = config.apply(new RemoveGroup(group));
-                            BuiltinCommands.report(context.out(), change, CloudHome.groupFileName(group));
+                            RemoveGroup removal = new RemoveGroup(group);
+                            if (!confirmDelete(context, config.snapshot(), removal, CloudHome.groupFileName(group))) {
+                                return;
+                            }
+                            ConfigChanged change = config.apply(removal);
+                            reportDeleted(context.out(), change, CloudHome.groupFileName(group));
                         }))
                 .subcommand(Command.builder("wanted")
                         .description(Text.of("Switches the server kind of the group on or off (cloud.yml servers:).",
@@ -176,12 +187,17 @@ final class GroupCommands {
                         }))
                 .subcommand(Command.builder("delete")
                         .aliases("remove")
-                        .description(Text.of("Deletes a task.", "Löscht einen Task."))
+                        .description(Text.of("Deletes a task after asking.", "Löscht einen Task nach Rückfrage."))
                         .argument(name)
+                        .argument(confirmation())
                         .executes(context -> {
                             String task = context.argument("name");
-                            ConfigChanged change = config.apply(new RemoveTask(task));
-                            BuiltinCommands.report(context.out(), change, CloudHome.taskFileName(task));
+                            RemoveTask removal = new RemoveTask(task);
+                            if (!confirmDelete(context, config.snapshot(), removal, CloudHome.taskFileName(task))) {
+                                return;
+                            }
+                            ConfigChanged change = config.apply(removal);
+                            reportDeleted(context.out(), change, CloudHome.taskFileName(task));
                         }))
                 .subcommand(Command.builder("wanted")
                         .description(Text.of("Switches the server kind of the task's group on or off.",
@@ -197,6 +213,51 @@ final class GroupCommands {
                             BuiltinCommands.report(context.out(), change, "servers." + kind.key() + " = " + wanted);
                         }))
                 .build();
+    }
+
+    // ---- deleting -------------------------------------------------------------------------------
+
+    /** The optional {@code --yes} after the name of {@code group delete} and {@code task delete}. */
+    private static Argument confirmation() {
+        return Argument.optional("confirm", Text.of("--yes or -y deletes without asking (for scripts)",
+                "--yes oder -y löscht ohne Rückfrage (für Skripte)")).suggest(YES_FLAGS);
+    }
+
+    /**
+     * Whether a deletion may go ahead. Refuses anything but {@code --yes} or {@code -y} after the
+     * name. Then checks the deletion against the current configuration with the
+     * same rules {@link ConfigService#apply} uses, so nobody confirms a deletion that would fail
+     * anyway (unknown name, group still used by a task). Then, unless {@code --yes} or {@code -y}
+     * was given, asks; Enter means no. A cancelled question ends the command as cancelled.
+     */
+    static boolean confirmDelete(CommandContext context, ConfigSnapshot snapshot, ConfigOperation removal, String file)
+            throws ConfigException, CommandException, PromptCancelledException {
+        Optional<String> flag = context.optional("confirm");
+        if (flag.isPresent() && !YES_FLAGS.contains(flag.get())) {
+            throw new CommandException(Text.of("Only --yes or -y may follow the name.",
+                    "Nach dem Namen ist nur --yes oder -y erlaubt."));
+        }
+        List<ConfigError> errors = ConfigValidator.validate(removal.apply(snapshot));
+        if (!errors.isEmpty()) {
+            throw new ConfigException(errors);
+        }
+        if (flag.isPresent()) {
+            return true;
+        }
+        boolean delete = context.prompter().ask(Question.yesNo(Text.of("Really delete " + file + "?",
+                file + " wirklich löschen?")).defaultValue(false));
+        if (!delete) {
+            context.out().println(Text.of("Nothing was deleted.", "Es wurde nichts gelöscht."));
+        }
+        return delete;
+    }
+
+    private static void reportDeleted(ConsoleOutput out, ConfigChanged change, String file) {
+        if (change.isEmpty()) {
+            out.println(Text.of("Unchanged: %1$s", "Unverändert: %1$s"), file);
+        } else {
+            out.success(Text.of("Deleted: %1$s", "Gelöscht: %1$s"), file);
+        }
     }
 
     // ---- changes --------------------------------------------------------------------------------
