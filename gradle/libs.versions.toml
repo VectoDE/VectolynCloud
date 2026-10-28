@@ -1,7 +1,7 @@
 [versions]
 # Keep in step with the Paper build that runs on the backends (Server-Network/*/runtime/paper.jar).
 paper-api = "26.3.build.226-stable"
-junit = "5.14.4"
+junit = "6.1.3"
 snakeyaml = "2.7"
 
 [libraries]
