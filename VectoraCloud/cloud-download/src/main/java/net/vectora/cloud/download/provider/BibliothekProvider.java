@@ -128,7 +128,7 @@ public final class BibliothekProvider implements ArtifactProvider {
         Map<String, String> metadata = new LinkedHashMap<>();
         metadata.put("download", key);
         return new ResolvedArtifact(new ArtifactCoordinate(id, project, version, Long.toString(build)), url,
-                download.name(), Optional.of(download.sha256()), OptionalLong.empty(), OptionalInt.empty(), metadata);
+                ApiSupport.fileName(download.name(), id), Optional.of(download.sha256()), OptionalLong.empty(), OptionalInt.empty(), metadata);
     }
 
     private static long parseBuildNumber(String build) {

@@ -1,6 +1,6 @@
 # Downloads
 
-`VectoraCloud/cloud-download` (`net.vectora.cloud.download`) fetches server software, plugins, mods and the MariaDB server, checks every file against a checksum and keeps it in a content-addressed cache. `software.lock.yml` records exactly which file each name stands for. JREs from Adoptium follow in a later pull request as one more provider.
+`VectoraCloud/cloud-download` (`net.vectora.cloud.download`) fetches server software, plugins, mods and the MariaDB server, checks every file against a checksum and keeps it in a content-addressed cache. `software.lock.yml` records exactly which file each name stands for. The `jre` package picks the Java runtime for each server group and installs Temurin from Adoptium where no fitting system Java exists ([JRE management](#jre-management)).
 
 The module uses the JDK `HttpClient` and Jackson 3. It has no other dependencies.
 
@@ -14,6 +14,7 @@ The module uses the JDK `HttpClient` and Jackson 3. It has no other dependencies
 | `lock` | `SoftwareLock`, `LockedArtifact`, `SoftwareLockFile` (YAML) |
 | `catalog` | `ArtifactCatalog`, read from `catalog.yml` on the class path |
 | `archive` | `SafeExtractor` for zip and tar.gz, `TarReader` |
+| `jre` | `JavaRequirement` (which Java a group gets), `SystemJavaFinder`, `JreInstaller` (`<home>/jre/`), `JreManager` (entry point for `cloud-node`), `JavaRuntime` |
 | `hash` | `Checksum`, `HashAlgorithm`, `MultiDigest` |
 
 ## HTTP rules
@@ -40,12 +41,14 @@ All providers implement `ArtifactProvider.resolve(ArtifactRequest) → ResolvedA
 | `modrinth` | `/v2/project/{slug}/version?loaders=[..]&game_versions=[..]&include_changelog=false` | `api.modrinth.com`, `cdn.modrinth.com` | sha512 (sha1 is also listed; the stronger one is used) | `project` (slug), `platform` = loader, `gameVersion`, `version` (exact `version_number`), `channel` (`release` by default) |
 | `hangar` | `/api/v1/projects/{slug}/versions?platform=..&platformVersion=..&channel=Release`, `/versions/{name}` | `hangar.papermc.io`, `hangarcdn.papermc.io` | sha256 | `project`, `platform` (`PAPER`, `VELOCITY`, `WATERFALL`), `gameVersion`, `version`, `channel`. Versions that only link to an external site have no checksum and are refused. |
 | `mariadb` | `downloads.mariadb.org/rest-api/mariadb/`, `/{series}/latest/`, `/{release}/` | `downloads.mariadb.org`, `archive.mariadb.org` | sha512 (sha1, sha256 and sha512 are listed) | `version` (`11.8.9`, `11.8` or empty for the newest stable LTS series), `system` |
+| `adoptium` | Adoptium API v3: `/v3/assets/latest/{feature}/hotspot`, `/v3/assets/release_name/eclipse/{release}` | `api.adoptium.net`, `github.com`, `objects.githubusercontent.com`, `release-assets.githubusercontent.com` | sha256 | `project` (`temurin`), `version` (feature version 8 to 99, required), `system`, options `image-type` (`jre` or `jdk`) and `release` (for example `jdk-21.0.13+9`) |
 
 Notes:
 
 - **MariaDB** resolves only. Windows x64 gets the zip, Linux x86_64 with glibc the `linux-systemd` tar.gz. Every other platform gets an `ArtifactNotAvailableException` that names the platform and points to the Docker mode or an external server. The API lists `http://` URLs. They are rewritten to `https://` and get `?mirror=archive`, because the default redirect goes to a geo-selected third-party mirror (`mirror.wtnet.de` from Germany) that no allowlist can know in advance. With `mirror=archive` the redirect goes to `archive.mariadb.org`.
 - **Fabric** publishes no checksum for the server launcher. See trust on first use below.
-- **Adoptium** comes as another `ArtifactProvider`. `ArtifactRequest` already carries what it needs: `system` (OS, CPU, C library) and free `options` such as `image-type`.
+- **Adoptium** resolves Eclipse Temurin (HotSpot, normal heap). Windows gets the zip (not the MSI), Linux and macOS the tar.gz; musl Linux maps to Adoptium's `alpine-linux`. Supported are x64 and aarch64 on Windows, Linux and macOS; anything else gets an `ArtifactNotAvailableException` that says to install Java by hand. Without `image-type` a JRE is preferred and a JDK is taken only if Adoptium has no JRE for that platform (Java 8 on macOS aarch64 is such a case). The coordinate is `adoptium:temurin:<openjdk version>#<os>-<arch>-<image type>`, so each platform is its own artifact. The download link is the GitHub release of `adoptium/temurin<N>-binaries`, which redirects to `release-assets.githubusercontent.com`. Checked on 2026-10-28: a JRE exists for 21 and 25 on all five platforms the cloud supports.
+- **File names** from an API must be plain base names: no `/`, `\`, `:`, `..`, control characters, `* ? " < > |`, trailing dot or space, and no Windows device name such as `nul` or `com1.jar` (`FileNames`). Anything else is a `MalformedResponseException`. `software.lock.yml` applies the same rule to `file-name`.
 
 ## Download flow
 
@@ -61,7 +64,9 @@ Two more checks:
 - If the lockfile has an entry for the same coordinate and the source now publishes a different checksum for it, the download fails. A published build must not change.
 - `download(lockedEntry)` replays a lock entry without asking the API: same URL, same checksum.
 
-`ArtifactCache.copyTo(sha256, target)` places a cached file into a server directory through a temporary file and an atomic move.
+`ArtifactCache.copyTo(sha256, target)` places a cached file into a server directory through a temporary file and an atomic move. It computes the SHA-256 again while copying. If the cache file has changed since it was stored, it is deleted, the target stays as it was and a `ChecksumMismatchException` is thrown; the next download fetches the file again.
+
+A download that is cut off (crash, killed process) can leave a `download-*.part` file in `cache/artifacts/`. Before each download, `ArtifactCache.removeStalePartFiles()` deletes every part file that no download in this JVM is writing. Only one cloud process uses a home at a time, so such a file is always orphaned. The cloud can also call the method at startup.
 
 ### Trust on first use
 
@@ -114,7 +119,7 @@ artifacts:
 | `artifacts.<name>` | One entry per name: lower case, digits, `.` and `-`, at most 64 characters. Usually the catalog id. |
 | `provider`, `project`, `version`, `build` | The coordinate. `build` is missing for sources without builds (Modrinth, Hangar, Mojang, MariaDB). |
 | `url` | HTTPS URL the file was downloaded from. |
-| `file-name` | File name at the source. |
+| `file-name` | File name at the source, a plain base name (see the notes on providers). |
 | `hash-type`, `hash` | The checksum the file was verified with: the strongest one the source offers (`sha1`, `sha256` or `sha512`). For `tofu` the pinned SHA-256. |
 | `sha256` | SHA-256 of the file, its name in `cache/artifacts/`. |
 | `trust` | `source` (checksum from the source) or `tofu` (pinned on first use). |
@@ -167,7 +172,7 @@ Every catalog entry has a source with a checksum except the Fabric launcher. A H
 
 ## Safe extraction
 
-`SafeExtractor` unpacks zip (MariaDB on Windows, later JREs) and tar.gz (MariaDB on Linux, later JREs) into a directory that does not exist or is empty.
+`SafeExtractor` unpacks zip (MariaDB and JREs on Windows) and tar.gz (MariaDB and JREs on Linux and macOS) into a directory that does not exist or is empty.
 
 - Entry names must be relative, use `/` and contain no `..`, `\`, `:` or NUL. Anything else is refused (zip slip).
 - Symbolic links (TAR only) are created after all files, so no file is ever written through a link. A link target must be relative and stay inside the directory: first checked on the path, then on the real path right after the link is created, and once more when all links exist. That catches chains such as `x -> .` plus `a -> x/..`. A target whose missing part contains `..` (`nonexist/../x`) is refused, because the kernel would resolve it only once that part exists.
@@ -184,8 +189,8 @@ Every catalog entry has a source with a checksum except the Fabric launcher. A H
 
 - Unit tests run without a network. `FakeTransport` replaces the HTTP layer; the provider tests use stored API answers under `src/test/resources/net/vectora/cloud/download/provider/`, saved on 2026-10-28 and trimmed.
 - Covered: wrong hash aborts and deletes, redirect to a foreign host or to HTTP, zip slip and tar slip, zip bomb by size and by entry count, links out of the target (also as chains), TOFU mismatch and a TOFU pin that stays binding once the source publishes a checksum, rate limits with `Retry-After`, lockfile round trip and rollback, catalog content.
-- Fuzz tests (Jazzer, regression mode in every test run, fuzzing at night): `TarReaderFuzzTest`, `ProviderJsonFuzzTest` (every JSON mapper) and `SoftwareLockFileFuzzTest`. Seeds include TAR files written by Python's `tarfile` in ustar, GNU and pax format.
-- Five tests need symlinks or POSIX permissions and are skipped on Windows; CI runs them on Linux.
+- Fuzz tests (Jazzer, regression mode in every test run, fuzzing at night): `TarReaderFuzzTest`, `ProviderJsonFuzzTest` (every JSON mapper, Adoptium included), `SoftwareLockFileFuzzTest` and `JreFilesFuzzTest` (`release` file, `-XshowSettings` output, install marker). Seeds include TAR files written by Python's `tarfile` in ustar, GNU and pax format.
+- Seven tests need symlinks or POSIX permissions and are skipped on Windows; CI runs them on Linux. The CI uploads the JUnit XML of every test run as an artifact (`junit-xml-ubuntu-latest`, `junit-xml-windows-latest`, `junit-xml-java21`), so it is visible there which tests ran and which were skipped.
 
 ### Live smoke test
 
@@ -195,4 +200,48 @@ Every catalog entry has a source with a checksum except the Fabric launcher. A H
 ./gradlew :VectoraCloud:cloud-download:networkTest
 ```
 
-It resolves Paper 26.3, Velocity, the Fabric launcher for 26.3, PandaSpigot, Geyser and Floodgate for Velocity, ViaVersion from Modrinth and from Hangar, Lithium, MariaDB for Windows and Linux and Mojang's Java version for 26.3. For each artifact it opens the download URL through the real client, so the redirect chain is checked against the allowlist too. Then it downloads Chunky (sha512) and the Fabric launcher (TOFU), checks both, downloads them a second time against the lockfile and writes a lockfile. The summary goes to `build/network-smoke.txt`.
+It resolves Paper 26.3, Velocity, the Fabric launcher for 26.3, PandaSpigot, Geyser and Floodgate for Velocity, ViaVersion from Modrinth and from Hangar, Lithium, MariaDB for Windows and Linux, Mojang's Java version for 26.3 and the Temurin JREs 21 and 25 for Windows x64, Linux x64 and aarch64 and macOS x64 and aarch64. For each artifact it opens the download URL through the real client, so the redirect chain is checked against the allowlist too. Then it downloads Chunky (sha512) and the Fabric launcher (TOFU), checks both, downloads them a second time against the lockfile and writes a lockfile. Last, `JreManager` downloads the JRE 21 for the machine it runs on, unpacks it into `jre/` and runs `java -version` from it. The summary goes to `build/network-smoke.txt`.
+
+The workflow `.github/workflows/network-smoke.yml` runs it every week, on demand and on pull requests that change the workflow or the test. It uploads the summary and the JUnit XML as the artifact `network-smoke`.
+
+## JRE management
+
+The `jre` package gives each server group a Java runtime. `cloud-node` calls one method and gets the path of `java` back:
+
+```java
+JavaRequirement requirement = JavaRequirement.forGroup(group.software(), minimum, group.java().major());
+JavaRuntime java = jreManager.provide(requirement);   // java.executable() goes into the ProcessBuilder
+```
+
+### Which Java a group gets
+
+`JavaRequirement.choose()`:
+
+1. `java: <major>` in the group file wins, unless it is below the minimum. Then the group fails with a `JreException` that names both versions, because the server would not start anyway.
+2. Legacy groups (`software: pandaspigot`, the 1.8.8 groups) get Java 21. PandaSpigot runs on 25 too, but Netty prints a `sun.misc.Unsafe` warning there ([Legacy 1.8.8 groups](legacy-1.8.8.md)).
+3. Every other group gets Java 25.
+4. If the minimum is higher than that, the minimum wins.
+
+The minimum is Mojang's `javaVersion.majorVersion` (`MojangProvider.javaMajorVersion`) or Fill's `java.version.minimum` (`ResolvedArtifact.javaMinimum()`); with both, `JavaRequirement.minimumOf` takes the higher one. The table per software is in [Java compatibility](../java-compatibility.md#jres-for-the-servers).
+
+### Where the runtime comes from
+
+`JreManager.provide(feature)` tries, in this order:
+
+1. **System Java** (`SystemJavaFinder`, can be switched off by passing `null`): `JAVA_HOME`, then each `java` on the `PATH`. The `release` file in the Java home tells the version without starting a JVM. Only a `java` without one (a launcher stub such as Oracle's `javapath`) is run with `java -XshowSettings:properties -version`, with a 15 s timeout. A runtime counts if its feature version is exactly the wanted one and its `OS_ARCH`/`os.arch` fits the machine. Java 26 does not stand in for 25, and 25 not for 21. Relative `PATH` entries are skipped, so a `java` in the working directory is never started.
+2. **The managed runtime from before**, if its marker names the archive that `software.lock.yml` pins under `jre-temurin-<feature>-<os>-<arch>` (plus `-musl` on musl Linux). No network access.
+3. **A download.** With a lock entry the pinned archive is downloaded again, without asking the API. Without one, the newest Temurin JRE of that feature version is resolved, downloaded, installed and then pinned with `trust: source`.
+
+`JreManager.update(feature)` resolves the newest release. If it differs from the pinned one, it is installed and pinned; `previous` in the lockfile keeps the old entry for a rollback.
+
+### Layout and installation
+
+Runtimes live in `<home>/jre/<vendor>-<feature>-<os>-<arch>/`, for example `jre/temurin-21-linux-x64/` or `jre/temurin-25-windows-x64/`. `JreInstaller.install`:
+
+1. unpacks the verified archive with `SafeExtractor` into `jre/.staging-<name>-*`, so the zip-slip, link and size rules above apply. TAR permission bits are kept, so `bin/java` stays executable on Linux and macOS;
+2. finds the Java home: the archive root, its single top-level directory, or `Contents/Home` below it (macOS);
+3. checks that `release` names the expected feature version, that `bin/java` (`bin\java.exe` on Windows) is a regular file and, for a Linux or macOS runtime on a POSIX file system, executable (a Windows zip has no permission bits, and `java.exe` needs none);
+4. writes `.vectora-jre.properties` (SHA-256 of the archive, relative Java home, version);
+5. moves the staging directory into place. An older install is moved to `jre/.old-<name>-*` first and deleted. If a running server still holds files there (Windows), it is removed on the next install, together with any staging directory an interrupted install left.
+
+If a step fails, the staging directory is deleted and an existing install stays as it was. A marker whose Java home points outside its directory is ignored, and the runtime is installed again.

@@ -99,7 +99,7 @@ public final class HangarProvider implements ArtifactProvider {
         Map<String, String> metadata = new LinkedHashMap<>();
         metadata.put("platform", platform);
         return new ResolvedArtifact(new ArtifactCoordinate(ID, request.project(), version.name(), null), url,
-                download.fileName(), download.sha256(),
+                ApiSupport.fileName(download.fileName(), ID), download.sha256(),
                 download.size() >= 0 ? OptionalLong.of(download.size()) : OptionalLong.empty(),
                 OptionalInt.empty(), metadata);
     }

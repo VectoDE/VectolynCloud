@@ -13,7 +13,7 @@ import net.vectora.cloud.download.hash.Checksum;
  *
  * @param coordinate provider, project, version and build
  * @param url the HTTPS download URL
- * @param fileName the file name the source uses
+ * @param fileName the file name the source uses; a plain base name ({@link net.vectora.cloud.download.FileNames})
  * @param checksum the strongest checksum the source publishes; empty means trust on first use
  * @param size the size in bytes, if the source says
  * @param javaMinimum the lowest Java major version the artifact needs, if the source says
@@ -45,7 +45,7 @@ public record ResolvedArtifact(
         if (!"https".equalsIgnoreCase(url.getScheme())) {
             throw new IllegalArgumentException("download URL must be HTTPS: " + url);
         }
-        ArtifactCoordinate.requireText(fileName, "fileName");
+        net.vectora.cloud.download.FileNames.requireSafeBaseName(fileName, "fileName");
         Objects.requireNonNull(checksum, "checksum");
         Objects.requireNonNull(size, "size");
         Objects.requireNonNull(javaMinimum, "javaMinimum");

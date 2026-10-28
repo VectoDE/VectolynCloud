@@ -1,0 +1,9 @@
+Property settings:
+    java.home = /usr/lib/jvm/temurin-25-jre
+    java.library.path = /usr/java/packages/lib
+        /usr/lib64
+    java.specification.version = 25
+    java.version = 25.0.5
+    os.arch = amd64
+
+openjdk version "25.0.5" 2026-10-20 LTS

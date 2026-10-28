@@ -122,4 +122,18 @@ class ProviderJsonFuzzTest {
             // Reported correctly.
         }
     }
+
+    @FuzzTest
+    void adoptium(byte @NotNull [] input) {
+        try {
+            AdoptiumProvider.parseLatest(input);
+        } catch (MalformedResponseException expected) {
+            // Reported correctly.
+        }
+        try {
+            AdoptiumProvider.parseRelease(input);
+        } catch (MalformedResponseException expected) {
+            // Reported correctly.
+        }
+    }
 }

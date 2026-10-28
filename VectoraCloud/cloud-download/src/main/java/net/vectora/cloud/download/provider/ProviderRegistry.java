@@ -49,11 +49,12 @@ public final class ProviderRegistry {
                 BibliothekProvider.pandaSpigot(client),
                 new ModrinthProvider(client),
                 new HangarProvider(client),
-                new MariaDbProvider(client)));
+                new MariaDbProvider(client),
+                new AdoptiumProvider(client)));
     }
 
     /**
-     * Returns a registry with one more provider, for example Adoptium.
+     * Returns a registry with one more provider.
      *
      * @param provider the provider
      * @return the new registry

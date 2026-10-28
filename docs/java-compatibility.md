@@ -17,6 +17,8 @@ The convention plugins in `build-logic/` set the defaults (toolchain 25, release
 
 On Java 21 the tests tagged `requires-java25` are skipped. They load paper-api or velocity-api classes (class file version 69), which a Java 21 JVM cannot load. Today these are `PluginDescriptorTest.mainClassIsAJavaPlugin` in both plugin modules, `PortalBridgeTest` (its class under test extends `JavaPlugin`), `PaperBridgeApiTest` and `VelocityBridgeApiTest`. Every module has a `BytecodeLevelTest` that runs on both: it reads a class file without loading it and checks major version 65. The Jazzer fuzz tests in `Vectora-Protocol`, `cloud-config`, `cloud-template` and `cloud-download` run in regression mode on both runtimes.
 
+Every run uploads the JUnit XML of its tests as an artifact (`junit-xml-ubuntu-latest`, `junit-xml-windows-latest`, `junit-xml-java21`). That shows which tests ran on which runner, including the ones that need POSIX permissions or symlinks and are skipped on Windows.
+
 Locally:
 
 ```sh
@@ -49,7 +51,22 @@ The reason: an admin who starts the cloud on Java 8 to 20 has to see a readable 
 
 Right after the Java check the launcher refuses to run as root or administrator. If it cannot tell whether the process is elevated (state UNKNOWN), it starts anyway and prints a clearly framed warning that tells an administrator or root to stop and restart as a normal user (maintainer decision of 2026-10-28). A start that is known to be elevated still needs `--allow-root` or `VECTORA_ALLOW_ROOT=true`. See [Root and administrator check](cloud/launcher.md#root-and-administrator-check).
 
-VectoraCloud itself (`java -jar VectoraCloud.jar`) runs on Java 21. The servers it starts get their own JRE per group (8, 17, 21 or 25), so the cloud's runtime does not limit them.
+VectoraCloud itself (`java -jar VectoraCloud.jar`) runs on Java 21. The servers it starts get their own JRE per group, so the cloud's runtime does not limit them. See [JREs for the servers](#jres-for-the-servers).
+
+## JREs for the servers
+
+Each server group runs on its own Java runtime, chosen by `JavaRequirement` in `cloud-download` ([JRE management](cloud/download.md#jre-management)):
+
+| Group | Software | Minimum from the source | Java |
+|---|---|---|---|
+| Proxy, legacy proxy | Velocity | Fill `java.version.minimum` | 25 |
+| Lobby, Survival, Creative, End, Minigames | Paper 26.3 | Fill `java.version.minimum` (25) | 25 |
+| Mod-Server | Fabric for 26.3 | Mojang `javaVersion` (25) | 25 |
+| 1.8.8 groups behind the legacy proxy | PandaSpigot 1.8.8 | Mojang `javaVersion` (8) | 21 |
+
+The rule: `java: <major>` in the group file wins if it is not below the minimum. Otherwise legacy groups (PandaSpigot) get 21 and every other group 25. A minimum above that default wins. PandaSpigot gets 21 rather than 25 because Netty prints a `sun.misc.Unsafe` warning under Java 25 (spike PR 22, checked weekly by the legacy fork smoke test).
+
+An installed system Java is used if its feature version is exactly the chosen one; otherwise the cloud downloads Eclipse Temurin (JRE) from Adoptium into `<home>/jre/`. Temurin JREs 21 and 25 exist for Windows x64, Linux x64 and aarch64 and macOS x64 and aarch64 (checked on 2026-10-28). The weekly download smoke test resolves all of them and starts the JRE 21 it installs.
 
 ## Marked Java 22+ spot: JLine terminal provider `ffm`
 

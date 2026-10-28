@@ -1,0 +1,81 @@
+name: Download smoke test
+
+# Live test of cloud-download against the real download APIs: Fill, Fabric-Meta, Mojang, GeyserMC,
+# PandaSpigot, Modrinth, Hangar, MariaDB and Adoptium. It resolves every source, follows each
+# download URL through the host allowlist, downloads and verifies a few small files, and downloads
+# a Temurin JRE 21, unpacks it with the JRE management and runs "java -version" from it.
+# The test is tagged "network" and never runs in the normal build. Background: docs/cloud/download.md.
+
+on:
+  schedule:
+    - cron: '37 4 * * 3' # weekly, Wednesday 04:37 UTC
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/network-smoke.yml
+      - VectoraCloud/cloud-download/src/test/java/net/vectora/cloud/download/LiveSmokeTest.java
+
+permissions:
+  contents: read
+
+concurrency:
+  group: network-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  network-test:
+    name: networkTest (live downloads)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      - name: Run networkTest
+        run: bash ./gradlew :VectoraCloud:cloud-download:networkTest --no-daemon --stacktrace
+
+      - name: Summary
+        if: always()
+        run: |
+          report=VectoraCloud/cloud-download/build/network-smoke.txt
+          {
+            echo "### Download smoke test"
+            echo
+            if [ -f "$report" ]; then
+              echo '```'
+              cat "$report"
+              echo '```'
+            else
+              echo "No report was written."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload report and JUnit XML
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: network-smoke
+          path: |
+            VectoraCloud/cloud-download/build/network-smoke.txt
+            VectoraCloud/cloud-download/build/test-results/networkTest/*.xml
+          if-no-files-found: ignore
+          retention-days: 14

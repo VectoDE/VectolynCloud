@@ -18,10 +18,15 @@ import net.vectora.cloud.download.cache.DownloadedArtifact;
 import net.vectora.cloud.download.hash.HashAlgorithm;
 import net.vectora.cloud.download.hash.MultiDigest;
 import net.vectora.cloud.download.http.DownloadClient;
+import net.vectora.cloud.download.jre.JavaRequirement;
+import net.vectora.cloud.download.jre.JavaRuntime;
+import net.vectora.cloud.download.jre.JreManager;
 import net.vectora.cloud.download.lock.LockedArtifact;
 import net.vectora.cloud.download.lock.SoftwareLock;
 import net.vectora.cloud.download.lock.SoftwareLockFile;
+import net.vectora.cloud.download.lock.SoftwareLockStore;
 import net.vectora.cloud.download.lock.Trust;
+import net.vectora.cloud.download.provider.AdoptiumProvider;
 import net.vectora.cloud.download.provider.ArtifactRequest;
 import net.vectora.cloud.download.provider.MojangProvider;
 import net.vectora.cloud.download.provider.ProviderRegistry;
@@ -34,7 +39,8 @@ import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Live smoke test against the real download APIs. Tagged {@code network}, so it never runs in
- * the normal build. Run it with {@code ./gradlew :VectoraCloud:cloud-download:networkTest}.
+ * the normal build. Run it with {@code ./gradlew :VectoraCloud:cloud-download:networkTest}; CI runs it
+ * weekly ({@code .github/workflows/network-smoke.yml}).
  * A summary goes to {@code build/network-smoke.txt}.
  */
 @Tag("network")
@@ -139,6 +145,52 @@ class LiveSmokeTest {
         assertEquals(lock, SoftwareLockFile.read(lockFile));
         REPORT.add("software.lock.yml:\n" + Files.readString(lockFile));
         assertFalse(lock.entries().isEmpty());
+    }
+
+    @Test
+    void resolvesTemurinRuntimesForEverySupportedPlatform() throws Exception {
+        TargetPlatform[] platforms = {
+            new TargetPlatform(TargetPlatform.Os.WINDOWS, TargetPlatform.Arch.X64, TargetPlatform.Libc.NONE),
+            new TargetPlatform(TargetPlatform.Os.LINUX, TargetPlatform.Arch.X64, TargetPlatform.Libc.GLIBC),
+            new TargetPlatform(TargetPlatform.Os.LINUX, TargetPlatform.Arch.AARCH64, TargetPlatform.Libc.GLIBC),
+            new TargetPlatform(TargetPlatform.Os.MAC, TargetPlatform.Arch.X64, TargetPlatform.Libc.NONE),
+            new TargetPlatform(TargetPlatform.Os.MAC, TargetPlatform.Arch.AARCH64, TargetPlatform.Libc.NONE),
+        };
+        for (int feature : new int[] {JavaRequirement.LEGACY_FEATURE, JavaRequirement.DEFAULT_FEATURE}) {
+            for (TargetPlatform platform : platforms) {
+                ResolvedArtifact jre = resolve("Temurin " + feature + " " + platform, AdoptiumProvider.ID,
+                        AdoptiumProvider.request(feature, platform));
+                assertEquals(HashAlgorithm.SHA256, jre.checksum().orElseThrow().algorithm());
+                assertEquals("jre", jre.metadata().get("image-type"), "a JRE exists for " + platform);
+                assertTrue(jre.fileName().endsWith(platform.os() == TargetPlatform.Os.WINDOWS ? ".zip" : ".tar.gz"));
+            }
+        }
+    }
+
+    @Test
+    void downloadsInstallsAndStartsAManagedJre() throws Exception {
+        TargetPlatform platform = TargetPlatform.current();
+        ArtifactDownloader downloader = new ArtifactDownloader(client, registry, new ArtifactCache(home.resolve("cache")));
+        SoftwareLockStore lockStore = SoftwareLockStore.inHome(home);
+        // No system Java: this test is about the download and the unpacked runtime.
+        JreManager manager = new JreManager(home, registry.get(AdoptiumProvider.ID), downloader, lockStore, null, platform);
+
+        JavaRuntime runtime = manager.provide(JavaRequirement.forGroup("pandaspigot", java.util.OptionalInt.of(8), 0));
+        assertEquals(JavaRuntime.Origin.MANAGED, runtime.origin());
+        assertEquals(JavaRequirement.LEGACY_FEATURE, runtime.feature());
+        assertTrue(Files.isExecutable(runtime.executable()), runtime.executable() + " is executable");
+        LockedArtifact pinned = lockStore.get(JreManager.lockName(runtime.feature(), platform)).orElseThrow();
+        REPORT.add("Installed " + pinned.fileName() + " (" + pinned.size() + " bytes, sha256 " + pinned.sha256().hex()
+                + ") to " + home.relativize(runtime.home()));
+
+        Process process = new ProcessBuilder(runtime.executable().toString(), "-version").redirectErrorStream(true).start();
+        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        assertEquals(0, process.waitFor(), output);
+        assertTrue(output.contains("Temurin"), output);
+        REPORT.add("java -version of the managed runtime:" + System.lineSeparator() + output.strip());
+
+        // Second call: installed and pinned, nothing is downloaded again.
+        assertEquals(runtime, manager.provide(runtime.feature()));
     }
 
     @AfterAll

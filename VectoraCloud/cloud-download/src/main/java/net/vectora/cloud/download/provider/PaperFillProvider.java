@@ -123,7 +123,7 @@ public final class PaperFillProvider implements ArtifactProvider {
         metadata.put("channel", build.channel());
         return new ResolvedArtifact(
                 new ArtifactCoordinate(ID, project, version.id(), Long.toString(build.id())),
-                download.url(), download.name(), Optional.of(download.sha256()),
+                download.url(), ApiSupport.fileName(download.name(), ID), Optional.of(download.sha256()),
                 download.size() >= 0 ? OptionalLong.of(download.size()) : OptionalLong.empty(),
                 version.javaMinimum(), metadata);
     }

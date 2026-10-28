@@ -7,7 +7,7 @@ import java.util.Objects;
 
 /**
  * Operating system, CPU architecture and C library a native artifact must fit. Only sources
- * with native downloads look at it (MariaDB, later Adoptium).
+ * with native downloads look at it (MariaDB, Adoptium).
  *
  * @param os the operating system
  * @param arch the CPU architecture
@@ -90,7 +90,14 @@ public record TargetPlatform(Os os, Arch arch, Libc libc) {
         return Os.OTHER;
     }
 
-    static Arch detectArch(String name) {
+    /**
+     * Maps an {@code os.arch} value (also the {@code OS_ARCH} of a Java {@code release} file) to an
+     * architecture.
+     *
+     * @param name for example {@code amd64}, {@code x86_64} or {@code aarch64}
+     * @return the architecture, {@link Arch#OTHER} if unknown
+     */
+    public static Arch detectArch(String name) {
         return switch (name.toLowerCase(Locale.ROOT)) {
             case "amd64", "x86_64", "x64" -> Arch.X64;
             case "aarch64", "arm64" -> Arch.AARCH64;

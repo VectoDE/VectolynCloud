@@ -113,7 +113,7 @@ public final class ModrinthProvider implements ArtifactProvider {
         metadata.put("version-type", chosen.versionType());
         metadata.put("loader", loader);
         return new ResolvedArtifact(new ArtifactCoordinate(ID, request.project(), chosen.versionNumber(), null),
-                file.url(), file.filename(), java.util.Optional.of(checksum),
+                file.url(), ApiSupport.fileName(file.filename(), ID), java.util.Optional.of(checksum),
                 file.size() >= 0 ? OptionalLong.of(file.size()) : OptionalLong.empty(), OptionalInt.empty(), metadata);
     }
 
