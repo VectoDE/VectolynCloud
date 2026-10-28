@@ -5,9 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.nio.ByteBuffer;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.junit.jupiter.api.Test;
 
 class VarIntsTest {
 
@@ -40,6 +40,42 @@ class VarIntsTest {
     void rejectsMoreThanFiveBytes() {
         byte[] tooLong = {(byte) 0x80, (byte) 0x80, (byte) 0x80, (byte) 0x80, (byte) 0x80, 0x01};
         assertThrows(ProtocolException.class, () -> VarInts.read(ByteBuffer.wrap(tooLong)));
+    }
+
+    @Test
+    void rejectsBitsBeyondThirtyTwo() {
+        byte[] overflow = {(byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, 0x1F};
+        assertThrows(ProtocolException.class, () -> VarInts.read(ByteBuffer.wrap(overflow)));
+    }
+
+    @Test
+    void rejectsNonMinimalEncodings() {
+        assertThrows(ProtocolException.class, () -> VarInts.read(ByteBuffer.wrap(new byte[] {(byte) 0x80, 0x00})));
+        assertThrows(ProtocolException.class,
+                () -> VarInts.read(ByteBuffer.wrap(new byte[] {(byte) 0x81, (byte) 0x80, 0x00})));
+    }
+
+    @ParameterizedTest
+    @ValueSource(longs = {0, 1, 127, 128, Integer.MAX_VALUE, 1L << 35, Long.MAX_VALUE, Long.MIN_VALUE, -1})
+    void longsRoundTrip(long value) {
+        ByteBuffer buffer = ByteBuffer.allocate(VarInts.MAX_LONG_BYTES);
+        VarInts.writeLong(buffer, value);
+        assertEquals(VarInts.sizeOfLong(value), buffer.position());
+        assertEquals(value, VarInts.readLong(buffer.flip()));
+    }
+
+    @Test
+    void longOfMinusOneTakesTenBytes() {
+        assertEquals(VarInts.MAX_LONG_BYTES, VarInts.sizeOfLong(-1L));
+    }
+
+    @Test
+    void rejectsMalformedLongs() {
+        byte[] overflow = {(byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF,
+            (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, 0x03};
+        assertThrows(ProtocolException.class, () -> VarInts.readLong(ByteBuffer.wrap(overflow)));
+        assertThrows(ProtocolException.class, () -> VarInts.readLong(ByteBuffer.wrap(new byte[] {(byte) 0x80, 0x00})));
+        assertThrows(ProtocolException.class, () -> VarInts.readLong(ByteBuffer.wrap(new byte[] {(byte) 0x80})));
     }
 
     private static byte[] encode(int value) {
