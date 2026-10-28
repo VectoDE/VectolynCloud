@@ -36,7 +36,6 @@ graph TD
     node --> download[cloud-download]
     node --> network[cloud-network]
     node --> database[cloud-database]
-    download --> config
     database --> config
     database --> download
     network --> config
@@ -60,7 +59,7 @@ The rules behind it:
 |---|---|---|---|
 | Netty (`netty-transport`, `netty-handler`, `netty-codec-http`) | 4.2.19.Final | `cloud-network` | Non-blocking server for many long-lived connections (every proxy and server keeps one open), TLS 1.3 for the mTLS cluster links, and HTTP plus WebSocket for the API from the same stack. Velocity and Paper are built on Netty too, so its behaviour under load is well known. |
 | JLine 3 (`jline-reader`, `jline-terminal`, `jline-terminal-jni`) | 3.30.17 | `cloud-node` | Console with line editing, history and tab completion on Windows, Linux and macOS, as in CloudNet. The terminal provider `jni` works on Java 21. `ffm` (`jline-terminal-ffm`) needs Java 22+ and is only an option on newer runtimes, see [Java compatibility](../java-compatibility.md). |
-| Jackson 3 (`jackson-databind`, `jackson-dataformat-yaml`) | 3.2.4 | `cloud-config` | One data model for the YAML files and the JSON API, with explicit `schema-version` handling and exact error positions for broken config files. |
+| Jackson 3 (`jackson-databind`, `jackson-dataformat-yaml`) | 3.2.4 | `cloud-config`, `cloud-download` | One data model for the YAML files and the JSON API, with explicit `schema-version` handling and exact error positions for broken config files. `cloud-download` also reads the download APIs, `software.lock.yml` and its catalog with it. |
 | MariaDB Connector/J (`mariadb-java-client`) | 4.0.0 | `cloud-database` | Talks to the managed or external MariaDB/MySQL server: creating databases and users, checking the connection, sizing the pools. |
 
 Test only: JUnit 6 and Jazzer 0.30.0 (fuzz tests, see below). Compile only: `velocity-api` 4.3.1 and `paper-api` 26.3 in the bridges. The proxy and the server provide them at runtime.
