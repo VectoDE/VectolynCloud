@@ -3,8 +3,8 @@ package net.vectora.cloud.download;
 /**
  * Downloads server software, plugins and JREs over HTTPS from allowlisted hosts and verifies checksums.
  *
- * <p>Placeholder from the stage-2 scaffold. The module structure and its planned
- * content are described in docs/cloud/architecture.md.
+ * <p>Overview of the module: docs/cloud/download.md. Its place among the cloud modules:
+ * docs/cloud/architecture.md.
  */
 public final class CloudDownloadModule {
 

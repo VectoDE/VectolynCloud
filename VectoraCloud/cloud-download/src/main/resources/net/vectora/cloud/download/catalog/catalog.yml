@@ -1,0 +1,252 @@
+# Standard artifacts VectoraCloud downloads. Data only; the code is ArtifactCatalog.
+# Format and the source research behind each entry: docs/cloud/download.md
+#
+# Fields per entry:
+#   id            unique name, also the name in software.lock.yml
+#   kind          server | plugin | mod | database
+#   type          standard | transitional (third-party plugin until the Vectora replacement exists)
+#   provider      id of the download provider (papermc, fabric, mojang, geysermc, pandaspigot,
+#                 modrinth, hangar, mariadb)
+#   project       project at the provider
+#   platform      loader / download key / Hangar platform, if the provider needs one
+#   game-version  how the group's Minecraft version is used: version (it is the version to
+#                 resolve, Paper), filter (only builds for it, Modrinth and Fabric) or none (the
+#                 proxy has no Minecraft version of its own; the newest release is used)
+#   targets       server templates in Server-Network/ that use it
+#   replaced-by   transitional only: what replaces it
+#   alternative   optional second source with a checksum, as provider:project
+schema-version: 1
+artifacts:
+  # --- Server software -------------------------------------------------------------------
+  - id: paper
+    kind: server
+    type: standard
+    provider: papermc
+    project: paper
+    game-version: version
+    targets: [Lobby-Server, Survival-Server, Creative-Server, End-Server, Minigame-Server]
+  - id: velocity
+    kind: server
+    type: standard
+    provider: papermc
+    project: velocity
+    game-version: none
+    targets: [Proxy]
+  - id: fabric-server
+    kind: server
+    type: standard
+    provider: fabric
+    project: fabric-server
+    game-version: filter
+    targets: [Mod-Server]
+  - id: pandaspigot
+    kind: server
+    type: standard
+    provider: pandaspigot
+    project: pandaspigot
+    platform: paperclip
+    game-version: none
+    targets: [legacy 1.8.8 groups]
+  - id: mariadb
+    kind: database
+    type: standard
+    provider: mariadb
+    project: mariadb
+    game-version: none
+    targets: [Database]
+
+  # --- Crossplay and protocol translation -----------------------------------------------
+  - id: geyser-velocity
+    kind: plugin
+    type: standard
+    provider: geysermc
+    project: geyser
+    platform: velocity
+    game-version: none
+    targets: [Proxy]
+  - id: floodgate-velocity
+    kind: plugin
+    type: standard
+    provider: geysermc
+    project: floodgate
+    platform: velocity
+    game-version: none
+    targets: [Proxy]
+  - id: floodgate-spigot
+    kind: plugin
+    type: standard
+    provider: geysermc
+    project: floodgate
+    platform: spigot
+    game-version: none
+    targets: [Lobby-Server, Survival-Server, Creative-Server, End-Server, Minigame-Server]
+  - id: floodgate-fabric
+    kind: mod
+    type: standard
+    provider: modrinth
+    project: floodgate
+    platform: fabric
+    game-version: filter
+    targets: [Mod-Server]
+  - id: viaversion
+    kind: plugin
+    type: standard
+    provider: modrinth
+    project: viaversion
+    platform: velocity
+    game-version: none
+    targets: [Proxy]
+    alternative: hangar:ViaVersion
+  - id: viabackwards
+    kind: plugin
+    type: standard
+    provider: modrinth
+    project: viabackwards
+    platform: velocity
+    game-version: none
+    targets: [Proxy]
+    alternative: hangar:ViaBackwards
+  - id: viarewind
+    kind: plugin
+    type: standard
+    provider: modrinth
+    project: viarewind
+    platform: velocity
+    game-version: none
+    targets: [Proxy]
+    alternative: hangar:ViaRewind
+
+  # --- Mod-Server (Fabric) ---------------------------------------------------------------
+  - id: fabric-api
+    kind: mod
+    type: standard
+    provider: modrinth
+    project: fabric-api
+    platform: fabric
+    game-version: filter
+    targets: [Mod-Server]
+  - id: fabricproxy-lite
+    kind: mod
+    type: standard
+    provider: modrinth
+    project: fabricproxy-lite
+    platform: fabric
+    game-version: filter
+    targets: [Mod-Server]
+  - id: lithium
+    kind: mod
+    type: standard
+    provider: modrinth
+    project: lithium
+    platform: fabric
+    game-version: filter
+    targets: [Mod-Server]
+  - id: ferritecore
+    kind: mod
+    type: standard
+    provider: modrinth
+    project: ferrite-core
+    platform: fabric
+    game-version: filter
+    targets: [Mod-Server]
+  - id: servercore
+    kind: mod
+    type: standard
+    provider: modrinth
+    project: servercore
+    platform: fabric
+    game-version: filter
+    targets: [Mod-Server]
+
+  # --- Transitional: removed once the Vectora plugin module replaces them -----------------
+  - id: luckperms-velocity
+    kind: plugin
+    type: transitional
+    provider: modrinth
+    project: luckperms
+    platform: velocity
+    game-version: none
+    targets: [Proxy]
+    replaced-by: Vectora plugin (permissions)
+  - id: luckperms-bukkit
+    kind: plugin
+    type: transitional
+    provider: modrinth
+    project: luckperms
+    platform: paper
+    game-version: filter
+    targets: [Lobby-Server, Survival-Server, Creative-Server, End-Server, Minigame-Server]
+    replaced-by: Vectora plugin (permissions)
+  - id: luckperms-fabric
+    kind: mod
+    type: transitional
+    provider: modrinth
+    project: luckperms
+    platform: fabric
+    game-version: filter
+    targets: [Mod-Server]
+    replaced-by: Vectora plugin (permissions)
+  - id: tab
+    kind: plugin
+    type: transitional
+    provider: modrinth
+    project: tab-was-taken
+    platform: paper
+    game-version: filter
+    targets: [Lobby-Server, Survival-Server, Creative-Server, End-Server, Minigame-Server]
+    replaced-by: Vectora plugin
+  - id: placeholderapi
+    kind: plugin
+    type: transitional
+    provider: modrinth
+    project: placeholderapi
+    platform: paper
+    game-version: filter
+    targets: [Lobby-Server, Survival-Server, Creative-Server, End-Server, Minigame-Server]
+    replaced-by: Vectora plugin
+  - id: worldedit
+    kind: plugin
+    type: transitional
+    provider: modrinth
+    project: worldedit
+    platform: paper
+    game-version: filter
+    targets: [Lobby-Server, Survival-Server, Creative-Server, End-Server, Minigame-Server]
+    replaced-by: Vectora plugin
+    alternative: hangar:WorldEdit
+  - id: worldguard
+    kind: plugin
+    type: transitional
+    provider: modrinth
+    project: worldguard
+    platform: paper
+    game-version: filter
+    targets: [Lobby-Server, Survival-Server, Creative-Server, End-Server, Minigame-Server]
+    replaced-by: Vectora plugin
+  - id: chunky
+    kind: mod
+    type: transitional
+    provider: modrinth
+    project: chunky
+    platform: fabric
+    game-version: filter
+    targets: [Mod-Server]
+    replaced-by: Vectora plugin
+  - id: spark
+    kind: mod
+    type: transitional
+    provider: modrinth
+    project: spark
+    platform: fabric
+    game-version: filter
+    targets: [Mod-Server]
+    replaced-by: VectoraCloud monitoring
+  - id: proxyportal
+    kind: mod
+    type: transitional
+    provider: modrinth
+    project: proxyportal
+    platform: fabric
+    game-version: filter
+    targets: [Mod-Server]
+    replaced-by: Vectora plugin (portals)

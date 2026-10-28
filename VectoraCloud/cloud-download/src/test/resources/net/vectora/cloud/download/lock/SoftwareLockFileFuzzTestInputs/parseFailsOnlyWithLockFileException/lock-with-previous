@@ -1,0 +1,26 @@
+schema-version: 1
+artifacts:
+  paper:
+    provider: papermc
+    project: paper
+    version: "26.3"
+    build: "227"
+    url: https://fill-data.papermc.io/v1/objects/416b7d105b1d0192df4afa4b29d2800d9dbeda092a82fbc5b511248a54adde15/paper-26.3-227.jar
+    file-name: paper-26.3-227.jar
+    hash-type: sha256
+    hash: 416b7d105b1d0192df4afa4b29d2800d9dbeda092a82fbc5b511248a54adde15
+    sha256: 416b7d105b1d0192df4afa4b29d2800d9dbeda092a82fbc5b511248a54adde15
+    trust: source
+    size: 55257780
+    previous:
+      provider: papermc
+      project: paper
+      version: "26.3"
+      build: "226"
+      url: https://fill-data.papermc.io/v1/objects/1373c651510d4aeee7e7903f3cfd7003919c1a364528dbe124a4ae40e11a766e/paper-26.3-226.jar
+      file-name: paper-26.3-226.jar
+      hash-type: sha256
+      hash: 1373c651510d4aeee7e7903f3cfd7003919c1a364528dbe124a4ae40e11a766e
+      sha256: 1373c651510d4aeee7e7903f3cfd7003919c1a364528dbe124a4ae40e11a766e
+      trust: source
+      size: 55255255
