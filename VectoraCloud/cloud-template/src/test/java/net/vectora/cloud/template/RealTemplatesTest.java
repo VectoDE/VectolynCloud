@@ -75,6 +75,8 @@ class RealTemplatesTest {
         String server = template.getParent().getFileName().toString();
         return switch (server) {
             case "Proxy" -> ServerPlatform.VELOCITY;
+            case "Legacy-Proxy" -> ServerPlatform.VELOCITY_LEGACY;
+            case "Legacy-Server" -> ServerPlatform.PANDASPIGOT;
             case "Mod-Server" -> ServerPlatform.FABRIC;
             case "Database" -> ServerPlatform.NONE;
             default -> ServerPlatform.PAPER;
@@ -84,6 +86,7 @@ class RealTemplatesTest {
     static PlaceholderValues values(Set<String> wanted) {
         Map<String, String> values = new HashMap<>();
         values.put("VECTORA_FORWARDING_SECRET", "forwarding-secret-for-tests");
+        values.put("VECTORA_LEGACY_FORWARDING_SECRET", "legacy-forwarding-secret-for-tests");
         values.put("VECTORA_DB_HOST", "127.0.0.1");
         values.put("VECTORA_DB_PORT", "3307");
         values.put("VECTORA_DB_NAME", "vectora_ranks");
@@ -99,9 +102,9 @@ class RealTemplatesTest {
         values.put("VECTORA_PROXY_BIND", "0.0.0.0");
         values.put("VECTORA_PROXY_PORT", "25565");
         values.put("VECTORA_BEDROCK_PORT", "19132");
-        // Later templates (stage 2, PR 12) add these; harmless until then.
         values.put("VECTORA_DB_POOL_SIZE", "4");
-        values.put("VECTORA_DB_STORAGE_METHOD", "MariaDB");
+        values.put("VECTORA_DB_STORAGE_METHOD", "mariadb");
+        values.put("VECTORA_LEGACY_PROXY_PORT", "25564");
         List<ProxyBackend> backends = BACKENDS.stream()
                 .map(b -> new ProxyBackend(b.name(), b.host(), b.port(), wanted.contains(b.name())))
                 .toList();
@@ -114,7 +117,8 @@ class RealTemplatesTest {
     @Test
     void everyTemplateRendersCompletelyAndStaysParseable() throws Exception {
         List<Path> templates = templates();
-        assertTrue(templates.size() >= 7, "expected the seven server templates, found " + templates);
+        assertTrue(templates.size() >= 10, "expected the seven servers, minigame and the two legacy templates, found "
+                + templates);
         List<String> problems = new ArrayList<>();
         for (Path template : templates) {
             String server = template.getParent().getFileName().toString();
@@ -242,5 +246,90 @@ class RealTemplatesTest {
             }
         }
         assertNull(TomlCheck.problem(velocity));
+    }
+
+    @Test
+    void newTemplatesHaveBothReadmesAndNoneReachesRuntime() throws Exception {
+        for (String server : List.of("Minigame-Server", "Legacy-Proxy", "Legacy-Server")) {
+            Path template = serverNetwork().resolve(server).resolve("template");
+            assertTrue(Files.isRegularFile(template.resolve("README.md")), server);
+            assertTrue(Files.isRegularFile(template.resolve("README.de.md")), server);
+            Path runtime = out.resolve(server);
+            RenderReport report = TemplateInstaller.install(template, runtime, platformOf(template),
+                    values(ALL_BUT_SURVIVAL), false);
+            assertTrue(report.skipped().containsAll(List.of("README.md", "README.de.md")), report.skipped().toString());
+            assertFalse(Files.exists(runtime.resolve("README.md")));
+            assertFalse(Files.exists(runtime.resolve("README.de.md")));
+        }
+    }
+
+    @Test
+    void legacyProxyForwardsWithBungeeguardOnItsOwnPort() throws Exception {
+        Path template = serverNetwork().resolve("Legacy-Proxy/template");
+        TemplateInstaller.install(template, out, ServerPlatform.VELOCITY_LEGACY, values(Set.of("lobby")), false);
+        String velocity = Files.readString(out.resolve("velocity.toml"));
+        assertTrue(velocity.contains("player-info-forwarding-mode = \"bungeeguard\""), velocity);
+        assertFalse(velocity.contains("player-info-forwarding-mode = \"modern\""));
+        assertTrue(velocity.contains("bind = \"0.0.0.0:25564\""));
+        assertFalse(velocity.contains(":25565"), "the main proxy's port must not appear");
+        assertEquals("legacy-forwarding-secret-for-tests", Files.readString(out.resolve("forwarding.secret")),
+                "the legacy proxy gets its own secret, never the modern-forwarding one");
+        assertFalse(Files.exists(out.resolve("plugins/floodgate/key.pem")), "no Floodgate on the legacy proxy yet");
+        assertNull(TomlCheck.problem(velocity));
+
+        String main = Files.readString(serverNetwork().resolve("Proxy/template/velocity.toml"));
+        assertTrue(main.contains("player-info-forwarding-mode = \"modern\""), "the main proxy stays on modern");
+    }
+
+    @Test
+    void legacyServerAcceptsTheLegacyProxyOnly() throws Exception {
+        Path template = serverNetwork().resolve("Legacy-Server/template");
+        RenderReport report = TemplateInstaller.install(template, out, ServerPlatform.PANDASPIGOT, values(Set.of()),
+                false);
+        assertEquals(List.of(), report.generated(), "no Floodgate key and, without consent, no eula.txt");
+        assertFalse(Files.exists(out.resolve("plugins/floodgate/key.pem")));
+        Properties properties = new Properties();
+        properties.load(new StringReader(Files.readString(out.resolve("server.properties"))));
+        assertEquals("false", properties.getProperty("online-mode"));
+        assertEquals("127.0.0.1", properties.getProperty("server-ip"));
+        assertEquals(true, new YAMLMapper().readTree(Files.readString(out.resolve("spigot.yml")))
+                .get("settings").get("bungeecord").asBoolean());
+        assertEquals(true, new YAMLMapper().readTree(Files.readString(out.resolve("pandaspigot.yml")))
+                .get("proxyOnlineMode").asBoolean());
+    }
+
+    @ParameterizedTest(name = "storage method {0}")
+    @ValueSource(strings = {"mariadb", "h2"})
+    void luckPermsTakesStorageMethodAndPoolSizeFromTheCloud(String method) throws Exception {
+        Map<String, String> db = Map.of("VECTORA_DB_STORAGE_METHOD", method, "VECTORA_DB_POOL_SIZE", "3");
+        PlaceholderValues values = PlaceholderValues.of(db).orElse(values(ALL_BUT_SURVIVAL));
+        for (String server : List.of("Lobby-Server", "Survival-Server", "Creative-Server", "End-Server",
+                "Minigame-Server", "Proxy")) {
+            Path template = serverNetwork().resolve(server).resolve("template");
+            Path runtime = out.resolve(method).resolve(server);
+            TemplateInstaller.install(template, runtime, platformOf(template), values, false);
+            Path config = runtime.resolve(server.equals("Proxy") ? "plugins/luckperms/config.yml"
+                    : "plugins/LuckPerms/config.yml");
+            tools.jackson.databind.JsonNode yaml = new YAMLMapper().readTree(Files.readString(config));
+            assertEquals(method, yaml.get("storage-method").asString(), server);
+            assertEquals(3, yaml.get("data").get("pool-settings").get("maximum-pool-size").asInt(), server);
+            assertEquals(2, yaml.get("data").get("pool-settings").get("minimum-idle").asInt(), server);
+        }
+        Path mod = serverNetwork().resolve("Mod-Server/template");
+        Path runtime = out.resolve(method).resolve("Mod-Server");
+        TemplateInstaller.install(mod, runtime, ServerPlatform.FABRIC, values, false);
+        String conf = Files.readString(runtime.resolve("config/luckperms/luckperms.conf"));
+        assertTrue(conf.contains("storage-method = \"" + method + "\""), conf);
+        assertTrue(conf.lines().anyMatch(l -> l.strip().equals("maximum-pool-size = 3")), conf);
+    }
+
+    @Test
+    void gitignoreKeepsEveryRuntimeFolderOut() throws Exception {
+        Path gitignore = serverNetwork().getParent().resolve(".gitignore");
+        assertTrue(Files.readAllLines(gitignore).contains("Server-Network/*/runtime/"));
+        for (Path template : templates()) {
+            // The pattern covers exactly one folder level below Server-Network/.
+            assertEquals(serverNetwork(), template.getParent().getParent(), template.toString());
+        }
     }
 }

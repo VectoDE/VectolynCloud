@@ -15,7 +15,7 @@ The module does not read `cloud.yml` or `secrets/` itself. The caller (later `cl
 | `ProxyServerList.of(backends, tryOrder, forcedHosts)` | Values for `VECTORA_PROXY_SERVERS`, `VECTORA_PROXY_TRY` and `VECTORA_PROXY_FORCED_HOSTS`. |
 | `ProxyBackend(name, host, port, wanted)` | One backend as the proxy sees it. |
 | `GeneratedFiles` | Writes `forwarding.secret`, Floodgate's `key.pem` and `eula.txt`. |
-| `ServerPlatform` | `VELOCITY`, `PAPER`, `FABRIC` or `NONE`. Decides which files are generated and where. |
+| `ServerPlatform` | `VELOCITY`, `VELOCITY_LEGACY`, `PAPER`, `PANDASPIGOT`, `FABRIC` or `NONE`. Decides which files are generated and where. |
 | `TemplateException` | Every rendering error. The message starts with `file:line`. |
 
 Typical use:
@@ -40,7 +40,7 @@ RenderReport report = TemplateInstaller.install(
 A value must not be able to change the structure of the file it lands in: a second YAML key, a new TOML table, another SQL statement. The renderer therefore checks every value before it inserts it and fails with a `TemplateException` that names the placeholder and the line, never the value:
 
 - No value may contain a line break (`\n`, `\r`) or any other control character (tab, NUL, everything `Character.isISOControl` reports). The only exceptions are `VECTORA_PROXY_SERVERS` and `VECTORA_PROXY_FORCED_HOSTS`: they may span lines, but still contain no other control character. `ProxyServerList` builds both from checked names and hosts.
-- Secrets, that is every placeholder whose name ends in `_SECRET` or `_PASSWORD` (today `VECTORA_FORWARDING_SECRET`, `VECTORA_MANAGEMENT_SECRET`, `VECTORA_DB_PASSWORD`, `VECTORA_DB_ROOT_PASSWORD`), must match `[A-Za-z0-9._~+/=-]{16,}`. Alphanumeric and base64 secrets, as the cloud generates them, fit. Quotes, `#`, spaces and backslashes do not, so a secret can neither end a quoted string nor start a comment.
+- Secrets, that is every placeholder whose name ends in `_SECRET` or `_PASSWORD` (today `VECTORA_FORWARDING_SECRET`, `VECTORA_LEGACY_FORWARDING_SECRET`, `VECTORA_MANAGEMENT_SECRET`, `VECTORA_DB_PASSWORD`, `VECTORA_DB_ROOT_PASSWORD`), must match `[A-Za-z0-9._~+/=-]{16,}`. Alphanumeric and base64 secrets, as the cloud generates them, fit. Quotes, `#`, spaces and backslashes do not, so a secret can neither end a quoted string nor start a comment.
 - Ports, every placeholder whose name ends in `_PORT`, must be a decimal number from 1 to 65535.
 
 `VECTORA_FLOODGATE_KEY_B64` is no text placeholder; it must be base64 of exactly 16 bytes (see below).
@@ -82,9 +82,10 @@ Markdown files (`*.md`, case-insensitive, in any folder of the template) are nei
 | File | Platform | Source |
 |---|---|---|
 | `forwarding.secret` | `VELOCITY` | `VECTORA_FORWARDING_SECRET`, written as UTF-8 without a line break. Must follow the secret rule above (16 or more characters from `A-Z a-z 0-9 . _ ~ + / = -`). |
-| `plugins/floodgate/key.pem` | `VELOCITY`, `PAPER` | `VECTORA_FLOODGATE_KEY_B64`, decoded to the raw 16 bytes. Floodgate reads raw bytes despite the file name. |
+| `forwarding.secret` | `VELOCITY_LEGACY` | `VECTORA_LEGACY_FORWARDING_SECRET`, same rules. The install fails if it equals `VECTORA_FORWARDING_SECRET`: in `bungeeguard` mode Velocity sends it to the 1.8.8 backends in plain text. |
+| `plugins/floodgate/key.pem` | `VELOCITY`, `PAPER` (not `VELOCITY_LEGACY` and `PANDASPIGOT`, which run no Floodgate yet) | `VECTORA_FLOODGATE_KEY_B64`, decoded to the raw 16 bytes. Floodgate reads raw bytes despite the file name. |
 | `config/floodgate/key.pem` | `FABRIC` | Same key. |
-| `eula.txt` | `PAPER`, `FABRIC` | Only with `eulaAccepted = true`. Without consent nothing is written, and an existing `eula.txt` stays as it is. |
+| `eula.txt` | `PAPER`, `PANDASPIGOT`, `FABRIC` | Only with `eulaAccepted = true`. Without consent nothing is written, and an existing `eula.txt` stays as it is. |
 
 The paths match the Floodgate configs in the templates (`key-file-name: key.pem` next to each `config.yml`). The secrets are checked before anything is written. On file systems with POSIX permissions, `forwarding.secret` and `key.pem` are readable by the owner only.
 

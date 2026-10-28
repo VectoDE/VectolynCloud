@@ -1,0 +1,7 @@
+# Only the settings Vectora needs. PandaSpigot adds every other setting with its default value on
+# the first start.
+settings:
+  # Accept the BungeeCord handshake the legacy proxy sends (player-info-forwarding-mode
+  # "bungeeguard"). The bungeeguard-token in it is checked by the Vectora bridge, because
+  # PandaSpigot does not check it itself (see docs/cloud/legacy-1.8.8.md).
+  bungeecord: true

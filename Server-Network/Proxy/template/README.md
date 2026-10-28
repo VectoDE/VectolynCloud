@@ -10,6 +10,7 @@ Software: Velocity 4.3.0, Geyser-Velocity, Floodgate, LuckPerms-Velocity, ViaVer
 - `{{VECTORA_PROXY_SERVERS}}`, `{{VECTORA_PROXY_TRY}}`, `{{VECTORA_PROXY_FORCED_HOSTS}}` in `velocity.toml`: filled from the wanted servers only
 - `{{VECTORA_BEDROCK_PORT}}` in `plugins/Geyser-Velocity/config.yml`
 - `{{VECTORA_DB_HOST}}`, `{{VECTORA_DB_PORT}}`, `{{VECTORA_DB_NAME}}`, `{{VECTORA_DB_USER}}`, `{{VECTORA_DB_PASSWORD}}` in `plugins/luckperms/config.yml`
+- `{{VECTORA_DB_STORAGE_METHOD}}` (`mariadb`, `mysql` or `h2`) and `{{VECTORA_DB_POOL_SIZE}}` (pool size set centrally by the cloud, normally 4) in `plugins/luckperms/config.yml`
 - `{{VECTORA_XMS}}`, `{{VECTORA_XMX}}` in `start.bat`
 - Generated files: `forwarding.secret` from `VECTORA_FORWARDING_SECRET`, `plugins/floodgate/key.pem` from `VECTORA_FLOODGATE_KEY_B64`
 

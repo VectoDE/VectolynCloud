@@ -25,6 +25,9 @@ class SecretGeneratorTest {
         assertEquals(EnumSet.allOf(GeneratedSecret.class), all.keySet());
         assertTrue(all.get(GeneratedSecret.MANAGEMENT_SECRET).reveal().matches("[A-Za-z0-9]{40}"));
         assertTrue(all.get(GeneratedSecret.FORWARDING_SECRET).reveal().matches("[A-Za-z0-9]{48}"));
+        assertTrue(all.get(GeneratedSecret.LEGACY_FORWARDING_SECRET).reveal().matches("[A-Za-z0-9]{48}"));
+        assertNotEquals(all.get(GeneratedSecret.FORWARDING_SECRET), all.get(GeneratedSecret.LEGACY_FORWARDING_SECRET),
+                "the legacy proxy never gets the modern-forwarding secret");
         assertTrue(all.get(GeneratedSecret.DB_PASSWORD).reveal().matches("[A-Za-z0-9]{32}"));
         assertTrue(all.get(GeneratedSecret.DB_ROOT_PASSWORD).reveal().matches("[A-Za-z0-9]{32}"));
         byte[] floodgate = Base64.getDecoder().decode(all.get(GeneratedSecret.FLOODGATE_KEY).reveal());

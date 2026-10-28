@@ -10,6 +10,7 @@ Software: Paper 26.3. Plugins today: Floodgate, LuckPerms, TAB, PlaceholderAPI, 
 - `{{VECTORA_MANAGEMENT_SECRET}}` in `server.properties`
 - `{{VECTORA_FORWARDING_SECRET}}` in `config/paper-global.yml`
 - `{{VECTORA_DB_HOST}}`, `{{VECTORA_DB_PORT}}`, `{{VECTORA_DB_NAME}}`, `{{VECTORA_DB_USER}}`, `{{VECTORA_DB_PASSWORD}}` in `plugins/LuckPerms/config.yml`
+- `{{VECTORA_DB_STORAGE_METHOD}}` (`mariadb`, `mysql` or `h2`) and `{{VECTORA_DB_POOL_SIZE}}` (pool size set centrally by the cloud, normally 4) in `plugins/LuckPerms/config.yml`
 - `{{VECTORA_XMS}}`, `{{VECTORA_XMX}}` in `start.bat`
 - Generated file: `plugins/floodgate/key.pem` from `VECTORA_FLOODGATE_KEY_B64`
 
