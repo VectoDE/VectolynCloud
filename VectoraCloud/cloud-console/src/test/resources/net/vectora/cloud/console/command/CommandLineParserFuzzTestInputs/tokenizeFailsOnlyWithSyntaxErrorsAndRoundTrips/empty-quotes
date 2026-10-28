@@ -1,0 +1,1 @@
+config set database.docker-image ""
