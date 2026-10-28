@@ -21,7 +21,11 @@ byte[] bytes = codec.encode(Envelope.of(new Ping(42)));
 
 // Receiving side, bytes arriving in chunks:
 Optional<Envelope> next = codec.tryDecode(buffer); // empty until a whole frame is there
+// Before AuthResult(ACCEPTED), with the small handshake limit:
+Optional<Envelope> hello = codec.tryDecode(buffer, Protocol.MAX_HANDSHAKE_FRAME_SIZE);
 ```
+
+`MessageCodec.tryDecode` reads the message straight from the stream buffer: `FrameCodec.tryReadBody` hands out a read-only view of the frame body and `FrameHeader.read` parses its header, so the payload is not copied on the way. Only the message records copy their own byte arrays, once when reading and once in the constructor that keeps them immutable. The `Frame` path (`FrameCodec.decode`, `MessageCodec.fromFrame`) is still there for tests and tools.
 
 ## Frame layout
 
@@ -29,7 +33,7 @@ Every frame on the stream:
 
 | Field | Type | Notes |
 |---|---|---|
-| `length` | VarInt | Size of everything after this field. 4 to 1,048,576 (1 MiB). Checked as soon as it arrives, before the body is buffered. |
+| `length` | VarInt | Size of everything after this field. 4 to 1,048,576 (1 MiB), and at most 4,096 (4 KiB) until the cloud has sent `AuthResult(ACCEPTED)`. Checked as soon as it arrives, before the body is buffered. |
 | `major` | u8 | Protocol major version of the sender. |
 | `minor` | u8 | Protocol minor version of the sender. |
 | `messageId` | VarInt | Message type, see the table below. Not negative. |
@@ -77,13 +81,13 @@ All messages are immutable records in `net.vectora.protocol.message`, listed in 
 | `0x03` | `Pong` | both | nonce of the ping (long) |
 | `0x04` | `Disconnect` | both | reason (VarInt) |
 | `0x10` | `ServiceReady` | service → cloud | service id (string ≤ 64) |
-| `0x11` | `ServiceStatus` | service → cloud | service id, players online and max (VarInt, 0 to 1,000,000), TPS (double, 0 to 1000), MSPT (double, 0 to 60,000), heap used and max (VarLong, ≥ 0) |
-| `0x20` | `RegisterServer` | cloud → proxy | name (service id), host (string ≤ 253, `[A-Za-z0-9._:-]`), port (u16, 1 to 65535), group (string ≤ 32), legacy (bool) |
+| `0x11` | `ServiceStatus` | service → cloud | service id, players online and max (VarInt, 0 to 1,000,000), TPS (double, 0 to 1000), MSPT (double, 0 to 60,000), heap used (VarLong, ≥ 0), heap max (VarLong, ≥ 0, or `-1` for unknown or unlimited) |
+| `0x20` | `RegisterServer` | cloud → proxy | name (service id), host (string ≤ 253, DNS name or IPv6 literal, see below), port (u16, 1 to 65535), group (string ≤ 32), legacy (bool) |
 | `0x21` | `UnregisterServer` | cloud → proxy | name (service id) |
 | `0x30` | `PlayerJoin` | proxy → cloud | UUID, name (string ≤ 32), service id, Bedrock (bool) |
 | `0x31` | `PlayerQuit` | proxy → cloud | UUID, name, service id, Bedrock (bool) |
 | `0x32` | `PlayerSwitch` | proxy → cloud | UUID, name, from (service id), to (service id, different from `from`), Bedrock (bool) |
-| `0x40` | `ChannelMessage` | both | channel (string ≤ 64, `[a-z0-9_.-]`), payload (bytes ≤ 64 KiB) |
+| `0x40` | `ChannelMessage` | both | channel (string ≤ 64, `[a-z0-9_][a-z0-9_.-]*`), payload (bytes ≤ 64 KiB) |
 | `0x50` | `Request` | both | channel, payload (bytes ≤ 64 KiB) |
 | `0x51` | `Response` | both | status (VarInt), payload (bytes ≤ 64 KiB) |
 
@@ -103,7 +107,8 @@ Ids are grouped by area: `0x0_` connection, `0x1_` service state, `0x2_` server 
 |---|---|
 | `GroupName`, `NodeId` | 1 to 32 characters, `[a-z0-9][a-z0-9_-]*`. Not a Windows device name (see below). |
 | `ServiceId` | 1 to 64 characters, same pattern and the same device-name rule. A service id is usually `<group>-<index>`, so a group name of full length still fits. |
-| `ChannelName` | 1 to 64 characters, `[a-z0-9_.-]`. |
+| `ChannelName` | 1 to 64 characters, `[a-z0-9_.-]`, starting with a letter, digit or `_`. That rules out `.`, `..`, hidden-file names like `.x` and option-like names like `-x`. |
+| Host (`RegisterServer`) | Either a DNS name, labels of 1 to 63 letters, digits and hyphens without a hyphen at either end, separated by single dots, no trailing dot (IPv4 addresses match this as well), or an IPv6 literal without brackets and zone id: 2 to 8 groups of up to 4 hex digits separated by colons, optionally ending in an IPv4 address, at most 45 characters. Never a port. |
 | `AuthToken` | 16 to 256 printable ASCII characters without spaces. `toString()` prints `AuthToken[redacted]`; compare with `matches`, which runs in constant time. |
 | Player name | 1 to 32 printable ASCII characters, no space at either end. Java names have at most 16; the rest leaves room for a Floodgate prefix and Bedrock gamertags with inner spaces. |
 
@@ -119,8 +124,8 @@ The sender of a request picks an id that is unique among its open requests (a co
 
 ### Connection flow
 
-1. The peer connects and sends `Hello` with its version, role, id and token.
-2. The cloud checks the token and answers `AuthResult`. On anything but `ACCEPTED` it closes the connection.
+1. The peer connects and sends `Hello` with its version, role, id and token. Until step 2 is done, both sides read frames of 4 KiB at most; the largest `Hello` is about 330 bytes. A larger length prefix closes the connection right away, before the body is read.
+2. The cloud checks the token and answers `AuthResult`. On anything but `ACCEPTED` it closes the connection. After `ACCEPTED` both sides allow the full 1 MiB.
 3. Both sides send `Ping` at intervals and answer with `Pong`. A side that hears nothing for too long closes with `Disconnect(TIMEOUT)`.
 4. Either side ends the connection with `Disconnect` and a reason.
 
@@ -139,13 +144,13 @@ Version history:
 
 | Version | Changes |
 |---|---|
-| 1.0 | First version: the 15 messages above. |
+| 1.0 | First version: the 15 messages above. Before the first release (stage 2, PR 9) the handshake frame limit was added, `ServiceStatus` accepts a heap maximum of `-1`, and channel names and hosts got the stricter rules above. No peer with the earlier rules was ever released, so the version stayed 1.0. |
 
 ## Limits at a glance
 
 | What | Limit |
 |---|---|
-| Frame body | 1 MiB (`Protocol.MAX_FRAME_SIZE`) |
+| Frame body | 1 MiB (`Protocol.MAX_FRAME_SIZE`); 4 KiB before `AuthResult(ACCEPTED)` (`Protocol.MAX_HANDSHAKE_FRAME_SIZE`) |
 | `ChannelMessage`, `Request`, `Response` payload | 64 KiB (`MessageLimits.MAX_PAYLOAD_SIZE`) |
 | Service id, channel name | 64 characters |
 | Group name, node id | 32 characters |
@@ -160,4 +165,4 @@ Version history:
 - Round trip for every message, once with typical values and once with every length at its limit (`MessageRoundTripTest`).
 - Limits and invalid input for every length, value type and enum (`PacketCodecTest`, `IdentifierTest`, `MessageValidationTest`, `MessageCodecTest`, `FrameCodecTest`, `VarIntsTest`).
 - Registry without duplicate ids, complete against the sealed `Message` interface, and pinned to the id table above (`MessageRegistryTest`).
-- Jazzer fuzz tests: `MessageCodecFuzzTest` (decode throws only `ProtocolException`; decoded frames encode back to the same bytes; payloads of every message type; stream decoding), `PacketReaderFuzzTest` (strings, lists) and `VarIntsFuzzTest`. They replay their seed inputs in every test run and are fuzzed nightly, see [architecture](architecture.md#fuzz-tests).
+- Jazzer fuzz tests: `MessageCodecFuzzTest` (decode throws only `ProtocolException`; decoded frames encode back to the same bytes; payloads of every message type; stream decoding; the copy-free path accepts exactly what the frame path accepts; the handshake limit holds), `PacketReaderFuzzTest` (strings, lists) and `VarIntsFuzzTest`. They replay their seed inputs in every test run and are fuzzed nightly, see [architecture](architecture.md#fuzz-tests).

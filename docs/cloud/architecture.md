@@ -2,18 +2,18 @@
 
 VectoraCloud is the Java application behind `java -jar VectoraCloud.jar`. It renders the server templates in `Server-Network/`, downloads and verifies the server software, sets up the database, starts and watches every proxy and server, and offers a console and later an API.
 
-This page describes the module layout. Each module gets its content in its own pull request (see the [roadmap](../wiki/Roadmap.md)). Done so far: [protocol](protocol.md), [configuration](config.md), [templates](template.md), [downloads](download.md) and the [launcher](launcher.md). The other modules are still empty shells with their final dependencies.
+This page describes the module layout. Each module gets its content in its own pull request (see the [roadmap](../wiki/Roadmap.md)). Done so far: [protocol](protocol.md), [configuration](config.md), [templates](template.md), [downloads](download.md), the [launcher](launcher.md) and the [cloud channel](network.md) (`cloud-network` and `Vectora-CloudClient`). The other modules are still empty shells with their final dependencies.
 
 ## Modules
 
 | Module | Package | Purpose |
 |---|---|---|
 | `Vectora-Protocol` | `net.vectora.protocol` | Wire format of the cloud channel. No dependencies at all, because it runs inside every proxy and server. See [protocol.md](protocol.md). |
-| `Vectora-CloudClient` | `net.vectora.cloud.client` | Client side of the channel, used by the bridges and later by the Vectora plugin. Uses only the JDK for networking. |
+| `Vectora-CloudClient` | `net.vectora.cloud.client` | Client side of the channel, used by the bridges and later by the Vectora plugin. Uses only the JDK for networking (no Netty, neither shaded nor the server's), reasons in [network.md](network.md#why-the-client-uses-plain-jdk-sockets-and-no-netty). |
 | `VectoraCloud/cloud-config` | `net.vectora.cloud.config` | Configuration model: `cloud.yml`, `groups/`, `tasks/`, `nodes.yml`, each with a `schema-version`, plus `secrets/vectora.env`. The API speaks JSON with the same model. See [config.md](config.md). |
 | `VectoraCloud/cloud-template` | `net.vectora.cloud.template` | Turns `Server-Network/<Server>/template/` into `runtime/`: placeholders, secrets, wanted and unwanted servers. See [template.md](template.md). |
 | `VectoraCloud/cloud-download` | `net.vectora.cloud.download` | Downloads server software, plugins, mods and JREs over HTTPS from an allowlist of hosts, verifies checksums, guards against zip slip. Owns `software.lock.yml`, the record of every resolved artifact with its hash. Its `jre` package picks and installs the Java runtime per group; `cloud-node` calls `JreManager`. See [download.md](download.md). |
-| `VectoraCloud/cloud-network` | `net.vectora.cloud.network` | Netty server for the cloud channel (bridges, nodes) and later the REST and WebSocket API. |
+| `VectoraCloud/cloud-network` | `net.vectora.cloud.network` | Netty server for the cloud channel (bridges, later nodes) and later the REST and WebSocket API. Loopback by default, per-start service tokens, connection limits. See [network.md](network.md). |
 | `VectoraCloud/cloud-database` | `net.vectora.cloud.database` | Database setup (managed MariaDB, Docker or external server) and central sizing of the connection pools. |
 | `VectoraCloud/cloud-node` | `net.vectora.cloud.node` | The node itself: services, groups and tasks, JRE management, console, setup flow, scaling, monitoring, backups, updates, cluster. |
 | `VectoraCloud/cloud-launcher` | `net.vectora.cloud.launcher` | Entry point of `VectoraCloud.jar`: arguments, refusal to run as root or administrator (unless `--allow-root` or `VECTORA_ALLOW_ROOT=true`), node startup. See [launcher.md](launcher.md). |
@@ -88,7 +88,7 @@ The shared Gradle setup lives in the included build `build-logic/` as convention
 |---|---|---|
 | `vectora.java-conventions` | every Java module | Java 25 toolchain, `--release 21`, `-Xlint:all -Werror` (a module may switch `-Werror` off and has to say why), JUnit, `-PtestJava=21`, reproducible jars. |
 | `vectora.java25-api-conventions` | bridges, `Vectora-Lobby`, `Vectora-PortalBridge` | Everything above, plus `disableAutoTargetJvm()` for the Java 25 server APIs. |
-| `vectora.fuzz-conventions` | modules with fuzz tests (`Vectora-Protocol`, `cloud-config`, `cloud-template`, `cloud-download`) | Adds Jazzer, runs `@FuzzTest` methods in regression mode in every test run; `-Pfuzz` switches to fuzzing mode. |
+| `vectora.fuzz-conventions` | modules with fuzz tests (`Vectora-Protocol`, `Vectora-CloudClient`, `cloud-config`, `cloud-template`, `cloud-download`, `cloud-network`) | Adds Jazzer, runs `@FuzzTest` methods in regression mode in every test run; `-Pfuzz` switches to fuzzing mode. |
 
 ## Fuzz tests
 
