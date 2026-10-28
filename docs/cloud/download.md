@@ -24,7 +24,7 @@ The module uses the JDK `HttpClient` and Jackson 3. It has no other dependencies
 - Timeouts: 15 s to connect, 30 s until the response headers arrive, 15 min per attempt in total. A watchdog closes a stalled connection when that time is up.
 - Up to 3 attempts with exponential backoff (1 s, 2 s, at most 10 s) after network errors and 5xx answers. 4xx answers are not retried, and neither are a refused host or an exceeded limit.
 - 429 (Too Many Requests) and 503 count as rate limits and get up to 2 retries of their own. The client waits as long as `Retry-After` asks: whole seconds (at most nine digits) or an HTTP date such as `Wed, 28 Oct 2026 12:00:05 GMT`, measured against the system clock in UTC. A date in the past means no wait. Without the header, or with a value it cannot read, it uses the backoff above. If `Retry-After` asks for more than 60 s, the request fails at once with a message that names the host and the requested wait, without the path or query of the URL.
-- User-Agent: `VectoraCloud/<version> (+https://github.com/VectoDE/Vectora-Network)`. PaperMC and Modrinth ask for a User-Agent that names the application and a contact.
+- User-Agent: `VectoraCloud/<version> (+https://github.com/VectoDE/Vectora-Network)`. The version comes from `Implementation-Version` in the jar manifest, which `vectora.java-conventions` sets for every module jar; outside a jar (tests, IDE) it is `dev`. PaperMC and Modrinth ask for a User-Agent that names the application and a contact.
 
 ## Providers
 

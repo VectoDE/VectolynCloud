@@ -23,7 +23,7 @@ def main() -> int:
     targets = []
     for source in sorted(root.glob("**/src/test/java/**/*.java")):
         rel = source.relative_to(root)
-        if any(part in ("build", ".gradle", "runtime") for part in rel.parts):
+        if any(part in ("build", ".gradle", ".claude", "runtime") for part in rel.parts):
             continue
         text = source.read_text(encoding="utf-8")
         if not FUZZ_TEST.search(text):
