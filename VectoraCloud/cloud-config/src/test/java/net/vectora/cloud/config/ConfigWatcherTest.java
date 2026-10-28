@@ -81,6 +81,48 @@ class ConfigWatcherTest {
         }
     }
 
+    @Test
+    void deletedGroupsFolderIsWatchedAgainAfterItsKeyBecameInvalid() throws Exception {
+        try (ConfigService service = ConfigService.open(CloudHome.of(root))) {
+            Recorder recorder = new Recorder();
+            service.addListener(recorder);
+            service.startWatching();
+
+            // Deleting the folder invalidates its watch key (key.reset() returns false).
+            Files.delete(root.resolve("groups"));
+            awaitDirectory(root.resolve("groups"));
+
+            Files.write(root.resolve("groups/lobby.yml"), ConfigYaml.write(Samples.lobbyGroup()));
+            ConfigChanged change = recorder.awaitChange(c -> c.current().groups().containsKey("lobby"));
+            assertTrue(change.files().contains("groups/lobby.yml"), "changes in the new folder are seen again");
+        }
+    }
+
+    @Test
+    void folderThatCannotBeWatchedAgainIsReported() throws Exception {
+        // groups/ replaced by a regular file: the folder can neither be created nor watched again.
+        try (ConfigService service = ConfigService.open(CloudHome.of(root))) {
+            Recorder recorder = new Recorder();
+            service.addListener(recorder);
+            service.startWatching();
+
+            Files.delete(root.resolve("groups"));
+            Files.writeString(root.resolve("groups"), "not a folder");
+
+            ConfigException error = recorder.awaitFailure(e -> e.errors().stream()
+                    .anyMatch(err -> err.code() == ErrorCode.FILE_ACCESS && err.file().equals("groups/")));
+            assertNotNull(error);
+        }
+    }
+
+    private static void awaitDirectory(Path dir) throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(WAIT_SECONDS);
+        while (!Files.isDirectory(dir)) {
+            assertTrue(System.nanoTime() < deadline, "the watcher did not create " + dir + " again");
+            Thread.sleep(50);
+        }
+    }
+
     private static final class Recorder implements ConfigListener {
         final BlockingQueue<ConfigChanged> changes = new LinkedBlockingQueue<>();
         final BlockingQueue<ConfigException> failures = new LinkedBlockingQueue<>();

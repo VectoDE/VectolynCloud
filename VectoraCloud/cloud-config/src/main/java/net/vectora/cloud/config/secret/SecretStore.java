@@ -10,6 +10,7 @@ import java.util.Objects;
 import java.util.Set;
 import net.vectora.cloud.config.CloudHome;
 import net.vectora.cloud.config.io.AtomicFileWriter;
+import net.vectora.cloud.config.io.RegularPaths;
 
 /**
  * Reads and writes {@code secrets/vectora.env}.
@@ -54,6 +55,8 @@ public final class SecretStore {
 
     /** The current content; empty if the file does not exist yet. */
     public synchronized EnvFile load() throws IOException, EnvFormatException {
+        RegularPaths.requireDirectoryOrMissing(file.getParent());
+        RegularPaths.requireFileOrMissing(file);
         try {
             if (Files.size(file) > EnvFileParser.MAX_BYTES) {
                 throw new EnvFormatException(0, EnvFormatException.Reason.TOO_LARGE);
@@ -110,7 +113,9 @@ public final class SecretStore {
 
     private void write(EnvFile content) throws IOException {
         Path dir = file.getParent();
+        RegularPaths.requireDirectoryOrMissing(dir);
         Files.createDirectories(dir);
+        RegularPaths.requireFileOrMissing(file);
         OwnerOnlyPermissions.restrictDirectory(dir);
         writer.write(file, content.render().getBytes(StandardCharsets.UTF_8), OwnerOnlyPermissions::restrictFile);
         OwnerOnlyPermissions.restrictFile(file);

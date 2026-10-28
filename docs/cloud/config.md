@@ -130,6 +130,16 @@ Group, task and node names match `[a-z0-9][a-z0-9_-]{0,31}` and must not be a Wi
 
 The cloud resolves a group or task file only directly inside `groups/` or `tasks/`; a name that would end up in another folder is rejected even if it slipped past the pattern.
 
+### Symbolic links
+
+`cloud.yml`, `nodes.yml`, the files in `groups/` and `tasks/`, the folders `groups/`, `tasks/` and `secrets/`, and `secrets/vectora.env` must be real files and folders. A symbolic link, a Windows junction, a special file, or a file where a folder belongs is an error with the code `not-regular`:
+
+- It is reported, never skipped silently. A link named like a configuration file (`groups/lobby.yml`) counts, a link with another name (`groups/notes.txt`) is ignored like any other file.
+- It is never followed. A dangling link where `cloud.yml` belongs does not count as a missing file, so the cloud does not write default files through it.
+- The secret store refuses a linked `secrets/` or `vectora.env` and writes nothing.
+
+The home folder itself may be a link, for example a mounted volume. The rule exists because the cloud replaces a file by renaming a new file over it, which would silently turn a link into a plain file, and because a link could point a secret or configuration out of the home. All checks use `NOFOLLOW_LINKS` (`RegularPaths` in `net.vectora.cloud.config.io`).
+
 Files in `groups/` and `tasks/` that start with `.` (editor swap files, the cloud's own temporary files) and files that do not end in `.yml` or `.yaml` are ignored. A `.yaml` file or a `.yml` file with an invalid name is an error, so a file that would otherwise be skipped silently is reported.
 
 ## Strict reading
@@ -151,7 +161,7 @@ cloud.yml: proxy.port (line 13): Must be between 1 and 65535. [out-of-range]
 cloud.yml: proxy.port (Zeile 13): Muss zwischen 1 und 65535 liegen.
 ```
 
-Codes (`ErrorCode.code()`): `syntax`, `not-a-mapping`, `file-too-large`, `file-missing`, `file-access`, `invalid-file-name`, `schema-version-missing`, `schema-version-unsupported`, `unknown-field`, `duplicate-field`, `invalid-value`, `required`, `out-of-range`, `pattern-mismatch`, `min-greater-than-max`, `port-conflict`, `port-in-service-range`, `duplicate-entry`, `unknown-group`, `unknown-task`, `unknown-node`, `already-exists`, `not-allowed`, `catalog-kind-mismatch`, `software-version-mismatch`, `api-tls-required`, `eula-required`, `empty`.
+Codes (`ErrorCode.code()`): `syntax`, `not-a-mapping`, `file-too-large`, `file-missing`, `file-access`, `invalid-file-name`, `schema-version-missing`, `schema-version-unsupported`, `unknown-field`, `duplicate-field`, `invalid-value`, `required`, `out-of-range`, `pattern-mismatch`, `min-greater-than-max`, `port-conflict`, `port-in-service-range`, `duplicate-entry`, `unknown-group`, `unknown-task`, `unknown-node`, `already-exists`, `not-allowed`, `catalog-kind-mismatch`, `software-version-mismatch`, `api-tls-required`, `eula-required`, `empty`, `not-regular`.
 
 An error never contains the value that was wrong, only the limit, pattern or name involved. A secret pasted into the wrong field therefore cannot reach a log through its error message. Names taken from the input (an unknown field, group, task or node) are passed on unchanged only when they are valid names; otherwise control and non-ASCII characters become `?` and the text is cut to 64 characters, so it cannot break or forge a log line.
 
@@ -186,11 +196,11 @@ try (ConfigService config = ConfigService.open(CloudHome.of(Path.of("Server-Netw
 
 Operations in `net.vectora.cloud.config.operation`: `SetLanguage`, `SetNetworkName`, `AcceptEula`, `CompleteSetup`, `SetServerWanted`, `SetDatabaseMode`, `SetDatabase`, `SetProxy`, `SetLegacyProxy`, `SetApi`, `PutGroup`, `RemoveGroup`, `SetGroupHeap`, `PutTask`, `RemoveTask`, `SetTaskScaling`, `PutNode`, `RemoveNode`. `ConfigOperation` is a plain interface; other modules add their own operations by implementing it.
 
-The service is thread-safe. `snapshot()` never blocks; changes and reloads run one at a time. Listeners are called in order while the service holds its lock, so they see changes in the order they happened. They may read the snapshot and call `apply` again, but must return quickly. An exception in a listener is logged and does not stop the others.
+The service is thread-safe. `snapshot()` never blocks; changes and reloads run one at a time. Listeners are called in order while the service holds its lock, so they see changes in the order they happened. They may read the snapshot and call `apply` again, but must return quickly. Such a nested `apply` returns its result at once; its event is queued and delivered after every listener has seen the change that triggered it, so no listener sees the second change before the first. An exception in a listener is logged and does not stop the others.
 
 ### Hand edits
 
-`startWatching()` watches `cloud.yml`, `nodes.yml`, `groups/` and `tasks/`. After a burst of changes has been quiet for 200 ms, all files are read again:
+`startWatching()` watches `cloud.yml`, `nodes.yml`, `groups/` and `tasks/`. If a watched folder is deleted, renamed or unmounted, its watch key becomes invalid. The watcher then creates `groups/` or `tasks/` again (as on the first start), watches it again and reloads. If the folder cannot be watched again (for example a file now has its name), listeners get `reloadFailed` with `file-access` for that folder, and the other folders stay watched. After a burst of changes has been quiet for 200 ms, all files are read again:
 
 - valid and different: it becomes the current snapshot, and listeners get a `ConfigChanged` with origin `FILE`;
 - invalid, or `cloud.yml`/`nodes.yml` deleted: the previous snapshot stays active, the errors are logged and listeners get `reloadFailed`;
@@ -256,7 +266,7 @@ Rules of the store:
 - An existing value is never overwritten. Missing keys are appended with a comment; empty entries (`KEY=`, as copied from the example) are filled in place.
 - Comments and blank lines stay.
 - The file is replaced atomically. The temporary file is restricted to the owner before the secrets are written into it.
-- Permissions: on Linux and macOS the folder is `700` and the file `600`. On Windows the access list of folder and file is replaced by one entry that gives the owner full control, inherited by new files in the folder. Windows does not mark this list as protected, so an administrator who later re-applies inheritance on a parent folder can widen it again. File systems without either model (FAT, some network shares) cannot be restricted.
+- Permissions: on Linux and macOS the folder is `700` and the file `600`. On Windows the access list of folder and file is replaced by one entry that gives the owner full control, inherited by new files in the folder, and is then marked protected (`icacls /inheritance:d`, called by its full path in `System32`; Java's ACL API cannot set the flag). Entries an administrator later adds to a parent folder are therefore not inherited. Explicitly replacing the list (for example `icacls /reset` or "Replace all child object permissions") still overrides it, as it overrides any protected list. File systems without either model (FAT, some network shares) cannot be restricted.
 - A malformed file is not touched; the error is reported.
 
 ### Redaction
