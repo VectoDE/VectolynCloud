@@ -101,11 +101,25 @@ public final class LibraryExtractor {
         if (!LibraryIndex.isSafeName(fileName)) {
             throw new LibraryException(LibraryException.Kind.UNSAFE_NAME, fileName, "not a plain jar file name");
         }
-        Path target = directory.resolve(fileName).normalize();
-        if (!directory.equals(target.getParent())) {
-            throw new LibraryException(LibraryException.Kind.UNSAFE_NAME, fileName, "resolves outside " + directory);
+        return requireDirectChild(directory, directory.resolve(fileName));
+    }
+
+    /**
+     * Second line of defence behind {@link LibraryIndex#isSafeName(String)}: the normalized target
+     * must lie directly inside the directory, not above it and not in a subdirectory.
+     *
+     * @param dir    the normalized absolute target directory
+     * @param target the path resolved against {@code dir}
+     * @return the normalized target
+     * @throws LibraryException if the target is not a direct child of {@code dir}
+     */
+    static Path requireDirectChild(Path dir, Path target) throws LibraryException {
+        Path normalized = target.normalize();
+        if (!dir.equals(normalized.getParent())) {
+            throw new LibraryException(LibraryException.Kind.UNSAFE_NAME, target.toString(),
+                    "resolves outside " + dir);
         }
-        return target;
+        return normalized;
     }
 
     private static boolean isCachedAndValid(Path target, LibraryEntry entry) {

@@ -119,15 +119,33 @@ public final class Messages {
     }
 
     /**
-     * Notice when the rights could not be determined.
+     * Warning when the rights could not be determined. The launcher still starts, so the warning
+     * tells anyone who did start it elevated to stop it right away.
      *
      * @param evidence why the check failed
-     * @return the notice
+     * @return the warning
      */
     public String elevationUnknown(String evidence) {
-        return de()
-                ? "Hinweis: Ob VectoraCloud mit Admin-Rechten läuft, ließ sich nicht prüfen (" + evidence + "). Start wird fortgesetzt."
-                : "Note: could not check whether VectoraCloud runs with admin rights (" + evidence + "). Continuing.";
+        if (de()) {
+            return """
+                    ************************************************************************
+                    WARNUNG: Ob VectoraCloud mit Administrator- bzw. root-Rechten läuft,
+                    ließ sich nicht ermitteln (%s).
+                    Wer VectoraCloud als Administrator oder root gestartet hat, beendet es
+                    jetzt sofort und startet es als normaler Benutzer neu.
+                    Der Start wird fortgesetzt.
+                    ************************************************************************
+                    """.formatted(evidence);
+        }
+        return """
+                ************************************************************************
+                WARNING: Could not determine whether VectoraCloud is running with
+                administrator or root rights (%s).
+                If you started it as administrator or root, stop it now and start it
+                again as a normal user.
+                Startup continues.
+                ************************************************************************
+                """.formatted(evidence);
     }
 
     /**

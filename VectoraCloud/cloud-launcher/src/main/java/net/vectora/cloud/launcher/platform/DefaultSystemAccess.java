@@ -1,9 +1,9 @@
 package net.vectora.cloud.launcher.platform;
 
-import java.io.ByteArrayOutputStream;
 import java.io.Console;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -58,9 +58,30 @@ public final class DefaultSystemAccess implements SystemAccess {
 
     @Override
     public Optional<String> run(List<String> command) {
+        // The output goes to a temporary file rather than a pipe, so a command that hangs without
+        // closing its output cannot block the launcher: waitFor() with the timeout always runs.
+        Path output;
+        try {
+            output = Files.createTempFile("vectora-launcher-", ".out");
+        } catch (IOException | SecurityException | UnsupportedOperationException e) {
+            return Optional.empty();
+        }
+        try {
+            return runInto(command, output);
+        } finally {
+            try {
+                Files.deleteIfExists(output);
+            } catch (IOException | SecurityException e) {
+                output.toFile().deleteOnExit();
+            }
+        }
+    }
+
+    private static Optional<String> runInto(List<String> command, Path output) {
         Process process;
         try {
             process = new ProcessBuilder(command)
+                    .redirectOutput(output.toFile())
                     .redirectError(ProcessBuilder.Redirect.DISCARD)
                     .start();
         } catch (IOException | SecurityException | UnsupportedOperationException e) {
@@ -68,18 +89,6 @@ public final class DefaultSystemAccess implements SystemAccess {
         }
         try {
             process.getOutputStream().close();
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            try (InputStream in = process.getInputStream()) {
-                byte[] buffer = new byte[8192];
-                int read;
-                while ((read = in.read(buffer)) >= 0) {
-                    if (out.size() + read > MAX_OUTPUT_BYTES) {
-                        process.destroyForcibly();
-                        return Optional.empty();
-                    }
-                    out.write(buffer, 0, read);
-                }
-            }
             if (!process.waitFor(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
                 process.destroyForcibly();
                 return Optional.empty();
@@ -87,8 +96,15 @@ public final class DefaultSystemAccess implements SystemAccess {
             if (process.exitValue() != 0) {
                 return Optional.empty();
             }
-            return Optional.of(out.toString(nativeCharset()));
-        } catch (IOException e) {
+            byte[] data;
+            try (InputStream in = Files.newInputStream(output)) {
+                data = in.readNBytes(MAX_OUTPUT_BYTES + 1);
+            }
+            if (data.length > MAX_OUTPUT_BYTES) {
+                return Optional.empty();
+            }
+            return Optional.of(new String(data, nativeCharset()));
+        } catch (IOException | SecurityException e) {
             process.destroyForcibly();
             return Optional.empty();
         } catch (InterruptedException e) {
@@ -139,7 +155,7 @@ public final class DefaultSystemAccess implements SystemAccess {
             return Boolean.TRUE.equals(isTerminal.invoke(console));
         } catch (NoSuchMethodException e) {
             return true;
-        } catch (ReflectiveOperationException | RuntimeException e) {
+        } catch (IllegalAccessException | InvocationTargetException | RuntimeException e) {
             return false;
         }
     }

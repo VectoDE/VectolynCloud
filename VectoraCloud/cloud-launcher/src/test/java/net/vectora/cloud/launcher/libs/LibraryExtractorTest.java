@@ -141,6 +141,19 @@ class LibraryExtractorTest {
     }
 
     @Test
+    void directChildCheckRejectsParentAndSubdirectory(@TempDir Path dir) throws Exception {
+        // The check behind isSafeName, tested on its own: resolveInside never reaches it with
+        // these names because the name check rejects them first.
+        Path base = dir.toAbsolutePath().normalize();
+        for (Path target : List.of(base.resolve("../x.jar"), base.resolve("a/b.jar"), base.resolve("a/../../x.jar"))) {
+            LibraryException e = assertThrows(LibraryException.class,
+                    () -> LibraryExtractor.requireDirectChild(base, target), target.toString());
+            assertEquals(LibraryException.Kind.UNSAFE_NAME, e.kind(), target.toString());
+        }
+        assertEquals(base.resolve("x.jar"), LibraryExtractor.requireDirectChild(base, base.resolve("a/../x.jar")));
+    }
+
+    @Test
     void malformedIndexLines() {
         for (String line : List.of("abc  a.jar", "0".repeat(63) + "  a.jar", "0".repeat(64) + "a.jar", "0".repeat(64))) {
             LibraryException e = assertThrows(LibraryException.class, () -> index(line), line);

@@ -23,14 +23,16 @@ VectoraCloud starts servers and downloads and runs software. With root or admini
 
 | System | Counts as elevated | Sources, in order |
 |---|---|---|
-| Linux, macOS, other Unix | UID 0 | `com.sun.security.auth.module.UnixSystem` (JDK module `jdk.security.auth`, by reflection); effective UID from the `Uid:` line of `/proc/self/status`; `id -u` |
-| Windows | Integrity level High (`S-1-16-12288`) or higher, e.g. System (`S-1-16-16384`) | Token groups from `com.sun.security.auth.module.NTSystem` (same module, by reflection); `whoami /groups /fo csv /nh` |
+| Linux, macOS, other Unix | UID 0 | `com.sun.security.auth.module.UnixSystem` (JDK module `jdk.security.auth`, by reflection); effective UID from the `Uid:` line of `/proc/self/status`; `/usr/bin/id -u`, or `/bin/id -u` if the former does not exist |
+| Windows | Integrity level High (`S-1-16-12288`) or higher, e.g. System (`S-1-16-16384`) | Token groups from `com.sun.security.auth.module.NTSystem` (same module, by reflection); `%SystemRoot%\System32\whoami.exe /groups /fo csv /nh` |
 
 **Why the integrity level on Windows.** An account in the Administrators group gets a filtered token in a normal console (integrity Medium, `S-1-16-8192`), and only "Run as administrator" gives it the full token (High). The Administrators SID `S-1-5-32-544` is no good signal: the filtered token still lists it, as a deny-only group, so checking it would refuse every admin account even in a normal console. The integrity label is exactly what "elevated" means.
 
 **Why `NTSystem` first.** It reads the process token in-process: no child process, no dependency on `whoami.exe` being on the `PATH`, and no localized output. Checked on Windows 11: in an elevated console its group list contains `S-1-16-12288`, the same as `whoami /groups`. `whoami` stays as a fallback for runtimes built without `jdk.security.auth` (custom `jlink` images); its group names are localized, so only the SIDs are parsed. Other dependency-free options were weaker: `net session` and `fltmc` only report success or failure, depend on services being started and cannot tell High from System. JNA or a native helper would add a dependency.
 
-If no source works, the launcher prints a notice and continues. Refusing in that case would lock out normal users on unusual systems.
+The fallback commands are started by absolute path and never looked up on the `PATH`, so a planted `id` or `whoami` earlier on the `PATH` cannot answer the check. A UID or integrity level that does not fit into a number counts as "no answer".
+
+If no source works, the launcher prints a boxed `WARNING` (German: `WARNUNG`) and continues: the rights could not be determined, and anyone who started it as administrator or root should stop it right away and start it again as a normal user. Refusing in that case would lock out normal users on unusual systems.
 
 **Override.** `--allow-root` or the environment variable `VECTORA_ALLOW_ROOT=true` (only `true`, any case) allow an elevated start. A boxed warning is printed every time. The node receives `root-allowed=true`.
 

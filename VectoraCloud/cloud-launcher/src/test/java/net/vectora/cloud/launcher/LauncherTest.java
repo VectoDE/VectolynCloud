@@ -131,7 +131,23 @@ class LauncherTest {
     void unknownStateStartsWithNotice() {
         int code = run(new FakeSystemAccess());
         assertEquals(Launcher.EXIT_OK, code);
-        assertTrue(err().contains("could not check"), err());
+        assertNotNull(launchedSettings, "node must still start");
+        String err = err();
+        assertTrue(err.startsWith("****"), err);
+        assertTrue(err.contains("WARNING: Could not determine whether VectoraCloud is running with"), err);
+        assertTrue(err.contains("stop it now and start it"), err);
+        assertTrue(err.contains("Startup continues."), err);
+        assertEquals("false", launchedSettings.get("root-allowed"));
+    }
+
+    @Test
+    void unknownStateWarningInGerman() {
+        assertEquals(Launcher.EXIT_OK, run(new FakeSystemAccess(), "--lang", "de"));
+        String err = err();
+        assertTrue(err.startsWith("****"), err);
+        assertTrue(err.contains("WARNUNG: Ob VectoraCloud mit Administrator- bzw. root-Rechten läuft"), err);
+        assertTrue(err.contains("beendet es"), err);
+        assertTrue(err.contains("Der Start wird fortgesetzt."), err);
     }
 
     @Test
@@ -173,6 +189,16 @@ class LauncherTest {
         });
         assertEquals(Launcher.EXIT_NO_NODE, code);
         assertTrue(err().contains(NodeStarter.NODE_MAIN_CLASS), err());
+    }
+
+    @Test
+    void unexpectedRuntimeExceptionFromNodeExitsWith1() {
+        int code = run(FakeSystemAccess.linuxUser(), (home, settings) -> {
+            throw new IllegalStateException("kaputt");
+        });
+        assertEquals(Launcher.EXIT_NODE_FAILED, code);
+        assertTrue(err().contains("The node failed to start"), err());
+        assertTrue(err().contains("kaputt"), err());
     }
 
     @Test

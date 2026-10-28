@@ -113,7 +113,7 @@ public final class Launcher {
                 return EXIT_ELEVATED;
             }
             case PROCEED_WITH_WARNING -> err.print(early.rootAllowedWarning(elevation.evidence()));
-            case PROCEED_UNCHECKED -> err.println(early.elevationUnknown(elevation.evidence()));
+            case PROCEED_UNCHECKED -> err.print(early.elevationUnknown(elevation.evidence()));
             case PROCEED -> {
                 // Nothing to say.
             }
@@ -167,6 +167,10 @@ public final class Launcher {
                 return EXIT_NODE_FAILED;
             }
             return EXIT_NO_NODE;
+        } catch (RuntimeException e) {
+            err.println(messages.nodeError(new NodeStartException(NodeStartException.Kind.FAILED, "unexpected", e)));
+            e.printStackTrace(err);
+            return EXIT_NODE_FAILED;
         }
     }
 
