@@ -17,7 +17,7 @@ Danke, dass du helfen willst. Vectora steht noch am Anfang, deshalb sind die Reg
 2. Kleine, abgegrenzte Commits machen.
 3. Vor dem Push `./gradlew build` ausführen.
 4. Pull Request gegen `main` öffnen und die Vorlage ausfüllen. Das Issue mit `Fixes #123` verknüpfen.
-5. CI, CodeQL und Dependency Review müssen grün sein. Ein Maintainer prüft und merged per Squash.
+5. CI, CodeQL und Dependency Review müssen grün sein, und alle Review-Konversationen müssen aufgelöst sein. Ein Maintainer prüft und merged per Squash. Auf `main` gibt es keine direkten Pushes und keine Force-Pushes.
 
 ## Commit-Nachrichten
 

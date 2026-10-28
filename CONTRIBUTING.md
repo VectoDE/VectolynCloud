@@ -17,7 +17,7 @@ Thanks for wanting to help. Vectora is at an early stage, so the rules below are
 2. Make small, focused commits.
 3. Run `./gradlew build` before you push.
 4. Open a pull request against `main` and fill in the template. Link the issue with `Fixes #123`.
-5. CI, CodeQL and dependency review have to pass. A maintainer reviews and merges with squash.
+5. CI, CodeQL and dependency review have to pass, and every review conversation has to be resolved. A maintainer reviews and merges with squash. `main` takes no direct pushes or force pushes.
 
 ## Commit messages
 
