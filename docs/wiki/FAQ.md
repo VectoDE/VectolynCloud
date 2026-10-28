@@ -6,7 +6,7 @@
 Not yet. The project is in stage 1 of 8. The address will be announced in [Discussions → Announcements](https://github.com/VectoDE/Vectora-Network/discussions/categories/announcements).
 
 **Which Minecraft versions can play?**
-The goal is Java 1.8 up to the latest release plus Bedrock. See [Crossplay](Crossplay) for what works today.
+The goal is Java 1.8 to 26.3 plus Bedrock. See [Crossplay](Crossplay) for what works today.
 
 **Do Bedrock players get the full game?**
 That is a project rule: no game mode ships that Bedrock players cannot enter. Menus are inventory menus that work on both editions.

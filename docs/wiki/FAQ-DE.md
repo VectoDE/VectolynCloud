@@ -6,7 +6,7 @@
 Noch nicht. Das Projekt steht bei Etappe 1 von 8. Die Adresse kündigen wir unter [Discussions → Announcements](https://github.com/VectoDE/Vectora-Network/discussions/categories/announcements) an.
 
 **Welche Minecraft-Versionen können spielen?**
-Ziel sind Java 1.8 bis zur neuesten Version und Bedrock. Was heute schon geht, steht unter [Crossplay](Crossplay-DE).
+Ziel sind Java 1.8 bis 26.3 und Bedrock. Was heute schon geht, steht unter [Crossplay](Crossplay-DE).
 
 **Bekommen Bedrock-Spieler das volle Spiel?**
 Das ist eine Projektregel: Kein Spielmodus erscheint, den Bedrock-Spieler nicht betreten können. Menüs sind Inventar-Menüs, die auf beiden Editionen funktionieren.

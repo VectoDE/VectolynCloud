@@ -4,7 +4,7 @@
 
 Vectora has two sides:
 
-1. **A public Minecraft network.** Java players from 1.8 to the latest version and Bedrock players join the same proxy and play together: lobby, survival, creative, a Fabric mod server, a shared End server and minigames.
+1. **A public Minecraft network.** Java players from 1.8 to 26.3 and Bedrock players join the same proxy and play together: lobby, survival, creative, a Fabric mod server, a shared End server and minigames.
 2. **An open-source kit.** Everything the network needs lives in this repository under GPL-3.0. You can take it and run your own network.
 
 ## Status

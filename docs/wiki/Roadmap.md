@@ -16,7 +16,7 @@ Node with console, CloudNet-style setup wizard on first start, configuration thr
 
 ## 3. Vectora plugin base ([#12](https://github.com/VectoDE/Vectora-Network/issues/12))
 
-Core, permissions and ranks, messaging, portals and End, sync between servers, version adapters for 1.8.8 to latest. One jar per platform.
+Core, permissions and ranks, messaging, portals and End, sync between servers, version adapters for 1.8.8 to 26.3. One jar per platform.
 
 ## 4. Lobby ([#13](https://github.com/VectoDE/Vectora-Network/issues/13))
 
@@ -32,7 +32,7 @@ BedWars, SkyWars, Parkour/JumpLeague, SurvivalGames, TNTRun/Spleef, BuildBattle,
 
 ## 7. Brand and resource pack ([#16](https://github.com/VectoDE/Vectora-Network/issues/16))
 
-New brand (logo, palette, typeface, tone), approved before use. Resource pack in steps, with a build tool for every Java `pack_format` from 1.8 to latest plus a Bedrock pack.
+New brand (logo, palette, typeface, tone), approved before use. Resource pack in steps, with a build tool for every Java `pack_format` from 1.8 to 26.3 plus a Bedrock pack.
 
 ## 8. Dashboard, Discord bot, website, store ([#17](https://github.com/VectoDE/Vectora-Network/issues/17))
 
