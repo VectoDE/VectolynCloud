@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 import net.vectora.cloud.config.CloudHome;
 import net.vectora.cloud.config.error.ConfigError;
 import net.vectora.cloud.config.error.ErrorCode;
@@ -65,7 +67,7 @@ public final class ConfigValidator {
         c.version(f, cloud.schemaVersion(), CloudConfig.SCHEMA_VERSION);
         c.pattern(f, "network-name", cloud.networkName(), ConfigNames.NETWORK_NAME);
         c.required(f, "language", cloud.language());
-        c.pattern(f, "node-id", cloud.nodeId(), ConfigNames.NAME);
+        c.name(f, "node-id", cloud.nodeId());
         c.required(f, "servers", cloud.servers());
         if (cloud.setupComplete() && !cloud.eulaAccepted()) {
             c.add(ConfigError.of(f, "setup-complete", ErrorCode.EULA_REQUIRED));
@@ -129,7 +131,7 @@ public final class ConfigValidator {
                 c.add(ConfigError.of(f, p, ErrorCode.REQUIRED));
                 continue;
             }
-            if (c.pattern(f, p + ".id", node.id(), ConfigNames.NAME) && !ids.add(node.id())) {
+            if (c.name(f, p + ".id", node.id()) && !ids.add(node.id())) {
                 c.add(ConfigError.of(f, p + ".id", ErrorCode.DUPLICATE_ENTRY, node.id()));
             }
             c.pattern(f, p + ".host", node.host(), ConfigNames.HOST);
@@ -196,7 +198,7 @@ public final class ConfigValidator {
             c.add(ConfigError.of(f, "", ErrorCode.INVALID_FILE_NAME, ConfigNames.NAME + "\\.yml"));
         }
         c.version(f, task.schemaVersion(), TaskConfig.SCHEMA_VERSION);
-        if (c.pattern(f, "group", task.group(), ConfigNames.NAME) && !snapshot.groups().containsKey(task.group())) {
+        if (c.name(f, "group", task.group()) && !snapshot.groups().containsKey(task.group())) {
             c.add(ConfigError.of(f, "group", ErrorCode.UNKNOWN_GROUP, task.group()));
         }
         c.required(f, "mode", task.mode());
@@ -216,7 +218,7 @@ public final class ConfigValidator {
         for (int i = 0; i < task.nodes().size(); i++) {
             String node = task.nodes().get(i);
             String p = "nodes[" + i + "]";
-            if (!c.pattern(f, p, node, ConfigNames.NAME)) {
+            if (!c.name(f, p, node)) {
                 continue;
             }
             if (!seen.add(node)) {
@@ -292,6 +294,9 @@ public final class ConfigValidator {
 
     /** Collects errors; each check returns whether the value passed. */
     private static final class Checks {
+
+        /** Compiled once; the keys are the constants of {@link ConfigNames}. */
+        private static final Map<String, Pattern> PATTERNS = new ConcurrentHashMap<>();
         private final List<ConfigError> errors = new ArrayList<>();
 
         void add(ConfigError error) {
@@ -314,8 +319,20 @@ public final class ConfigValidator {
             if (!required(file, path, value)) {
                 return false;
             }
-            if (!value.matches(regex)) {
+            if (!PATTERNS.computeIfAbsent(regex, Pattern::compile).matcher(value).matches()) {
                 add(ConfigError.of(file, path, ErrorCode.PATTERN_MISMATCH, regex));
+                return false;
+            }
+            return true;
+        }
+
+        /** A group, task or node name: the pattern plus the excluded device names. */
+        boolean name(String file, String path, String value) {
+            if (!required(file, path, value)) {
+                return false;
+            }
+            if (!ConfigNames.isValidName(value)) {
+                add(ConfigError.of(file, path, ErrorCode.PATTERN_MISMATCH, ConfigNames.NAME));
                 return false;
             }
             return true;

@@ -9,6 +9,7 @@ import net.vectora.cloud.config.error.ErrorCode;
 import net.vectora.cloud.config.model.JavaSelection;
 import net.vectora.cloud.config.model.MemorySize;
 import net.vectora.cloud.config.model.TimeSpan;
+import net.vectora.cloud.config.validation.ConfigNames;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.JsonParser;
 import tools.jackson.core.TokenStreamLocation;
@@ -120,7 +121,8 @@ public final class ConfigYaml {
         }
         String original = e.getOriginalMessage() == null ? "" : e.getOriginalMessage();
         if (e instanceof UnrecognizedPropertyException unknown) {
-            return ConfigError.at(file, path, line, ErrorCode.UNKNOWN_FIELD, unknown.getPropertyName());
+            return ConfigError.at(file, path, line, ErrorCode.UNKNOWN_FIELD,
+                    ConfigNames.safeArgument(unknown.getPropertyName()));
         }
         if (original.toLowerCase(Locale.ROOT).contains("duplicate")) {
             return ConfigError.at(file, path, line, ErrorCode.DUPLICATE_FIELD);

@@ -115,7 +115,9 @@ nodes:
 
 ### Names
 
-Group, task and node names match `[a-z0-9][a-z0-9_-]{0,31}`. Group and task names are the file names, so they cannot disagree with the file. Only lower case is allowed because Windows and macOS do not tell `Lobby.yml` from `lobby.yml`. The pattern is a strict subset of what `Vectora-Protocol` accepts on the wire (`[A-Za-z0-9][A-Za-z0-9_-]*`, groups up to 32 and nodes up to 64 characters), so every configured name can be sent.
+Group, task and node names match `[a-z0-9][a-z0-9_-]{0,31}` and must not be a Windows device name (`con`, `prn`, `aux`, `nul`, `com0` to `com9`, `lpt0` to `lpt9`); `console` or `con1` are fine. Group and task names are the file names, so they cannot disagree with the file. Only lower case is allowed because Windows and macOS do not tell `Lobby.yml` from `lobby.yml`. The rule is the same as for `GroupName` and `NodeId` in `Vectora-Protocol` (1 to 32 characters, lower case, no device names), so every configured name can be sent. A service id there (`ServiceId`) may have up to 64 characters, so that `<group>-<index>` fits.
+
+The cloud resolves a group or task file only directly inside `groups/` or `tasks/`; a name that would end up in another folder is rejected even if it slipped past the pattern.
 
 Files in `groups/` and `tasks/` that start with `.` (editor swap files, the cloud's own temporary files) and files that do not end in `.yml` or `.yaml` are ignored. A `.yaml` file or a `.yml` file with an invalid name is an error, so a file that would otherwise be skipped silently is reported.
 
@@ -140,7 +142,7 @@ cloud.yml: proxy.port (Zeile 13): Muss zwischen 1 und 65535 liegen.
 
 Codes (`ErrorCode.code()`): `syntax`, `not-a-mapping`, `file-too-large`, `file-missing`, `file-access`, `invalid-file-name`, `schema-version-missing`, `schema-version-unsupported`, `unknown-field`, `duplicate-field`, `invalid-value`, `required`, `out-of-range`, `pattern-mismatch`, `min-greater-than-max`, `port-conflict`, `port-in-service-range`, `duplicate-entry`, `unknown-group`, `unknown-task`, `unknown-node`, `already-exists`, `not-allowed`, `catalog-kind-mismatch`, `software-version-mismatch`, `api-tls-required`, `eula-required`, `empty`.
 
-An error never contains the value that was wrong, only the limit, pattern or name involved. A secret pasted into the wrong field therefore cannot reach a log through its error message.
+An error never contains the value that was wrong, only the limit, pattern or name involved. A secret pasted into the wrong field therefore cannot reach a log through its error message. Names taken from the input (an unknown field, group, task or node) are passed on unchanged only when they are valid names; otherwise control and non-ASCII characters become `?` and the text is cut to 64 characters, so it cannot break or forge a log line.
 
 ### Validation rules
 

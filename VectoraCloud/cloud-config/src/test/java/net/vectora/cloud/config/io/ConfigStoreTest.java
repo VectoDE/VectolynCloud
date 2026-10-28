@@ -92,6 +92,15 @@ class ConfigStoreTest {
                 "groups/lobby.txt", "groups/sub/lobby.yml", ""}) {
             assertThrows(IllegalArgumentException.class, () -> home.resolve(bad), bad);
         }
+        for (String name : new String[] {"..", ".hidden", "a.b", "a\\b", "a/b", "con", "com1", "lpt9", "a b",
+                "a".repeat(33)}) {
+            for (String folder : new String[] {CloudHome.GROUPS_DIR, CloudHome.TASKS_DIR}) {
+                String bad = folder + "/" + name + CloudHome.EXTENSION;
+                assertThrows(IllegalArgumentException.class, () -> home.resolve(bad), bad);
+            }
+        }
+        assertEquals(root.resolve("tasks").resolve("console.yml").toAbsolutePath().normalize(),
+                home.resolve("tasks/console.yml"));
     }
 
     @Test

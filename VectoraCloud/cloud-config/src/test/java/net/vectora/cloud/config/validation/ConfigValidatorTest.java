@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import net.vectora.cloud.config.CloudHome;
 import net.vectora.cloud.config.Samples;
 import net.vectora.cloud.config.error.ConfigError;
 import net.vectora.cloud.config.error.ErrorCode;
@@ -90,6 +91,17 @@ class ConfigValidatorTest {
         assertEquals(Set.of("groups/" + "a".repeat(33) + ".yml  INVALID_FILE_NAME"),
                 codes(valid.withGroup("a".repeat(33), Samples.lobbyGroup())));
         assertEquals(Set.of(), codes(valid.withGroup("bed_wars-2", Samples.lobbyGroup())));
+        for (String bad : new String[] {"..", ".hidden", "a.b", "a\\b", "a/b", "con", "com1", "lpt9", "a b",
+                "a".repeat(33)}) {
+            assertEquals(Set.of(CloudHome.groupFileName(bad) + "  INVALID_FILE_NAME"),
+                    codes(valid.withGroup(bad, Samples.lobbyGroup())), bad);
+        }
+        for (String good : new String[] {"console", "con1", "com10", "lpt"}) {
+            assertEquals(Set.of(), codes(valid.withGroup(good, Samples.lobbyGroup())), good);
+        }
+        TaskConfig lobby = Samples.lobbyTask();
+        assertEquals(Set.of("tasks/lobby.yml group PATTERN_MISMATCH"), codes(valid.withTask("lobby",
+                new TaskConfig(lobby.schemaVersion(), "nul", lobby.mode(), lobby.scaling(), lobby.nodes()))));
         assertEquals(Set.of("cloud.yml network-name PATTERN_MISMATCH"),
                 codes(withCloud(valid.cloud().withNetworkName(" leading space"))));
         assertEquals(Set.of(), codes(withCloud(valid.cloud().withNetworkName("Vectora Netzwerk"))));

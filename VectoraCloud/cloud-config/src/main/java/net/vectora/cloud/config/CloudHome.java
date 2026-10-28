@@ -104,6 +104,11 @@ public record CloudHome(Path root) {
         if (!valid) {
             throw new IllegalArgumentException("not a configuration file of the cloud home");
         }
-        return root.resolve(parts[0]).resolve(parts.length == 2 ? parts[1] : "").normalize();
+        Path folder = parts.length == 2 ? root.resolve(parts[0]) : root;
+        Path resolved = root.resolve(relative).normalize();
+        if (!folder.equals(resolved.getParent())) {
+            throw new IllegalArgumentException("not a configuration file of the cloud home");
+        }
+        return resolved;
     }
 }

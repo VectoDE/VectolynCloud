@@ -8,10 +8,15 @@ public final class ConfigNames {
 
     /**
      * Group, task and node names: lower case letters, digits, {@code _} and {@code -}, 1 to 32
-     * characters, starting with a letter or digit. A strict subset of the names Vectora-Protocol
-     * accepts ({@code [A-Za-z0-9][A-Za-z0-9_-]*}, groups up to 32, nodes up to 64 characters), so every
-     * configured name can travel on the wire. Lower case only, because group and task names are file
-     * names and must not collide on case-insensitive file systems (Windows, macOS).
+     * characters, starting with a letter or digit. {@link #isValidName} additionally rejects the
+     * Windows device names ({@code con}, {@code prn}, {@code aux}, {@code nul}, {@code com0} to
+     * {@code com9}, {@code lpt0} to {@code lpt9}), which cannot be used as file names there.
+     *
+     * <p>The rule is identical to {@code GroupName} and {@code NodeId} in Vectora-Protocol (both 1 to
+     * 32 characters, lower case only, no device names), so every configured name can travel on the
+     * wire. A service id there ({@code ServiceId}) allows up to 64 characters, so that
+     * {@code <group>-<index>} fits. Lower case only, because group and task names are file names and
+     * must not collide on case-insensitive file systems (Windows, macOS).
      */
     public static final String NAME = "[a-z0-9][a-z0-9_-]{0,31}";
     /** Network display name. */
@@ -32,14 +37,34 @@ public final class ConfigNames {
     public static final String RELATIVE_PATH = "[A-Za-z0-9_-][A-Za-z0-9._-]*(/[A-Za-z0-9_-][A-Za-z0-9._-]*){0,7}";
 
     private static final Pattern NAME_PATTERN = Pattern.compile(NAME);
+    private static final Pattern DEVICE_NAME = Pattern.compile("con|prn|aux|nul|com[0-9]|lpt[0-9]");
+    private static final int MAX_ARGUMENT_LENGTH = 64;
     private static final Pattern LOOPBACK_V4 = Pattern.compile("127(\\.[0-9]{1,3}){3}");
 
     private ConfigNames() {
     }
 
-    /** Whether {@code name} is a valid group, task or node name. */
+    /** Whether {@code name} is a valid group, task or node name (see {@link #NAME}). */
     public static boolean isValidName(String name) {
-        return name != null && NAME_PATTERN.matcher(name).matches();
+        return name != null && NAME_PATTERN.matcher(name).matches() && !DEVICE_NAME.matcher(name).matches();
+    }
+
+    /**
+     * Makes user input safe as an error argument (for example an unknown field or group name): a
+     * valid name is returned as is; otherwise control and non-ASCII characters become {@code ?} and
+     * the text is cut to 64 characters, so it cannot forge or break log lines.
+     */
+    public static String safeArgument(String value) {
+        if (value == null || isValidName(value)) {
+            return String.valueOf(value);
+        }
+        int length = Math.min(value.length(), MAX_ARGUMENT_LENGTH);
+        StringBuilder out = new StringBuilder(length);
+        for (int i = 0; i < length; i++) {
+            char ch = value.charAt(i);
+            out.append(ch >= 0x20 && ch < 0x7f ? ch : '?');
+        }
+        return out.toString();
     }
 
     /** Whether {@code host} is a loopback address ({@code localhost}, {@code 127.x.x.x}, {@code ::1}). */

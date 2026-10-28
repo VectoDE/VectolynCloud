@@ -102,6 +102,16 @@ class ConfigYamlTest {
     }
 
     @Test
+    void unknownFieldArgumentIsSanitized() {
+        // YAML escapes: \e is ESC (ANSI colour), \n a line break, \u00e4 non-ASCII.
+        ConfigError error = single(CLOUD + "\"ex\\e[31mtra\\nfake: line \\u00e4\": 1\n", ConfigFormat.CLOUD);
+        assertEquals(ErrorCode.UNKNOWN_FIELD, error.code());
+        assertEquals(List.of("ex?[31mtra?fake: line ?"), error.args());
+        ConfigError longKey = single(CLOUD + "\"" + "x.".repeat(50) + "\": 1\n", ConfigFormat.CLOUD);
+        assertEquals(List.of("x.".repeat(32)), longKey.args());
+    }
+
+    @Test
     void unknownTopLevelFieldIsAnError() {
         ConfigError error = single(CLOUD + "extra: 1\n", ConfigFormat.CLOUD);
         assertEquals(ErrorCode.UNKNOWN_FIELD, error.code());

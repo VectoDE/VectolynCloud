@@ -66,6 +66,11 @@ class ConfigOperationsTest {
                 () -> new SetGroupHeap("nope", MemorySize.parse("1G"), MemorySize.parse("1G")).apply(base));
         assertEquals(ErrorCode.UNKNOWN_GROUP, missing.errors().getFirst().code());
         assertThrows(ConfigException.class, () -> new RemoveGroup("nope").apply(base));
+        ConfigException injected = assertThrows(ConfigException.class,
+                () -> new SetGroupHeap("x\r\nFAKE \u00e4", MemorySize.parse("1G"), MemorySize.parse("1G")).apply(base));
+        assertEquals(List.of("x??FAKE ?"), injected.errors().getFirst().args());
+        ConfigException node = assertThrows(ConfigException.class, () -> new RemoveNode("n\u001b").apply(base));
+        assertEquals(List.of("n?"), node.errors().getFirst().args());
     }
 
     @Test

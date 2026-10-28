@@ -1,5 +1,6 @@
 package net.vectora.cloud.config;
 
+import java.util.Objects;
 import net.vectora.cloud.config.error.ConfigException;
 
 /**
@@ -22,5 +23,6 @@ public interface ConfigListener {
      * active until the file is fixed.
      */
     default void reloadFailed(ConfigException error) {
+        Objects.requireNonNull(error, "error");
     }
 }
