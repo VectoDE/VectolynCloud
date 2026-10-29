@@ -1,0 +1,504 @@
+package net.vectora.cloud.monitor;
+
+import java.io.IOException;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Deque;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.OptionalDouble;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import net.vectora.cloud.monitor.alert.Alert;
+import net.vectora.cloud.monitor.alert.AlertEngine;
+import net.vectora.cloud.monitor.alert.AlertEvent;
+import net.vectora.cloud.monitor.alert.AlertListener;
+import net.vectora.cloud.monitor.alert.AlertRule;
+import net.vectora.cloud.monitor.alert.RuleParser;
+import net.vectora.cloud.monitor.config.MonitorConfig;
+import net.vectora.cloud.monitor.config.MonitorConfigLoader;
+import net.vectora.cloud.monitor.history.HistoryFile;
+import net.vectora.cloud.monitor.history.HistoryStore;
+import net.vectora.cloud.monitor.metric.Metric;
+import net.vectora.cloud.monitor.metric.MetricSource;
+import net.vectora.cloud.monitor.metric.NodeSample;
+import net.vectora.cloud.monitor.metric.RingBuffer;
+import net.vectora.cloud.monitor.metric.ServiceSample;
+import net.vectora.protocol.ServiceId;
+import net.vectora.protocol.message.ServiceStatus;
+
+/**
+ * The monitor of one node. Every {@code sample-interval} it takes one sample per service and one of
+ * the node, adds them to the history, evaluates the alert rules and hands the alert events to its
+ * listeners (the log always, notifiers and later the API as added).
+ *
+ * <p>Inputs from the node, all thread-safe and cheap:
+ * <ul>
+ *   <li>{@link ServiceDirectory}: which services exist, their state, pid and restart count;</li>
+ *   <li>{@link #statusReported(ServiceStatus)}: every status report of the cloud channel
+ *       ({@code ServiceEvent.StatusReported}), with players, TPS, MSPT and heap;</li>
+ *   <li>{@link #serviceStateChanged(ServiceId, ServicePhase, ServicePhase)}: every state change of the
+ *       service core ({@code ServiceListener.stateChanged}), for crash counting;</li>
+ *   <li>{@link MetricSource}: CPU and memory from the operating system.</li>
+ * </ul>
+ *
+ * <p>A status report counts for {@code stale-after}; after that the bridge values are missing.
+ * Gauge rules (everything except {@code crashes} and {@code restarts}) are evaluated only while a
+ * service is {@link ServicePhase#RUNNING}; when it leaves that state its gauge alerts end.
+ */
+public final class Monitor implements AutoCloseable {
+
+    private static final Logger LOG = Logger.getLogger(Monitor.class.getName());
+
+    private final ServiceDirectory directory;
+    private final MetricSource source;
+    private final Clock clock;
+    private final MonitorConfig config;
+    private final AlertEngine engine;
+    private final HistoryStore store;
+    private final List<AlertListener> listeners = new CopyOnWriteArrayList<>();
+    private final Map<ServiceId, Track> tracks = new ConcurrentHashMap<>();
+    private final RingBuffer<NodeSample> nodeHistory;
+    private final Object sampling = new Object();
+    private ScheduledExecutorService timer;
+    private volatile boolean closed;
+
+    private static final class Track {
+        final RingBuffer<ServiceSample> history;
+        final Deque<Instant> crashes = new ArrayDeque<>();
+        volatile ServiceStatus status;
+        volatile Instant statusAt;
+        int crashTotal;
+
+        Track(int capacity) {
+            history = new RingBuffer<>(capacity);
+        }
+    }
+
+    private Monitor(Builder b) {
+        this.directory = b.directory;
+        this.source = b.source;
+        this.clock = b.clock;
+        this.config = b.settings.config();
+        this.engine = new AlertEngine(b.settings.rules());
+        this.store = b.store;
+        this.nodeHistory = new RingBuffer<>(config.history().samples());
+        listeners.add(Monitor::log);
+        listeners.addAll(b.listeners);
+    }
+
+    /**
+     * Starts a builder.
+     *
+     * @param directory the node's services
+     * @param source    operating system metrics
+     * @param settings  checked configuration
+     * @return the builder
+     */
+    public static Builder builder(ServiceDirectory directory, MetricSource source, MonitorConfigLoader.Settings settings) {
+        return new Builder(directory, source, settings);
+    }
+
+    /** Builder of {@link Monitor}. */
+    public static final class Builder {
+        private final ServiceDirectory directory;
+        private final MetricSource source;
+        private final MonitorConfigLoader.Settings settings;
+        private final List<AlertListener> listeners = new ArrayList<>();
+        private Clock clock = Clock.systemUTC();
+        private HistoryStore store;
+
+        private Builder(ServiceDirectory directory, MetricSource source, MonitorConfigLoader.Settings settings) {
+            this.directory = Objects.requireNonNull(directory, "directory");
+            this.source = Objects.requireNonNull(source, "source");
+            this.settings = Objects.requireNonNull(settings, "settings");
+        }
+
+        /** Clock for the samples (tests). */
+        public Builder clock(Clock value) {
+            clock = Objects.requireNonNull(value, "clock");
+            return this;
+        }
+
+        /** Adds a listener for alert events, for example a {@code NotificationDispatcher}. */
+        public Builder listener(AlertListener value) {
+            listeners.add(Objects.requireNonNull(value, "listener"));
+            return this;
+        }
+
+        /** Keeps the history in a file ({@code history.persist}). */
+        public Builder historyStore(HistoryStore value) {
+            store = Objects.requireNonNull(value, "store");
+            return this;
+        }
+
+        /** Builds the monitor; {@link Monitor#start()} starts sampling. */
+        public Monitor build() {
+            return new Monitor(this);
+        }
+    }
+
+    /** The configuration in use. */
+    public MonitorConfig config() {
+        return config;
+    }
+
+    /** Adds a listener for alert events (the API, PR 15). */
+    public void addListener(AlertListener listener) {
+        listeners.add(Objects.requireNonNull(listener, "listener"));
+    }
+
+    // ---- inputs from the node ------------------------------------------------------------------
+
+    /**
+     * A service sent a status report. Call from the cloud channel's listener
+     * ({@code ServiceEvent.StatusReported}); returns at once.
+     *
+     * @param status the report
+     */
+    public void statusReported(ServiceStatus status) {
+        Objects.requireNonNull(status, "status");
+        Track track = track(status.service());
+        track.status = status;
+        track.statusAt = clock.instant();
+    }
+
+    /**
+     * A service changed its state. Call from the service core's listener; returns at once.
+     *
+     * @param service  the service
+     * @param now      the new state
+     * @param previous the state before, or null for a new service
+     */
+    public void serviceStateChanged(ServiceId service, ServicePhase now, ServicePhase previous) {
+        Objects.requireNonNull(service, "service");
+        Objects.requireNonNull(now, "now");
+        Track track = track(service);
+        if (now == ServicePhase.CRASHED && previous != ServicePhase.CRASHED) {
+            synchronized (track) {
+                track.crashes.addLast(clock.instant());
+                track.crashTotal++;
+            }
+        }
+        if (now != ServicePhase.RUNNING && now != ServicePhase.STARTING) {
+            // A report from the previous process must not count for the next one.
+            track.status = null;
+            track.statusAt = null;
+        }
+    }
+
+    private Track track(ServiceId id) {
+        return tracks.computeIfAbsent(id, k -> new Track(config.history().samples()));
+    }
+
+    // ---- sampling ------------------------------------------------------------------------------
+
+    /**
+     * Starts sampling every {@code sample-interval} on the daemon thread {@code vectora-monitor},
+     * and, with {@code history.persist}, reads the history file first and writes it every
+     * {@code persist-interval}. Does nothing if {@code enabled} is false.
+     */
+    public synchronized void start() {
+        if (timer != null || closed || !config.enabled()) {
+            return;
+        }
+        if (store != null) {
+            store.load(clock.instant()).ifPresent(this::restore);
+        }
+        timer = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "vectora-monitor");
+            t.setDaemon(true);
+            return t;
+        });
+        long interval = config.sampleInterval().duration().toMillis();
+        timer.scheduleWithFixedDelay(this::sampleSafely, interval, interval, TimeUnit.MILLISECONDS);
+        if (store != null) {
+            long persist = config.history().persistInterval().duration().toMillis();
+            timer.scheduleWithFixedDelay(this::persistSafely, persist, persist, TimeUnit.MILLISECONDS);
+        }
+    }
+
+    private void sampleSafely() {
+        try {
+            sampleNow();
+        } catch (RuntimeException e) {
+            LOG.log(Level.WARNING, "Monitor sample failed", e);
+        }
+    }
+
+    private void persistSafely() {
+        try {
+            persist();
+        } catch (IOException | RuntimeException e) {
+            LOG.log(Level.WARNING, "Monitor history could not be saved: " + e.getClass().getSimpleName());
+        }
+    }
+
+    /**
+     * Takes one sample of every service and of the node, evaluates the rules and delivers the
+     * events. Called by the timer; tests call it directly.
+     *
+     * @return the events of this round
+     */
+    public List<AlertEvent> sampleNow() {
+        synchronized (sampling) {
+            Instant now = Instant.ofEpochSecond(clock.instant().getEpochSecond());
+            List<MonitoredService> services = directory.services();
+            Set<Long> pids = new HashSet<>();
+            for (MonitoredService s : services) {
+                if (hasProcess(s.phase()) && s.pid().isPresent()) {
+                    pids.add(s.pid().getAsLong());
+                }
+            }
+            Map<Long, MetricSource.ProcessMetrics> processes = pids.isEmpty() ? Map.of() : source.processes(pids);
+            List<AlertEvent> events = new ArrayList<>();
+            Set<String> present = new HashSet<>();
+            for (MonitoredService service : services) {
+                present.add(service.id().value());
+                Track track = track(service.id());
+                ServiceSample sample = sample(now, service, track, processes);
+                if (hasProcess(service.phase())) {
+                    track.history.add(sample);
+                }
+                pruneCrashes(track, now);
+                boolean running = service.phase() == ServicePhase.RUNNING;
+                if (!running) {
+                    events.addAll(engine.endFor(now, service.id().value(), Monitor::isEventRule));
+                }
+                events.addAll(engine.evaluateService(now, service.id().value(), service.group(),
+                        (metric, window) -> value(metric, window, service, track, sample, running, now)));
+            }
+            tracks.keySet().removeIf(id -> !present.contains(id.value()));
+            events.addAll(engine.retainServices(now, present::contains));
+            NodeSample node = source.node(now);
+            nodeHistory.add(node);
+            events.addAll(engine.evaluateNode(now, (metric, window) -> node.value(metric)));
+            deliver(events);
+            return events;
+        }
+    }
+
+    private static boolean isEventRule(AlertRule rule) {
+        Metric metric = rule.condition().metric();
+        return metric == Metric.CRASHES || metric == Metric.RESTARTS;
+    }
+
+    private static boolean hasProcess(ServicePhase phase) {
+        return phase == ServicePhase.STARTING || phase == ServicePhase.RUNNING || phase == ServicePhase.STOPPING;
+    }
+
+    private ServiceSample sample(Instant now, MonitoredService service, Track track,
+                                 Map<Long, MetricSource.ProcessMetrics> processes) {
+        ServiceStatus status = track.status;
+        Instant at = track.statusAt;
+        boolean fresh = status != null && at != null
+                && !Duration.between(at, now).minus(config.staleAfter().duration()).isPositive()
+                && (service.phase() == ServicePhase.RUNNING || service.phase() == ServicePhase.STARTING);
+        MetricSource.ProcessMetrics process = service.pid().isPresent() && hasProcess(service.phase())
+                ? processes.getOrDefault(service.pid().getAsLong(), MetricSource.ProcessMetrics.UNKNOWN)
+                : MetricSource.ProcessMetrics.UNKNOWN;
+        if (!fresh) {
+            return new ServiceSample(now, ServiceSample.UNKNOWN, ServiceSample.UNKNOWN, Double.NaN, Double.NaN,
+                    ServiceSample.UNKNOWN, ServiceSample.UNKNOWN, process.cpu(), process.rss());
+        }
+        boolean ticks = !service.proxy();
+        return new ServiceSample(now, status.playersOnline(), status.maxPlayers(),
+                ticks ? status.tps() : Double.NaN, ticks ? status.mspt() : Double.NaN,
+                status.heapUsed(), status.heapMax(), process.cpu(), process.rss());
+    }
+
+    private OptionalDouble value(Metric metric, Duration window, MonitoredService service, Track track,
+                                 ServiceSample sample, boolean running, Instant now) {
+        if (metric == Metric.RESTARTS) {
+            return OptionalDouble.of(service.restartAttempts());
+        }
+        if (metric == Metric.CRASHES) {
+            Instant from = now.minus(window);
+            synchronized (track) {
+                return OptionalDouble.of(track.crashes.stream().filter(t -> !t.isBefore(from)).count());
+            }
+        }
+        if (!running) {
+            return OptionalDouble.empty();
+        }
+        return sample.value(metric);
+    }
+
+    private static void pruneCrashes(Track track, Instant now) {
+        Instant oldest = now.minus(RuleParser.MAX_DURATION);
+        synchronized (track) {
+            while (!track.crashes.isEmpty() && track.crashes.peekFirst().isBefore(oldest)) {
+                track.crashes.removeFirst();
+            }
+        }
+    }
+
+    private void deliver(List<AlertEvent> events) {
+        for (AlertEvent event : events) {
+            for (AlertListener listener : listeners) {
+                try {
+                    listener.onAlert(event);
+                } catch (RuntimeException e) {
+                    LOG.log(Level.WARNING, "Alert listener failed", e);
+                }
+            }
+        }
+    }
+
+    private static void log(AlertEvent event) {
+        switch (event) {
+            case AlertEvent.Fired fired -> LOG.warning("Alert " + fired.alert().summary());
+            case AlertEvent.Resolved resolved -> LOG.info("Alert #" + resolved.alert().id() + " " + resolved.alert().rule()
+                    + " on " + resolved.alert().subject() + " ended: " + switch (resolved.alert().resolution().orElseThrow()) {
+                        case CLEARED -> "the value is healthy again";
+                        case SERVICE_GONE -> "the service is no longer running";
+                        case RULE_REMOVED -> "the rule was changed or removed";
+                    });
+            case AlertEvent.Acknowledged ack -> LOG.info("Alert #" + ack.alert().id() + " acknowledged");
+        }
+    }
+
+    // ---- history -------------------------------------------------------------------------------
+
+    private void restore(HistoryFile.Content content) {
+        content.node().forEach(nodeHistory::add);
+        content.services().forEach((id, samples) -> {
+            Track track = track(id);
+            samples.forEach(track.history::add);
+        });
+    }
+
+    /**
+     * Writes the history file now (only with {@code history.persist}).
+     *
+     * @throws IOException if writing fails
+     */
+    public void persist() throws IOException {
+        if (store == null) {
+            return;
+        }
+        Map<ServiceId, List<ServiceSample>> services = new java.util.LinkedHashMap<>();
+        tracks.entrySet().stream().sorted(Map.Entry.comparingByKey(Comparator.comparing(ServiceId::value)))
+                .forEach(e -> services.put(e.getKey(), e.getValue().history.snapshot()));
+        store.save(new HistoryFile.Content(nodeHistory.snapshot(), services), clock.instant());
+    }
+
+    // ---- views ---------------------------------------------------------------------------------
+
+    /** Every service of the directory with its newest sample, sorted by id. */
+    public List<ServiceView> services() {
+        return directory.services().stream()
+                .sorted(Comparator.comparing(s -> s.id().value()))
+                .map(s -> {
+                    Track track = tracks.get(s.id());
+                    if (track == null) {
+                        return new ServiceView(s, Optional.empty(), 0);
+                    }
+                    int crashes;
+                    synchronized (track) {
+                        crashes = track.crashTotal;
+                    }
+                    return new ServiceView(s, Optional.ofNullable(track.history.latest()), crashes);
+                })
+                .toList();
+    }
+
+    /** The samples of one service, oldest first; empty for an unknown service. */
+    public List<ServiceSample> history(ServiceId service) {
+        Track track = tracks.get(service);
+        return track == null ? List.of() : track.history.snapshot();
+    }
+
+    /** The newest node sample. */
+    public Optional<NodeSample> node() {
+        return Optional.ofNullable(nodeHistory.latest());
+    }
+
+    /** The node samples, oldest first. */
+    public List<NodeSample> nodeHistory() {
+        return nodeHistory.snapshot();
+    }
+
+    /** The rules in use. */
+    public List<AlertRule> rules() {
+        return engine.rules();
+    }
+
+    /** Alerts that fire now. */
+    public List<Alert> activeAlerts() {
+        return engine.active();
+    }
+
+    /** Recently ended alerts, oldest first. */
+    public List<Alert> resolvedAlerts() {
+        return engine.resolved();
+    }
+
+    /**
+     * Acknowledges an alert.
+     *
+     * @param id alert number
+     * @return whether an active, not yet acknowledged alert had the number
+     */
+    public boolean acknowledge(int id) {
+        Optional<AlertEvent> event = engine.acknowledge(id, clock.instant());
+        event.ifPresent(e -> deliver(List.of(e)));
+        return event.isPresent();
+    }
+
+    /**
+     * Acknowledges every active alert.
+     *
+     * @return how many were acknowledged
+     */
+    public int acknowledgeAll() {
+        List<AlertEvent> events = engine.acknowledgeAll(clock.instant());
+        deliver(events);
+        return events.size();
+    }
+
+    /**
+     * Replaces the rules after {@code monitor.yml} changed. Unchanged rules keep their state;
+     * alerts of changed or removed rules end.
+     *
+     * @param rules the new rules
+     */
+    public void replaceRules(List<AlertRule> rules) {
+        deliver(engine.replaceRules(clock.instant(), rules));
+    }
+
+    /** Stops sampling and writes the history file one last time. */
+    @Override
+    public void close() {
+        ScheduledExecutorService t;
+        synchronized (this) {
+            if (closed) {
+                return;
+            }
+            closed = true;
+            t = timer;
+        }
+        if (t != null) {
+            t.shutdownNow();
+            try {
+                t.awaitTermination(10, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+        persistSafely();
+    }
+}
