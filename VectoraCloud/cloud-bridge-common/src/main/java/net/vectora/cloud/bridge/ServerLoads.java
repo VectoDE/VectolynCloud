@@ -37,9 +37,13 @@ public final class ServerLoads {
     /** How long a player who was sent to a backend counts there before the proxy reports them. */
     public static final Duration PENDING = Duration.ofSeconds(10);
 
+    /** How long the group of a removed backend is still known, for the kicks of its players. */
+    public static final Duration REMEMBER_GROUP = Duration.ofSeconds(60);
+
     private final Clock clock;
     private final Map<String, Entry> servers = new HashMap<>();
     private final Map<UUID, Pending> pending = new HashMap<>();
+    private final Map<String, Gone> gone = new HashMap<>();
 
     /** Creates an empty directory with the system clock. */
     public ServerLoads() {
@@ -63,6 +67,7 @@ public final class ServerLoads {
      * @param group its group
      */
     public synchronized void registered(String name, String group) {
+        gone.remove(name);
         Entry previous = servers.get(name);
         servers.put(name, previous != null && previous.group().equals(group) ? previous : new Entry(group, 0, false));
     }
@@ -90,18 +95,28 @@ public final class ServerLoads {
      * @param name server name on the proxy
      */
     public synchronized void removed(String name) {
-        servers.remove(name);
+        Entry entry = servers.remove(name);
         pending.values().removeIf(p -> p.server().equals(name));
+        if (entry != null) {
+            gone.put(name, new Gone(entry.group(), clock.instant().plus(REMEMBER_GROUP)));
+        }
     }
 
     /**
-     * The group of a backend.
+     * The group of a backend, also of one removed within {@link #REMEMBER_GROUP}: the cloud may
+     * withdraw a stopping server before the proxy reports the kick of its players.
      *
      * @param name server name on the proxy
      * @return the group, if the cloud named one
      */
     public synchronized Optional<String> groupOf(String name) {
-        return Optional.ofNullable(servers.get(name)).map(Entry::group);
+        Entry entry = servers.get(name);
+        if (entry != null) {
+            return Optional.of(entry.group());
+        }
+        Instant now = clock.instant();
+        gone.values().removeIf(g -> !now.isBefore(g.until()));
+        return Optional.ofNullable(gone.get(name)).map(Gone::group);
     }
 
     /**
@@ -187,5 +202,8 @@ public final class ServerLoads {
     }
 
     private record Pending(String server, Instant until) {
+    }
+
+    private record Gone(String group, Instant until) {
     }
 }

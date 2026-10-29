@@ -177,6 +177,19 @@ class ProxyBridgeTest {
     }
 
     @Test
+    void aKickThatArrivesAfterTheServerWasWithdrawnStaysInItsGroup() {
+        lobbies();
+        bedwars2();
+        // The cloud withdraws the stopping server before the proxy reports the kick of its players.
+        receive(new UnregisterServer(new ServiceId("bedwars-1")));
+        assertEquals(move("bedwars-2", null), bridge.kicked(UUID.randomUUID(), "bedwars-1", SHUTDOWN, false),
+                "the group of bedwars-1 is still known: not the lobby");
+        // Counter-check: a server the cloud never named has no group; the player goes to the lobby.
+        assertEquals(move("lobby", null), bridge.kicked(UUID.randomUUID(), "bedwars-9", SHUTDOWN, false));
+        sender.close(Duration.ofSeconds(5));
+    }
+
+    @Test
     void bansWhitelistVanillaKicksAndMarkedKicksAreLeftAsTheProxyDecided() {
         lobbies();
         bedwars2();

@@ -84,6 +84,25 @@ class ServerLoadsTest {
     }
 
     @Test
+    void theGroupOfARemovedServerIsKnownForAWhile() {
+        lobbies();
+        loads.removed("bedwars-1");
+        assertEquals(Optional.of("bedwars"), loads.groupOf("bedwars-1"), "the kicks of its players come later");
+        assertFalse(loads.isOpen("bedwars-1"), "but nobody is sent there");
+        assertEquals(Optional.empty(), choose("bedwars", Set.of()));
+        now = now.plus(ServerLoads.REMEMBER_GROUP).minusSeconds(1);
+        assertEquals(Optional.of("bedwars"), loads.groupOf("bedwars-1"), "59 s");
+        now = now.plusSeconds(1);
+        assertEquals(Optional.empty(), loads.groupOf("bedwars-1"), "60 s: forgotten");
+        // Counter-check: registered again under another group, the new one counts at once.
+        loads.removed("lobby-2");
+        loads.registered("lobby-2", "hub");
+        assertEquals(Optional.of("hub"), loads.groupOf("lobby-2"));
+        loads.removed("lobby-2");
+        assertEquals(Optional.of("hub"), loads.groupOf("lobby-2"));
+    }
+
+    @Test
     void aFullServerIsSkippedPlayersOnTheirWayIncluded() {
         loads.registered("lobby", "lobby");
         loads.registered("lobby-2", "lobby");
