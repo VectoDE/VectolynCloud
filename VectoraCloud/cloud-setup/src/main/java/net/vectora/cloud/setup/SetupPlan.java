@@ -25,8 +25,6 @@ import net.vectora.cloud.config.model.ProxyConfig;
 import net.vectora.cloud.config.model.ScalingConfig;
 import net.vectora.cloud.config.model.ServerKind;
 import net.vectora.cloud.config.model.TaskConfig;
-import net.vectora.cloud.config.model.TaskMode;
-import net.vectora.cloud.config.model.TimeSpan;
 import net.vectora.cloud.config.operation.AcceptEula;
 import net.vectora.cloud.config.operation.CompleteSetup;
 import net.vectora.cloud.config.operation.ConfigOperation;
@@ -40,6 +38,7 @@ import net.vectora.cloud.config.operation.SetLegacyProxy;
 import net.vectora.cloud.config.operation.SetNetworkName;
 import net.vectora.cloud.config.operation.SetProxy;
 import net.vectora.cloud.config.operation.SetServerWanted;
+import net.vectora.cloud.config.operation.SetTaskScaling;
 import net.vectora.cloud.config.validation.ConfigNames;
 
 /**
@@ -58,6 +57,8 @@ public final class SetupPlan {
     static final MemorySize MAX_INITIAL_HEAP = MemorySize.ofMegabytes(512);
     /** Port of an external MariaDB or MySQL server unless the operator says otherwise. */
     public static final int EXTERNAL_DATABASE_PORT = 3306;
+    /** Players one minigame service is meant for. */
+    static final int MINIGAME_PLAYERS = 16;
 
     private SetupPlan() {
     }
@@ -100,6 +101,17 @@ public final class SetupPlan {
                 heap.put(group, current == null || current.max() == null ? server.defaultHeap() : current.max());
             }
         }
+        Map<String, ServiceCounts> services = new TreeMap<>();
+        for (NetworkServer server : NetworkServer.values()) {
+            if (server.isProxy()) {
+                continue;
+            }
+            for (String task : serviceTasks(snapshot, server)) {
+                TaskConfig existing = snapshot.tasks().get(task);
+                services.put(task, existing == null || existing.scaling() == null ? server.defaultCounts()
+                        : ServiceCounts.of(existing.scaling()));
+            }
+        }
         DatabaseConfig database = cloud.database() == null ? DatabaseConfig.defaults() : cloud.database();
         if (first && database.mode() == DatabaseMode.MANAGED && !env.managedDatabase()) {
             database = switchMode(database, DatabaseMode.H2);
@@ -111,7 +123,27 @@ public final class SetupPlan {
         return new SetupAnswers(language == null ? env.language() : language, cloud.eulaAccepted(),
                 cloud.networkName() == null ? CloudConfig.defaults().networkName() : cloud.networkName(), servers, switches,
                 proxy.bind() == null ? ProxyConfig.defaults().bind() : proxy.bind(), javaPort, proxy.bedrockPort(),
-                legacy.port(), heap, database, Optional.empty());
+                legacy.port(), heap, services, database, Optional.empty());
+    }
+
+    /**
+     * The tasks the assistant asks the service counts of for {@code server}: the existing tasks of
+     * its groups, sorted, or the default task it will create (named like the new group). Empty if
+     * groups exist but none has a task.
+     */
+    public static List<String> serviceTasks(ConfigSnapshot snapshot, NetworkServer server) {
+        List<String> groups = groupsOf(snapshot, server);
+        if (groups.isEmpty()) {
+            return List.of(newGroupName(snapshot, server));
+        }
+        List<String> tasks = new ArrayList<>();
+        snapshot.tasks().forEach((name, task) -> {
+            if (groups.contains(task.group())) {
+                tasks.add(name);
+            }
+        });
+        tasks.sort(null);
+        return tasks;
     }
 
     /** Names of the groups that use the template of {@code server}, sorted. */
@@ -179,9 +211,20 @@ public final class SetupPlan {
                     String name = newGroupName(taken, server);
                     taken.add(name);
                     ops.add(new PutGroup(name, newGroup(server, answers.heap().getOrDefault(name, server.defaultHeap()))));
-                    ops.add(new PutTask(name, newTask(server, name)));
+                    ops.add(new PutTask(name, newTask(server, name,
+                            server.isProxy() ? server.defaultCounts() : answers.services().getOrDefault(name, server.defaultCounts()))));
                 }
                 continue;
+            }
+            if (!server.isProxy()) {
+                for (String task : serviceTasks(current, server)) {
+                    ServiceCounts counts = answers.services().get(task);
+                    TaskConfig before = current.tasks().get(task);
+                    if (counts != null && before != null && before.scaling() != null
+                            && !counts.equals(ServiceCounts.of(before.scaling()))) {
+                        ops.add(new SetTaskScaling(task, counts.applyTo(before.scaling())));
+                    }
+                }
             }
             for (String group : existing) {
                 MemorySize max = answers.heap().get(group);
@@ -301,12 +344,25 @@ public final class SetupPlan {
                 JavaSelection.AUTO, new HeapConfig(initialHeap(max), max), List.of(), server.combat());
     }
 
-    /** The task the assistant creates for {@code server}: one static service, minigames scale from one to four. */
+    /**
+     * The task the assistant creates for {@code server} with its suggested counts
+     * ({@link NetworkServer#defaultCounts()}).
+     */
     static TaskConfig newTask(NetworkServer server, String group) {
-        ScalingConfig scaling = server.taskMode() == TaskMode.DYNAMIC
-                ? new ScalingConfig(1, 4, 16, 80, TimeSpan.ofSeconds(300), TimeSpan.ofSeconds(60))
-                : ScalingConfig.single();
-        return new TaskConfig(TaskConfig.SCHEMA_VERSION, group, server.taskMode(), scaling, List.of());
+        return newTask(server, group, server.defaultCounts());
+    }
+
+    /**
+     * The task the assistant creates for {@code server}: the given counts, scale up at
+     * {@value ScalingConfig#DEFAULT_SCALE_UP_AT} %, down below {@value ScalingConfig#DEFAULT_SCALE_DOWN_BELOW} %;
+     * a minigame round is meant for 16 players, every other server for 50.
+     */
+    static TaskConfig newTask(NetworkServer server, String group, ServiceCounts counts) {
+        ScalingConfig scaling = ScalingConfig.counts(counts.staticServices(), counts.minServices(), counts.maxServices());
+        if (server == NetworkServer.MINIGAME) {
+            scaling = scaling.withPlayersPerService(MINIGAME_PLAYERS);
+        }
+        return new TaskConfig(TaskConfig.SCHEMA_VERSION, group, scaling, List.of());
     }
 
     /** Initial heap of a new group: the maximum, but at most {@link #MAX_INITIAL_HEAP}. */

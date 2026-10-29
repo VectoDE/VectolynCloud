@@ -48,6 +48,12 @@ public enum ErrorCode {
     PATTERN_MISMATCH("Must match %1$s.", "Muss %1$s entsprechen."),
     /** A minimum is greater than its maximum. */
     MIN_GREATER_THAN_MAX("Must not be greater than %1$s.", "Darf nicht größer sein als %1$s."),
+    /** More static services than {@code min-services}; static services always count toward it. */
+    STATIC_ABOVE_MIN("Must not be greater than %1$s: static services always run and count toward it.",
+            "Darf nicht größer sein als %1$s: statische Dienste laufen immer und zählen dazu."),
+    /** {@code scale-down-below} is not below {@code scale-up-at}. */
+    SCALE_DOWN_NOT_BELOW_UP("Must be lower than %1$s, otherwise a service would be started and stopped in turn.",
+            "Muss kleiner sein als %1$s, sonst würde ein Dienst abwechselnd gestartet und gestoppt."),
     /** Two fixed ports on the same node are equal. */
     PORT_CONFLICT("Port already used by %1$s.", "Port wird schon von %1$s verwendet."),
     /** A fixed port lies inside the service port range of the node. */

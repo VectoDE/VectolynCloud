@@ -14,7 +14,6 @@ import net.vectora.cloud.config.model.HeapConfig;
 import net.vectora.cloud.config.model.JavaSelection;
 import net.vectora.cloud.config.model.MemorySize;
 import net.vectora.cloud.config.model.ServerSoftware;
-import net.vectora.cloud.config.model.TaskMode;
 import net.vectora.cloud.config.operation.PutGroup;
 import net.vectora.cloud.config.operation.SetLegacyProxy;
 import net.vectora.cloud.node.software.BridgePlugins;
@@ -34,7 +33,7 @@ class LegacyBridgeRequiredTest {
                 "1.8.8", JavaSelection.AUTO, new HeapConfig(MemorySize.parse("16M"), MemorySize.parse("64M")), List.of(),
                 CombatSystem.LEGACY, TestNetwork.process("normal", "20s", TestNetwork.noRestart()));
         net.config.apply(List.of(new SetLegacyProxy(true, 25577), new PutGroup("legacy", group)));
-        net.task("legacy", "legacy", TaskMode.STATIC, 0, 1);
+        net.task("legacy", "legacy", 1, 1, 1);
     }
 
     @Test

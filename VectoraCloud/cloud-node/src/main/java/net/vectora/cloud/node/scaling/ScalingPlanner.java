@@ -33,17 +33,19 @@ import net.vectora.protocol.ServiceId;
  * {@code GroupRules.isWanted} of cloud-config), at most one decision per task and round, and none
  * before {@code cooldown} has passed since the last one:
  * <ol>
- *   <li><b>min-services</b>: fewer than {@code min-services} count, so one more starts. A dynamic
- *       service counts while it is prepared, starting, running or waiting for its restart after a
- *       crash. A static service always counts, also stopped or given up after its crashes, so a
- *       server the operator stopped by hand stays down; only one that stopped because its group
- *       was switched off ({@code released}) comes back, at its own index. The memory budget does
- *       not apply here, as on the start of the node.</li>
- *   <li><b>above max-services</b> (a dynamic task whose limit was lowered): an empty dynamic
- *       service stops, without waiting for {@code scale-down-after}.</li>
- *   <li><b>players</b>: every running service of a dynamic task has reached {@code scale-up-at}
- *       percent of {@code players-per-service}, none is still starting, and {@code max-services}
- *       leaves room: one more starts, if the memory budget of the node allows it.</li>
+ *   <li><b>min-services</b>: fewer than {@code min-services} count, so one more starts: a static
+ *       one while the task has fewer static services than {@code static-services}, otherwise a
+ *       dynamic one. A dynamic service counts while it is prepared, starting, running or waiting
+ *       for its restart after a crash. A static service always counts, also stopped or given up
+ *       after its crashes, so a server the operator stopped by hand stays down; only one that
+ *       stopped because its group was switched off ({@code released}) comes back, at its own
+ *       index. The memory budget does not apply here, as on the start of the node.</li>
+ *   <li><b>above max-services</b> (a limit that was lowered): an empty dynamic service stops,
+ *       without waiting for {@code scale-down-after}.</li>
+ *   <li><b>players</b>: the task may have dynamic services ({@code max-services} above
+ *       {@code static-services}), every running service has reached {@code scale-up-at} percent
+ *       of {@code players-per-service}, none is still starting, and {@code max-services} leaves
+ *       room: one more dynamic service starts, if the memory budget of the node allows it.</li>
  *   <li><b>empty</b>: a dynamic service has had no players for {@code scale-down-after}, the task
  *       has more than {@code min-services}, and another service of the task has room below the
  *       threshold (hysteresis: stopping the last one with room would start a new one at once).</li>
@@ -227,13 +229,18 @@ public final class ScalingPlanner {
             if (isPaused) {
                 return Optional.of(new Held(name, Hold.PAUSED));
             }
-            OptionalInt index = task.mode() == TaskMode.STATIC ? staticIndex(in, name, task) : OptionalInt.empty();
-            if (task.mode() == TaskMode.STATIC && index.isEmpty()) {
+            OptionalInt index = releasedIndex(in, name);
+            if (index.isEmpty() && staticCount(mine) < scaling.staticServices()) {
+                index = staticIndex(in, task);
+                if (index.isEmpty()) {
+                    return Optional.empty();
+                }
+            } else if (index.isEmpty() && !scaling.allowsDynamic()) {
                 return Optional.empty();
             }
             return Optional.of(new Start(name, index, Reason.MIN_SERVICES));
         }
-        if (task.mode() != TaskMode.DYNAMIC || group.software() == ServerSoftware.VELOCITY) {
+        if (group.software() == ServerSoftware.VELOCITY) {
             return Optional.empty();
         }
         List<ServiceInfo> running = mine.stream().filter(s -> s.state() == ServiceState.RUNNING).toList();
@@ -245,6 +252,9 @@ public final class ScalingPlanner {
         if (counted > scaling.maxServices()) {
             return removable.stream().findFirst()
                     .map(s -> (Decision) new Stop(name, s.id(), Reason.ABOVE_MAX));
+        }
+        if (!scaling.allowsDynamic()) {
+            return Optional.empty();
         }
 
         boolean starting = mine.stream().anyMatch(s -> s.state() == ServiceState.PREPARED
@@ -298,20 +308,25 @@ public final class ScalingPlanner {
         return s.state() != ServiceState.STOPPED;
     }
 
-    /**
-     * The index of a new static service: the lowest one that stopped because its group was switched
-     * off, otherwise the lowest index of the group without any service, so no folder of a server
-     * the operator stopped by hand is used.
-     */
-    private static OptionalInt staticIndex(Input in, String name, TaskConfig task) {
-        OptionalInt released = in.services().stream()
+    /** The lowest static service of the task that stopped because its group was switched off. */
+    private static OptionalInt releasedIndex(Input in, String name) {
+        return in.services().stream()
                 .filter(s -> name.equals(s.task()) && s.mode() == TaskMode.STATIC && in.released().contains(s.id())
                         && !occupiesASlot(s))
                 .mapToInt(ServiceInfo::index)
                 .min();
-        if (released.isPresent()) {
-            return released;
-        }
+    }
+
+    /** Static services of the task, in any state: they keep their folder and always count. */
+    private static long staticCount(List<ServiceInfo> mine) {
+        return mine.stream().filter(s -> s.mode() == TaskMode.STATIC).count();
+    }
+
+    /**
+     * The index of a new static service: the lowest index of the group without any service, so no
+     * folder of a server the operator stopped by hand is used.
+     */
+    private static OptionalInt staticIndex(Input in, TaskConfig task) {
         Set<Integer> taken = new HashSet<>();
         for (ServiceInfo s : in.services()) {
             if (task.group().equals(s.group())) {

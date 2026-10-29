@@ -241,11 +241,33 @@ class ApiServerTest {
             assertEquals("1G", api.config.snapshot().groups().get("lobby").heap().max().toString());
 
             String task = """
-                    {"schema-version":1,"group":"lobby","mode":"static","scaling":{"min-services":1,"max-services":1,
-                     "players-per-service":50,"scale-up-at":80,"scale-down-after":"5m","cooldown":"60s"},"nodes":[]}""";
+                    {"schema-version":2,"group":"lobby","scaling":{"static-services":1,"min-services":1,"max-services":3,
+                     "players-per-service":50,"scale-up-at":75,"scale-down-below":40,"scale-down-after":"5m",
+                     "cooldown":"60s"},"nodes":[]}""";
             assertEquals(201, api.send("PUT", "/api/v1/tasks/lobby", api.admin, task).statusCode());
+            assertEquals(1, api.config.snapshot().tasks().get("lobby").scaling().staticServices());
+            assertEquals(40, api.config.snapshot().tasks().get("lobby").scaling().scaleDownBelow());
             assertEquals(422, api.send("PUT", "/api/v1/tasks/other", api.admin, task.replace("\"lobby\"", "\"nope\""))
                     .statusCode());
+            // The same validator as for the file: static above min, scale-down-below not below scale-up-at.
+            HttpResponse<String> tooStatic = api.send("PUT", "/api/v1/tasks/lobby", api.admin,
+                    task.replace("\"static-services\":1", "\"static-services\":2"));
+            assertEquals(422, tooStatic.statusCode());
+            assertTrue(tooStatic.body().contains("static-above-min"), tooStatic.body());
+            HttpResponse<String> overlap = api.send("PUT", "/api/v1/tasks/lobby", api.admin,
+                    task.replace("\"scale-down-below\":40", "\"scale-down-below\":75"));
+            assertEquals(422, overlap.statusCode());
+            assertTrue(overlap.body().contains("scale-down-not-below-up"), overlap.body());
+            // Without scale-down-below the default applies.
+            assertEquals(200, api.send("PUT", "/api/v1/tasks/lobby", api.admin,
+                    task.replace(",\"scale-down-below\":40", "")).statusCode());
+            assertEquals(50, api.config.snapshot().tasks().get("lobby").scaling().scaleDownBelow());
+            // A body of schema-version 1 with mode is refused, not guessed.
+            String v1 = """
+                    {"schema-version":1,"group":"lobby","mode":"static","scaling":{"min-services":1,"max-services":1,
+                     "players-per-service":50,"scale-up-at":80,"scale-down-after":"5m","cooldown":"60s"},"nodes":[]}""";
+            assertEquals(400, api.send("PUT", "/api/v1/tasks/lobby", api.admin, v1).statusCode());
+            assertEquals(3, api.config.snapshot().tasks().get("lobby").scaling().maxServices(), "unchanged");
 
             // Wanted: the group's own switch; the switch of its server kind stays as it is.
             HttpResponse<String> off = api.send("PUT", "/api/v1/groups/lobby/wanted", api.admin, "{\"wanted\":false}");

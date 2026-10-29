@@ -152,6 +152,47 @@ class SetupFileTest {
     }
 
     @Test
+    void serviceCountsComeFromTheFileOrTheSuggestion() throws Exception {
+        String file = """
+                schema-version: 1
+                eula: true
+                servers:
+                  legacy-proxy: true
+                  legacy-server: true
+                services:
+                  lobby: {static-services: 2, min-services: 2, max-services: 6}
+                  minigame: {max-services: 12}
+                """;
+        assertEquals(SetupResult.Status.COMPLETED, SetupWizard.nonInteractive(config, env(file, false), null).status());
+        var tasks = config.snapshot().tasks();
+        assertEquals(new ServiceCounts(2, 2, 6), ServiceCounts.of(tasks.get("lobby").scaling()));
+        assertEquals(new ServiceCounts(0, 1, 12), ServiceCounts.of(tasks.get("minigame").scaling()), "only max changed");
+        // Counter-check: the suggestions of every other server.
+        assertEquals(new ServiceCounts(1, 1, 1), ServiceCounts.of(tasks.get("survival").scaling()));
+        assertEquals(new ServiceCounts(1, 1, 3), ServiceCounts.of(tasks.get("legacy-server").scaling()));
+        assertEquals(new ServiceCounts(1, 1, 1), ServiceCounts.of(tasks.get("proxy").scaling()));
+        assertEquals(new ServiceCounts(1, 1, 1), ServiceCounts.of(tasks.get("legacy-proxy").scaling()));
+        assertEquals(75, tasks.get("lobby").scaling().scaleUpAt());
+        assertEquals(50, tasks.get("lobby").scaling().scaleDownBelow());
+        assertEquals(16, tasks.get("minigame").scaling().playersPerService());
+    }
+
+    @Test
+    void invalidOrUnknownServiceCountsAreRefused() throws Exception {
+        String above = refused("schema-version: 1\neula: true\nservices:\n  lobby: {static-services: 2}\n", false)
+                .describe(Language.EN);
+        assertTrue(above.contains("Services of lobby"), above);
+        refused("schema-version: 1\neula: true\nservices:\n  lobby: {max-services: 0}\n", false);
+        String unknown = refused("schema-version: 1\neula: true\nservices:\n  nonsense: {max-services: 2}\n", false)
+                .describe(Language.EN);
+        assertTrue(unknown.contains("nonsense"), unknown);
+        String proxy = refused("schema-version: 1\neula: true\nservices:\n  proxy: {max-services: 2}\n", false)
+                .describe(Language.EN);
+        assertTrue(proxy.contains("proxies always run one service"), proxy);
+        refused("schema-version: 1\neula: true\nservices:\n  lobby: {static: 1}\n", false);
+    }
+
+    @Test
     void unknownMemoryGroupsAndEmptyMinigameSwitchesAreNamed() throws Exception {
         String message = refused("schema-version: 1\neula: true\nmemory:\n  nonsense: 1G\n", false).describe(Language.EN);
         assertTrue(message.contains("nonsense"), message);

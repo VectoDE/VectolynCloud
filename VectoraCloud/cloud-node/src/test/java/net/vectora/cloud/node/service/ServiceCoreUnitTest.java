@@ -131,10 +131,19 @@ class ServiceCoreUnitTest {
                         "elsewhere", task("lobby", TaskMode.STATIC, 1, List.of("node-2"))));
 
         assertEquals(List.of(
-                new ServicePlanner.Planned("bedwars", "bedwars", 1),
-                new ServicePlanner.Planned("lobby-a", "lobby", 1),
-                new ServicePlanner.Planned("lobby-a", "lobby", 2),
-                new ServicePlanner.Planned("lobby-b", "lobby", 3)), ServicePlanner.plan(snapshot, "node-1"));
+                new ServicePlanner.Planned("bedwars", "bedwars", 1, TaskMode.DYNAMIC),
+                new ServicePlanner.Planned("lobby-a", "lobby", 1, TaskMode.STATIC),
+                new ServicePlanner.Planned("lobby-a", "lobby", 2, TaskMode.STATIC),
+                new ServicePlanner.Planned("lobby-b", "lobby", 3, TaskMode.DYNAMIC)), ServicePlanner.plan(snapshot, "node-1"));
+
+        // Mixed: the first static-services of a task are static, the rest of min-services dynamic.
+        ConfigSnapshot mixed = ConfigSnapshot.of(cloud, NodesConfig.defaults(), Map.of("lobby", lobby),
+                Map.of("lobby", new TaskConfig(TaskConfig.SCHEMA_VERSION, "lobby",
+                        net.vectora.cloud.config.model.ScalingConfig.counts(1, 3, 4), List.of())));
+        assertEquals(List.of(
+                new ServicePlanner.Planned("lobby", "lobby", 1, TaskMode.STATIC),
+                new ServicePlanner.Planned("lobby", "lobby", 2, TaskMode.DYNAMIC),
+                new ServicePlanner.Planned("lobby", "lobby", 3, TaskMode.DYNAMIC)), ServicePlanner.plan(mixed, "node-1"));
 
         assertTrue(ServicePlanner.isWanted(lobby, cloud.servers()));
         assertFalse(ServicePlanner.isWanted(survival, cloud.servers()));
@@ -447,8 +456,9 @@ class ServiceCoreUnitTest {
     }
 
     static TaskConfig task(String group, TaskMode mode, int min, List<String> nodes) {
-        return new TaskConfig(TaskConfig.SCHEMA_VERSION, group, mode,
-                new ScalingConfig(min, Math.max(min, 1), 50, 80, TimeSpan.parse("5m"), TimeSpan.parse("60s")), nodes);
+        return new TaskConfig(TaskConfig.SCHEMA_VERSION, group,
+                new ScalingConfig(mode == TaskMode.STATIC ? min : 0, min, Math.max(min, 1), 50, 80, 50, TimeSpan.parse("5m"),
+                        TimeSpan.parse("60s")), nodes);
     }
 
     static ServiceSpec spec(GroupConfig group, int port) {

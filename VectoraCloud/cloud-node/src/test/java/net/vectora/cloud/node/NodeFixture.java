@@ -106,9 +106,11 @@ final class NodeFixture {
                 process);
     }
 
+    /** A task; {@code STATIC} makes the {@code min} services static, {@code DYNAMIC} none. */
     static PutTask task(String name, String group, TaskMode mode, int min, int max) {
-        return new PutTask(name, new TaskConfig(TaskConfig.SCHEMA_VERSION, group, mode,
-                new ScalingConfig(min, max, 50, 80, TimeSpan.parse("5m"), TimeSpan.parse("60s")), List.of()));
+        return new PutTask(name, new TaskConfig(TaskConfig.SCHEMA_VERSION, group,
+                new ScalingConfig(mode == TaskMode.STATIC ? min : 0, min, max, 50, 80, 50, TimeSpan.parse("5m"),
+                        TimeSpan.parse("60s")), List.of()));
     }
 
     void file(String relative, String content) throws IOException {

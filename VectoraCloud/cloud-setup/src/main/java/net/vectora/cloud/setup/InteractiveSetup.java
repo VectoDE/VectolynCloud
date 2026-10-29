@@ -43,6 +43,8 @@ import net.vectora.cloud.console.terminal.ConsoleTerminal;
  *       minigame group on its own once there are several;</li>
  *   <li>bind address, Java and Bedrock port (with the proxy), legacy port (with the legacy proxy);</li>
  *   <li>maximum heap of each wanted group, with the total;</li>
+ *   <li>static, minimum and maximum services of each wanted server except the proxies, with the
+ *       suggestion of {@link NetworkServer#defaultCounts()};</li>
  *   <li>database mode ({@code docker} hidden on Pterodactyl); for {@code external} host, port, name,
  *       user and password;</li>
  *   <li>summary with the files that change, then save, change or cancel.</li>
@@ -200,7 +202,45 @@ final class InteractiveSetup {
         answers = servers(current, answers);
         answers = network(current, answers);
         answers = memory(current, answers);
+        answers = services(current, answers);
         return database(current, answers);
+    }
+
+    /** Static, minimum and maximum services of every wanted server except the proxies. */
+    private SetupAnswers services(ConfigSnapshot current, SetupAnswers answers) throws PromptCancelledException {
+        out.heading(SetupMessages.SERVICES.get(out.language()));
+        out.println(SetupMessages.SERVICES_HELP);
+        for (NetworkServer server : NetworkServer.values()) {
+            if (!answers.wants(server) || server.isProxy()) {
+                continue;
+            }
+            for (String task : SetupPlan.serviceTasks(current, server)) {
+                if (!answers.groupSwitches().getOrDefault(groupOf(current, task), Boolean.TRUE)) {
+                    continue;
+                }
+                ServiceCounts fallback = answers.services().getOrDefault(task, server.defaultCounts());
+                ServiceCounts counts = ask.ask(Question.custom(
+                                SetupMessages.fill(SetupMessages.SERVICES_OF, label(server.shortName()), task),
+                                InteractiveSetup::serviceCounts, ServiceCounts::toString)
+                        .defaultValue(fallback).validate(ServiceCounts::problem));
+                answers = answers.withServices(task, counts);
+            }
+        }
+        return answers;
+    }
+
+    /** The group of an existing task, or the task name for one the assistant creates (same name). */
+    private static String groupOf(ConfigSnapshot current, String task) {
+        var existing = current.tasks().get(task);
+        return existing == null ? task : existing.group();
+    }
+
+    private static ServiceCounts serviceCounts(String text) throws InvalidAnswerException {
+        ServiceCounts counts = ServiceCounts.parse(text);
+        if (counts == null) {
+            throw new InvalidAnswerException(SetupMessages.CHECK_SERVICES);
+        }
+        return counts;
     }
 
     private SetupAnswers servers(ConfigSnapshot current, SetupAnswers answers) throws PromptCancelledException {
@@ -479,6 +519,17 @@ final class InteractiveSetup {
             }
         }
         long total = totalHeap(current, answers);
+        List<String> counts = new ArrayList<>();
+        for (NetworkServer server : NetworkServer.values()) {
+            if (!answers.wants(server) || server.isProxy()) {
+                continue;
+            }
+            for (String task : SetupPlan.serviceTasks(current, server)) {
+                if (answers.groupSwitches().getOrDefault(groupOf(current, task), Boolean.TRUE)) {
+                    counts.add(task + " " + answers.services().getOrDefault(task, server.defaultCounts()));
+                }
+            }
+        }
         DatabaseConfig db = answers.database();
         String endpoint = db.host() + ":" + db.port();
         String database = switch (db.mode()) {
@@ -500,6 +551,8 @@ final class InteractiveSetup {
         rows.put(SetupMessages.S_PORTS, ports.isEmpty() ? SetupMessages.S_NONE.get(lang) : String.join(", ", ports));
         rows.put(SetupMessages.S_MEMORY, memory.isEmpty() ? SetupMessages.S_NONE.get(lang)
                 : String.join(", ", memory) + " (" + size(total) + ")");
+        rows.put(SetupMessages.S_SERVICES, counts.isEmpty() ? SetupMessages.S_NONE.get(lang)
+                : String.join(", ", counts) + " " + SetupMessages.S_SERVICES_FORM.get(lang));
         rows.put(SetupMessages.S_DATABASE, database);
         rows.put(SetupMessages.S_SECRETS, secretsLine);
         rows.put(SetupMessages.S_FILES, files.isEmpty() ? SetupMessages.S_NONE.get(lang) : String.join(", ", files));

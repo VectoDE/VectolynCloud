@@ -21,6 +21,7 @@ import net.vectora.cloud.config.model.DatabaseConfig;
 import net.vectora.cloud.config.model.DatabaseMode;
 import net.vectora.cloud.config.model.GroupConfig;
 import net.vectora.cloud.config.model.HeapConfig;
+import net.vectora.cloud.config.model.MemorySize;
 import net.vectora.cloud.config.model.NodeConfig;
 import net.vectora.cloud.config.model.NodesConfig;
 import net.vectora.cloud.config.model.ProcessConfig;
@@ -46,6 +47,8 @@ public final class ConfigValidator {
     public static final int MAX_SERVICES = 1000;
     /** Upper limit for players per service. */
     public static final int MAX_PLAYERS_PER_SERVICE = 10_000;
+    /** Lowest {@code max-memory} of a node in MiB: one proxy with its default heap. */
+    public static final long MIN_NODE_MEMORY_MEGABYTES = 512;
     /** Only Minecraft version PandaSpigot runs. */
     public static final String PANDASPIGOT_VERSION = "1.8.8";
 
@@ -150,6 +153,9 @@ public final class ConfigValidator {
             }
             c.pattern(f, p + ".host", node.host(), ConfigNames.HOST);
             c.port(f, p + ".port", node.port());
+            if (node.maxMemory() != null) {
+                c.range(f, p + ".max-memory", node.maxMemory().megabytes(), MIN_NODE_MEMORY_MEGABYTES, MemorySize.MAX_MEGABYTES);
+            }
             if (c.required(f, p + ".service-ports", node.servicePorts())) {
                 boolean first = c.port(f, p + ".service-ports.first", node.servicePorts().first());
                 boolean last = c.port(f, p + ".service-ports.last", node.servicePorts().last());
@@ -245,16 +251,23 @@ public final class ConfigValidator {
         if (c.name(f, "group", task.group()) && !snapshot.groups().containsKey(task.group())) {
             c.add(ConfigError.of(f, "group", ErrorCode.UNKNOWN_GROUP, task.group()));
         }
-        c.required(f, "mode", task.mode());
         ScalingConfig s = task.scaling();
         if (c.required(f, "scaling", s)) {
+            boolean fixed = c.range(f, "scaling.static-services", s.staticServices(), 0, MAX_SERVICES);
             boolean min = c.range(f, "scaling.min-services", s.minServices(), 0, MAX_SERVICES);
             boolean max = c.range(f, "scaling.max-services", s.maxServices(), 1, MAX_SERVICES);
+            if (fixed && min && s.staticServices() > s.minServices()) {
+                c.add(ConfigError.of(f, "scaling.static-services", ErrorCode.STATIC_ABOVE_MIN, "scaling.min-services"));
+            }
             if (min && max && s.minServices() > s.maxServices()) {
                 c.add(ConfigError.of(f, "scaling.min-services", ErrorCode.MIN_GREATER_THAN_MAX, "scaling.max-services"));
             }
             c.range(f, "scaling.players-per-service", s.playersPerService(), 1, MAX_PLAYERS_PER_SERVICE);
-            c.range(f, "scaling.scale-up-at", s.scaleUpAt(), 1, 100);
+            boolean up = c.range(f, "scaling.scale-up-at", s.scaleUpAt(), 1, 100);
+            boolean down = c.range(f, "scaling.scale-down-below", s.scaleDownBelow(), 0, 99);
+            if (up && down && s.scaleDownBelow() >= s.scaleUpAt()) {
+                c.add(ConfigError.of(f, "scaling.scale-down-below", ErrorCode.SCALE_DOWN_NOT_BELOW_UP, "scaling.scale-up-at"));
+            }
             c.required(f, "scaling.scale-down-after", s.scaleDownAfter());
             c.required(f, "scaling.cooldown", s.cooldown());
         }

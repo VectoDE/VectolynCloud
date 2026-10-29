@@ -14,9 +14,9 @@ import tools.jackson.databind.node.ObjectNode;
  * One kind of configuration file: its model type, its current {@code schema-version} and the
  * migrations that lead there.
  *
- * <p>Version 1 is the first format of every file, so there are no migrations yet. To change a
- * format later: raise {@code SCHEMA_VERSION} in the model record, change the record, and add a
- * {@link ConfigMigration} from the previous version here.
+ * <p>Version 1 is the first format of every file. To change a format: raise {@code SCHEMA_VERSION}
+ * in the model record, change the record, and add a {@link ConfigMigration} from the previous
+ * version here. Task files are at version 2 ({@link TaskModeMigration}).
  *
  * @param <T> model type
  */
@@ -33,7 +33,7 @@ public final class ConfigFormat<T> {
             new ConfigFormat<>(GroupConfig.class, GroupConfig.SCHEMA_VERSION, List.of());
     /** {@code tasks/<name>.yml}. */
     public static final ConfigFormat<TaskConfig> TASK =
-            new ConfigFormat<>(TaskConfig.class, TaskConfig.SCHEMA_VERSION, List.of());
+            new ConfigFormat<>(TaskConfig.class, TaskConfig.SCHEMA_VERSION, List.of(new TaskModeMigration()));
     /** {@code nodes.yml}. */
     public static final ConfigFormat<NodesConfig> NODES =
             new ConfigFormat<>(NodesConfig.class, NodesConfig.SCHEMA_VERSION, List.of());

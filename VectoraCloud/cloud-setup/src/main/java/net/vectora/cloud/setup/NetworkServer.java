@@ -5,7 +5,6 @@ import net.vectora.cloud.config.model.CombatSystem;
 import net.vectora.cloud.config.model.MemorySize;
 import net.vectora.cloud.config.model.ServerKind;
 import net.vectora.cloud.config.model.ServerSoftware;
-import net.vectora.cloud.config.model.TaskMode;
 import net.vectora.cloud.console.Text;
 
 /**
@@ -109,9 +108,24 @@ public enum NetworkServer {
         return software == ServerSoftware.PANDASPIGOT ? CombatSystem.LEGACY : CombatSystem.MODERN;
     }
 
-    /** Task mode of the default task: minigames scale, everything else runs one static service. */
-    public TaskMode taskMode() {
-        return this == MINIGAME ? TaskMode.DYNAMIC : TaskMode.STATIC;
+    /**
+     * Services the assistant suggests for the default task, as {@code static/min/max}: the proxies
+     * and Survival, Creative, Mod and End one static service that is never scaled; the lobby one
+     * static and dynamic overflow up to 4; the 1.8.8 server one static and overflow up to 3;
+     * minigames only dynamic, one ready and up to 8.
+     */
+    public ServiceCounts defaultCounts() {
+        return switch (this) {
+            case LOBBY -> new ServiceCounts(1, 1, 4);
+            case LEGACY_SERVER -> new ServiceCounts(1, 1, 3);
+            case MINIGAME -> new ServiceCounts(0, 1, 8);
+            case PROXY, LEGACY_PROXY, SURVIVAL, CREATIVE, MOD, END -> new ServiceCounts(1, 1, 1);
+        };
+    }
+
+    /** Whether the server is a Velocity proxy: one per node, so its counts are fixed at 1/1/1. */
+    public boolean isProxy() {
+        return software == ServerSoftware.VELOCITY;
     }
 
     /** Suggested maximum heap of one service. */

@@ -95,6 +95,20 @@ public final class SetupMessages {
     public static final Text MEMORY_ABOVE_PTERODACTYL = Text.of(
             "That is more than the %1$s this Pterodactyl server may use. Raise the limit in the panel or lower the values.",
             "Das ist mehr als die %1$s, die dieser Pterodactyl-Server nutzen darf. Erhöh das Limit im Panel oder senk die Werte.");
+    /** Services heading. */
+    public static final Text SERVICES = Text.of(
+            "Services per server, as static/min/max. Static services keep their worlds and always run;"
+                    + " above them the cloud adds dynamic ones by player count, fresh from the template, up to max.",
+            "Dienste pro Server, als statisch/min/max. Statische Dienste behalten ihre Welten und laufen immer;"
+                    + " darüber startet die Cloud nach Spielerzahl dynamische, frisch aus dem Template, bis max.");
+    /** Services example. */
+    public static final Text SERVICES_HELP = Text.of(
+            "1/1/1: one static server, never scaled. 1/1/4: one static, up to 3 more dynamic ones."
+                    + " 0/1/8: only dynamic, one always ready, at most 8.",
+            "1/1/1: ein statischer Server, nie skaliert. 1/1/4: einer statisch, bis zu 3 weitere dynamisch."
+                    + " 0/1/8: nur dynamisch, einer immer bereit, höchstens 8.");
+    /** Services question; %1$s is the server, %2$s the task. */
+    public static final Text SERVICES_OF = Text.of("%1$s (task %2$s), static/min/max", "%1$s (Task %2$s), statisch/min/max");
     /** Database heading. */
     public static final Text DATABASE = Text.of("Database (LuckPerms, later the Vectora plugin)",
             "Datenbank (LuckPerms, später das Vectora-Plugin)");
@@ -184,6 +198,10 @@ public final class SetupMessages {
     public static final Text S_PORTS = Text.of("Ports", "Ports");
     /** Label. */
     public static final Text S_MEMORY = Text.of("Memory", "Arbeitsspeicher");
+    /** Label. */
+    public static final Text S_SERVICES = Text.of("Services", "Dienste");
+    /** After the counts in the summary. */
+    public static final Text S_SERVICES_FORM = Text.of("(static/min/max)", "(statisch/min/max)");
     /** Label. */
     public static final Text S_DATABASE = Text.of("Database", "Datenbank");
     /** Managed; %1$s host:port. */
@@ -316,6 +334,10 @@ public final class SetupMessages {
     public static final Text FILE_UNKNOWN_MEMORY_GROUP = Text.of(
             "memory: %1$s is neither an existing group nor a group the setup creates.",
             "memory: %1$s ist weder eine vorhandene Gruppe noch eine, die die Einrichtung anlegt.");
+    /** Unknown task under services; %1$s the task. */
+    public static final Text FILE_UNKNOWN_SERVICES_TASK = Text.of(
+            "services: %1$s is neither an existing task nor one the setup creates (the proxies always run one service).",
+            "services: %1$s ist weder ein vorhandener Task noch einer, den die Einrichtung anlegt (die Proxys laufen immer mit einem Dienst).");
     /** A minigame entry without value; %1$s the group. */
     public static final Text FILE_MINIGAME_VALUE = Text.of(
             "minigames: %1$s needs true or false.", "minigames: %1$s braucht true oder false.");
@@ -355,6 +377,14 @@ public final class SetupMessages {
     public static final Text CHECK_HEAP = Text.of("At least 256M, written like 512M or 2G.", "Mindestens 256M, geschrieben wie 512M oder 2G.");
     /** Heap rule for one group; %1$s the group. */
     public static final Text CHECK_HEAP_OF = Text.of("Memory of %1$s: at least 256M.", "Arbeitsspeicher von %1$s: mindestens 256M.");
+    /** Service count rule. */
+    public static final Text CHECK_SERVICES = Text.of(
+            "Write static/min/max, for example 1/1/4: static at most min, min at most max, max from 1 to 1000.",
+            "Schreib statisch/min/max, zum Beispiel 1/1/4: statisch höchstens min, min höchstens max, max von 1 bis 1000.");
+    /** Service count rule for one task; %1$s the task. */
+    public static final Text CHECK_SERVICES_OF = Text.of(
+            "Services of %1$s: static at most min, min at most max, max from 1 to 1000.",
+            "Dienste von %1$s: statisch höchstens min, min höchstens max, max von 1 bis 1000.");
     /** Unknown group under minigames; %1$s the group. */
     public static final Text CHECK_UNKNOWN_GROUP = Text.of(
             "minigames: %1$s is no existing group.", "minigames: %1$s ist keine vorhandene Gruppe.");

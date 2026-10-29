@@ -367,7 +367,7 @@ public final class ServiceManager implements AutoCloseable {
         List<Service> prepared = new ArrayList<>();
         for (ServicePlanner.Planned planned : ServicePlanner.plan(snapshot, nodeId)) {
             try {
-                prepared.add(prepare(snapshot, planned.task(), OptionalInt.of(planned.index())));
+                prepared.add(prepare(snapshot, planned.task(), OptionalInt.of(planned.index()), Optional.of(planned.mode())));
             } catch (ServiceException e) {
                 LOG.log(System.Logger.Level.ERROR, "Service {0}-{1} of task {2} not started: {3}",
                         planned.group(), planned.index(), planned.task(), e.getMessage());
@@ -385,28 +385,53 @@ public final class ServiceManager implements AutoCloseable {
     }
 
     /**
-     * Starts one more service of a task, for example from the console or the scaler. A static
-     * task reuses the lowest index whose service is not running (and with it its folder); a
-     * dynamic task takes the lowest free index.
+     * Starts one more service of a task, for example from the console or the API. In this order:
+     * <ol>
+     *   <li>a static service of the task that is not running comes back at the lowest such index,
+     *       in its own folder;</li>
+     *   <li>while the task has fewer static services than {@code static-services}, a new static
+     *       service starts at the lowest index of the group that has no running service;</li>
+     *   <li>otherwise a dynamic service starts at the lowest free index.</li>
+     * </ol>
      *
      * @param task task name
      * @return the started service
      * @throws ServiceException if the setup is not complete or the EULA not accepted, the
      *                          {@link StartGate} refuses, the task is unknown, its group is not
-     *                          wanted or runs elsewhere, {@code max-services} is reached, or the
-     *                          start fails
+     *                          wanted or runs elsewhere, {@code max-services} is reached, a dynamic
+     *                          service would be needed but the task has none
+     *                          ({@code max-services = static-services}), or the start fails
      */
     public ServiceInfo start(String task) throws ServiceException {
         ConfigSnapshot snapshot = config.get();
         checkStartAllowed(snapshot.cloud());
         startGate.beforeStart();
-        Service service = prepare(snapshot, task, OptionalInt.empty());
+        Service service = prepare(snapshot, task, OptionalInt.empty(), Optional.empty());
         launch(service, snapshot);
         return service.info();
     }
 
     /**
-     * Starts the service of a task with a given index, for the scaler: a static service that
+     * Starts one more dynamic (overflow) service of a task at the lowest free index, for the scaler.
+     * Unlike {@link #start(String)} it never brings back a static service the operator stopped by
+     * hand. Same gate and limits as {@link #start(String)}.
+     *
+     * @param task task name
+     * @return the started service
+     * @throws ServiceException for the reasons of {@link #start(String)}, or if the task has no
+     *                          dynamic services ({@code max-services = static-services})
+     */
+    public ServiceInfo startDynamic(String task) throws ServiceException {
+        ConfigSnapshot snapshot = config.get();
+        checkStartAllowed(snapshot.cloud());
+        startGate.beforeStart();
+        Service service = prepare(snapshot, task, OptionalInt.empty(), Optional.of(TaskMode.DYNAMIC));
+        launch(service, snapshot);
+        return service.info();
+    }
+
+    /**
+     * Starts the static service of a task with a given index, for the scaler: a static service that
      * stopped because its group was switched off comes back in its own folder, and a new static
      * slot gets an index no service of the group has used yet, so the folder of a server the
      * operator stopped by hand is not touched. Same gate and limits as {@link #start(String)}.
@@ -415,7 +440,9 @@ public final class ServiceManager implements AutoCloseable {
      * @param index index within the group, 1 to {@value ServiceIds#MAX_INDEX}
      * @return the started service
      * @throws ServiceException for the reasons of {@link #start(String)}, if the index is out of
-     *                          range, or if a service with this index is active
+     *                          range, if a service with this index is active, or if the index is no
+     *                          static service of the task and the task already has
+     *                          {@code static-services} static services
      */
     public ServiceInfo start(String task, int index) throws ServiceException {
         if (index < 1 || index > ServiceIds.MAX_INDEX) {
@@ -424,7 +451,7 @@ public final class ServiceManager implements AutoCloseable {
         ConfigSnapshot snapshot = config.get();
         checkStartAllowed(snapshot.cloud());
         startGate.beforeStart();
-        Service service = prepare(snapshot, task, OptionalInt.of(index));
+        Service service = prepare(snapshot, task, OptionalInt.of(index), Optional.of(TaskMode.STATIC));
         launch(service, snapshot);
         return service.info();
     }
@@ -453,7 +480,7 @@ public final class ServiceManager implements AutoCloseable {
         checkStartAllowed(snapshot.cloud());
         startGate.beforeStart();
         Service next = prepare(snapshot, spec.taskName(),
-                spec.isStatic() ? OptionalInt.of(spec.index()) : OptionalInt.empty());
+                spec.isStatic() ? OptionalInt.of(spec.index()) : OptionalInt.empty(), Optional.of(spec.mode()));
         launch(next, snapshot);
         return next.info();
     }
@@ -551,9 +578,11 @@ public final class ServiceManager implements AutoCloseable {
     }
 
     /**
-     * Picks id, index, port and folder for a new start and registers the service as PREPARED.
+     * Picks mode, id, index, port and folder for a new start and registers the service as PREPARED.
+     * Without a wanted mode, the order of {@link #start(String)} applies.
      */
-    private Service prepare(ConfigSnapshot snapshot, String taskName, OptionalInt wantedIndex) throws ServiceException {
+    private Service prepare(ConfigSnapshot snapshot, String taskName, OptionalInt wantedIndex,
+                            Optional<TaskMode> wantedMode) throws ServiceException {
         TaskConfig task = snapshot.tasks().get(taskName);
         if (task == null) {
             throw new ServiceException("task " + taskName + " does not exist");
@@ -580,7 +609,29 @@ public final class ServiceManager implements AutoCloseable {
                 throw new ServiceException("task " + taskName + " already runs max-services ("
                         + task.scaling().maxServices() + ")");
             }
-            int index = wantedIndex.isPresent() ? wantedIndex.getAsInt() : freeIndex(task.group(), task.mode());
+            OptionalInt chosenIndex = wantedIndex;
+            TaskMode mode;
+            if (wantedMode.isPresent()) {
+                mode = wantedMode.get();
+            } else {
+                OptionalInt stoppedStatic = stoppedStaticIndex(taskName);
+                if (stoppedStatic.isPresent()) {
+                    mode = TaskMode.STATIC;
+                    chosenIndex = stoppedStatic;
+                } else {
+                    mode = staticCount(taskName) < task.scaling().staticServices() ? TaskMode.STATIC : TaskMode.DYNAMIC;
+                }
+            }
+            if (mode == TaskMode.DYNAMIC && !task.scaling().allowsDynamic()) {
+                throw new ServiceException("task " + taskName + " has no dynamic services (max-services "
+                        + task.scaling().maxServices() + " = static-services " + task.scaling().staticServices() + ")");
+            }
+            if (mode == TaskMode.STATIC && chosenIndex.isPresent() && !isOwnStatic(taskName, chosenIndex.getAsInt(), task)
+                    && staticCount(taskName) >= task.scaling().staticServices()) {
+                throw new ServiceException("task " + taskName + " already has its " + task.scaling().staticServices()
+                        + " static services (static-services)");
+            }
+            int index = chosenIndex.isPresent() ? chosenIndex.getAsInt() : freeIndex(task.group(), mode);
             ServiceId id = ServiceIds.of(task.group(), index);
             Service existing = services.get(id);
             if (existing != null && existing.isActive()) {
@@ -589,7 +640,7 @@ public final class ServiceManager implements AutoCloseable {
             if (held.contains(id)) {
                 throw new ServiceException(id + " is held by a backup or restore; it starts once that is done");
             }
-            Path workDirectory = ServicePlanner.workDirectory(home, group, task.mode(), id.value(), index);
+            Path workDirectory = ServicePlanner.workDirectory(home, group, mode, id.value(), index);
             if (cleaning.contains(workDirectory)) {
                 throw new ServiceException("the folder of " + id + " is still being deleted");
             }
@@ -619,7 +670,7 @@ public final class ServiceManager implements AutoCloseable {
                 port = ports.allocate(existing == null ? 0 : existing.spec.port());
                 allocated = true;
             }
-            ServiceSpec spec = new ServiceSpec(id, task.group(), taskName, index, group, task.mode(),
+            ServiceSpec spec = new ServiceSpec(id, task.group(), taskName, index, group, mode,
                     ServicePlanner.kindOf(group), home.resolve(group.template()).resolve("template"), workDirectory, port);
             Service service = existing != null ? existing : new Service();
             int attempts = service.restartAttempts;
@@ -630,6 +681,27 @@ public final class ServiceManager implements AutoCloseable {
             transition(service, ServiceState.PREPARED);
             return service;
         }
+    }
+
+    /** Static services of a task the node knows, in any state. Holds {@code lock}. */
+    private long staticCount(String taskName) {
+        return services.values().stream()
+                .filter(s -> s.spec.taskName().equals(taskName) && s.spec.isStatic())
+                .count();
+    }
+
+    /** The lowest index of a static service of the task without a process. Holds {@code lock}. */
+    private OptionalInt stoppedStaticIndex(String taskName) {
+        return services.values().stream()
+                .filter(s -> s.spec.taskName().equals(taskName) && s.spec.isStatic() && !s.isActive())
+                .mapToInt(s -> s.spec.index())
+                .min();
+    }
+
+    /** Whether {@code index} is a static service of the task. Holds {@code lock}. */
+    private boolean isOwnStatic(String taskName, int index, TaskConfig task) {
+        Service service = services.get(ServiceIds.of(task.group(), index));
+        return service != null && service.spec.taskName().equals(taskName) && service.spec.isStatic();
     }
 
     private int freeIndex(String group, TaskMode mode) throws ServiceException {
@@ -1150,7 +1222,7 @@ public final class ServiceManager implements AutoCloseable {
                     // The same gate as every other start: eula-accepted or setup-complete taken
                     // back by hand (or a new setup) also stops the restart after a crash.
                     checkStartAllowed(snapshot.cloud());
-                    next = prepare(snapshot, task, OptionalInt.of(index));
+                    next = prepare(snapshot, task, OptionalInt.of(index), Optional.of(service.spec.mode()));
                 } catch (ServiceException e) {
                     giveUpRestart(service);
                     throw e;

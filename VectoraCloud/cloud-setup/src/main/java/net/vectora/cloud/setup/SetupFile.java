@@ -44,11 +44,13 @@ import net.vectora.cloud.console.Text;
  * @param minigames     the own switch of existing minigame groups, by group name
  * @param network       bind address and ports
  * @param memory        maximum heap per group name
+ * @param services      static, minimum and maximum services per task name; a missing value keeps
+ *                      the suggestion
  * @param database      database settings
  */
 public record SetupFile(int schemaVersion, Language language, Boolean eula, String networkName, Servers servers,
                         Map<String, Boolean> minigames, Network network, Map<String, MemorySize> memory,
-                        Database database) {
+                        Map<String, Services> services, Database database) {
 
     /** Current version of the format. */
     public static final int SCHEMA_VERSION = 1;
@@ -97,6 +99,22 @@ public record SetupFile(int schemaVersion, Language language, Boolean eula, Stri
      * @param legacyPort  port of the legacy proxy
      */
     public record Network(String bind, Integer javaPort, Integer bedrockPort, Integer legacyPort) {
+    }
+
+    /**
+     * Service counts of one task, like in its task file; a missing one keeps the suggestion.
+     *
+     * @param staticServices {@code static-services}
+     * @param minServices    {@code min-services}
+     * @param maxServices    {@code max-services}
+     */
+    public record Services(Integer staticServices, Integer minServices, Integer maxServices) {
+
+        ServiceCounts over(ServiceCounts defaults) {
+            return new ServiceCounts(staticServices != null ? staticServices : defaults.staticServices(),
+                    minServices != null ? minServices : defaults.minServices(),
+                    maxServices != null ? maxServices : defaults.maxServices());
+        }
     }
 
     /**
@@ -208,6 +226,17 @@ public record SetupFile(int schemaVersion, Language language, Boolean eula, Stri
                     continue;
                 }
                 answers = answers.withHeap(group, entry.getValue());
+            }
+        }
+        if (services != null) {
+            for (Map.Entry<String, Services> entry : services.entrySet()) {
+                String task = entry.getKey();
+                ServiceCounts suggested = defaults.services().get(task);
+                if (suggested == null || entry.getValue() == null) {
+                    problems.add(SetupMessages.fill(SetupMessages.FILE_UNKNOWN_SERVICES_TASK, ConfigNames.safeArgument(task)));
+                    continue;
+                }
+                answers = answers.withServices(task, entry.getValue().over(suggested));
             }
         }
         if (database != null) {

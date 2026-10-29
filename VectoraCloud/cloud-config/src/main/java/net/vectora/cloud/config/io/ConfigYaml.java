@@ -85,6 +85,9 @@ public final class ConfigYaml {
             return new Decoded<>(value, version);
         } catch (JacksonException e) {
             throw new ConfigException(toError(file, e, content));
+        } catch (MigrationException e) {
+            throw new ConfigException(ConfigError.at(file, e.path(), locate(content, "/" + e.path().replace('.', '/')),
+                    e.code(), e.args()));
         } catch (RuntimeException e) {
             // A migration that trips over unexpected content.
             throw new ConfigException(ConfigError.of(file, "", ErrorCode.INVALID_VALUE, "content of schema-version " + version));

@@ -1,0 +1,12 @@
+2schema-version: 2
+group: lobby
+scaling:
+  static-services: 3
+  min-services: 1
+  max-services: 4
+  players-per-service: 50
+  scale-up-at: 50
+  scale-down-below: 50
+  scale-down-after: 5m
+  cooldown: 60s
+nodes: []

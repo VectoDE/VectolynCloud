@@ -246,8 +246,11 @@ class AutoscalerTest {
         }
 
         Fixture task(String name, TaskMode mode, int min, int max) {
-            tasks.put(name, new TaskConfig(TaskConfig.SCHEMA_VERSION, name, mode,
-                    new ScalingConfig(min, max, 50, 80, TimeSpan.parse("5m"), TimeSpan.parse("60s")), List.of()));
+            // STATIC: every service static and never scaled, as a task file of schema-version 1 migrates.
+            int fixed = mode == TaskMode.STATIC ? min : 0;
+            int limit = mode == TaskMode.STATIC ? min : max;
+            tasks.put(name, new TaskConfig(TaskConfig.SCHEMA_VERSION, name,
+                    new ScalingConfig(fixed, min, limit, 50, 80, 50, TimeSpan.parse("5m"), TimeSpan.parse("60s")), List.of()));
             return this;
         }
 
@@ -313,7 +316,7 @@ class AutoscalerTest {
         }
 
         @Override
-        public ServiceInfo start(String task) throws ServiceException {
+        public ServiceInfo startDynamic(String task) throws ServiceException {
             calls.add("start " + task);
             if (failStarts && crashEvent) {
                 fixture.scaler.stateChanged(info(task, 1, TaskMode.DYNAMIC, ServiceState.CRASHED, fixture.now),
@@ -326,7 +329,7 @@ class AutoscalerTest {
             while (services.containsKey(new ServiceId(task + "-" + index))) {
                 index++;
             }
-            ServiceInfo info = info(task, index, fixture.tasks.get(task).mode(), ServiceState.PREPARED, fixture.now);
+            ServiceInfo info = info(task, index, TaskMode.DYNAMIC, ServiceState.PREPARED, fixture.now);
             services.put(info.id(), info);
             return info;
         }

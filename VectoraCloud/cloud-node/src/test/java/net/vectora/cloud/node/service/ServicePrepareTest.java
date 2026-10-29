@@ -31,7 +31,7 @@ class ServicePrepareTest {
     void afterCloseNoStartReachesTheStartGate() throws Exception {
         try (TestNetwork net = TestNetwork.create(dir)) {
             net.group("lobby", ServerKind.LOBBY, ServerSoftware.PAPER, TestNetwork.process("normal", "20s", null));
-            net.task("lobby", "lobby", TaskMode.STATIC, 0, 1);
+            net.task("lobby", "lobby", 1, 1, 1);
             java.util.concurrent.atomic.AtomicInteger gate = new java.util.concurrent.atomic.AtomicInteger();
             ServiceManager manager = net.manager().startGate(gate::incrementAndGet).build();
             manager.close();
@@ -47,7 +47,7 @@ class ServicePrepareTest {
     void aHeldServiceDoesNotStartUntilTheHoldIsReleased() throws Exception {
         try (TestNetwork net = TestNetwork.create(dir)) {
             net.group("lobby", ServerKind.LOBBY, ServerSoftware.PAPER, TestNetwork.process("normal", "20s", null));
-            net.task("lobby", "lobby", TaskMode.STATIC, 0, 1);
+            net.task("lobby", "lobby", 1, 1, 1);
             try (ServiceManager manager = net.manager().build()) {
                 ServiceId lobby = new ServiceId("lobby-1");
                 ServiceManager.Hold hold = manager.holdStopped(lobby);
@@ -74,7 +74,7 @@ class ServicePrepareTest {
     void aStopWhilePreparedEndsAsStoppedAndNoProcessStarts() throws Exception {
         try (TestNetwork net = TestNetwork.create(dir)) {
             net.group("lobby", ServerKind.LOBBY, ServerSoftware.PAPER, TestNetwork.process("normal", "20s", null));
-            net.task("lobby", "lobby", TaskMode.STATIC, 0, 1);
+            net.task("lobby", "lobby", 1, 1, 1);
             CountDownLatch providing = new CountDownLatch(1);
             CountDownLatch release = new CountDownLatch(1);
             ServerSoftwareProvider fake = net.fakeSoftware();

@@ -79,15 +79,16 @@ public final class NodeBackups implements BackupTargets, ServiceControl, Databas
         List<BackupTarget> targets = new ArrayList<>();
         for (TaskConfig task : snapshot.tasks().values()) {
             GroupConfig group = snapshot.groups().get(task.group());
-            if (group == null || task.mode() != TaskMode.STATIC || !ServicePlanner.runsOn(task, node)
+            if (group == null || task.scaling() == null || task.scaling().staticServices() == 0
+                    || !ServicePlanner.runsOn(task, node)
                     || ServicePlanner.kindOf(group).orElse(null) == ServerKind.DATABASE) {
                 continue;
             }
             for (int index = 1; index <= task.scaling().maxServices(); index++) {
                 ServiceId id = ServiceIds.of(task.group(), index);
                 Path folder = ServicePlanner.workDirectory(home, group, TaskMode.STATIC, id.value(), index);
-                // The services min-services asks for, and any further one that has run before.
-                if (index > task.scaling().minServices() && !Files.isDirectory(folder)) {
+                // The static services static-services asks for, and any further one that has run before.
+                if (index > task.scaling().staticServices() && !Files.isDirectory(folder)) {
                     continue;
                 }
                 targets.add(new BackupTarget(id.value(), task.group(), group.minecraftVersion(), folder,

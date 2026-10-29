@@ -18,16 +18,17 @@ public interface ScalingTarget {
     List<ServiceInfo> services();
 
     /**
-     * Starts one more service of a task at the lowest free index ({@link ServiceManager#start(String)}).
+     * Starts one more dynamic service of a task at the lowest free index
+     * ({@link ServiceManager#startDynamic(String)}).
      *
      * @param task task name
      * @return the service
      * @throws ServiceException if it cannot start
      */
-    ServiceInfo start(String task) throws ServiceException;
+    ServiceInfo startDynamic(String task) throws ServiceException;
 
     /**
-     * Starts the service of a task with this index ({@link ServiceManager#start(String, int)}).
+     * Starts the static service of a task with this index ({@link ServiceManager#start(String, int)}).
      *
      * @param task  task name
      * @param index index within the group
@@ -60,8 +61,8 @@ public interface ScalingTarget {
             }
 
             @Override
-            public ServiceInfo start(String task) throws ServiceException {
-                return services.start(task);
+            public ServiceInfo startDynamic(String task) throws ServiceException {
+                return services.startDynamic(task);
             }
 
             @Override
