@@ -27,7 +27,23 @@ import net.vectora.protocol.ServiceId;
  */
 public final class FakeServerJar {
 
+    /** Resource with default system properties of the fake, read when a property is not set. */
+    public static final String DEFAULTS = "fake-defaults.properties";
+
     private FakeServerJar() {
+    }
+
+    /**
+     * Writes the jar with the cloud client that connects to the cloud channel without any JVM
+     * flag: {@code fake.cloud=true} is in its defaults. For the end-to-end test of
+     * {@code VectoraCloud.jar}, whose groups come from the setup, not from the test.
+     *
+     * @param target where to write it
+     * @return {@code target}
+     * @throws IOException if a class cannot be read or the jar not written
+     */
+    public static Path writeConnected(Path target) throws IOException {
+        return write(target, true, "fake.cloud=true\n");
     }
 
     /**
@@ -38,7 +54,7 @@ public final class FakeServerJar {
      * @throws IOException if the class file cannot be read or the jar not written
      */
     public static Path write(Path target) throws IOException {
-        return write(target, false);
+        return write(target, false, null);
     }
 
     /**
@@ -49,10 +65,10 @@ public final class FakeServerJar {
      * @throws IOException if a class cannot be read or the jar not written
      */
     public static Path writeWithCloudClient(Path target) throws IOException {
-        return write(target, true);
+        return write(target, true, null);
     }
 
-    private static Path write(Path target, boolean cloudClient) throws IOException {
+    private static Path write(Path target, boolean cloudClient, String defaults) throws IOException {
         Manifest manifest = new Manifest();
         manifest.getMainAttributes().put(Attributes.Name.MANIFEST_VERSION, "1.0");
         manifest.getMainAttributes().put(Attributes.Name.MAIN_CLASS, FakeServer.class.getName());
@@ -65,6 +81,9 @@ public final class FakeServerJar {
                 put(jar, written, resource(FakeCloudBridge.class), classFile(FakeCloudBridge.class));
                 copyClasses(jar, written, location(CloudClient.class));
                 copyClasses(jar, written, location(ServiceId.class));
+            }
+            if (defaults != null) {
+                put(jar, written, DEFAULTS, defaults.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
             }
         }
         return target;

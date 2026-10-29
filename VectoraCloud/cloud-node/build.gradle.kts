@@ -151,6 +151,74 @@ sourceSets.main {
     resources.srcDir(templateResources)
 }
 
+// The end-to-end test starts the real VectoraCloud.jar as a process in an empty folder, with fake
+// server software and without network (CloudJarEndToEndTest, docs/cloud/node.md#end-to-end-test).
+// It takes a few minutes and starts about ten JVMs, so it is not part of the normal build; the
+// Integration job of ci.yml runs it with ./gradlew :VectoraCloud:cloud-node:e2eTest.
+val cloudJar: Configuration = configurations.create("cloudJar") {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    isTransitive = false
+}
+
+dependencies {
+    cloudJar(project(mapOf("path" to ":VectoraCloud:cloud-launcher", "configuration" to "cloudJarElements")))
+}
+
+tasks.test {
+    useJUnitPlatform {
+        excludeTags("e2e")
+    }
+}
+
+val e2eToolchains = extensions.getByType<JavaToolchainService>()
+val e2eJava21 = e2eToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+val e2eJava25 = e2eToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(25) }
+
+/** Common setup of the two tasks that start VectoraCloud.jar as a process. */
+fun Test.startsTheCloudJar() {
+    group = LifecycleBasePlugin.VERIFICATION_GROUP
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    val jar: FileCollection = cloudJar
+    val java21 = e2eJava21
+    val java25 = e2eJava25
+    inputs.files(jar).withPropertyName("cloudJar").withPathSensitivity(PathSensitivity.NONE)
+    jvmArgumentProviders.add(CommandLineArgumentProvider {
+        listOf(
+            "-Dvectora.e2e.cloudJar=${jar.singleFile.absolutePath}",
+            // The servers get exactly Java 21 (PandaSpigot) and 25 (everything else).
+            "-Dvectora.e2e.java21=${java21.get().executablePath.asFile.absolutePath}",
+            "-Dvectora.e2e.java25=${java25.get().executablePath.asFile.absolutePath}",
+        )
+    })
+    // -Pe2eAllowRoot=true for a developer shell that runs as administrator or root.
+    providers.gradleProperty("e2eAllowRoot").orNull?.let { systemProperty("vectora.e2e.allowRoot", it) }
+    // -Pe2eDatabase=managed: the cloud downloads and runs its own MariaDB (managed-mariadb.yml).
+    providers.gradleProperty("e2eDatabase").orNull?.let { systemProperty("vectora.e2e.database", it) }
+    outputs.upToDateWhen { false }
+    outputs.cacheIf { false }
+}
+
+val e2eTest by tasks.registering(Test::class) {
+    description = "Starts VectoraCloud.jar in an empty folder with fake servers and checks the whole network."
+    startsTheCloudJar()
+    useJUnitPlatform {
+        includeTags("e2e")
+        excludeTags("e2e-live")
+    }
+}
+
+// The same with real downloads and real Velocity, Paper and PandaSpigot: needs internet access
+// and a few GB of memory, so only on purpose and in the weekly cloud-e2e-live.yml.
+val e2eLiveTest by tasks.registering(Test::class) {
+    description = "Starts VectoraCloud.jar with real downloads and real servers (needs internet access)."
+    startsTheCloudJar()
+    useJUnitPlatform {
+        includeTags("e2e-live")
+    }
+}
+
 tasks.withType<Test>().configureEach {
     // The console's terminal providers call native code; Java 24+ warns unless it is allowed.
     // VectoraCloud.jar declares the same in its manifest (Enable-Native-Access, PR 14).

@@ -1,0 +1,68 @@
+name: VectoraCloud live start
+
+# VectoraCloud.jar with the real downloads and the real servers: Velocity with the lobby
+# (Paper 26.3), the legacy proxy with the 1.8.8 server (PandaSpigot). It checks that every
+# download verifies and is pinned, that each server loads its bridge and reports ready on the cloud
+# channel, that both proxies get their backends, and the clean shutdown.
+# The offline version with fake servers runs in the Integration job of ci.yml. This one depends on
+# the download APIs and takes several minutes, so it runs weekly and on demand only.
+# Background: docs/cloud/node.md#end-to-end-test.
+
+on:
+  schedule:
+    - cron: '41 4 * * 4' # weekly, Thursday 04:41 UTC
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/cloud-e2e-live.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloud-e2e-live-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  live:
+    name: e2eLiveTest (real downloads and servers)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The servers need exactly Java 21 (PandaSpigot) and 25 (Velocity, Paper).
+      - name: Set up JDK 21 and 25
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: |
+            21
+            25
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      - name: Run e2eLiveTest
+        run: >-
+          bash ./gradlew :VectoraCloud:cloud-node:e2eLiveTest --no-daemon --stacktrace
+          -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64,JAVA_HOME_25_X64
+
+      - name: Upload test report
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: cloud-e2e-live
+          path: VectoraCloud/cloud-node/build/reports/tests/e2eLiveTest/
+          retention-days: 14
