@@ -1,6 +1,6 @@
 # Downloads
 
-`VectoraCloud/cloud-download` (`net.vectora.cloud.download`) fetches server software, plugins, mods and the MariaDB server, checks every file against a checksum and keeps it in a content-addressed cache. `software.lock.yml` records exactly which file each name stands for. The `jre` package picks the Java runtime for each server group and installs Temurin from Adoptium where no fitting system Java exists ([JRE management](#jre-management)).
+`cloud/download` (`net.vectora.cloud.download`) fetches server software, plugins, mods and the MariaDB server, checks every file against a checksum and keeps it in a content-addressed cache. `software.lock.yml` records exactly which file each name stands for. The `jre` package picks the Java runtime for each server group and installs Temurin from Adoptium where no fitting system Java exists ([JRE management](#jre-management)).
 
 The module uses the JDK `HttpClient` and Jackson 3. It has no other dependencies.
 
@@ -14,7 +14,7 @@ The module uses the JDK `HttpClient` and Jackson 3. It has no other dependencies
 | `lock` | `SoftwareLock`, `LockedArtifact`, `SoftwareLockFile` (YAML) |
 | `catalog` | `ArtifactCatalog`, read from `catalog.yml` on the class path |
 | `archive` | `SafeExtractor` for zip and tar.gz, `TarReader` |
-| `jre` | `JavaRequirement` (which Java a group gets), `SystemJavaFinder`, `JreInstaller` (`<home>/jre/`), `JreManager` (entry point for `cloud-node`), `JavaRuntime` |
+| `jre` | `JavaRequirement` (which Java a group gets), `SystemJavaFinder`, `JreInstaller` (`<home>/jre/`), `JreManager` (entry point for `cloud/node`), `JavaRuntime` |
 | `hash` | `Checksum`, `HashAlgorithm`, `MultiDigest` |
 
 ## HTTP rules
@@ -74,7 +74,7 @@ For a source without a checksum (only the Fabric launcher so far) the first down
 
 ## `software.lock.yml`
 
-The lockfile lives in the cloud home (`Server-Network/software.lock.yml`). It is written through a temporary file and an atomic move.
+The lockfile lives in the cloud home (`<home>/software.lock.yml`). It is written through a temporary file and an atomic move.
 
 ```yaml
 # Written by VectoraCloud. Pins every downloaded artifact to one file and its hash.
@@ -143,7 +143,7 @@ Rules:
 | `type` | `standard` or `transitional` (third-party plugin until the Vectora replacement exists; requires `replaced-by`) |
 | `provider`, `project`, `platform` | Where it comes from |
 | `game-version` | `version` (the group's Minecraft version is the version to resolve, Paper), `filter` (only builds for that version, Modrinth and Fabric) or `none` (the proxy has no Minecraft version of its own) |
-| `targets` | Server templates in `Server-Network/` that use it |
+| `targets` | Server templates in `templates/` that use it |
 | `replaced-by` | What replaces a transitional entry |
 | `alternative` | A second source with a checksum, as `provider:project` |
 | `version` | Optional. Pins the version to resolve. Only for `game-version: none`, where the group's Minecraft version says nothing about the version wanted. `velocity` is pinned to `4.3.1`, the Velocity API the bridge is compiled against (move both together); `pandaspigot` to `1.8.8`. |
@@ -173,7 +173,7 @@ Every catalog entry has a source with a checksum except the Fabric launcher. A H
 
 ## What the node installs
 
-`cloud-node` uses the catalog through `software.SoftwareInstaller` (its `ServerSoftwareProvider`) and `software.LockedDownloads`:
+`cloud/node` uses the catalog through `software.SoftwareInstaller` (its `ServerSoftwareProvider`) and `software.LockedDownloads`:
 
 - **Server jar.** `paper`, `velocity`, `fabric-server` or `pandaspigot`, by the group's `software`, copied into the service folder as `paper.jar`, `velocity.jar`, `fabric-server.jar` or `pandaspigot.jar`.
 - **Plugins and mods.** An empty `catalog` in the group file means the catalog's defaults: every `plugin` or `mod` entry whose `targets` name the group's template and whose platform fits the software (mods only on Fabric, Velocity plugins only on Velocity). A non-empty `catalog` is exactly that list; an unknown id or one for another platform fails the start and names the id. Plugins go to `plugins/`, mods to `mods/`. The legacy proxy gets no defaults yet (Bedrock and ViaVersion on the legacy side come with PR 24).
@@ -181,7 +181,7 @@ Every catalog entry has a source with a checksum except the Fabric launcher. A H
 - **Pinning.** The first resolve of a lock name asks the provider for the newest stable version (or the pinned `version`), downloads it and writes the coordinate and checksum to `software.lock.yml`. Every later start replays that entry: from `cache/artifacts/<sha256>` without the network, or by downloading exactly that file again. A newer upstream build is only taken after the entry is removed from the lockfile. A lock entry that no longer fits (another provider, another pinned version, another Minecraft version) is resolved again.
 - **What the checksum proves.** Fill, Modrinth, Hangar, GeyserMC and the PandaSpigot API publish the checksum in the same API answer that names the download URL. It catches a damaged or swapped download and a mirror that serves something else, but not a compromised source, project account or API: whoever controls the answer controls both. The first resolve of an unpinned entry is therefore trust in the source at that moment, like trust on first use; after that the lockfile pins exactly that file. Catalog entries name Modrinth and Hangar projects by slug, not by a fixed project id. `software.lock.yml` is trusted like the rest of the home folder: whoever can write it can pin another file from an allowed host, so it must only be writable by the cloud's user.
 - **Java minimum.** The highest of Fill's `java.version.minimum` and Mojang's `javaVersion` for that Minecraft version is noted per group in `cache/java-minimums.properties`, so `ManagedJavaRuntimes` knows it on a later offline start.
-- **Bridge.** `BridgePlugins` copies `VectoraCloudBridge{Velocity,Paper,Legacy}-<version>.jar` from the node's own resources (listed with their SHA-256 in `bridges.index`, built by `:VectoraCloud:cloud-node:bridgeResources`) into `plugins/`, checked against that hash, and removes older versions of the same bridge. Fabric has no bridge yet.
+- **Bridge.** `BridgePlugins` copies `VectoraCloudBridge{Velocity,Paper,Legacy}-<version>.jar` from the node's own resources (listed with their SHA-256 in `bridges.index`, built by `:cloud:node:bridgeResources`) into `plugins/`, checked against that hash, and removes older versions of the same bridge. Fabric has no bridge yet.
 - **Bookkeeping.** `plugins/.vectora-managed` (`mods/.vectora-managed`) lists the files the node put there. On the next start, a listed file that is no longer wanted is deleted; files the operator added are not touched.
 
 ## Safe extraction
@@ -211,7 +211,7 @@ Every catalog entry has a source with a checksum except the Fabric launcher. A H
 `LiveSmokeTest` is tagged `network` and excluded from the normal build. Run it on purpose:
 
 ```sh
-./gradlew :VectoraCloud:cloud-download:networkTest
+./gradlew :cloud:download:networkTest
 ```
 
 It resolves Paper 26.3, Velocity, the Fabric launcher for 26.3, PandaSpigot, Geyser and Floodgate for Velocity, ViaVersion from Modrinth and from Hangar, Lithium, MariaDB for Windows and Linux, Mojang's Java version for 26.3 and the Temurin JREs 21 and 25 for Windows x64, Linux x64 and aarch64 and macOS x64 and aarch64. For each artifact it opens the download URL through the real client, so the redirect chain is checked against the allowlist too. Then it downloads Chunky (sha512) and the Fabric launcher (TOFU), checks both, downloads them a second time against the lockfile and writes a lockfile. Last, `JreManager` downloads the JRE 21 for the machine it runs on, unpacks it into `jre/` and runs `java -version` from it. The summary goes to `build/network-smoke.txt`.
@@ -220,7 +220,7 @@ The workflow `.github/workflows/network-smoke.yml` runs it every week, on demand
 
 ## JRE management
 
-The `jre` package gives each server group a Java runtime. `cloud-node` calls one method and gets the path of `java` back:
+The `jre` package gives each server group a Java runtime. `cloud/node` calls one method and gets the path of `java` back:
 
 ```java
 JavaRequirement requirement = JavaRequirement.forGroup(group.software(), minimum, group.java().major());

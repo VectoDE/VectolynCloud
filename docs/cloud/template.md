@@ -1,10 +1,10 @@
 # Template rendering (`cloud-template`)
 
-`VectoraCloud/cloud-template` (package `net.vectora.cloud.template`) turns `Server-Network/<Server>/template/` into the server's `runtime/` folder. It replaces the `{{VECTORA_*}}` placeholders, writes the files that come from secrets, and builds the proxy's server list from the wanted servers. The placeholders themselves are listed in [`Server-Network/placeholders.md`](../../Server-Network/placeholders.md).
+`cloud/template` (package `net.vectora.cloud.template`) turns `<home>/<Server>/template/` into the server's `runtime/` folder. It replaces the `{{VECTORA_*}}` placeholders, writes the files that come from secrets, and builds the proxy's server list from the wanted servers. The placeholders themselves are listed in [`templates/placeholders.md`](../../templates/placeholders.md).
 
-The node carries a copy of every template in its jar and writes it into a home that does not have it ([node.md](node.md#built-in-templates)); outside the repository checkout, `<home>/<Server>/template/` plays the part of `Server-Network/<Server>/template/`.
+The node carries a copy of every template in its jar and writes it into a home that does not have it ([node.md](node.md#built-in-templates)); the repository keeps these templates in `templates/<Server>/`.
 
-The module does not read `cloud.yml` or `secrets/` itself. The caller (later `cloud-node`) passes the values through the `PlaceholderValues` interface.
+The module does not read `cloud.yml` or `secrets/` itself. The caller (later `cloud/node`) passes the values through the `PlaceholderValues` interface.
 
 ## API
 
@@ -127,11 +127,11 @@ Names must be 1 to 64 letters, digits, `_` or `-`, and unique ignoring case. Hos
 
 ## Tests
 
-- `RealTemplatesTest` renders every real `Server-Network/*/template/` with test values into a temporary folder. Afterwards no file may contain `{{`. Every YAML and JSON file must parse with Jackson, every `.properties` file with `java.util.Properties`, and every TOML file must pass a plausibility check (no TOML library in the build). The test also checks that a proxy without the survival server never mentions it, checks that the rendered `spigot.yml` of every Paper and PandaSpigot template turns Spigot's restart off without the node having to change it, and compares the part of `velocity.toml` from `[servers]` up to `[advanced]` for 1, 3 and 6 wanted servers with the golden files in `src/test/resources/net/vectora/cloud/template/golden/`. When a template change is intended, the actual output lands in `build/golden-actual/` for review.
+- `RealTemplatesTest` renders every real `templates/<Server>/` with test values into a temporary folder. Afterwards no file may contain `{{`. Every YAML and JSON file must parse with Jackson, every `.properties` file with `java.util.Properties`, and every TOML file must pass a plausibility check (no TOML library in the build). The test also checks that a proxy without the survival server never mentions it, checks that the rendered `spigot.yml` of every Paper and PandaSpigot template turns Spigot's restart off without the node having to change it, and compares the part of `velocity.toml` from `[servers]` up to `[advanced]` for 1, 3 and 6 wanted servers with the golden files in `src/test/resources/net/vectora/cloud/template/golden/`. When a template change is intended, the actual output lands in `build/golden-actual/` for review.
 - `PlaceholderRendererFuzzTest` is a Jazzer target: arbitrary bytes may only end in a `TemplateException`, and text without `{{` must come back byte for byte. Seeds are in `PlaceholderRendererFuzzTestInputs/`. A `.gitattributes` next to that folder marks them binary, so git keeps their CRLF and invalid UTF-8. Local run:
 
   ```sh
-  ./gradlew :VectoraCloud:cloud-template:test --tests 'net.vectora.cloud.template.PlaceholderRendererFuzzTest.renderFailsOnlyWithTemplateException' -Pfuzz -PfuzzMaxDuration=2m
+  ./gradlew :cloud:template:test --tests 'net.vectora.cloud.template.PlaceholderRendererFuzzTest.renderFailsOnlyWithTemplateException' -Pfuzz -PfuzzMaxDuration=2m
   ```
 
 Tests that need symbolic links are skipped where the OS does not allow creating them (Windows without developer mode). The junction tests run on Windows only and create the junction with `mklink /J`, which needs no extra rights.

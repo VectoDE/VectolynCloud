@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-Backend für Gruppen mit Minecraft 1.8.8, etwa ein 1.8-PvP-Minigame. Software ist PandaSpigot (Gruppeneinstellung `software: pandaspigot`, `minecraft-version: "1.8.8"`), das unter Java 21 läuft (siehe [docs/cloud/legacy-1.8.8.md](../../../docs/cloud/legacy-1.8.8.md)). Diese Server stehen hinter dem [Legacy-Proxy](../../Legacy-Proxy/template/README.de.md), nie hinter dem Hauptproxy.
+Backend für Gruppen mit Minecraft 1.8.8, etwa ein 1.8-PvP-Minigame. Software ist PandaSpigot (Gruppeneinstellung `software: pandaspigot`, `minecraft-version: "1.8.8"`), das unter Java 21 läuft (siehe [docs/cloud/legacy-1.8.8.md](../../docs/cloud/legacy-1.8.8.md)). Diese Server stehen hinter dem [Legacy-Proxy](../Legacy-Proxy/README.de.md), nie hinter dem Hauptproxy.
 
 Die Vorlage enthält nur, was Vectora braucht. Alle übrigen Einstellungen ergänzt PandaSpigot beim ersten Start mit seinen Standardwerten.
 
@@ -21,4 +21,4 @@ PandaSpigot prüft den `bungeeguard-token` nicht selbst. Bis die Vectora-Bridge 
 
 ## Gewollt oder nicht
 
-Nur als gewollt markierte Gruppen rendert die Cloud aus dieser Vorlage nach `runtime/` und startet sie. Diese README ist reine Doku, die Cloud kopiert sie nie nach `runtime/`. Alle Platzhalter: [`../../placeholders.md`](../../placeholders.md).
+Nur als gewollt markierte Gruppen rendert die Cloud aus dieser Vorlage nach `runtime/` und startet sie. Diese README ist reine Doku, die Cloud kopiert sie nie nach `runtime/`. Alle Platzhalter: [`../placeholders.md`](../placeholders.md).

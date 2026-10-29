@@ -4,23 +4,23 @@ The bridges connect the proxies and servers that VectoraCloud starts to the [clo
 
 | Module | Jar | Runs in | Does |
 |---|---|---|---|
-| `cloud-bridge-common` | (bundled into the three below) | | Send queue, server registry and player state of the proxy, tick meter, BungeeGuard check. No platform API. |
-| `cloud-bridge-velocity` | `VectoraCloudBridgeVelocity-<version>.jar` | Velocity 4.3, main proxy and legacy proxy (Java 25) | Adds and removes dynamic servers, reports player events and status, ready signal. |
-| `cloud-bridge-paper` | `VectoraCloudBridgePaper-<version>.jar` | Paper 26.3 (Java 25) | Ready signal and status. |
-| `cloud-bridge-legacy` | `VectoraCloudBridgeLegacy-<version>.jar` | PandaSpigot 1.8.8 (Java 21) | Ready signal and status, plus the check of the legacy proxy's `bungeeguard-token`. |
+| `plugins/bridge/common` | (bundled into the three below) | | Send queue, server registry and player state of the proxy, tick meter, BungeeGuard check. No platform API. |
+| `plugins/bridge/velocity` | `VectoraCloudBridgeVelocity-<version>.jar` | Velocity 4.3, main proxy and legacy proxy (Java 25) | Adds and removes dynamic servers, reports player events and status, ready signal. |
+| `plugins/bridge/paper` | `VectoraCloudBridgePaper-<version>.jar` | Paper 26.3 (Java 25) | Ready signal and status. |
+| `plugins/bridge/legacy` | `VectoraCloudBridgeLegacy-<version>.jar` | PandaSpigot 1.8.8 (Java 21) | Ready signal and status, plus the check of the legacy proxy's `bungeeguard-token`. |
 
-Each jar contains the bridge core, `Vectora-CloudClient` and `Vectora-Protocol`, all Vectora code. No third-party library is bundled, and none is needed at runtime besides the platform itself.
+Each jar contains the bridge core, `common/client` and `common/protocol`, all Vectora code. No third-party library is bundled, and none is needed at runtime besides the platform itself.
 
 ## Environment
 
 | Variable | Read by | Set by | Content |
 |---|---|---|---|
-| `VECTORA_CLOUD_HOST`, `VECTORA_CLOUD_PORT`, `VECTORA_SERVICE_ID`, `VECTORA_SERVICE_TOKEN` | all bridges | `cloud-node` | See [network.md](network.md#environment-variables). Missing id or token: the bridge logs why and stays inactive (the legacy token check still runs). |
-| `VECTORA_SERVICE_PLATFORM` | Velocity bridge | `cloud-node`, for every service | Name of cloud-template's `ServerPlatform`. `VELOCITY_LEGACY` makes the bridge the legacy proxy, anything else (also a missing value) the main proxy. The bridge logs the role it took; for a value other than `VELOCITY` or `VELOCITY_LEGACY` it logs a warning (without repeating the value). The Paper and legacy bridges log their role on enable as well. |
-| `VECTORA_LEGACY_FORWARDING_SECRET` | legacy bridge | `cloud-node`, for `PANDASPIGOT` services only | The forwarding secret of the legacy proxy, the same value as in `Legacy-Proxy/runtime/forwarding.secret`. Must follow the template's secret rule (16 or more characters from `A-Z a-z 0-9 . _ ~ + / = -`). Read from the environment only, never from a system property, which would show on the command line. |
-| `VECTORA_FALLBACK_GROUP` | Velocity bridge | `cloud-node`, for both proxies | The group a kicked player goes to when the own group has no free server: `fallback-group` of `cloud.yml`, default `lobby`. Read once when the bridge connects, so a change reaches a proxy with its next start. A missing value (a proxy started by an older node) or one that is no valid group name gives `lobby`; an invalid one is logged as a warning, without repeating it. |
+| `VECTORA_CLOUD_HOST`, `VECTORA_CLOUD_PORT`, `VECTORA_SERVICE_ID`, `VECTORA_SERVICE_TOKEN` | all bridges | `cloud/node` | See [network.md](network.md#environment-variables). Missing id or token: the bridge logs why and stays inactive (the legacy token check still runs). |
+| `VECTORA_SERVICE_PLATFORM` | Velocity bridge | `cloud/node`, for every service | Name of cloud-template's `ServerPlatform`. `VELOCITY_LEGACY` makes the bridge the legacy proxy, anything else (also a missing value) the main proxy. The bridge logs the role it took; for a value other than `VELOCITY` or `VELOCITY_LEGACY` it logs a warning (without repeating the value). The Paper and legacy bridges log their role on enable as well. |
+| `VECTORA_LEGACY_FORWARDING_SECRET` | legacy bridge | `cloud/node`, for `PANDASPIGOT` services only | The forwarding secret of the legacy proxy, the same value as in `Legacy-Proxy/runtime/forwarding.secret`. Must follow the template's secret rule (16 or more characters from `A-Z a-z 0-9 . _ ~ + / = -`). Read from the environment only, never from a system property, which would show on the command line. |
+| `VECTORA_FALLBACK_GROUP` | Velocity bridge | `cloud/node`, for both proxies | The group a kicked player goes to when the own group has no free server: `fallback-group` of `cloud.yml`, default `lobby`. Read once when the bridge connects, so a change reaches a proxy with its next start. A missing value (a proxy started by an older node) or one that is no valid group name gives `lobby`; an invalid one is logged as a warning, without repeating it. |
 
-All names are constants in `net.vectora.protocol.ServiceEnvironment` (`SERVICE_PLATFORM` and `LEGACY_FORWARDING_SECRET` added with this module, `FALLBACK_GROUP` later), so node and bridges cannot drift apart. `cloud-node` passes the services an environment without the cloud's own `VECTORA_*` variables (see [node.md](node.md#process)), so the node adds the last three explicitly: the platform for every service, the legacy secret only for `PANDASPIGOT`, the fallback group only for the two proxies.
+All names are constants in `net.vectora.protocol.ServiceEnvironment` (`SERVICE_PLATFORM` and `LEGACY_FORWARDING_SECRET` added with this module, `FALLBACK_GROUP` later), so node and bridges cannot drift apart. `cloud/node` passes the services an environment without the cloud's own `VECTORA_*` variables (see [node.md](node.md#process)), so the node adds the last three explicitly: the platform for every service, the legacy secret only for `PANDASPIGOT`, the fallback group only for the two proxies.
 
 ## Threads
 
@@ -119,7 +119,7 @@ The proxy's events are not passed on as they come. `PlayerTracker` checks them a
 - The events are queued while the tracker's lock is held, so two threads cannot swap them on the way to the send queue.
 - Bedrock players are recognised by Floodgate's UUID scheme (upper 64 bits zero), without the Floodgate API.
 
-Backend names: a dynamic server is registered under its service id. A static backend appears in `velocity.toml` under its group name (`lobby`) when its index is 1 (see [node.md](node.md#ids-folders-and-ports)), so the proxy reports `lobby`, not `lobby-1`. `cloud-node` maps that name back to the service when it takes the events (`NetworkPlayers`, see [node.md](node.md#life-cycle)).
+Backend names: a dynamic server is registered under its service id. A static backend appears in `velocity.toml` under its group name (`lobby`) when its index is 1 (see [node.md](node.md#ids-folders-and-ports)), so the proxy reports `lobby`, not `lobby-1`. `cloud/node` maps that name back to the service when it takes the events (`NetworkPlayers`, see [node.md](node.md#life-cycle)).
 
 ### Status
 
@@ -176,7 +176,7 @@ As on Paper ([Network-wide kicks](#network-wide-kicks)), with `NetworkKickComman
 
 ## Compiling against PandaSpigot
 
-`cloud-bridge-legacy` compiles against the real API, `com.hpfxd.pandaspigot:pandaspigot-api`, from the project's own repository `https://repo.hpfxd.com/releases/` (documented in the [PandaSpigot README](https://github.com/hpfxd/PandaSpigot)). Licence GPL-3.0, like Vectora. Only a snapshot is published, so the build pins one unique snapshot (`1.8.8-R0.1-20251003.170525-12`) instead of the moving `-SNAPSHOT`; a new upload cannot change the build without a commit.
+`plugins/bridge/legacy` compiles against the real API, `com.hpfxd.pandaspigot:pandaspigot-api`, from the project's own repository `https://repo.hpfxd.com/releases/` (documented in the [PandaSpigot README](https://github.com/hpfxd/PandaSpigot)). Licence GPL-3.0, like Vectora. Only a snapshot is published, so the build pins one unique snapshot (`1.8.8-R0.1-20251003.170525-12`) instead of the moving `-SNAPSHOT`; a new upload cannot change the build without a commit.
 
 | Choice | Why |
 |---|---|
@@ -205,11 +205,11 @@ The API has Java 8 class files, so the module needs no `disableAutoTargetJvm()`,
 | `ForwardedHandshakeFuzzTest` | Jazzer: any handshake gives a result and never an exception, an accepted one never carries a token on; any properties JSON fails only with `MalformedHandshakeException` and what parses round-trips. |
 | `VelocityServersTest`, `VelocityBridgePluginTest`, `PluginDescriptorTest` | The Velocity adapter on a scripted `ProxyServer`; plugin descriptors, Guice constructor and event handlers. Tagged `requires-java25` where they load Velocity or Paper classes. |
 
-All tests of `cloud-bridge-common` and `cloud-bridge-legacy` run on Java 25 and, with `-PtestJava=21`, on Java 21.
+All tests of `plugins/bridge/common` and `plugins/bridge/legacy` run on Java 25 and, with `-PtestJava=21`, on Java 21.
 
 ## Open for later pull requests
 
-- The node copies the bridge jar into the plugin folder of each service before it starts ([node.md](node.md#server-software)); the three jars are embedded in `cloud-node` with their SHA-256. A PandaSpigot service does not start without the legacy bridge.
+- The node copies the bridge jar into the plugin folder of each service before it starts ([node.md](node.md#server-software)); the three jars are embedded in `cloud/node` with their SHA-256. A PandaSpigot service does not start without the legacy bridge.
 - PR 24 (legacy proxy group): a real start of the legacy proxy with a PandaSpigot backend and the token check end to end.
-- Stage 3: the Vectora plugin per platform takes over `cloud-bridge-common`.
+- Stage 3: the Vectora plugin per platform takes over `plugins/bridge/common`.
 - Fabric: there is no Fabric bridge yet. When it comes, it replaces `kick` and `minecraft:kick` in the Brigadier dispatcher the same way (`CommandRegistrationCallback`) and reports the kicks of entitled senders and of the moderation as `NetworkKick`.

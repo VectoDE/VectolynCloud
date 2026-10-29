@@ -4,8 +4,8 @@ Every proxy and server that VectoraCloud starts keeps one TCP connection to its 
 
 | Module | Package | Side |
 |---|---|---|
-| `VectoraCloud/cloud-network` | `net.vectora.cloud.network` | Netty server inside the cloud (`CloudNetworkServer`) |
-| `Vectora-CloudClient` | `net.vectora.cloud.client` | Client inside every proxy and server (`CloudClient`) |
+| `cloud/network` | `net.vectora.cloud.network` | Netty server inside the cloud (`CloudNetworkServer`) |
+| `common/client` | `net.vectora.cloud.client` | Client inside every proxy and server (`CloudClient`) |
 
 ## Security model
 
@@ -15,7 +15,7 @@ The channel carries no secrets beyond the service tokens, but a peer that gets i
 |---|---|---|
 | Listen address | `127.0.0.1:7010`, reachable from this machine only | `host` and `port` of this node in `nodes.yml` |
 | Authentication | A random token per service and start (32 bytes from `SecureRandom`, 43 characters). The cloud compares it in constant time (`AuthToken.matches`). An unknown service id is compared against a decoy token, so it takes as long as a known one. | `ServiceTokens` |
-| Token handling | Never logged. `AuthToken`, `Hello` and `CloudClientSettings` print `[redacted]` instead. The token reaches the service process in an environment variable, not on the command line (set by `cloud-node`, PR 8). | |
+| Token handling | Never logged. `AuthToken`, `Hello` and `CloudClientSettings` print `[redacted]` instead. The token reaches the service process in an environment variable, not on the command line (set by `cloud/node`, PR 8). | |
 | Frame size before authentication | 4 KiB (`Protocol.MAX_HANDSHAKE_FRAME_SIZE`). A larger length prefix ends the connection as soon as it has arrived, without waiting for the body. After `AuthResult(ACCEPTED)`: 1 MiB. | both ends |
 | Handshake timeout | 10 s from the accept. A peer that sends `Hello` one byte at a time (slowloris) is cut off all the same. | `NetworkSettings` |
 | Idle timeout | 30 s without any frame from an authenticated service. The cloud sends `Ping` after 10 s without output, the client every 10 s. | `NetworkSettings`, `CloudClientSettings` |
@@ -62,7 +62,7 @@ The network module knows nothing about groups or processes. The node connects it
 | Interface | Direction | Purpose |
 |---|---|---|
 | `ServiceAuthenticator` | network asks node | `authenticate(PeerId, AuthToken)` returns an `AuthResult.Outcome`. `ServiceTokens` is the ready-made implementation with `issue`, `register` and `remove(id, token)`. |
-| `ChannelListener` (the service core's own listener in `cloud-node` is `ServiceListener`) | network tells node | `onEvent(ServiceEvent)` with one of the records `Connected`, `Ready`, `StatusReported`, `MessageReceived` (`PlayerJoin`, `PlayerQuit`, `PlayerSwitch`) and `Disconnected`. `ServiceEvent` is sealed, so a `switch` can cover every case. Without a listener the events are dropped. |
+| `ChannelListener` (the service core's own listener in `cloud/node` is `ServiceListener`) | network tells node | `onEvent(ServiceEvent)` with one of the records `Connected`, `Ready`, `StatusReported`, `MessageReceived` (`PlayerJoin`, `PlayerQuit`, `PlayerSwitch`) and `Disconnected`. `ServiceEvent` is sealed, so a `switch` can cover every case. Without a listener the events are dropped. |
 
 And the node talks to services through the server:
 
@@ -120,7 +120,7 @@ The cloud starts every service process with these variables. A system property w
 | `VECTORA_SERVICE_ID` | `vectora.service.id` | required | Id of this service, for example `lobby-1` |
 | `VECTORA_SERVICE_TOKEN` | `vectora.service.token` | required | Token from `ServiceTokens.issue` |
 
-The names are constants of `net.vectora.protocol.ServiceEnvironment` (`CLOUD_HOST`, `CLOUD_PORT`, `SERVICE_ID`, `SERVICE_TOKEN`; `CloudClientSettings.ENV_*` point at them). `cloud-node` sets them from the same constants, so both sides use one definition; the bridges read them in PR 13. A missing or invalid value fails with a message that names the variable and never contains the token.
+The names are constants of `net.vectora.protocol.ServiceEnvironment` (`CLOUD_HOST`, `CLOUD_PORT`, `SERVICE_ID`, `SERVICE_TOKEN`; `CloudClientSettings.ENV_*` point at them). `cloud/node` sets them from the same constants, so both sides use one definition; the bridges read them in PR 13. A missing or invalid value fails with a message that names the variable and never contains the token.
 
 ### Behaviour
 
@@ -153,7 +153,7 @@ Paper, Velocity, Fabric and PandaSpigot all ship Netty, each in the version its 
 2. **Shade and relocate Netty.** Works everywhere, but adds about 2.5 MB (common, buffer, transport, handler, codec) to every plugin jar and a second Netty copy to every server JVM, and the native transports need extra care when relocated. Every Netty security update would mean a new plugin release.
 3. **JDK sockets.** One connection per process does not need non-blocking I/O. A blocking `Socket` with three daemon threads is enough, adds nothing to the class path and behaves the same on every platform and Java version from 21 on.
 
-The client uses option 3. `Vectora-CloudClient` depends on `Vectora-Protocol` only, which has no dependencies either. The cloud side handles many connections and later HTTP and WebSocket for the API, so it uses Netty there (see [architecture](architecture.md#runtime-libraries)).
+The client uses option 3. `common/client` depends on `common/protocol` only, which has no dependencies either. The cloud side handles many connections and later HTTP and WebSocket for the API, so it uses Netty there (see [architecture](architecture.md#runtime-libraries)).
 
 ## Tests
 

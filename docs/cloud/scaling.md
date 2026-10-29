@@ -1,6 +1,6 @@
 # VectoraCloud autoscaling
 
-Package `net.vectora.cloud.node.scaling` in `VectoraCloud/cloud-node`. The node keeps `min-services` of every task running, adds dynamic services when the load of a group is high, and empties and removes them when it is low. German version: [scaling.de.md](scaling.de.md).
+Package `net.vectora.cloud.node.scaling` in `cloud/node`. The node keeps `min-services` of every task running, adds dynamic services when the load of a group is high, and empties and removes them when it is low. German version: [scaling.de.md](scaling.de.md).
 
 ## Configuration
 
@@ -190,8 +190,8 @@ A scaled service is an ordinary service of the service core ([node.md](node.md#i
 | `NodeWiringTest.aDeclinedEulaOrMissingAnswersStartNothingUntilTheSetupIsDone` | after the setup the servers start; the EULA taken back and given again brings back the same `lobby-1` |
 | `NodeWiringTest.theGroupsOwnSwitchStopsItOnReloadAndSwitchingItOnBringsItBack` | a static service stopped by a switch comes back at its own index |
 | `ServiceLifecycleIntegrationTest.aStaticServiceStartsAtAGivenIndexInItsOwnFolderWithinTheLimits` | `ServiceManager.start(task, index)`: range, folder, running index, `max-services`, unwanted group |
-| `ServerLoadsTest`, `ProxyBridgeTest` (cloud-bridge-common) | the proxy's choice of the emptiest server, pending players, closed servers, transfers only inside the group to an open listed server, caught kicks to the group, then the lobby, closed servers refused except with `vectora.server.bypass-closed` |
-| `KickClassifierTest`, `KickGuardTest` (cloud-bridge-common) | which kicks are caught (all but bans, whitelist, the moderation marker and network kicks), each server once per incident, at most 3 caught kicks in 60 s |
+| `ServerLoadsTest`, `ProxyBridgeTest` (plugins/bridge/common) | the proxy's choice of the emptiest server, pending players, closed servers, transfers only inside the group to an open listed server, caught kicks to the group, then the lobby, closed servers refused except with `vectora.server.bypass-closed` |
+| `KickClassifierTest`, `KickGuardTest` (plugins/bridge/common) | which kicks are caught (all but bans, whitelist, the moderation marker and network kicks), each server once per incident, at most 3 caught kicks in 60 s |
 
 ## Limits today
 

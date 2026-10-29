@@ -1,7 +1,7 @@
 # VectoraCloud container image.
 #
 # Build from the repository root (the build context must contain the whole Gradle project):
-#   docker build -f VectoraCloud/dist/docker/Dockerfile -t vectora-cloud .
+#   docker build -f cloud/dist/docker/Dockerfile -t vectora-cloud .
 #
 # The release workflow does not build the jar a second time: it passes the signed VectoraCloud.jar
 # of the release as the named build context "jar" (docker buildx build --build-context jar=dist),
@@ -21,8 +21,8 @@ FROM eclipse-temurin:25-jdk-noble@sha256:a9c5ddd386f629518bd500ecfabf7d1e5d32d7f
 WORKDIR /src
 COPY . .
 # --no-daemon: one build, no background process left in the layer.
-RUN bash ./gradlew --no-daemon --no-build-cache :VectoraCloud:cloud-launcher:cloudJar \
-    && cp VectoraCloud/cloud-launcher/build/cloud/VectoraCloud.jar /VectoraCloud.jar
+RUN bash ./gradlew --no-daemon --no-build-cache :cloud:launcher:cloudJar \
+    && cp cloud/launcher/build/cloud/VectoraCloud.jar /VectoraCloud.jar
 
 # ---------------------------------------------------------------------------------------------
 # Stage 2: only the jar. Replaced by --build-context jar=<folder with VectoraCloud.jar>.
@@ -52,7 +52,7 @@ RUN if id -u ubuntu >/dev/null 2>&1; then userdel ubuntu; fi \
     && chmod 0750 /data
 
 COPY --from=jar --chown=root:root --chmod=0644 /VectoraCloud.jar /opt/vectora/VectoraCloud.jar
-COPY --chown=root:root --chmod=0755 VectoraCloud/dist/start.sh /opt/vectora/start.sh
+COPY --chown=root:root --chmod=0755 cloud/dist/start.sh /opt/vectora/start.sh
 
 # The jar and the start script belong to root and are read-only for the cloud; everything the
 # cloud writes (configuration, secrets, servers, JREs, caches, logs) lives in /data.

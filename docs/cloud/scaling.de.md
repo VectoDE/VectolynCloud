@@ -1,6 +1,6 @@
 # VectoraCloud-Autoskalierung
 
-Paket `net.vectora.cloud.node.scaling` in `VectoraCloud/cloud-node`. Der Node hält von jedem Task `min-services` Dienste am Laufen, startet dynamische Dienste, wenn die Last einer Gruppe hoch ist, und leert und stoppt sie, wenn sie niedrig ist. Die ausführliche englische Seite ist [scaling.md](scaling.md).
+Paket `net.vectora.cloud.node.scaling` in `cloud/node`. Der Node hält von jedem Task `min-services` Dienste am Laufen, startet dynamische Dienste, wenn die Last einer Gruppe hoch ist, und leert und stoppt sie, wenn sie niedrig ist. Die ausführliche englische Seite ist [scaling.md](scaling.md).
 
 ## Konfiguration
 

@@ -1,6 +1,6 @@
 # Template placeholders
 
-Every `Server-Network/<Server>/template/` holds configuration with placeholders of the form `{{VECTORA_NAME}}`. VectoraCloud (stage 2) renders a template into `runtime/` by replacing each placeholder with its value. Until then the existing `runtime/` folders are run directly through `start-network.bat`.
+Every template `templates/<Server>/` (in the cloud home `<Server>/template/`) holds configuration with placeholders of the form `{{VECTORA_NAME}}`. VectoraCloud (stage 2) renders a template into `runtime/` by replacing each placeholder with its value. Until then the existing `runtime/` folders are run directly through `start-network.bat` (`cloud/dist/manual/`).
 
 ## Only wanted servers are rendered
 
@@ -12,7 +12,7 @@ No value may contain a line break or another control character, except `VECTORA_
 
 ## Global values
 
-These come from `Server-Network/secrets/vectora.env` (gitignored, see `secrets/vectora.env.example`).
+These come from `secrets/vectora.env` in the cloud home (never in the repository, see [`cloud/dist/secrets/vectora.env.example`](../cloud/dist/secrets/vectora.env.example)).
 
 | Placeholder | Meaning | Used in |
 |---|---|---|
@@ -53,7 +53,7 @@ The cloud assigns these for each service it creates.
 
 ## Legacy proxy values
 
-The [legacy proxy](Legacy-Proxy/template/README.md) uses the proxy values above (`VECTORA_PROXY_BIND`, `VECTORA_PROXY_SERVERS`, `VECTORA_PROXY_TRY`, `VECTORA_PROXY_FORCED_HOSTS`), filled with the 1.8.8 groups only, plus its own port:
+The [legacy proxy](Legacy-Proxy/README.md) uses the proxy values above (`VECTORA_PROXY_BIND`, `VECTORA_PROXY_SERVERS`, `VECTORA_PROXY_TRY`, `VECTORA_PROXY_FORCED_HOSTS`), filled with the 1.8.8 groups only, plus its own port:
 
 | Placeholder | Meaning | Current local value |
 |---|---|---|
@@ -73,7 +73,7 @@ Its `forwarding.secret` holds `VECTORA_LEGACY_FORWARDING_SECRET`, never `VECTORA
 | `Legacy-Proxy` | Velocity, `bungeeguard` forwarding, in front of the 1.8.8 groups | `VELOCITY_LEGACY` (own forwarding secret, no Floodgate key) |
 | `Legacy-Server` | PandaSpigot 1.8.8, behind the legacy proxy | `PANDASPIGOT` (EULA only, no Floodgate key) |
 
-The new templates (`Minigame-Server`, `Legacy-Proxy`, `Legacy-Server`) have a `README.md` in English and a `README.de.md` in German. Markdown files are never copied into `runtime/`. `.gitignore` keeps every `Server-Network/*/runtime/` out of git, the new folders included.
+The new templates (`Minigame-Server`, `Legacy-Proxy`, `Legacy-Server`) have a `README.md` in English and a `README.de.md` in German. Markdown files are never copied into `runtime/`. `runtime/` folders live in the cloud home, never in the repository.
 
 ## Files the cloud creates instead of copying
 

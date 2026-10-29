@@ -1,6 +1,6 @@
 # VectoraCloud with MariaDB as an external database (Docker Compose v2).
 #
-#   cd VectoraCloud/dist/docker
+#   cd cloud/dist/docker
 #   cp setup.example.yml setup.yml                         # then edit: accept the EULA, name, ports
 #   mkdir -p secrets && openssl rand -base64 32 | tr -d '\n' > secrets/db_password
 #   openssl rand -base64 32 | tr -d '\n' > secrets/db_root_password
@@ -21,7 +21,7 @@ services:
     image: ghcr.io/vectode/vectora-cloud:${VECTORA_VERSION:-latest}
     build:
       context: ../../..
-      dockerfile: VectoraCloud/dist/docker/Dockerfile
+      dockerfile: cloud/dist/docker/Dockerfile
     # Zombie reaping for every process the cloud starts (servers, MariaDB tools).
     init: true
     restart: unless-stopped

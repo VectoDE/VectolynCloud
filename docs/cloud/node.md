@@ -1,6 +1,6 @@
 # VectoraCloud node: service core
 
-`VectoraCloud/cloud-node` (package `net.vectora.cloud.node`) is the node itself. This page covers the entry point the launcher calls, how the node puts its parts together (home lock, Java runtimes, database, cloud channel, console) and the service core, which renders the wanted servers, starts them as plain Java processes, watches them, restarts them after a crash and stops them in stages. The [setup assistant](setup.md) runs before the first service starts. Before each start the node downloads the server software and the plugins of the group and copies the bridge jar into the service ([Server software](#server-software)). The [autoscaler](scaling.md) keeps `min-services` of every task running and scales the dynamic services of a group by its load, emptying a service through the proxy before it stops; the interfaces for later pull requests are listed at the end.
+`cloud/node` (package `net.vectora.cloud.node`) is the node itself. This page covers the entry point the launcher calls, how the node puts its parts together (home lock, Java runtimes, database, cloud channel, console) and the service core, which renders the wanted servers, starts them as plain Java processes, watches them, restarts them after a crash and stops them in stages. The [setup assistant](setup.md) runs before the first service starts. Before each start the node downloads the server software and the plugins of the group and copies the bridge jar into the service ([Server software](#server-software)). The [autoscaler](scaling.md) keeps `min-services` of every task running and scales the dynamic services of a group by its load, emptying a service through the proxy before it stops; the interfaces for later pull requests are listed at the end.
 
 ## Start order
 
@@ -50,7 +50,7 @@ The JRE manager is built on the first start that needs it.
 
 ## Built-in templates
 
-`VectoraCloud.jar` carries the templates of every server of the network: the tracked files of `Server-Network/<Server>/template/` for `Proxy`, `Legacy-Proxy`, `Lobby-Server`, `Survival-Server`, `Creative-Server`, `Mod-Server`, `End-Server`, `Minigame-Server`, `Legacy-Server` and `Database`. The build task `:VectoraCloud:cloud-node:templateResources` copies them into the node's resources under `net/vectora/cloud/node/templates/` and lists each file with its SHA-256 in `templates.index`. Jars, `key.pem`, `*.key`, `*.secret`, keystores and hidden files never go in, even if a checkout has them in a template folder.
+`VectoraCloud.jar` carries the templates of every server of the network: the tracked files of `templates/<Server>/` for `Proxy`, `Legacy-Proxy`, `Lobby-Server`, `Survival-Server`, `Creative-Server`, `Mod-Server`, `End-Server`, `Minigame-Server`, `Legacy-Server` and `Database`. The build task `:cloud:node:templateResources` copies them into the node's resources under `net/vectora/cloud/node/templates/<Server>/template/` (the layout of the home) and lists each file with its SHA-256 in `templates.index`. Jars, `key.pem`, `*.key`, `*.secret`, keystores and hidden files never go in, even if a checkout has them in a template folder.
 
 On every start `BuiltInTemplates.seed` writes the templates whose folder `<home>/<Server>/template/` does not exist. That is what makes `java -jar VectoraCloud.jar` in an empty folder work: the release, the Docker image and the Pterodactyl egg ship only the jar.
 
@@ -59,7 +59,7 @@ On every start `BuiltInTemplates.seed` writes the templates whose folder `<home>
 - The index accepts only plain paths below `<Server>/template/` (no `..`, no hidden names, no backslash).
 - A template that cannot be written is logged as an error; the node keeps running, and the servers of that template fail to start with the missing folder as reason.
 
-In the repository checkout (`Server-Network/` as home) every template exists, so nothing is written.
+In a home that already has every template folder nothing is written.
 
 ## Database
 
@@ -264,9 +264,9 @@ Afterwards the leftover folders in `temp/services/` are deleted, except blocked 
 `CloudJarEndToEndTest` starts the real `VectoraCloud.jar` as its own process, the way an operator does:
 
 ```sh
-./gradlew :VectoraCloud:cloud-node:e2eTest                          # offline, fake servers (CI: Integration job)
-./gradlew :VectoraCloud:cloud-node:e2eTest -Pe2eDatabase=managed    # same with a downloaded MariaDB (managed-mariadb.yml)
-./gradlew :VectoraCloud:cloud-node:e2eLiveTest                      # real downloads and servers (cloud-e2e-live.yml, weekly)
+./gradlew :cloud:node:e2eTest                          # offline, fake servers (CI: Integration job)
+./gradlew :cloud:node:e2eTest -Pe2eDatabase=managed    # same with a downloaded MariaDB (managed-mariadb.yml)
+./gradlew :cloud:node:e2eLiveTest                      # real downloads and servers (cloud-e2e-live.yml, weekly)
 ```
 
 Add `-Pe2eAllowRoot=true` in a shell that runs as administrator or root; the test then passes `--allow-root`. GitHub's Windows runners run as administrator, so `managed-mariadb.yml` sets it there.

@@ -1,6 +1,6 @@
 # VectoraCloud launcher
 
-`VectoraCloud/cloud-launcher` is the entry point of `java -jar VectoraCloud.jar`. It runs a few checks, unpacks the node and its libraries, and hands over to the node. It has no third-party dependencies and never references a node class at compile time.
+`cloud/launcher` is the entry point of `java -jar VectoraCloud.jar`. It runs a few checks, unpacks the node and its libraries, and hands over to the node. It has no third-party dependencies and never references a node class at compile time.
 
 ## Start order
 
@@ -67,7 +67,7 @@ All reads go through the `SystemAccess` interface. The tests replace it and repl
 
 ## Embedded libraries
 
-`VectoraCloud.jar` is assembled by the task `:VectoraCloud:cloud-launcher:cloudJar` (part of `assemble`, output `VectoraCloud/cloud-launcher/build/cloud/VectoraCloud.jar`):
+`VectoraCloud.jar` is assembled by the task `:cloud:launcher:cloudJar` (part of `assemble`, output `cloud/launcher/build/cloud/VectoraCloud.jar`):
 
 ```
 net/vectora/cloud/launcher/...         launcher classes (release 21) and Bootstrap (release 8)

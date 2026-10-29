@@ -2,7 +2,7 @@
 
 [Deutsch](README.de.md)
 
-Backend for groups that run Minecraft 1.8.8, for example a 1.8 PvP minigame. Software: PandaSpigot (group setting `software: pandaspigot`, `minecraft-version: "1.8.8"`), which runs on Java 21 (see [docs/cloud/legacy-1.8.8.md](../../../docs/cloud/legacy-1.8.8.md)). These servers sit behind the [legacy proxy](../../Legacy-Proxy/template/README.md), never behind the main proxy.
+Backend for groups that run Minecraft 1.8.8, for example a 1.8 PvP minigame. Software: PandaSpigot (group setting `software: pandaspigot`, `minecraft-version: "1.8.8"`), which runs on Java 21 (see [docs/cloud/legacy-1.8.8.md](../../docs/cloud/legacy-1.8.8.md)). These servers sit behind the [legacy proxy](../Legacy-Proxy/README.md), never behind the main proxy.
 
 The template only holds what Vectora needs. PandaSpigot adds every other setting with its default value on the first start.
 
@@ -21,4 +21,4 @@ PandaSpigot does not check the `bungeeguard-token` itself. Until the Vectora bri
 
 ## Wanted or not
 
-Only groups marked as wanted are rendered from this template into `runtime/` and started. This README is documentation only; the cloud never copies it into `runtime/`. All placeholders: [`../../placeholders.md`](../../placeholders.md).
+Only groups marked as wanted are rendered from this template into `runtime/` and started. This README is documentation only; the cloud never copies it into `runtime/`. All placeholders: [`../placeholders.md`](../placeholders.md).

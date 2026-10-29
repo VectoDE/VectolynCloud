@@ -71,7 +71,7 @@ Options for checking the token:
 1. **BungeeGuard backend plugin** ([lucko/BungeeGuard](https://github.com/lucko/BungeeGuard), MIT, latest release v1.4.0 from 2025-06-02). It picks `PaperHandshakeListener` when `PlayerHandshakeEvent` exists and falls back to ProtocolLib otherwise ([`BungeeGuardBackendPlugin`](https://github.com/lucko/BungeeGuard/blob/master/bungeeguard-spigot/src/main/java/me/lucko/bungeeguard/spigot/BungeeGuardBackendPlugin.java)). Because PandaSpigot keeps the Paper class name, the Paper path should be used. Not installed or tested in this spike.
 2. **Own bridge plugin.** Listen to `PlayerHandshakeEvent`, parse the forwarded handshake, compare `bungeeguard-token` against the configured secrets in constant time, call `setFailed(true)` on a mismatch and `setServerHostname(...)` otherwise. This is the same approach as option 1 without a third-party jar and lets the Vectora config hand out the secret.
 
-Option 2 is implemented in `cloud-bridge-legacy` (stage 2, PR 13), without a third-party plugin: see [Bridges](bridges.md#legacy-bridge-bungeeguard-check). It also refuses every login whose handshake it has not accepted, which covers connections that arrive before the plugin is enabled.
+Option 2 is implemented in `plugins/bridge/legacy` (stage 2, PR 13), without a third-party plugin: see [Bridges](bridges.md#legacy-bridge-bungeeguard-check). It also refuses every login whose handshake it has not accepted, which covers connections that arrive before the plugin is enabled.
 
 Either way, backends should also listen only on the internal network or behind a firewall. The token check is a second layer.
 

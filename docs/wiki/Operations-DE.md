@@ -15,7 +15,7 @@ Jedes [Release](https://github.com/VectoDE/Vectora-Network/releases) enthält:
 
 Mehr nicht: Die Plugin-Jars gehören nicht zum Release.
 
-Das Container-Image heißt `ghcr.io/vectode/vectora-cloud:<version>`. `latest` zeigt nur auf das neueste stabile Release. Dockerfile, `compose.yml`, die systemd-Unit und das Pterodactyl-Egg liegen in [`VectoraCloud/dist/`](https://github.com/VectoDE/Vectora-Network/tree/main/VectoraCloud/dist).
+Das Container-Image heißt `ghcr.io/vectode/vectora-cloud:<version>`. `latest` zeigt nur auf das neueste stabile Release. Dockerfile, `compose.yml`, die systemd-Unit und das Pterodactyl-Egg liegen in [`cloud/dist/`](https://github.com/VectoDE/Vectora-Network/tree/main/cloud/dist).
 
 ## Wo es läuft
 

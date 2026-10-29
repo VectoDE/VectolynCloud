@@ -1,10 +1,10 @@
 # VectoraCloud configuration
 
-Module `VectoraCloud/cloud-config`, package `net.vectora.cloud.config`. This is the one configuration layer of the cloud: the console, the setup assistant, hand-edited files and later the REST API and the dashboard all read and change the configuration through it.
+Module `cloud/config`, package `net.vectora.cloud.config`. This is the one configuration layer of the cloud: the console, the setup assistant, hand-edited files and later the REST API and the dashboard all read and change the configuration through it.
 
 ## Files in the cloud home
 
-In the repository checkout the cloud home is `Server-Network/`.
+The cloud home is the folder the cloud runs in (`VECTORA_HOME`, by default the folder of the start script). It is not part of the repository.
 
 ```
 <home>/cloud.yml           network and this node
@@ -158,7 +158,7 @@ nodes:
 
 ### Names
 
-Group, task and node names match `[a-z0-9][a-z0-9_-]{0,31}` and must not be a Windows device name (`con`, `prn`, `aux`, `nul`, `com0` to `com9`, `lpt0` to `lpt9`); `console` or `con1` are fine. Group and task names are the file names, so they cannot disagree with the file. Only lower case is allowed because Windows and macOS do not tell `Lobby.yml` from `lobby.yml`. The rule is the same as for `GroupName` and `NodeId` in `Vectora-Protocol` (1 to 32 characters, lower case, no device names), so every configured name can be sent. A service id there (`ServiceId`) may have up to 64 characters, so that `<group>-<index>` fits.
+Group, task and node names match `[a-z0-9][a-z0-9_-]{0,31}` and must not be a Windows device name (`con`, `prn`, `aux`, `nul`, `com0` to `com9`, `lpt0` to `lpt9`); `console` or `con1` are fine. Group and task names are the file names, so they cannot disagree with the file. Only lower case is allowed because Windows and macOS do not tell `Lobby.yml` from `lobby.yml`. The rule is the same as for `GroupName` and `NodeId` in `common/protocol` (1 to 32 characters, lower case, no device names), so every configured name can be sent. A service id there (`ServiceId`) may have up to 64 characters, so that `<group>-<index>` fits.
 
 The cloud resolves a group or task file only directly inside `groups/` or `tasks/`; a name that would end up in another folder is rejected even if it slipped past the pattern.
 
@@ -222,7 +222,7 @@ Not checked here: whether a template folder or a catalog id exists. The template
 ## Changing the configuration: `ConfigService`
 
 ```java
-try (ConfigService config = ConfigService.open(CloudHome.of(Path.of("Server-Network")))) {
+try (ConfigService config = ConfigService.open(CloudHome.of(Path.of("/opt/vectora")))) {
     config.addListener(change -> log.info("changed: " + change.files()));
     config.startWatching();
     config.apply(List.of(new SetServerWanted(ServerKind.MOD, false), new SetLanguage(Language.DE)));
@@ -264,7 +264,7 @@ To change a format: raise `SCHEMA_VERSION` in the model record, change the recor
 
 ## Secrets
 
-`secrets/vectora.env` holds the secrets in `KEY=VALUE` lines. `Server-Network/secrets/vectora.env.example` lists the keys.
+`secrets/vectora.env` holds the secrets in `KEY=VALUE` lines. `cloud/dist/secrets/vectora.env.example` lists the keys.
 
 ### The `Secret` type
 
@@ -318,10 +318,10 @@ Both parsers have Jazzer fuzz tests (see [architecture](architecture.md#fuzz-tes
 - `EnvFileParserFuzzTest.parseFailsOnlyWithEnvFormatExceptionAndRoundTrips`: any input either fails with `EnvFormatException` or parses into a file whose rendering parses to the same lines.
 - `ConfigYamlFuzzTest.loadAndValidateFailOnlyWithConfigErrors`: the first byte picks the file kind, the rest is the file. Any input either fails with `ConfigException` or loads, validates without an exception and writes back to an equal value.
 
-Seed inputs live in `VectoraCloud/cloud-config/src/test/resources/net/vectora/cloud/config/…/*FuzzTestInputs/`. They are raw bytes, so a `.gitattributes` there switches off line-ending normalisation.
+Seed inputs live in `cloud/config/src/test/resources/net/vectora/cloud/config/…/*FuzzTestInputs/`. They are raw bytes, so a `.gitattributes` there switches off line-ending normalisation.
 
 ```sh
-./gradlew :VectoraCloud:cloud-config:test --tests 'net.vectora.cloud.config.io.ConfigYamlFuzzTest.loadAndValidateFailOnlyWithConfigErrors' -Pfuzz -PfuzzMaxDuration=5m
+./gradlew :cloud:config:test --tests 'net.vectora.cloud.config.io.ConfigYamlFuzzTest.loadAndValidateFailOnlyWithConfigErrors' -Pfuzz -PfuzzMaxDuration=5m
 ```
 
 ## JVM flag allowlist

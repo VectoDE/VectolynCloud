@@ -1,6 +1,6 @@
 # VectoraCloud-Konsole: Befehlsreferenz
 
-Modul `VectoraCloud/cloud-console`. Die ausführliche Modulseite mit Terminal-Auswahl, Erweiterung und Frage-API steht auf Englisch in [console.md](console.md). Diese Seite beschreibt die Bedienung.
+Modul `cloud/console`. Die ausführliche Modulseite mit Terminal-Auswahl, Erweiterung und Frage-API steht auf Englisch in [console.md](console.md). Diese Seite beschreibt die Bedienung.
 
 Alle Texte der Konsole erscheinen in der Sprache aus `language` in `cloud.yml`. Ein `config set language de` wirkt sofort.
 
@@ -107,7 +107,7 @@ Host, Ports sowie neue oder entfernte Nodes ändert man weiter in `nodes.yml`. S
 
 ### `api`
 
-Kommt aus `cloud-api` ([api.de.md](api.de.md)). Der ganze Befehl gilt als sensibel, keine seiner Zeilen landet in der History.
+Kommt aus `cloud/api` ([api.de.md](api.de.md)). Der ganze Befehl gilt als sensibel, keine seiner Zeilen landet in der History.
 
 | Zeile | Wirkung |
 |---|---|

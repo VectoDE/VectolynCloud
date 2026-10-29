@@ -15,4 +15,4 @@ Software: Fabric Loader 0.20.1 on MC 26.3 with Fabric API, FabricProxy-Lite, Flo
 
 ## Wanted or not
 
-Whether this server exists at all is decided in the VectoraCloud setup: only servers marked as wanted are rendered from this template into `runtime/` and started. An unwanted server is never created and is not referenced by the proxy or the lobby. See [`../../placeholders.md`](../../placeholders.md) for every placeholder.
+Whether this server exists at all is decided in the VectoraCloud setup: only servers marked as wanted are rendered from this template into `runtime/` and started. An unwanted server is never created and is not referenced by the proxy or the lobby. See [`../placeholders.md`](../placeholders.md) for every placeholder.

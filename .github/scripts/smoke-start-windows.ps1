@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Smoke test of VectoraCloud/dist/start.bat, start.ps1 and the windows archive (operations.yml).
+    Smoke test of cloud/dist/start.bat, start.ps1 and the windows archive (operations.yml).
 
 .DESCRIPTION
     .github/scripts/smoke-start-windows.ps1 -Dist <folder with VectoraCloud.jar and the archives>

@@ -1,7 +1,7 @@
 """Lists every Jazzer @FuzzTest method in the repository as a GitHub Actions matrix.
 
 Output (stdout): JSON list of {"project", "test", "name"}:
-  project  Gradle path of the module, e.g. ":Vectora-Protocol"
+  project  Gradle path of the module, e.g. ":common:protocol"
   test     test filter for --tests, e.g. "net.vectora.protocol.VarIntsFuzzTest.roundTrip"
   name     short label for the job name
 

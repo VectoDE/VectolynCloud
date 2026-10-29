@@ -1,6 +1,6 @@
 # VectoraCloud console
 
-Module `VectoraCloud/cloud-console`, package `net.vectora.cloud.console`. It reads commands from the terminal, runs them, and offers a question API that the setup assistant builds on. Every change to the configuration goes through [cloud-config](config.md), so a command is checked exactly like a hand-edited file.
+Module `cloud/console`, package `net.vectora.cloud.console`. It reads commands from the terminal, runs them, and offers a question API that the setup assistant builds on. Every change to the configuration goes through [cloud-config](config.md), so a command is checked exactly like a hand-edited file.
 
 German version of the command reference: [console.de.md](console.de.md).
 
@@ -132,7 +132,7 @@ Host, ports and adding or removing nodes stay in `nodes.yml`. See [config.md](co
 
 ### `api`
 
-Comes from `cloud-api` ([api.md](api.md)). The whole command is sensitive: no line of it is written to the history.
+Comes from `cloud/api` ([api.md](api.md)). The whole command is sensitive: no line of it is written to the history.
 
 | Line | Effect |
 |---|---|

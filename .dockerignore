@@ -1,4 +1,4 @@
-# Build context of VectoraCloud/dist/docker/Dockerfile (the repository root).
+# Build context of cloud/dist/docker/Dockerfile (the repository root).
 # The image build needs the Gradle project and the start script, nothing else.
 
 # Never send secrets, server runtimes or local state to the Docker daemon.
@@ -28,9 +28,9 @@ Server-Network/
 # Documentation is not part of the image.
 docs/
 *.md
-!VectoraCloud/**/src/**/*.md
+!cloud/**/src/**/*.md
+!plugins/bridge/**/src/**/*.md
 
 # The node carries the server templates in VectoraCloud.jar (docs/cloud/node.md#built-in-templates),
-# so the templates, and only they, come back in. secrets/ and runtime/ stay out (rules above).
-!Server-Network/*/template/
-!Server-Network/*/template/**
+# so templates/ stays in the context. No rule here may bring it back with "!": that would also bring
+# back secrets/ or runtime/ folders someone put below it (rules above).

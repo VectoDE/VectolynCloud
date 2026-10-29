@@ -2,7 +2,7 @@
 # Packs the VectoraCloud release files. Used by .github/workflows/release.yml and, as a dry run,
 # by .github/workflows/operations.yml, so both produce exactly the same files.
 #
-#   VectoraCloud/dist/package.sh <version> <VectoraCloud.jar> <output folder>
+#   cloud/dist/package.sh <version> <VectoraCloud.jar> <output folder>
 #
 # Writes into <output folder>:
 #   VectoraCloud.jar                              the jar, unchanged

@@ -20,4 +20,4 @@ Unterschiede zur Lobby: `gamemode=survival` und `spawn-protection=0`, weil die S
 
 ## Gewollt oder nicht
 
-Der Setup-Assistent fragt für jede Minigame-Gruppe, ob sie gewollt ist. Nur gewollte Gruppen rendert die Cloud aus dieser Vorlage nach `runtime/` und startet sie, und nur sie erscheinen in der Serverliste des Proxys. Diese README ist reine Doku, die Cloud kopiert sie nie nach `runtime/`. Alle Platzhalter: [`../../placeholders.md`](../../placeholders.md).
+Der Setup-Assistent fragt für jede Minigame-Gruppe, ob sie gewollt ist. Nur gewollte Gruppen rendert die Cloud aus dieser Vorlage nach `runtime/` und startet sie, und nur sie erscheinen in der Serverliste des Proxys. Diese README ist reine Doku, die Cloud kopiert sie nie nach `runtime/`. Alle Platzhalter: [`../placeholders.md`](../placeholders.md).

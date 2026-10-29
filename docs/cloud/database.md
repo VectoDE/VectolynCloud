@@ -1,8 +1,8 @@
 # Database
 
-`VectoraCloud/cloud-database` (`net.vectora.cloud.database`) prepares the database that LuckPerms and later the Vectora plugin use. It installs and secures a managed MariaDB, writes a compose file for Docker, checks an external server or picks the embedded H2 fallback. It also decides how many connections each service's pool may open.
+`cloud/database` (`net.vectora.cloud.database`) prepares the database that LuckPerms and later the Vectora plugin use. It installs and secures a managed MariaDB, writes a compose file for Docker, checks an external server or picks the embedded H2 fallback. It also decides how many connections each service's pool may open.
 
-The module does not start processes itself. In managed mode it says what to run, and `cloud-node` runs it through the `DatabaseProcesses` interface (see below).
+The module does not start processes itself. In managed mode it says what to run, and `cloud/node` runs it through the `DatabaseProcesses` interface (see below).
 
 ## Packages
 
@@ -30,11 +30,11 @@ The module does not start processes itself. In managed mode it says what to run,
 
 ### Managed MariaDB
 
-Home: `Server-Network/Database/runtime/`. It holds the unpacked server, `data/`, `vectora-mariadb.ini` and `mariadb.log`. Git ignores the folder.
+Home: `<home>/Database/runtime/`. It holds the unpacked server, `data/`, `vectora-mariadb.ini` and `mariadb.log`.
 
-1. **Platform.** `ManagedPlatform.of(...)` accepts Windows x64 and Linux x86_64 with glibc, the two platforms MariaDB publishes server archives for. On every other platform (Linux on ARM or with musl, macOS, Windows on ARM) `DatabaseProvisioners.create` returns the embedded H2 fallback instead, so the cloud still starts. Its `notice()` names the platform and says how to get a shared database (`external` or `docker`); `cloud-node` logs it as a warning. `ManagedMariaDbProvisioner` used directly still fails there with `MANAGED_PLATFORM`.
+1. **Platform.** `ManagedPlatform.of(...)` accepts Windows x64 and Linux x86_64 with glibc, the two platforms MariaDB publishes server archives for. On every other platform (Linux on ARM or with musl, macOS, Windows on ARM) `DatabaseProvisioners.create` returns the embedded H2 fallback instead, so the cloud still starts. Its `notice()` names the platform and says how to get a shared database (`external` or `docker`); `cloud/node` logs it as a warning. `ManagedMariaDbProvisioner` used directly still fails there with `MANAGED_PLATFORM`.
 2. **Binaries.** `DownloadingMariaDbBinaries` gets the archive from the `mariadb` provider in [downloads](download.md) (checksum, cache, safe extraction). It unpacks into a temporary folder and then moves it into place, so a broken download never leaves a half folder. `mariadb-install.properties` records folder, version and SHA-256. A matching install is reused.
-3. **Config.** `MariaDbConfigFile` writes `vectora-mariadb.ini`: `bind-address=127.0.0.1`, `skip-name-resolve`, `max_connections=150`, `innodb_buffer_pool_size=256M`, `utf8mb4`, the port from `cloud.yml`. On Linux the socket goes to the temp directory. A test checks that every setting of the hand-written `Server-Network/Database/template/vectora-mariadb.ini` is kept.
+3. **Config.** `MariaDbConfigFile` writes `vectora-mariadb.ini`: `bind-address=127.0.0.1`, `skip-name-resolve`, `max_connections=150`, `innodb_buffer_pool_size=256M`, `utf8mb4`, the port from `cloud.yml`. On Linux the socket goes to the temp directory. A test checks that every setting of the hand-written `templates/Database/vectora-mariadb.ini` is kept.
 4. **Initialise.** Only when `data/mysql` is missing. Windows: `bin/mariadb-install-db.exe`, with `bin/mysql_install_db.exe` as fallback for older archives. Linux: `scripts/mariadb-install-db --no-defaults --auth-root-authentication-method=normal --skip-name-resolve`. A non-empty `data/` without `mysql/` is someone else's data. The cloud stops there instead of overwriting it.
 5. **First start.** The server starts with `--init-file`. That file sets the root password before the server accepts its first connection, removes anonymous users and remote root accounts and drops the `test` database. It is written owner-only and deleted in a `finally` block, whether the start works or not. There is no window in which root has no password and accepts connections. Before `mariadb-install-db` runs, the cloud writes the marker `vectora-init.pending`; it is deleted only after root logged in with the generated password. If the first start fails (port taken, missing library), the next start sees the marker and passes the init file again, so the data directory never stays with a root account without password. A data directory without the marker (for example from the old start script) never gets the init file.
 6. **Setup.** As root over `127.0.0.1`: secure again (same rules, for data directories from older setups; the grants of the `test` databases are matched by their bytes (`HEX(Db)`) instead of a literal backslash, so the statement means the same with `NO_BACKSLASH_ESCAPES` in `sql_mode`), then create the application database and user (see [rights](#rights)). Afterwards the application user logs in once to prove the grant works.
@@ -47,7 +47,7 @@ Errors are `DatabaseException` with a `Reason` (`MANAGED_PLATFORM`, `INSTALL`, `
 
 ### Docker
 
-The cloud does not talk to the Docker socket. It writes `Server-Network/Database/runtime/compose.database.yml` (service `vectora-database`, image from `database.docker-image`, port bound to `127.0.0.1` only, data volume, health check, `--max-connections=150`). The root password comes from `secrets/vectora.env` at `docker compose` time and is never written into the file:
+The cloud does not talk to the Docker socket. It writes `<home>/Database/runtime/compose.database.yml` (service `vectora-database`, image from `database.docker-image`, port bound to `127.0.0.1` only, data volume, health check, `--max-connections=150`). The root password comes from `secrets/vectora.env` at `docker compose` time and is never written into the file:
 
 ```
 docker compose --env-file ../../secrets/vectora.env -f compose.database.yml up -d
@@ -75,7 +75,7 @@ The application user (`database.user`, normally `luckperms`) gets exactly these 
 SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX
 ```
 
-LuckPerms creates its tables and indexes on the first start (`CREATE`, `INDEX`) and afterwards only reads and writes rows. `ALTER` stays for schema migrations of later LuckPerms versions and the Vectora plugin. `DROP` is left out on purpose: it would let the user drop the whole database or `TRUNCATE` tables, and LuckPerms never drops a table. `REFERENCES` is left out because the schema has no foreign keys. No `GRANT OPTION`, no global rights, no `FILE`, no `PROCESS`, no access to `mysql.*`. Before granting, the cloud revokes everything else, so a user that had more rights from an older setup loses them. The hand-written `Server-Network/Database/template/init.sql` grants the same list; a test compares both.
+LuckPerms creates its tables and indexes on the first start (`CREATE`, `INDEX`) and afterwards only reads and writes rows. `ALTER` stays for schema migrations of later LuckPerms versions and the Vectora plugin. `DROP` is left out on purpose: it would let the user drop the whole database or `TRUNCATE` tables, and LuckPerms never drops a table. `REFERENCES` is left out because the schema has no foreign keys. No `GRANT OPTION`, no global rights, no `FILE`, no `PROCESS`, no access to `mysql.*`. Before granting, the cloud revokes everything else, so a user that had more rights from an older setup loses them. The hand-written `templates/Database/init.sql` grants the same list; a test compares both.
 
 In managed and Docker mode the application user may log in from `127.0.0.1` (managed) or `%` (Docker, because the connection comes through the Docker network). Root keeps only the local hosts `localhost`, `127.0.0.1`, `::1` (plus `%` in Docker, where the container network requires it).
 
@@ -113,11 +113,11 @@ Result: 4.0.0 is usable. The managed integration test proves it against a real M
 | `VECTORA_DB_STORAGE_METHOD` | `mariadb`, `mysql` or `h2` |
 | `VECTORA_DB_POOL_SIZE` | from `ConnectionBudget`, normally `4` |
 
-`minimum-idle` stays at 2 in every LuckPerms config. All placeholders: [`Server-Network/placeholders.md`](../../Server-Network/placeholders.md).
+`minimum-idle` stays at 2 in every LuckPerms config. All placeholders: [`templates/placeholders.md`](../../templates/placeholders.md).
 
 ## Interface for cloud-node
 
-`cloud-node` implements `DatabaseProcesses` and passes it in `DatabaseProvisioners.Managed`:
+`cloud/node` implements `DatabaseProcesses` and passes it in `DatabaseProvisioners.Managed`:
 
 ```java
 int run(Command command, Duration timeout);   // mariadb-install-db, until it exits
@@ -126,10 +126,10 @@ record Command(List<String> arguments, Path workingDirectory, Path logFile);
 interface Running { boolean isAlive(); boolean waitFor(Duration timeout); void kill(); }
 ```
 
-The program in `arguments` is always an absolute path. Output goes to `logFile` (appended). The implementation is `NodeDatabaseProcesses` in `cloud-node`: no shell, the node's environment without `VECTORA_*` variables, and a program that does not finish within its timeout is killed with its child processes. `NodeDatabase` calls `provision()` before the first service starts, logs `notice()` as a warning and calls `shutdown()` after the last service stopped. It takes the pool size from `connectionBudget()` and the placeholder values from the endpoint. Details in [node.md](node.md#database).
+The program in `arguments` is always an absolute path. Output goes to `logFile` (appended). The implementation is `NodeDatabaseProcesses` in `cloud/node`: no shell, the node's environment without `VECTORA_*` variables, and a program that does not finish within its timeout is killed with its child processes. `NodeDatabase` calls `provision()` before the first service starts, logs `notice()` as a warning and calls `shutdown()` after the last service stopped. It takes the pool size from `connectionBudget()` and the placeholder values from the endpoint. Details in [node.md](node.md#database).
 
 ## Tests
 
 - Unit tests: config file, command lines, platforms, all setup SQL, quoting and injection attempts, connection URL and TLS choice, version parsing, budget, compose file (parsed as YAML), every provisioner against a fake SQL server and fake processes.
 - Fuzz tests: `SqlQuotingFuzzTest`, `ServerVersionFuzzTest` (regression mode in every run, see [architecture](architecture.md#fuzz-tests)).
-- Integration (`@Tag("mariadb")`, not part of `./gradlew build`): `./gradlew :VectoraCloud:cloud-database:mariadbTest` downloads MariaDB, starts it in a temp folder on a free port and checks bind address, `max_connections`, removed anonymous users, remote root and `test` database, the exact grants, refused wrong passwords, that the application user cannot create databases or users or read `mysql.user`, clean shutdown, restart with kept data, and that no password reaches the log. `-PmariadbVersion=11.4` picks another series. The workflow `.github/workflows/managed-mariadb.yml` runs it weekly on Linux and Windows with Java 21 and 25, and on pull requests that change this module.
+- Integration (`@Tag("mariadb")`, not part of `./gradlew build`): `./gradlew :cloud:database:mariadbTest` downloads MariaDB, starts it in a temp folder on a free port and checks bind address, `max_connections`, removed anonymous users, remote root and `test` database, the exact grants, refused wrong passwords, that the application user cannot create databases or users or read `mysql.user`, clean shutdown, restart with kept data, and that no password reaches the log. `-PmariadbVersion=11.4` picks another series. The workflow `.github/workflows/managed-mariadb.yml` runs it weekly on Linux and Windows with Java 21 and 25, and on pull requests that change this module.
