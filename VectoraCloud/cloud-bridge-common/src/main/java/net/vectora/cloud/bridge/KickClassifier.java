@@ -80,7 +80,8 @@ public final class KickClassifier {
     private static final String INTERNAL_EXCEPTION = "internal exception:";
 
     private static final Pattern NEVER_WORDS = Pattern.compile(
-            "\\b(ban|bans|banned|bann|gebannt|gesperrt|whitelist|whitelisted|white-listed)\\b");
+            "\\b(ban|bans|banned|bann|gebannt|verbannt|verbannen|gesperrt|tempban|tempbanned|permban|permbanned"
+                    + "|ipban|ipbanned|banished|whitelist|whitelisted|white-listed)\\b");
     private static final Pattern COLOUR_CODES = Pattern.compile("§.");
 
     private KickClassifier() {

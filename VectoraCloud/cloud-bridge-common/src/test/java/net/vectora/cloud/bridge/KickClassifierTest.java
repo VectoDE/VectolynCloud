@@ -65,7 +65,9 @@ class KickClassifierTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"You are banned from this server!", "You are not white-listed on this server!",
-            "Du wurdest gebannt", "Du bist gesperrt", "§cBanned: Cheating", "You are not whitelisted"})
+            "Du wurdest gebannt", "Du bist gesperrt", "§cBanned: Cheating", "You are not whitelisted",
+            "Du wurdest verbannt", "Wir verbannen dich", "You were tempbanned", "Tempban: 7 days",
+            "Permbanned for cheating", "PermBan", "IPBan", "You are ipbanned", "You have been banished"})
     void banAndWhitelistTextsAreNotCaught(String text) {
         assertEquals(Verdict.NOT_CAUGHT, text(text), text);
     }
