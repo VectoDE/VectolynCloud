@@ -16,6 +16,7 @@ import java.util.OptionalLong;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 /**
@@ -37,8 +38,12 @@ import java.util.stream.Collectors;
  */
 public interface ResidentMemoryProbe {
 
-    /** Time a helper program may take before it is killed. */
-    Duration COMMAND_TIMEOUT = Duration.ofSeconds(5);
+    /**
+     * Time a helper program may take before it is killed. {@code tasklist} needs about half a second
+     * on an idle Windows machine, but more than 20 seconds were measured while the machine was busy
+     * with other processes, so the limit is generous.
+     */
+    Duration COMMAND_TIMEOUT = Duration.ofSeconds(30);
 
     /** Most output read from a helper program: 4 MiB. */
     int MAX_OUTPUT = 4 * 1024 * 1024;
@@ -371,19 +376,37 @@ public interface ResidentMemoryProbe {
      *
      * @param command program and arguments
      * @return standard output (UTF-8; the parsed parts are ASCII)
-     * @throws IOException on start failure, time-out, too much output or an exit code other than 0
+     * @throws IOException on start failure, time-out, too much output or an exit code other than 0; a
+     *                     time-out is never an {@link ExitCodeException}, although the killed program
+     *                     has an exit code (1 on Windows, 137 on Unix)
      */
     static String runCommand(List<String> command) throws IOException {
+        return runCommand(command, COMMAND_TIMEOUT);
+    }
+
+    /**
+     * {@link #runCommand(List)} with another time limit, for tests.
+     *
+     * @param command program and arguments
+     * @param timeout time the program may take in all
+     * @return standard output
+     * @throws IOException as {@link #runCommand(List)}
+     */
+    static String runCommand(List<String> command, Duration timeout) throws IOException {
         ProcessBuilder builder = new ProcessBuilder(command)
                 .redirectInput(ProcessBuilder.Redirect.from(nullDevice()))
                 .redirectError(ProcessBuilder.Redirect.DISCARD);
         builder.environment().keySet().removeIf(key -> key.startsWith("VECTORA_"));
+        long deadline = System.nanoTime() + timeout.toNanos();
         Process process = builder.start();
+        // Set before the kill, so whoever sees the end of the output also sees why it ended.
+        AtomicBoolean killed = new AtomicBoolean();
         CompletableFuture<Void> watchdog = CompletableFuture.runAsync(() -> {
             if (process.isAlive()) {
+                killed.set(true);
                 process.destroyForcibly();
             }
-        }, CompletableFuture.delayedExecutor(COMMAND_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS));
+        }, CompletableFuture.delayedExecutor(timeout.toMillis(), TimeUnit.MILLISECONDS));
         try {
             byte[] out;
             try (InputStream in = process.getInputStream()) {
@@ -393,9 +416,10 @@ public interface ResidentMemoryProbe {
                 process.destroyForcibly();
                 throw new IOException("helper program printed more than " + MAX_OUTPUT + " bytes");
             }
-            if (!process.waitFor(COMMAND_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)) {
+            long left = Math.max(0, deadline - System.nanoTime());
+            if (killed.get() || !process.waitFor(left, TimeUnit.NANOSECONDS) || killed.get()) {
                 process.destroyForcibly();
-                throw new IOException("helper program took longer than " + COMMAND_TIMEOUT.toSeconds() + " s");
+                throw new IOException("helper program took longer than " + timeout.toSeconds() + " s");
             }
             if (process.exitValue() != 0) {
                 throw new ExitCodeException(process.exitValue());
