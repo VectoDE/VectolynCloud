@@ -169,7 +169,12 @@ public final class BridgeSender implements AutoCloseable {
             // Half the time for queued actions to make room; after that they are given up.
             if (!queue.offer(closeLink, Math.max(1, timeout.toNanos() / 2), TimeUnit.NANOSECONDS)) {
                 queue.clear();
-                queue.offer(closeLink);
+                if (!queue.offer(closeLink)) {
+                    // A submit that raced the close refilled the queue: close the link from here.
+                    thread.interrupt();
+                    link.close();
+                    return;
+                }
             }
             long left = deadline - System.nanoTime();
             thread.join(Math.max(1, TimeUnit.NANOSECONDS.toMillis(left)));
@@ -192,7 +197,8 @@ public final class BridgeSender implements AutoCloseable {
             }
             try {
                 action.accept(link);
-            } catch (RuntimeException e) {
+            } catch (RuntimeException | LinkageError e) {
+                // Keep the sender alive: a dead sender would silently drop everything after it.
                 LOG.log(Level.WARNING, "VectoraCloud call failed", e);
             }
             if (action == closeLink) {

@@ -19,8 +19,8 @@ public record ForwardedHandshake(String serverHostname, String playerAddress, UU
     /** Longest handshake read: the field is a Minecraft string of at most 32767 characters. */
     public static final int MAX_LENGTH = Short.MAX_VALUE;
 
-    /** Longest host name accepted (DNS limit). */
-    public static final int MAX_HOST_LENGTH = 253;
+    /** Longest host part accepted (the vanilla handshake allows 255 characters). */
+    public static final int MAX_HOST_LENGTH = 255;
 
     /** Longest IP literal accepted (IPv6 with an IPv4 tail and a zone). */
     public static final int MAX_ADDRESS_LENGTH = 64;
@@ -61,8 +61,8 @@ public record ForwardedHandshake(String serverHostname, String playerAddress, UU
         }
         for (int i = 0; i < host.length(); i++) {
             char c = host.charAt(i);
-            if (c <= 0x20 || c >= 0x7f) {
-                throw new MalformedHandshakeException("server host contains a space, control or non-ASCII character");
+            if (c < 0x20 || c == 0x7f) {
+                throw new MalformedHandshakeException("server host contains a control character");
             }
         }
         return host;

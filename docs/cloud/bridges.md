@@ -80,7 +80,7 @@ The handshake field then reads `host \0 player-ip \0 uuid-without-dashes \0 prop
 | Part | Rule |
 |---|---|
 | Whole field | at most 32767 characters, three or four parts |
-| Host | 1 to 253 printable ASCII characters |
+| Host | 1 to 255 characters without control characters |
 | Player address | an IPv4 or IPv6 literal (with an optional zone), never a host name: the server turns it into an `InetSocketAddress`, and a host name would make it resolve DNS during the login |
 | UUID | exactly 32 hex digits |
 | Properties | a JSON array of at most 32 objects with the string members `name`, `value` and optionally `signature` (or `null`). Nothing else: no other members, numbers, nesting, duplicate members, raw control characters or trailing data. Own small parser (`PropertiesJson`), no JSON library on the server's class path. |
@@ -139,5 +139,6 @@ All tests of `cloud-bridge-common` and `cloud-bridge-legacy` run on Java 25 and,
 ## Open for later pull requests
 
 - `cloud-node`: set `VECTORA_SERVICE_PLATFORM` for every service and `VECTORA_LEGACY_FORWARDING_SECRET` for `PANDASPIGOT` services, copy the bridge jar into the plugin folder of each service, send `RegisterServer` with the right `legacy` flag to the right proxy, check the player events and map static backend names.
+- Velocity fires connect and disconnect events of one player on different threads. If a connect arrives after the disconnect of the same session, or an old session's disconnect after a new login with the same UUID, the tracker can be off for that player until the next quit. To be checked in a real start (PR 14); the fix would key the state by session.
 - PR 24 (legacy proxy group): a real start of the legacy proxy with a PandaSpigot backend and the token check end to end.
 - Stage 3: the Vectora plugin per platform takes over `cloud-bridge-common`.
