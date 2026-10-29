@@ -6,11 +6,11 @@ Alle Texte der Konsole erscheinen in der Sprache aus `language` in `cloud.yml`. 
 
 ## Bedienung
 
-**Im Terminal** (JLine): Prompt `vectora> `, Zeilenbearbeitung, Tab vervollständigt Befehle, Unterbefehle und Werte. Farben gibt es nur, wenn das Terminal mindestens 8 Farben meldet und `NO_COLOR` nicht gesetzt ist. Log-Zeilen erscheinen über dem Prompt, die angefangene Eingabe bleibt stehen. Strg+C und Strg+D führen `shutdown` aus.
+**Im Terminal** (JLine): Prompt `vectora> `, Zeilenbearbeitung, Tab vervollständigt Befehle, Unterbefehle und Werte. Farben gibt es nur, wenn das Terminal mindestens 8 Farben meldet und `NO_COLOR` nicht gesetzt ist. Log-Zeilen erscheinen über dem Prompt, die angefangene Eingabe bleibt stehen. Strg+C oder Strg+D am Prompt fragen erst nach („Zum Stoppen aller Dienste und der Cloud innerhalb von 3 Sekunden erneut Strg+C drücken oder shutdown eingeben.“). Erst ein zweites Strg+C oder Strg+D innerhalb von 3 Sekunden führt `shutdown` aus. Ein einzelner Tastendruck stoppt also nicht das ganze Netzwerk. Während ein Befehl läuft, wird Strg+C ignoriert.
 
 Die History liegt in `<home>/state/console.history` (höchstens 500 Zeilen, nur für den Besitzer lesbar). Nicht gespeichert werden Antworten auf Fragen, Secrets, Zeilen von Befehlen, die als sensibel markiert sind, und Zeilen, die mit einem Leerzeichen beginnen.
 
-**Ohne Terminal** (Docker ohne `-t`, Pterodactyl, systemd): Die Konsole liest stdin Zeile für Zeile, ohne Prompt, ohne Farben, ohne History. Endet stdin, hört die Konsole nur auf zu lesen; die Cloud läuft weiter und wird per Signal beendet (SIGTERM, `docker stop`). Eine Frage bricht man hier mit `!cancel` ab.
+**Ohne Terminal** (Docker ohne `-t`, Pterodactyl, systemd): Die Konsole liest stdin Zeile für Zeile, ohne Prompt, ohne Farben, ohne History. Endet stdin, hört die Konsole nur auf zu lesen; die Cloud läuft weiter und wird per Signal beendet (SIGTERM, `docker stop`). Strg+C kommt hier als Signal an. In beiden Fällen fährt die Cloud sauber herunter, jeder Dienst bekommt seinen Stopp-Befehl. Eine Frage bricht man hier mit `!cancel` ab.
 
 Erzwingen lässt sich die Art mit der System-Property `vectora.console` oder der Umgebungsvariable `VECTORA_CONSOLE`: `auto`, `ffm`, `jni`, `dumb` oder `plain`.
 
@@ -30,7 +30,21 @@ Ohne Argument die Liste aller Befehle, mit Befehl der Aufruf, die Aliase, Unterb
 
 ### `shutdown`, `exit`
 
-Stoppt alle Dienste und die Cloud.
+Stoppt alle Dienste und die Cloud. Im Terminal tut zweimal Strg+C oder Strg+D innerhalb von 3 Sekunden dasselbe.
+
+### `service`
+
+Kommt vom Node: listet, startet, stoppt und beobachtet die Server.
+
+| Befehl | Wirkung |
+|---|---|
+| `service list` | alle Dienste mit Zustand, Port, PID und Spielerzahl |
+| `service info <ID>` | ein Dienst im Detail, mit seinem letzten Statusbericht |
+| `service start <Task>` | startet einen weiteren Dienst des Tasks |
+| `service stop <ID>` | stoppt den Dienst und wartet, bis er beendet ist |
+| `service restart <ID>` | stoppt den Dienst und startet ihn neu |
+| `service command <ID> <Zeile>` (`cmd`) | gibt eine Zeile in die Konsole des Servers ein |
+| `service screen <ID>` (`logs`) | zeigt die Ausgabe des Servers hier an, noch einmal aufgerufen blendet es sie aus |
 
 ### `clear`, `cls`
 

@@ -57,7 +57,7 @@ class ConnectionFuzzTest {
         }
     }
 
-    private static final class RecordingConnected implements ServiceListener {
+    private static final class RecordingConnected implements ChannelListener {
 
         private boolean happened;
 

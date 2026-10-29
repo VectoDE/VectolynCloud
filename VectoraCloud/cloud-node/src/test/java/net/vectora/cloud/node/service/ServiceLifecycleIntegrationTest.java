@@ -24,7 +24,9 @@ import net.vectora.cloud.config.secret.EnvFile;
 import net.vectora.cloud.node.state.ServiceRecord;
 import net.vectora.cloud.node.state.ServiceStateStore;
 import net.vectora.cloud.node.state.ServiceStates;
+import net.vectora.protocol.AuthToken;
 import net.vectora.protocol.ServiceId;
+import net.vectora.protocol.message.AuthResult;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
@@ -86,6 +88,8 @@ class ServiceLifecycleIntegrationTest {
                 for (ServiceId id : List.of(lobby, minigame, proxy)) {
                     TestNetwork.await(id + " running", WAIT, () -> state(manager, id) == ServiceState.RUNNING);
                 }
+                // Listeners run on their own thread, a moment after the state has changed.
+                TestNetwork.await("running event", WAIT, () -> recorder.of("lobby-1").contains("RUNNING"));
                 assertEquals(List.of("prepared", "starting", "running"),
                         recorder.of("lobby-1").stream().map(s -> s.toLowerCase(java.util.Locale.ROOT)).toList());
 
@@ -126,10 +130,10 @@ class ServiceLifecycleIntegrationTest {
                 assertFalse(Files.readString(new ServiceStateStore(net.home).file()).contains(token));
 
                 // Token: right one matches, a wrong one does not, other services' tokens do not.
-                assertTrue(manager.verifyToken(lobby, token));
-                assertFalse(manager.verifyToken(lobby, token + "x"));
-                assertFalse(manager.verifyToken(minigame, token));
-                assertFalse(manager.verifyToken(lobby, null));
+                assertEquals(AuthResult.Outcome.ACCEPTED, auth(manager, lobby, token));
+                assertEquals(AuthResult.Outcome.INVALID_TOKEN, auth(manager, lobby, token + "x"));
+                assertEquals(AuthResult.Outcome.INVALID_TOKEN, auth(manager, minigame, token));
+                assertEquals(AuthResult.Outcome.UNKNOWN_PEER, auth(manager, new ServiceId("lobby-9"), token));
 
                 // Console commands reach the process; line breaks are refused.
                 manager.sendCommand(lobby, "say hello");
@@ -163,7 +167,9 @@ class ServiceLifecycleIntegrationTest {
                 assertEquals(0, stopped.exitCode().getAsInt());
                 assertTrue(Files.exists(lobbyDir.resolve("stopped-cleanly")), "stop command did not arrive");
                 assertTrue(Files.isRegularFile(lobbyDir.resolve("world/level.dat")), "static world must stay");
-                assertFalse(manager.verifyToken(lobby, token), "token must die with the process");
+                assertEquals(AuthResult.Outcome.UNKNOWN_PEER, auth(manager, lobby, token),
+                        "token must die with the process");
+                TestNetwork.await("stopped event", WAIT, () -> recorder.of("lobby-1").contains("STOPPED"));
                 assertEquals(List.of("prepared", "starting", "running", "stopping", "stopped"),
                         recorder.of("lobby-1").stream().map(s -> s.toLowerCase(java.util.Locale.ROOT)).toList());
 
@@ -378,5 +384,9 @@ class ServiceLifecycleIntegrationTest {
         } catch (java.io.IOException e) {
             return "";
         }
+    }
+
+    private static AuthResult.Outcome auth(ServiceManager manager, ServiceId id, String token) {
+        return manager.authenticator().authenticate(id, new AuthToken(token));
     }
 }

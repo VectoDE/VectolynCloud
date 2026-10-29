@@ -19,7 +19,7 @@ Each jar contains the bridge core, `Vectora-CloudClient` and `Vectora-Protocol`,
 | `VECTORA_SERVICE_PLATFORM` | Velocity bridge | `cloud-node` (to do) | Name of cloud-template's `ServerPlatform`. `VELOCITY_LEGACY` makes the bridge the legacy proxy, anything else (also a missing value) the main proxy. |
 | `VECTORA_LEGACY_FORWARDING_SECRET` | legacy bridge | `cloud-node` (to do), for `PANDASPIGOT` services only | The forwarding secret of the legacy proxy, the same value as in `Legacy-Proxy/runtime/forwarding.secret`. Must follow the template's secret rule (16 or more characters from `A-Z a-z 0-9 . _ ~ + / = -`). Read from the environment only, never from a system property, which would show on the command line. |
 
-`cloud-node` passes the services an environment without the cloud's own `VECTORA_*` variables (see [node.md](node.md#process)), so the last two have to be added there explicitly.
+All names are constants in `net.vectora.protocol.ServiceEnvironment` (`SERVICE_PLATFORM` and `LEGACY_FORWARDING_SECRET` added with this module), so node and bridges cannot drift apart. `cloud-node` passes the services an environment without the cloud's own `VECTORA_*` variables (see [node.md](node.md#process)), so the last two have to be added there explicitly.
 
 ## Threads
 

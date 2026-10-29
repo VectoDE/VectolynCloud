@@ -6,10 +6,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import net.vectora.cloud.config.model.CloudConfig;
 import net.vectora.cloud.config.model.ConfigSnapshot;
 import net.vectora.cloud.config.model.GroupConfig;
 import net.vectora.cloud.config.model.RestartConfig;
 import net.vectora.cloud.config.model.ServerKind;
+import net.vectora.cloud.config.model.ServerSoftware;
 import net.vectora.cloud.config.model.TaskConfig;
 import net.vectora.cloud.config.model.TaskMode;
 import net.vectora.cloud.config.model.WantedServers;
@@ -22,6 +24,9 @@ public final class ServicePlanner {
 
     /** Folder below the home where dynamic services work. */
     public static final String DYNAMIC_DIR = "temp/services";
+
+    /** Template folder of the legacy proxy (Velocity with {@code bungeeguard}, in front of the 1.8.8 groups). */
+    public static final String LEGACY_PROXY_TEMPLATE = "Legacy-Proxy";
 
     private ServicePlanner() {
     }
@@ -60,6 +65,32 @@ public final class ServicePlanner {
     }
 
     /**
+     * Like {@link #isWanted(GroupConfig, WantedServers)}, and the 1.8.8 groups (the legacy proxy
+     * and PandaSpigot, see {@link #isLegacy}) only while {@code legacy-proxy.enabled} is set.
+     *
+     * @param group the group
+     * @param cloud {@code cloud.yml}
+     * @return whether services of the group may be created
+     */
+    public static boolean isWanted(GroupConfig group, CloudConfig cloud) {
+        if (isLegacy(group) && !cloud.legacyProxy().enabled()) {
+            return false;
+        }
+        return isWanted(group, cloud.servers());
+    }
+
+    /**
+     * Tells whether a group belongs to the 1.8.8 part of the network: the legacy proxy (template
+     * {@value #LEGACY_PROXY_TEMPLATE}) or a PandaSpigot server.
+     *
+     * @param group the group
+     * @return whether it runs behind or as the legacy proxy
+     */
+    public static boolean isLegacy(GroupConfig group) {
+        return group.software() == ServerSoftware.PANDASPIGOT || LEGACY_PROXY_TEMPLATE.equals(group.template());
+    }
+
+    /**
      * Tells whether a task may run on a node.
      *
      * @param task the task
@@ -95,7 +126,7 @@ public final class ServicePlanner {
         for (Map.Entry<String, TaskConfig> entry : snapshot.tasks().entrySet()) {
             TaskConfig task = entry.getValue();
             GroupConfig group = snapshot.groups().get(task.group());
-            if (group == null || !isWanted(group, snapshot.cloud().servers()) || !runsOn(task, node)) {
+            if (group == null || !isWanted(group, snapshot.cloud()) || !runsOn(task, node)) {
                 continue;
             }
             int count = Math.min(task.scaling().minServices(), ServiceIds.MAX_INDEX);

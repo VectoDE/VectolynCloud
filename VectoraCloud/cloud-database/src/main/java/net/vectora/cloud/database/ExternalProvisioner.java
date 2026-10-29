@@ -2,6 +2,7 @@ package net.vectora.cloud.database;
 
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import net.vectora.cloud.config.model.DatabaseConfig;
 import net.vectora.cloud.config.model.DatabaseMode;
 import net.vectora.cloud.config.secret.Secret;
@@ -20,6 +21,8 @@ public final class ExternalProvisioner implements DatabaseProvisioner {
     private final Secret password;
     private final SqlConnector connector;
     private final ConnectionTarget target;
+    private volatile ConnectionBudget budget = ConnectionBudget.managed();
+    private volatile Optional<String> notice = Optional.empty();
 
     /**
      * Creates the provisioner.
@@ -51,9 +54,30 @@ public final class ExternalProvisioner implements DatabaseProvisioner {
                     + "' of your database server there.");
         }
         Optional<ServerVersion> version = ServerSetup.checkApplicationLogin(connector, target, config, password);
+        OptionalInt max = ServerSetup.maxConnections(connector, target, config.user(), password);
+        if (max.isPresent()) {
+            budget = ConnectionBudget.forServer(max.getAsInt());
+            notice = Optional.empty();
+        } else {
+            budget = ConnectionBudget.managed();
+            notice = Optional.of("The database server did not tell its max_connections, so the cloud assumes "
+                    + ConnectionBudget.MANAGED_MAX_CONNECTIONS + ". If the servers report \"Too many connections\","
+                    + " raise max_connections on the server or run fewer services.");
+        }
         StorageMethod method = version.map(v -> v.mariaDb() ? StorageMethod.MARIADB : StorageMethod.MYSQL)
                 .orElse(StorageMethod.MARIADB);
         return new DatabaseEndpoint(method, config.host(), config.port(), config.name(), config.user(), version);
+    }
+
+    /** The budget from the server's {@code max_connections}, read by {@link #provision()}. */
+    @Override
+    public ConnectionBudget connectionBudget() {
+        return budget;
+    }
+
+    @Override
+    public Optional<String> notice() {
+        return notice;
     }
 
     @Override

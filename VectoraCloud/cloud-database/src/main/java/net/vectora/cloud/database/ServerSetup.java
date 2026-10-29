@@ -93,6 +93,36 @@ public final class ServerSetup {
     }
 
     /**
+     * Reads {@code @@max_connections} of a server as the given user. Any user may read it.
+     *
+     * @param connector the connector
+     * @param target the server
+     * @param user the user
+     * @param password the password
+     * @return the value, or empty if it cannot be read or is not a positive number
+     */
+    public static java.util.OptionalInt maxConnections(SqlConnector connector, ConnectionTarget target, String user,
+            Secret password) {
+        try (SqlSession session = connector.open(target, user, password)) {
+            List<List<String>> rows = session.query(BootstrapStatements.maxConnections());
+            if (rows.size() != 1 || rows.getFirst().size() != 1) {
+                return java.util.OptionalInt.empty();
+            }
+            String value = rows.getFirst().getFirst();
+            if (value == null || !value.matches("[0-9]{1,9}")) {
+                return java.util.OptionalInt.empty();
+            }
+            int max = Integer.parseInt(value);
+            return max > 0 ? java.util.OptionalInt.of(max) : java.util.OptionalInt.empty();
+        } catch (NumberFormatException e) {
+            // Not reachable after the pattern check (at most nine digits); kept as a safe fallback.
+            return java.util.OptionalInt.empty();
+        } catch (SQLException e) {
+            return java.util.OptionalInt.empty();
+        }
+    }
+
+    /**
      * Logs in, runs {@code SELECT 1} and reads the version.
      *
      * @param connector the connector

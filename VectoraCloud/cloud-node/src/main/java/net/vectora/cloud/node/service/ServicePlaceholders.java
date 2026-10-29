@@ -21,7 +21,8 @@ import net.vectora.cloud.template.ProxyServerList;
  *   <li>database host, port, name and user from {@code cloud.yml};</li>
  *   <li>per service: {@code VECTORA_SERVER_PORT}, {@code VECTORA_SERVER_HOST}, {@code VECTORA_XMS},
  *       {@code VECTORA_XMX};</li>
- *   <li>for the proxy: bind, port, Bedrock port and the server list built from the backends.</li>
+ *   <li>for the proxy: bind, port, Bedrock port and the server list built from the backends; for
+ *       the legacy proxy also {@code VECTORA_LEGACY_PROXY_PORT}.</li>
  * </ul>
  * Values of {@link PlaceholderContributor}s come last and cannot replace any of the above.
  */
@@ -64,10 +65,13 @@ final class ServicePlaceholders {
         PlaceholderValues source = PlaceholderValues.of(values);
         if (spec.isProxy()) {
             ProxyConfig proxy = snapshot.cloud().proxy();
-            Map<String, String> proxyValues = Map.of(
-                    "VECTORA_PROXY_BIND", proxy.bind(),
-                    "VECTORA_PROXY_PORT", Integer.toString(proxy.port()),
-                    "VECTORA_BEDROCK_PORT", Integer.toString(proxy.bedrockPort()));
+            Map<String, String> proxyValues = new HashMap<>();
+            proxyValues.put("VECTORA_PROXY_BIND", proxy.bind());
+            proxyValues.put("VECTORA_PROXY_PORT", Integer.toString(proxy.port()));
+            proxyValues.put("VECTORA_BEDROCK_PORT", Integer.toString(proxy.bedrockPort()));
+            if (spec.isLegacyProxy()) {
+                proxyValues.put("VECTORA_LEGACY_PROXY_PORT", Integer.toString(spec.port()));
+            }
             ProxyServerList list;
             try {
                 list = ProxyServerList.of(backends, tryOrder, Map.of());

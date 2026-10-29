@@ -39,6 +39,7 @@ graph TD
     node --> download[cloud-download]
     node --> network[cloud-network]
     node --> database[cloud-database]
+    node --> console[cloud-console]
     database --> config
     console[cloud-console] --> config
     database --> download

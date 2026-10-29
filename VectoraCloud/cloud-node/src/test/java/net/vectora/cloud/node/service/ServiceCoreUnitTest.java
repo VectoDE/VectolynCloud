@@ -7,7 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
-import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -23,6 +22,7 @@ import net.vectora.cloud.config.model.ConfigSnapshot;
 import net.vectora.cloud.config.model.GroupConfig;
 import net.vectora.cloud.config.model.HeapConfig;
 import net.vectora.cloud.config.model.JavaSelection;
+import net.vectora.cloud.config.model.LegacyProxyConfig;
 import net.vectora.cloud.config.model.MemorySize;
 import net.vectora.cloud.config.model.NodeConfig;
 import net.vectora.cloud.config.model.NodesConfig;
@@ -36,8 +36,10 @@ import net.vectora.cloud.config.model.TaskConfig;
 import net.vectora.cloud.config.model.TaskMode;
 import net.vectora.cloud.config.model.TimeSpan;
 import net.vectora.cloud.config.model.WantedServers;
-import net.vectora.cloud.config.secret.Secret;
+import net.vectora.cloud.network.ServiceTokens;
 import net.vectora.cloud.template.ServerPlatform;
+import net.vectora.protocol.AuthToken;
+import net.vectora.protocol.ServiceEnvironment;
 import net.vectora.protocol.ServiceId;
 import org.junit.jupiter.api.Test;
 
@@ -166,17 +168,22 @@ class ServiceCoreUnitTest {
     }
 
     @Test
-    void tokensAreRandomMaskedAndComparedSafely() {
-        SecureRandom random = new SecureRandom();
-        ServiceToken a = ServiceToken.generate(random);
-        ServiceToken b = ServiceToken.generate(random);
-        assertNotEquals(a.secret().reveal(), b.secret().reveal());
-        assertTrue(a.secret().reveal().matches("[A-Za-z0-9_-]{43}"), "base64url of 32 bytes");
-        assertEquals(Secret.MASK, a.toString());
-        assertTrue(a.matches(a.secret().reveal()));
-        assertFalse(a.matches(b.secret().reveal()));
-        assertFalse(a.matches(null));
-        assertFalse(a.matches(""));
+    void theLegacyGroupsAreWantedOnlyWithTheLegacyProxy() {
+        GroupConfig legacyProxy = group(ServicePlanner.LEGACY_PROXY_TEMPLATE, ServerSoftware.VELOCITY);
+        GroupConfig legacyServer = group("Legacy-Server", ServerSoftware.PANDASPIGOT);
+        GroupConfig lobby = group("Lobby-Server", ServerSoftware.PAPER);
+        CloudConfig off = CloudConfig.defaults();
+        CloudConfig on = off.withLegacyProxy(new LegacyProxyConfig(true, 25564));
+        assertTrue(ServicePlanner.isLegacy(legacyProxy));
+        assertTrue(ServicePlanner.isLegacy(legacyServer));
+        assertFalse(ServicePlanner.isLegacy(lobby));
+        assertFalse(ServicePlanner.isWanted(legacyProxy, off), "legacy-proxy.enabled is false");
+        assertFalse(ServicePlanner.isWanted(legacyServer, off));
+        assertTrue(ServicePlanner.isWanted(legacyProxy, on));
+        assertTrue(ServicePlanner.isWanted(legacyServer, on));
+        assertTrue(ServicePlanner.isWanted(lobby, off), "other groups do not depend on it");
+        assertTrue(spec(legacyProxy, 25564).isLegacyProxy());
+        assertFalse(spec(group("Proxy", ServerSoftware.VELOCITY), 25565).isLegacyProxy());
     }
 
     @Test
@@ -192,20 +199,25 @@ class ServiceCoreUnitTest {
         GroupConfig velocity = group("Proxy", ServerSoftware.VELOCITY);
         assertEquals(List.of("java", "-Xms256M", "-Xmx1G", "-jar", "velocity.jar"),
                 ServiceManager.command(java8, spec(velocity, 25565), "velocity.jar"));
-        assertEquals(ServerPlatform.PAPER, ServiceManager.platformOf(ServerSoftware.PANDASPIGOT));
-        assertEquals(ServerPlatform.FABRIC, ServiceManager.platformOf(ServerSoftware.FABRIC));
+        assertEquals(ServerPlatform.PANDASPIGOT, ServiceManager.platformOf(group("Legacy-Server", ServerSoftware.PANDASPIGOT)));
+        assertEquals(ServerPlatform.VELOCITY_LEGACY, ServiceManager.platformOf(
+                group(ServicePlanner.LEGACY_PROXY_TEMPLATE, ServerSoftware.VELOCITY)));
+        assertEquals(ServerPlatform.VELOCITY, ServiceManager.platformOf(group("Proxy", ServerSoftware.VELOCITY)));
+        assertEquals(ServerPlatform.PAPER, ServiceManager.platformOf(group("Lobby-Server", ServerSoftware.PAPER)));
+        assertEquals(ServerPlatform.FABRIC, ServiceManager.platformOf(group("Mod-Server", ServerSoftware.FABRIC)));
         assertEquals("fabric-server.jar", ServerSoftwareProvider.jarName(ServerSoftware.FABRIC));
     }
 
     @Test
     void environmentCarriesTheServiceButNoInheritedVectoraVariables() {
-        ServiceToken token = ServiceToken.generate(new SecureRandom());
+        AuthToken token = new ServiceTokens().issue(new ServiceId("lobby-1"));
+        NodeConfig node = NodeConfig.defaults();
         Map<String, String> env = ServiceManager.environment(spec(group("Lobby-Server", ServerSoftware.PAPER), 30007),
-                token, NodeConfig.defaults());
+                token, node.host(), node.port());
         assertEquals("lobby-1", env.get("VECTORA_SERVICE_ID"));
         assertEquals("lobby", env.get("VECTORA_SERVICE_GROUP"));
         assertEquals("30007", env.get("VECTORA_SERVICE_PORT"));
-        assertEquals(token.secret().reveal(), env.get(ServiceToken.ENV));
+        assertEquals(token.value(), env.get(ServiceEnvironment.SERVICE_TOKEN));
         assertEquals("127.0.0.1", env.get("VECTORA_CLOUD_HOST"));
         assertEquals("7010", env.get("VECTORA_CLOUD_PORT"));
         Set<String> expected = Set.of("VECTORA_SERVICE_ID", "VECTORA_SERVICE_GROUP", "VECTORA_SERVICE_TASK",

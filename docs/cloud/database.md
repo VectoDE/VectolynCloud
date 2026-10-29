@@ -37,7 +37,7 @@ Home: `Server-Network/Database/runtime/`. It holds the unpacked server, `data/`,
 3. **Config.** `MariaDbConfigFile` writes `vectora-mariadb.ini`: `bind-address=127.0.0.1`, `skip-name-resolve`, `max_connections=150`, `innodb_buffer_pool_size=256M`, `utf8mb4`, the port from `cloud.yml`. On Linux the socket goes to the temp directory. A test checks that every setting of the hand-written `Server-Network/Database/template/vectora-mariadb.ini` is kept.
 4. **Initialise.** Only when `data/mysql` is missing. Windows: `bin/mariadb-install-db.exe`, with `bin/mysql_install_db.exe` as fallback for older archives. Linux: `scripts/mariadb-install-db --no-defaults --auth-root-authentication-method=normal --skip-name-resolve`. A non-empty `data/` without `mysql/` is someone else's data. The cloud stops there instead of overwriting it.
 5. **First start.** The server starts with `--init-file`. That file sets the root password before the server accepts its first connection, removes anonymous users and remote root accounts and drops the `test` database. It is written owner-only and deleted in a `finally` block, whether the start works or not. There is no window in which root has no password and accepts connections. Before `mariadb-install-db` runs, the cloud writes the marker `vectora-init.pending`; it is deleted only after root logged in with the generated password. If the first start fails (port taken, missing library), the next start sees the marker and passes the init file again, so the data directory never stays with a root account without password. A data directory without the marker (for example from the old start script) never gets the init file.
-6. **Setup.** As root over `127.0.0.1`: secure again (same rules, for data directories from older setups), then create the application database and user (see [rights](#rights)). Afterwards the application user logs in once to prove the grant works.
+6. **Setup.** As root over `127.0.0.1`: secure again (same rules, for data directories from older setups; the grants of the `test` databases are matched by their bytes (`HEX(Db)`) instead of a literal backslash, so the statement means the same with `NO_BACKSLASH_ESCAPES` in `sql_mode`), then create the application database and user (see [rights](#rights)). Afterwards the application user logs in once to prove the grant works.
 7. **Takeover.** If a server already answers on the port with the root password, the cloud uses it and only repeats step 6.
 8. **Shutdown.** `SHUTDOWN` as root, then wait up to one minute, then kill.
 
@@ -59,11 +59,11 @@ The cloud then waits 20 seconds for the container. If it does not answer, `provi
 
 ### External
 
-For a MariaDB or MySQL server the operator runs. The cloud only connects as the application user with `VECTORA_DB_PASSWORD`, runs `USE <database>` and `SELECT 1` and reads the server version. Whether it is MariaDB or MySQL decides `VECTORA_DB_STORAGE_METHOD` (`mariadb` or `mysql`). The operator creates database and user with at least the [rights](#rights) below.
+For a MariaDB or MySQL server the operator runs. The cloud only connects as the application user with `VECTORA_DB_PASSWORD`, runs `USE <database>` and `SELECT 1`, reads the server version and `SELECT @@max_connections`. The connection budget follows that value (`ConnectionBudget.forServer`: 20 connections kept free, or a fifth on a server with fewer than 100). If the value cannot be read, the managed budget (150) is assumed and `notice()` says so; the node logs it as a warning. A server that allows too few connections for even one pool fails the check with `CONNECTION_BUDGET`. Whether it is MariaDB or MySQL decides `VECTORA_DB_STORAGE_METHOD` (`mariadb` or `mysql`). The operator creates database and user with at least the [rights](#rights) below.
 
 ### H2 (embedded)
 
-The embedded fallback: chosen with `database.mode: h2`, and used automatically when `managed` is configured on a platform without a MariaDB server build. Good for tests and for a single small setup without any database server. LuckPerms ships its own H2 driver and file storage, so the cloud adds no dependency and starts nothing. Each service then has its own rank data; nothing is shared between servers. For a network, use one of the other modes.
+The embedded fallback: chosen with `database.mode: h2`, and used automatically when `managed` is configured on a platform without a MariaDB server build or with `servers.database: false` in `cloud.yml` (the database server is not wanted, so the node starts none). Good for tests and for a single small setup without any database server. LuckPerms ships its own H2 driver and file storage, so the cloud adds no dependency and starts nothing. Each service then has its own rank data; nothing is shared between servers. For a network, use one of the other modes.
 
 H2 is dual-licensed under MPL 2.0 and EPL 1.0. MPL 2.0 allows combination with GPL code (section 3.3, "Secondary License"), so the choice is compatible with Vectora's GPL-3.0. Vectora does not distribute H2 anyway; LuckPerms downloads it at runtime.
 
@@ -103,7 +103,7 @@ Result: 4.0.0 is usable. The managed integration test proves it against a real M
 
 ## Pool sizes and placeholders
 
-`ConnectionBudget` shares the server's connections between the services. In managed mode: `max_connections` 150, 20 reserved for administration and the cloud, so 130 are available. Each service gets `min(4, available / services)`. Below 2 per service the cloud stops with `CONNECTION_BUDGET`, instead of starting servers that would fail later. With 4 per service, 32 services fit.
+`ConnectionBudget` shares the server's connections between the services; `DatabaseProvisioner.connectionBudget()` returns the one of the mode. In managed and Docker mode: `max_connections` 150, 20 reserved for administration and the cloud, so 130 are available. Each service gets `min(4, available / services)`. Below 2 per service the cloud stops with `CONNECTION_BUDGET`, instead of starting servers that would fail later. With 4 per service, 32 services fit.
 
 `DatabaseEndpoint.placeholderValues(poolSize)` returns the values for the templates:
 
@@ -126,7 +126,7 @@ record Command(List<String> arguments, Path workingDirectory, Path logFile);
 interface Running { boolean isAlive(); boolean waitFor(Duration timeout); void kill(); }
 ```
 
-The program in `arguments` is always an absolute path. Output goes to `logFile` (appended). `cloud-node` decides about log rotation, restarts and shutdown hooks; it calls `provision()` before it starts any service that uses the database and `shutdown()` after the last one stopped. It takes the pool size from `ConnectionBudget` and the placeholder values from the endpoint.
+The program in `arguments` is always an absolute path. Output goes to `logFile` (appended). The implementation is `NodeDatabaseProcesses` in `cloud-node`: no shell, the node's environment without `VECTORA_*` variables, and a program that does not finish within its timeout is killed with its child processes. `NodeDatabase` calls `provision()` before the first service starts, logs `notice()` as a warning and calls `shutdown()` after the last service stopped. It takes the pool size from `connectionBudget()` and the placeholder values from the endpoint. Details in [node.md](node.md#database).
 
 ## Tests
 

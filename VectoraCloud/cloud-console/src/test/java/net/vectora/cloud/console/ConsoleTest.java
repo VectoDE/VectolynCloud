@@ -77,15 +77,61 @@ class ConsoleTest {
     }
 
     @Test
-    void onATerminalCtrlDAndCtrlCRunTheShutdownCommand() {
-        FakeTerminal terminal = new FakeTerminal().type("echo a").endOfInput().type("echo never");
+    void onATerminalASecondCtrlCOrCtrlDRunsTheShutdownCommand() {
+        FakeTerminal terminal = new FakeTerminal().type("echo a").endOfInput().endOfInput().type("echo never");
         withEcho(terminal).run();
         assertEquals(List.of("a", "shutdown"), calls);
 
         calls.clear();
-        FakeTerminal interrupted = new FakeTerminal().interrupt();
+        FakeTerminal interrupted = new FakeTerminal().interrupt().interrupt().type("echo never");
         withEcho(interrupted).run();
         assertEquals(List.of("shutdown"), calls);
+        assertTrue(interrupted.printed().stream().anyMatch(line -> line.contains("Ctrl+C again")),
+                "the first press says how to confirm");
+    }
+
+    @Test
+    void aSingleCtrlCDoesNotShutDown() {
+        long[] now = {0};
+        FakeTerminal terminal = new FakeTerminal().interrupt().type("echo still here").interrupt()
+                .type("echo after the window").interrupt();
+        Console console = Console.builder().terminal(terminal).nanoTime(() -> now[0]).build();
+        console.commands().register(Command.builder("echo").description(Text.of("e", "e"))
+                .argument(Argument.required("text", Text.of("t", "t")).takingRest())
+                .executes(c -> {
+                    calls.add(c.argument("text"));
+                    // Typing a command clears a pending Ctrl+C; time passes beyond the window too.
+                    now[0] += Console.CONFIRM_WINDOW.toNanos() + 1;
+                }).build());
+        console.commands().register(Command.builder("shutdown").description(Text.of("s", "s"))
+                .executes(c -> {
+                    calls.add("shutdown");
+                    console.stop();
+                }).build());
+        console.run();
+        // The fake terminal ends with end of input, which counts as the confirming second press.
+        assertEquals(List.of("still here", "after the window", "shutdown"), calls);
+    }
+
+    @Test
+    void aSecondCtrlCAfterTheWindowOnlyAsksAgain() {
+        long[] now = {0};
+        FakeTerminal terminal = new FakeTerminal().interrupt().interrupt().type("echo never");
+        Console console = Console.builder().terminal(terminal).nanoTime(() -> {
+            long value = now[0];
+            now[0] += Console.CONFIRM_WINDOW.toNanos() + 1;
+            return value;
+        }).build();
+        console.commands().register(Command.builder("echo").description(Text.of("e", "e"))
+                .argument(Argument.required("text", Text.of("t", "t")).takingRest())
+                .executes(c -> {
+                    calls.add(c.argument("text"));
+                    console.stop();
+                }).build());
+        console.commands().register(Command.builder("shutdown").description(Text.of("s", "s"))
+                .executes(c -> calls.add("shutdown")).build());
+        console.run();
+        assertEquals(List.of("never"), calls, "two presses further apart than the window do not shut down");
     }
 
     @Test

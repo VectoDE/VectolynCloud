@@ -5,6 +5,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Objects;
 import java.util.regex.Pattern;
+import net.vectora.protocol.ServiceEnvironment;
 
 /**
  * The forwarding secret of the legacy proxy, which Velocity sends to the backends as the
@@ -15,7 +16,7 @@ import java.util.regex.Pattern;
 public final class ForwardingSecret {
 
     /** Environment variable the cloud passes the secret in. Same name as the template placeholder. */
-    public static final String ENV = "VECTORA_LEGACY_FORWARDING_SECRET";
+    public static final String ENV = ServiceEnvironment.LEGACY_FORWARDING_SECRET;
 
     /** The secret rule of cloud-template (docs/cloud/template.md). */
     private static final Pattern RULE = Pattern.compile("[A-Za-z0-9._~+/=-]{16,1024}");

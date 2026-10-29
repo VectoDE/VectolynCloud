@@ -22,6 +22,16 @@ import net.vectora.cloud.config.secret.Secret;
 public final class BootstrapStatements {
 
     /**
+     * The grants of the {@code test} database and of every {@code test_...} database, as
+     * {@code mysql_secure_installation} removes them. The stored name is {@code test\_%} with a
+     * literal backslash. It is compared by its bytes ({@code HEX(Db)}, {@code 74 65 73 74 5C 5F 25})
+     * instead of a backslash escape, so the condition means the same on a server with
+     * {@code NO_BACKSLASH_ESCAPES} in its SQL mode, and no character set or collation of the
+     * {@code utf8mb3} column {@code mysql.db.Db} gets in the way.
+     */
+    static final String TEST_DATABASES = "Db = 'test' OR HEX(Db) = '746573745C5F25'";
+
+    /**
      * Rights of the application user on its own database, nothing else. LuckPerms creates its
      * tables and indexes itself ({@code CREATE}, {@code INDEX}) and works with plain row statements.
      * {@code ALTER} stays for schema migrations of later LuckPerms versions and the Vectora plugin.
@@ -66,7 +76,7 @@ public final class BootstrapStatements {
                 "DELETE FROM mysql.global_priv WHERE User = '';",
                 "DELETE FROM mysql.global_priv WHERE User = 'root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');",
                 "DROP DATABASE IF EXISTS `test`;",
-                "DELETE FROM mysql.db WHERE Db = 'test' OR Db = 'test\\\\_%';",
+                "DELETE FROM mysql.db WHERE " + TEST_DATABASES + ";",
                 "FLUSH PRIVILEGES;");
         return String.join("\n", lines) + "\n";
     }
@@ -91,7 +101,7 @@ public final class BootstrapStatements {
             }
         }
         statements.add("DROP DATABASE IF EXISTS `test`");
-        statements.add("DELETE FROM mysql.db WHERE Db = 'test' OR Db = 'test\\\\_%'");
+        statements.add("DELETE FROM mysql.db WHERE " + TEST_DATABASES);
         statements.add("FLUSH PRIVILEGES");
         return List.copyOf(statements);
     }
@@ -127,5 +137,14 @@ public final class BootstrapStatements {
      */
     public static String listAccounts() {
         return "SELECT User, Host FROM mysql.user";
+    }
+
+    /**
+     * Reads the connection limit of the server.
+     *
+     * @return the query, one row with one column
+     */
+    public static String maxConnections() {
+        return "SELECT @@max_connections";
     }
 }

@@ -1,6 +1,7 @@
 package net.vectora.cloud.bridge;
 
 import java.util.Locale;
+import net.vectora.protocol.ServiceEnvironment;
 
 /**
  * Which of the two proxies a Velocity bridge runs in. The main proxy ({@code modern} forwarding)
@@ -13,12 +14,8 @@ public enum ProxyRole {
     /** The legacy proxy in front of the PandaSpigot 1.8.8 groups. */
     LEGACY;
 
-    /**
-     * Environment variable with the platform of the service, the name of cloud-template's
-     * {@code ServerPlatform} ({@code VELOCITY}, {@code VELOCITY_LEGACY}, {@code PAPER},
-     * {@code PANDASPIGOT}, ...). Set by cloud-node.
-     */
-    public static final String ENV_PLATFORM = "VECTORA_SERVICE_PLATFORM";
+    /** Environment variable with the platform of the service ({@link ServiceEnvironment#SERVICE_PLATFORM}). */
+    public static final String ENV_PLATFORM = ServiceEnvironment.SERVICE_PLATFORM;
 
     /** Value of {@link #ENV_PLATFORM} for the legacy proxy. */
     public static final String LEGACY_PLATFORM = "VELOCITY_LEGACY";
