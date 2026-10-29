@@ -88,6 +88,17 @@ class KickCommandWatchTest {
     }
 
     @Test
+    void anExpectedSelectorOrNameWatchesWithoutACommandLine() {
+        watch.expect("@a");
+        assertTrue(watch.kicked("Steve"), "a selector: anyone in this tick");
+        watch.clear();
+        assertFalse(watch.kicked("Steve"));
+        watch.expect("Steve");
+        assertTrue(watch.kicked("steve"));
+        assertFalse(watch.kicked("Alex"));
+    }
+
+    @Test
     void theReasonIsPlainShortAndEmptyForTheVanillaText() {
         assertEquals("Spam im Chat", KickCommandWatch.reason(" §cSpam §lim Chat "));
         assertEquals("", KickCommandWatch.reason("Kicked by an operator."), "1.8.8 vanilla text");

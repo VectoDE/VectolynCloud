@@ -19,6 +19,12 @@ import net.vectora.protocol.message.NetworkKick;
  * entitled sender, so that the kick that follows in the same server tick is reported to the proxy
  * as a {@link NetworkKick} and takes the player off the whole network.
  *
+ * <p>The bridges replace {@code kick} and {@code minecraft:kick} with a command of their own, which
+ * kicks through the moderation's {@code networkKick}; that also covers {@code execute ... run kick},
+ * {@code dispatchCommand} and aliases. This watch is the second way: it catches the {@code kick}
+ * commands of other plugins ({@code <plugin>:kick}), a {@code /kick} on a server where replacing
+ * failed, and on 1.8.8 the selectors the bridge's command hands on to the server ({@link #expect}).
+ *
  * <ol>
  *   <li>The platform passes every command line of the console, of RCON and of a player
  *       ({@link #command}). Command blocks and command minecarts are no source
@@ -92,14 +98,27 @@ public final class KickCommandWatch {
         if (found.isEmpty()) {
             return false;
         }
-        for (String target : found.get()) {
-            if (target.startsWith("@")) {
-                anyTarget = true;
-            } else {
-                names.add(target.toLowerCase(Locale.ROOT));
-            }
-        }
+        found.get().forEach(this::add);
         return true;
+    }
+
+    /**
+     * Expects the kick of a target in this tick without reading a command line: for a kick command
+     * of the bridge that hands a selector on to the server's own command. The caller has checked
+     * the sender ({@link #entitled}) and clears the watch at the next tick ({@link #clear}).
+     *
+     * @param target a player name, or a selector ({@code @a}, {@code @p}, ...) for anyone
+     */
+    public synchronized void expect(String target) {
+        add(Objects.requireNonNull(target, "target"));
+    }
+
+    private void add(String target) {
+        if (target.startsWith("@")) {
+            anyTarget = true;
+        } else {
+            names.add(target.toLowerCase(Locale.ROOT));
+        }
     }
 
     /**
