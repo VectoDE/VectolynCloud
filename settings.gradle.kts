@@ -51,6 +51,7 @@ include(
     "VectoraCloud:cloud-network",
     "VectoraCloud:cloud-console",
     "VectoraCloud:cloud-database",
+    "VectoraCloud:cloud-setup",
     "VectoraCloud:cloud-node",
     "VectoraCloud:cloud-bridge-common",
     "VectoraCloud:cloud-bridge-velocity",

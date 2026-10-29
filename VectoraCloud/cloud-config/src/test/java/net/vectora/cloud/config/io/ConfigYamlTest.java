@@ -19,6 +19,7 @@ import net.vectora.cloud.config.model.Language;
 import net.vectora.cloud.config.model.NodesConfig;
 import net.vectora.cloud.config.model.ProcessConfig;
 import net.vectora.cloud.config.model.RestartConfig;
+import net.vectora.cloud.config.model.ServerKind;
 import net.vectora.cloud.config.model.TaskConfig;
 import net.vectora.cloud.config.model.TimeSpan;
 import org.junit.jupiter.api.Test;
@@ -347,5 +348,37 @@ class ConfigYamlTest {
             return "tasks/lobby.yml";
         }
         return format.type() == GroupConfig.class ? "groups/lobby.yml" : "nodes.yml";
+    }
+
+    @Test
+    void groupSwitchIsWrittenOnlyWhenOff() throws ConfigException {
+        GroupConfig on = Samples.lobbyGroup();
+        assertTrue(on.wantedOrDefault());
+        assertFalse(new String(ConfigYaml.write(on), StandardCharsets.UTF_8).contains("wanted"),
+                "the default is not written");
+        GroupConfig off = on.withWanted(false);
+        assertFalse(off.wantedOrDefault());
+        String written = new String(ConfigYaml.write(off), StandardCharsets.UTF_8);
+        assertTrue(written.contains("wanted: false"), written);
+        assertRoundTrip(off, ConfigFormat.GROUP);
+        assertEquals(on, off.withWanted(true), "switching it on again removes the entry");
+        assertEquals(on.withProcess(ProcessConfig.defaults()).withWanted(false).processOrDefaults(), ProcessConfig.defaults(),
+                "the switch keeps the process section");
+    }
+
+    @Test
+    void groupSwitchAcceptsOnlyBooleans() {
+        String base = new String(ConfigYaml.write(Samples.lobbyGroup()), StandardCharsets.UTF_8);
+        assertEquals(ErrorCode.INVALID_VALUE, assertThrows(ConfigException.class,
+                () -> read(base + "wanted: \"no\"\n", ConfigFormat.GROUP)).errors().getFirst().code());
+    }
+
+    @Test
+    void legacyServerSwitchIsReadAndMissingCountsAsOff() throws ConfigException {
+        String yaml = new String(ConfigYaml.write(CloudConfig.defaults()), StandardCharsets.UTF_8);
+        assertTrue(yaml.contains("legacy-server: true"), yaml);
+        CloudConfig without = read(yaml.replace("  legacy-server: true\n", ""), ConfigFormat.CLOUD);
+        assertFalse(without.servers().isWanted(ServerKind.LEGACY_SERVER));
+        assertTrue(without.servers().isWanted(ServerKind.MINIGAME));
     }
 }

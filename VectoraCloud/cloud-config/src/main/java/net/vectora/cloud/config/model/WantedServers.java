@@ -17,13 +17,20 @@ import java.util.Map;
  * @param end      End-Server
  * @param database MariaDB
  * @param minigame minigame groups
+ * @param legacyServer 1.8.8 servers behind the legacy proxy ({@code legacy-server}); they also need
+ *                     {@code legacy-proxy.enabled}
  */
 public record WantedServers(boolean proxy, boolean lobby, boolean survival, boolean creative,
-                            boolean mod, boolean end, boolean database, boolean minigame) {
+                            boolean mod, boolean end, boolean database, boolean minigame, boolean legacyServer) {
 
     /** Every server wanted. */
     public static WantedServers all() {
-        return new WantedServers(true, true, true, true, true, true, true, true);
+        return new WantedServers(true, true, true, true, true, true, true, true, true);
+    }
+
+    /** No server wanted. */
+    public static WantedServers none() {
+        return new WantedServers(false, false, false, false, false, false, false, false, false);
     }
 
     /** Whether the given server is wanted. */
@@ -37,6 +44,7 @@ public record WantedServers(boolean proxy, boolean lobby, boolean survival, bool
             case END -> end;
             case DATABASE -> database;
             case MINIGAME -> minigame;
+            case LEGACY_SERVER -> legacyServer;
         };
     }
 
@@ -50,7 +58,8 @@ public record WantedServers(boolean proxy, boolean lobby, boolean survival, bool
                 kind == ServerKind.MOD ? wanted : mod,
                 kind == ServerKind.END ? wanted : end,
                 kind == ServerKind.DATABASE ? wanted : database,
-                kind == ServerKind.MINIGAME ? wanted : minigame);
+                kind == ServerKind.MINIGAME ? wanted : minigame,
+                kind == ServerKind.LEGACY_SERVER ? wanted : legacyServer);
     }
 
     /** All switches, in declaration order of {@link ServerKind}. */

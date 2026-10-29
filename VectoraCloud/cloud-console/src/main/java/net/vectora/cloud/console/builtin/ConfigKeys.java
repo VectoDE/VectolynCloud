@@ -149,7 +149,7 @@ final class ConfigKeys {
     // The model allows null sections in a snapshot built in code; files always have them.
 
     private static WantedServers servers(CloudConfig c) {
-        return c.servers() == null ? new WantedServers(false, false, false, false, false, false, false, false) : c.servers();
+        return c.servers() == null ? WantedServers.none() : c.servers();
     }
 
     private static ProxyConfig proxy(CloudConfig c) {

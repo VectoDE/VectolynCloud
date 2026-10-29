@@ -21,7 +21,7 @@ public record SetServerWanted(ServerKind server, boolean wanted) implements Conf
     @Override
     public ConfigSnapshot apply(ConfigSnapshot current) {
         WantedServers servers = current.cloud().servers() == null
-                ? new WantedServers(false, false, false, false, false, false, false, false)
+                ? WantedServers.none()
                 : current.cloud().servers();
         return current.withCloud(current.cloud().withServers(servers.with(server, wanted)));
     }

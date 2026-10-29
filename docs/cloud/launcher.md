@@ -47,7 +47,7 @@ If no source works, the launcher prints a boxed `WARNING` (German: `WARNUNG`) an
 |---|---|
 | `--home <path>` | Cloud home. Default: the working directory. |
 | `--non-interactive` | Never ask on the console (Docker, Pterodactyl, systemd). |
-| `--setup-file <path>` | Answers for the setup assistant. |
+| `--setup-file <path>` | Answers for the setup assistant, see [setup](setup.md#setup-file---setup-file). Used only while `setup-complete` is false. |
 | `--lang de\|en` | Language of the messages. Default: `user.language`, German stays German, everything else is English. |
 | `--allow-root` | Allow a start with root or administrator rights. |
 | `--help` | Print the help and exit. |

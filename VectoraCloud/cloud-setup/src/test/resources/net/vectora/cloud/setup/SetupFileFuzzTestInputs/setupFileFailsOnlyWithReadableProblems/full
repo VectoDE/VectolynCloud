@@ -1,0 +1,17 @@
+schema-version: 1
+language: de
+eula: true
+network-name: Testnetz
+servers:
+  mod: false
+  legacy-proxy: true
+  legacy-server: true
+network:
+  bind: 127.0.0.1
+  java-port: 25570
+  bedrock-port: 19140
+  legacy-port: 25571
+memory:
+  survival: 4G
+database:
+  mode: h2
