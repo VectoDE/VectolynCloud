@@ -294,6 +294,21 @@ class ProxyBridgeTest {
     }
 
     @Test
+    void reachingABackendDropsAnOldMark() {
+        lobbies();
+        bedwars2();
+        UUID alex = UUID.randomUUID();
+        players.on.put(alex, "bedwars-1");
+        receive(networkKick(alex, "bedwars-1", "Spam"));
+        // The player stayed (the disconnect did not reach him) and arrives on another backend.
+        players.on.put(alex, "bedwars-2");
+        bridge.playerConnected(new Object(), alex, "Alex", "bedwars-2");
+        assertEquals(move("bedwars-1", null), bridge.kicked(alex, "bedwars-2", SHUTDOWN, false),
+                "a stop of the new server is caught, the old mark no longer counts");
+        sender.close(Duration.ofSeconds(5));
+    }
+
+    @Test
     void aPluginKickWithoutANetworkKickIsCaught() throws Exception {
         lobbies();
         bedwars2();

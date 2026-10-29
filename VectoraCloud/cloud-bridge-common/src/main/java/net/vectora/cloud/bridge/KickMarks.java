@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit;
  *   <li>A kick that may be a {@code /kick} waits up to {@link #WAIT} for its mark
  *       ({@link #await}); a mark that comes in the meantime completes the wait at once.</li>
  *   <li>A mark is only accepted for the server the player is on or was kicked from within
- *       {@link #WINDOW} ({@link #kickedFrom}, {@link #concerns}), so a backend cannot take a
+ *       {@link #WINDOW} ({@link #kickedFrom}, {@link #mark}), so a backend cannot take a
  *       player off the network who was never on it.</li>
  * </ul>
  * Thread-safe. No platform type.
@@ -78,7 +78,7 @@ public final class KickMarks {
      * @param current the backend the player is on, empty if none
      * @return whether the mark may be accepted
      */
-    public synchronized boolean concerns(UUID player, String server, Optional<String> current) {
+    synchronized boolean concerns(UUID player, String server, Optional<String> current) {
         if (current.isPresent() && current.get().equals(server)) {
             return true;
         }
@@ -86,22 +86,44 @@ public final class KickMarks {
         return kick != null && kick.text().equals(server);
     }
 
+    /** What became of a mark. */
+    public enum Outcome {
+        /**
+         * The mark does not concern the player (they are not on that server and it did not kick
+         * them within {@link KickMarks#WINDOW}); nothing was recorded.
+         */
+        IGNORED,
+        /** A waiting kick of the player took the mark over and disconnects them. */
+        TAKEN,
+        /** The mark was recorded and nobody waited: the caller disconnects the player. */
+        MARKED
+    }
+
     /**
-     * Records a mark. If a kick of the player is waiting for one, it gets the reason now.
+     * Records a mark if it concerns the player, in one step: the check and the record cannot be
+     * split by another thread, so no mark is left behind for a server the player was never on.
+     * If a kick of the player is waiting for one, it gets the reason now.
      *
-     * @param player the player
-     * @param reason the reason of the mark, possibly empty
-     * @return whether a waiting kick took it over; otherwise the caller disconnects the player
+     * @param player  the player
+     * @param server  the backend that sent the mark
+     * @param current the backend the player is on, empty if none
+     * @param reason  the reason of the mark, possibly empty
+     * @return what became of the mark
      */
-    public boolean mark(UUID player, String reason) {
+    public Outcome mark(UUID player, String server, Optional<String> current, String reason) {
+        Objects.requireNonNull(server, "server");
+        Objects.requireNonNull(current, "current");
         Objects.requireNonNull(reason, "reason");
         CompletableFuture<Optional<String>> waiter;
         synchronized (this) {
+            if (!concerns(player, server, current)) {
+                return Outcome.IGNORED;
+            }
             marks.put(player, new Timed(reason, clock.instant().plus(WINDOW)));
             waiter = waiting.remove(player);
         }
         // Completed outside the lock: the waiting kick goes on in this thread.
-        return waiter != null && waiter.complete(Optional.of(reason));
+        return waiter != null && waiter.complete(Optional.of(reason)) ? Outcome.TAKEN : Outcome.MARKED;
     }
 
     /**
@@ -125,16 +147,18 @@ public final class KickMarks {
      */
     public CompletableFuture<Optional<String>> await(UUID player, Duration wait) {
         CompletableFuture<Optional<String>> waiter;
+        CompletableFuture<Optional<String>> before;
         synchronized (this) {
             Optional<String> known = find(player);
             if (known.isPresent()) {
                 return CompletableFuture.completedFuture(known);
             }
             waiter = new CompletableFuture<>();
-            CompletableFuture<Optional<String>> before = waiting.put(player, waiter);
-            if (before != null) {
-                before.complete(Optional.empty());
-            }
+            before = waiting.put(player, waiter);
+        }
+        // Completed outside the lock, as in mark and forget: the earlier wait goes on in this thread.
+        if (before != null) {
+            before.complete(Optional.empty());
         }
         waiter.whenComplete((result, error) -> {
             synchronized (this) {
@@ -145,8 +169,26 @@ public final class KickMarks {
     }
 
     /**
-     * Forgets the player's marks and kicks: they reached a backend or left the proxy. A kick that
-     * is waiting goes on without a mark.
+     * The player reached a backend: forgets their marks, and a kick that is waiting goes on
+     * without a mark. The server that kicked them stays known for the rest of {@link #WINDOW}, so
+     * a report that comes later than {@link #WAIT} still takes the moved player off the network.
+     *
+     * @param player the player
+     */
+    public void arrived(UUID player) {
+        CompletableFuture<Optional<String>> waiter;
+        synchronized (this) {
+            marks.remove(player);
+            waiter = waiting.remove(player);
+        }
+        if (waiter != null) {
+            waiter.complete(Optional.empty());
+        }
+    }
+
+    /**
+     * Forgets the player's marks and kicks: they left the proxy. A kick that is waiting goes on
+     * without a mark.
      *
      * @param player the player
      */

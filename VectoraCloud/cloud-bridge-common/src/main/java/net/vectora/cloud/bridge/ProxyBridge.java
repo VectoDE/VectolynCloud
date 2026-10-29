@@ -163,11 +163,12 @@ public final class ProxyBridge implements CloudClientListener {
             LOG.log(Level.WARNING, "Network kick from {0} ignored: the cloud did not list that server", server);
             return;
         }
-        if (!marks.concerns(kick.uuid(), server, players.currentServer(kick.uuid()))) {
+        KickMarks.Outcome outcome = marks.mark(kick.uuid(), server, players.currentServer(kick.uuid()), kick.reason());
+        if (outcome == KickMarks.Outcome.IGNORED) {
             LOG.log(Level.DEBUG, "Network kick from {0} ignored: the player is not on that server here", server);
             return;
         }
-        if (marks.mark(kick.uuid(), kick.reason())) {
+        if (outcome == KickMarks.Outcome.TAKEN) {
             return;
         }
         if (players.disconnect(kick.uuid(), networkKickText(kick.uuid(), kick.reason()))) {
@@ -333,6 +334,7 @@ public final class ProxyBridge implements CloudClientListener {
     public void playerConnected(Object session, UUID uuid, String name, String server) {
         loads.arrived(uuid);
         guard.arrived(uuid);
+        marks.arrived(uuid);
         // Queued under the tracker's lock, so events of different threads keep the tracker's order.
         // Submitting never blocks.
         synchronized (tracker) {
