@@ -2,7 +2,7 @@
 
 [Deutsch](Server-Network-DE)
 
-Vectora consists of seven servers plus minigame servers that the cloud will scale (planned, stage 6). Ports are those of the current local setup.
+A Vectora network consists of seven servers plus minigame servers that the cloud will scale (planned, stage 6). Ports are those of the current local setup.
 
 | Server | Software | Port | Role |
 |---|---|---|---|

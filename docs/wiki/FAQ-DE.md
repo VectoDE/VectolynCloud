@@ -2,8 +2,8 @@
 
 [English](FAQ)
 
-**Gibt es schon einen Server?**
-Noch nicht. Das Projekt steht bei Etappe 1 von 8. Die Adresse kündigen wir unter [Discussions → Announcements](https://github.com/VectoDE/Vectora-Network/discussions/categories/announcements) an.
+**Gibt es einen offiziellen Vectora-Server?**
+Nein, und es wird auch keinen geben. Vectora ist ein Baukasten: Wir veröffentlichen Code und Releases, jeder Betreiber betreibt sein eigenes Netzwerk. Das Projekt steht bei Etappe 1 von 8; Releases kündigen wir unter [Discussions → Announcements](https://github.com/VectoDE/Vectora-Network/discussions/categories/announcements) an.
 
 **Welche Minecraft-Versionen können spielen?**
 Ziel sind Java 1.8 bis 26.3 und Bedrock. Was heute schon geht, steht unter [Crossplay](Crossplay-DE).
@@ -24,10 +24,10 @@ Für den Betrieb der Server Java 25, weil Paper 26.3 es verlangt. Zum Bauen star
 Vectora soll ein Plugin pro Plattform haben, das auf jedem Server gleich funktioniert und Bedrock kennt. Der Plan ersetzt LuckPerms, TAB, WorldEdit, WorldGuard, PlaceholderAPI, ProxyPortal und Chunky durch eigene Module. Bis es die gibt, nutzen die aktuellen Server noch einige davon.
 
 **Darf ich den Code für mein eigenes Netzwerk nutzen?**
-Ja, im Rahmen der GPL-3.0. Gibst du eine geänderte Version weiter, musst du den Quellcode deiner Änderungen unter derselben Lizenz veröffentlichen.
+Ja, genau dafür ist er da, im Rahmen der GPL-3.0. Gibst du eine geänderte Version weiter, musst du den Quellcode deiner Änderungen unter derselben Lizenz veröffentlichen.
 
 **Wird es Pay-to-Win geben?**
-Nein. Der geplante Store verkauft nur Kosmetik und hält sich an die Minecraft-EULA. Zahlungen bleiben im Testmodus, bis das Rechtliche geprüft ist.
+Nein. Der geplante Store verkauft nur Kosmetik und hält sich an die Minecraft-EULA. Wir entwickeln ihn gegen den Stripe-Testmodus. Jeder Betreiber bindet sein eigenes Stripe-Konto an und ist selbst dafür verantwortlich, echte Zahlungen rechtlich sauber abzuwickeln.
 
 **Wo melde ich eine Sicherheitslücke?**
 Privat, siehe [SECURITY.md](https://github.com/VectoDE/Vectora-Network/blob/main/SECURITY.md).

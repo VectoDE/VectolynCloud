@@ -57,8 +57,8 @@ A Java node with a console (JLine) and a setup wizard.
 - **Messaging:** Vectora's own channel (Netty/WebSocket) between cloud, proxy and servers.
 - **API:** REST and WebSocket with token auth.
 - **Backups and monitoring (stage 2):** backups of worlds and database, monitoring of TPS, RAM and players with alerts.
-- **Extras (stage 8):** web dashboard (including the full setup) and Discord bot.
-- **Operation:** Docker image, Pterodactyl egg, systemd unit, start scripts for Windows and macOS.
+- **Extras (stage 8):** web dashboard (including the full setup), Discord bot, website and cosmetic store. The operator hosts them and brings their own bot token and Stripe account.
+- **Operation:** Docker image on GHCR (Dockerfile and compose file in the repository), Pterodactyl egg, systemd unit, start scripts for Windows, Linux and macOS.
 
 ## Vectora plugin (planned, stage 3)
 
