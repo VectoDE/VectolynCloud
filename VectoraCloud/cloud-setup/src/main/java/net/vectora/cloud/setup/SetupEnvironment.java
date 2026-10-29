@@ -96,16 +96,24 @@ public record SetupEnvironment(Language language, boolean interactive, Optional<
         if (value == null || !value.matches("[0-9]{1,9}")) {
             return OptionalLong.empty();
         }
-        long parsed = Long.parseLong(value);
-        return parsed > 0 ? OptionalLong.of(parsed) : OptionalLong.empty();
+        try {
+            long parsed = Long.parseLong(value);
+            return parsed > 0 ? OptionalLong.of(parsed) : OptionalLong.empty();
+        } catch (NumberFormatException e) {
+            return OptionalLong.empty();
+        }
     }
 
     private static OptionalInt port(String value) {
         if (value == null || !value.matches("[0-9]{1,5}")) {
             return OptionalInt.empty();
         }
-        int parsed = Integer.parseInt(value);
-        return parsed >= 1 && parsed <= 65535 ? OptionalInt.of(parsed) : OptionalInt.empty();
+        try {
+            int parsed = Integer.parseInt(value);
+            return parsed >= 1 && parsed <= 65535 ? OptionalInt.of(parsed) : OptionalInt.empty();
+        } catch (NumberFormatException e) {
+            return OptionalInt.empty();
+        }
     }
 
     private static OptionalLong physicalMemory() {

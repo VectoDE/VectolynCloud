@@ -104,10 +104,10 @@ public final class SecretAccess {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return Optional.empty();
-        } catch (InterruptedIOException e) {
-            Thread.currentThread().interrupt();
-            return Optional.empty();
         } catch (IOException | RuntimeException e) {
+            if (e instanceof InterruptedIOException) {
+                Thread.currentThread().interrupt();
+            }
             return Optional.empty();
         }
     }
