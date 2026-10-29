@@ -18,6 +18,9 @@ Server-Network/secrets/*
 .env
 .env.*
 !.env.example
+# Docker Compose (VectoraCloud/dist/docker): password files and the filled-in setup file.
+VectoraCloud/dist/docker/secrets/
+VectoraCloud/dist/docker/setup.yml
 *.secret
 key.pem
 *.key

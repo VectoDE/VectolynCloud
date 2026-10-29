@@ -1,0 +1,89 @@
+# VectoraCloud with MariaDB as an external database (Docker Compose v2).
+#
+#   cd VectoraCloud/dist/docker
+#   cp setup.example.yml setup.yml                         # then edit: accept the EULA, name, ports
+#   mkdir -p secrets && openssl rand -base64 32 | tr -d '\n' > secrets/db_password
+#   openssl rand -base64 32 | tr -d '\n' > secrets/db_root_password
+#   docker compose up -d
+#   docker compose logs -f cloud
+#
+# Passwords are files (Docker secrets), never environment variables: they would show up in
+# "docker inspect" and in the environment of every server the cloud starts. The cloud reads its
+# database password through database.password-file in setup.yml.
+#
+# The image comes from GHCR. To build it from this checkout instead: docker compose build
+# Details: docs/cloud/operations.md
+
+name: vectora
+
+services:
+  cloud:
+    image: ghcr.io/vectode/vectora-cloud:${VECTORA_VERSION:-latest}
+    build:
+      context: ../../..
+      dockerfile: VectoraCloud/dist/docker/Dockerfile
+    # Zombie reaping for every process the cloud starts (servers, MariaDB tools).
+    init: true
+    restart: unless-stopped
+    stdin_open: true          # "docker attach vectora-cloud-1" reaches the console
+    tty: false
+    command: ["--non-interactive", "--setup-file", "/data/setup.yml"]
+    environment:
+      VECTORA_XMX: 512M
+    volumes:
+      - cloud-data:/data
+      - ./setup.yml:/data/setup.yml:ro
+    secrets:
+      - source: db_password
+        target: vectora-db
+    ports:
+      - "25565:25565/tcp"     # Java proxy
+      - "19132:19132/udp"     # Bedrock (Geyser)
+      # - "25564:25564/tcp"   # legacy proxy for 1.8.8, if servers.legacy-proxy is on
+    depends_on:
+      database:
+        condition: service_healthy
+    # The cloud stops every server with its stop command first; give it the time to do so.
+    stop_signal: SIGTERM
+    stop_grace_period: 5m
+    # Many threads per Minecraft server; each counts against the PID limit.
+    pids_limit: 8192
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  database:
+    image: mariadb:11.8-noble@sha256:c4124d1afa875e47f2892edf26b482fa54f796e2f342d3717a04ca091a22a9bd
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: luckperms
+      MARIADB_USER: luckperms
+      MARIADB_PASSWORD_FILE: /run/secrets/db_password
+      MARIADB_ROOT_PASSWORD_FILE: /run/secrets/db_root_password
+      MARIADB_AUTO_UPGRADE: "1"
+    command: ["--max-connections=150", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    secrets:
+      - db_password
+      - db_root_password
+    volumes:
+      - database-data:/var/lib/mysql
+    # No published port: only the cloud and its servers reach the database, over the compose network.
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+
+secrets:
+  db_password:
+    file: ./secrets/db_password
+  db_root_password:
+    file: ./secrets/db_root_password
+
+volumes:
+  cloud-data:
+  database-data:
