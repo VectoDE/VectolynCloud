@@ -154,7 +154,12 @@ public final class LockedDownloads implements ArtifactSource {
             if (value == null || !value.matches("[0-9]{1,2}")) {
                 return OptionalInt.empty();
             }
-            return OptionalInt.of(Integer.parseInt(value));
+            try {
+                return OptionalInt.of(Integer.parseInt(value));
+            } catch (NumberFormatException e) {
+                // Cannot happen after the pattern; a broken entry is treated like a missing one.
+                return OptionalInt.empty();
+            }
         }
     }
 
