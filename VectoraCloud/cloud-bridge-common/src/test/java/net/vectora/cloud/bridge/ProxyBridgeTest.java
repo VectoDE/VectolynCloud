@@ -103,6 +103,82 @@ class ProxyBridgeTest {
         sender.close(Duration.ofSeconds(5));
     }
 
+    private void bedwars2() {
+        receive(ServerRegistryTest.server("bedwars-2", 30004, false));
+        receive(new ServerCapacity(new ServiceId("bedwars-2"), 8, true));
+    }
+
+    private static final KickReason SHUTDOWN = KickReason.of(List.of("multiplayer.disconnect.server_shutdown"), "");
+    private static final KickReason FULL = KickReason.of(List.of("multiplayer.disconnect.server_full"), "");
+    private static final KickReason BANNED = KickReason.of(List.of("multiplayer.disconnect.banned"), "");
+
+    private static KickOutcome move(String server, Locale locale) {
+        return KickOutcome.move(server, TransferMessages.rescued(locale));
+    }
+
+    @Test
+    void aKickedPlayerGoesToTheGroupThenToTheLobbyAndEachServerOnlyOnce() {
+        lobbies();
+        bedwars2();
+        servers.players.put("lobby", 30);
+        servers.players.put("lobby-2", 5);
+        UUID alex = UUID.randomUUID();
+        players.locales.put(alex, Locale.GERMANY);
+        assertEquals(move("bedwars-2", Locale.GERMANY), bridge.kicked(alex, "bedwars-1", KickReason.missing(), false));
+        assertEquals(move("lobby-2", Locale.GERMANY), bridge.kicked(alex, "bedwars-2", SHUTDOWN, false),
+                "bedwars-1 was already tried: the emptiest lobby");
+        assertEquals(move("lobby", Locale.GERMANY), bridge.kicked(alex, "lobby-2", KickReason.missing(), false),
+                "the other lobby, not lobby-2 again");
+        assertEquals(KickOutcome.disconnect(TransferMessages.lost(Locale.GERMANY)),
+                bridge.kicked(alex, "lobby", KickReason.missing(), false), "the fourth rescue within 60 s");
+        // Counter-check: after leaving the proxy the player is rescued again.
+        bridge.playerDisconnected(new Object(), alex);
+        assertEquals(move("lobby-2", Locale.GERMANY), bridge.kicked(alex, "lobby", KickReason.missing(), false));
+        sender.close(Duration.ofSeconds(5));
+    }
+
+    @Test
+    void bansAndDeliberateKicksAreLeftAsTheProxyDecided() {
+        lobbies();
+        bedwars2();
+        UUID alex = UUID.randomUUID();
+        assertEquals(KickOutcome.keep(), bridge.kicked(alex, "bedwars-1", BANNED, false));
+        assertEquals(KickOutcome.keep(),
+                bridge.kicked(alex, "bedwars-1", KickReason.of(List.of(), "Kicked by an operator."), false));
+        // Counter-check: the same kick from a shutdown is caught.
+        assertEquals(move("bedwars-2", null), bridge.kicked(alex, "bedwars-1", SHUTDOWN, false));
+        sender.close(Duration.ofSeconds(5));
+    }
+
+    @Test
+    void withoutAnyOpenServerThePlayerIsDisconnected() {
+        lobbies();
+        receive(new ServerCapacity(new ServiceId("lobby"), 50, false));
+        receive(new ServerCapacity(new ServiceId("lobby-2"), 50, false));
+        UUID alex = UUID.randomUUID();
+        assertEquals(KickOutcome.disconnect(TransferMessages.lost(null)),
+                bridge.kicked(alex, "bedwars-1", SHUTDOWN, false));
+        // Counter-check: with an open lobby the player goes there, also from a server of no known group.
+        receive(new ServerCapacity(new ServiceId("lobby-2"), 50, true));
+        assertEquals(move("lobby-2", null), bridge.kicked(UUID.randomUUID(), "bedwars-1", SHUTDOWN, false));
+        assertEquals(move("lobby-2", null), bridge.kicked(UUID.randomUUID(), "survival", SHUTDOWN, false));
+        sender.close(Duration.ofSeconds(5));
+    }
+
+    @Test
+    void aPlayerWhoStaysOnHisServerIsOnlyMovedInsideTheGroup() {
+        lobbies();
+        bedwars2();
+        UUID alex = UUID.randomUUID();
+        assertEquals(move("bedwars-2", null), bridge.kicked(alex, "bedwars-1", FULL, true),
+                "a full server during the connect: another one of the group");
+        assertEquals(KickOutcome.keep(), bridge.kicked(alex, "bedwars-2", FULL, true),
+                "no other bedwars server: the player stays where he is, no lobby");
+        // Counter-check: without a server to stay on, the lobby takes him.
+        assertEquals(move("lobby", null), bridge.kicked(alex, "bedwars-2", FULL, false));
+        sender.close(Duration.ofSeconds(5));
+    }
+
     @Test
     void cloudMessagesChangeTheServerList() {
         bridge.onEvent(new CloudClientEvent.MessageReceived(ServerRegistryTest.server("bedwars-1", 30002, false)));

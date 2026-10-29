@@ -1,6 +1,8 @@
 package net.vectora.cloud.bridge;
 
 import java.lang.System.Logger.Level;
+import java.util.HashSet;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -31,20 +33,28 @@ public final class ProxyBridge implements CloudClientListener {
     private final ServerRegistry registry;
     private final PlayerTracker tracker;
     private final ServerLoads loads;
+    private final KickGuard guard;
+    private final String fallbackGroup;
+
+    /** The group a kicked player goes to when no other server of their own group is free. */
+    public static final String FALLBACK_GROUP = "lobby";
 
     /** Creates the bridge for a proxy in {@code role} whose server list is {@code servers}. */
     public ProxyBridge(BridgeSender sender, ProxyServers servers, ProxyPlayers players, ProxyRole role) {
-        this(sender, servers, players, role, new ServerLoads());
+        this(sender, servers, players, role, new ServerLoads(), new KickGuard(), FALLBACK_GROUP);
     }
 
-    /** As above, with the load directory given (tests: its own clock). */
-    ProxyBridge(BridgeSender sender, ProxyServers servers, ProxyPlayers players, ProxyRole role, ServerLoads loads) {
+    /** As above, with the load directory, the kick guard and the fallback group given (tests). */
+    ProxyBridge(BridgeSender sender, ProxyServers servers, ProxyPlayers players, ProxyRole role, ServerLoads loads,
+                KickGuard guard, String fallbackGroup) {
         this.sender = Objects.requireNonNull(sender, "sender");
         this.servers = Objects.requireNonNull(servers, "servers");
         this.players = Objects.requireNonNull(players, "players");
         this.registry = new ServerRegistry(servers, role);
         this.tracker = new PlayerTracker(servers::exists);
         this.loads = Objects.requireNonNull(loads, "loads");
+        this.guard = Objects.requireNonNull(guard, "guard");
+        this.fallbackGroup = Objects.requireNonNull(fallbackGroup, "fallbackGroup");
     }
 
     @Override
@@ -123,6 +133,43 @@ public final class ProxyBridge implements CloudClientListener {
         return enter(player, target, Set.of(kickedFrom));
     }
 
+    /**
+     * A backend kicked the player or refused the connect. If the kick is one the proxy catches
+     * ({@link KickClassifier}), the player goes to the emptiest other server of the same group,
+     * otherwise to the emptiest server of the {@linkplain #FALLBACK_GROUP fallback group}; servers
+     * already tried in this incident are skipped ({@link KickGuard}). A player who still is on
+     * another server (a refused switch) is only moved inside the group and otherwise stays.
+     *
+     * @param player         the player
+     * @param kickedFrom     the backend that kicked
+     * @param reason         its reason
+     * @param staysConnected whether the player is still on another backend
+     * @return keep the proxy's result, move the player, or disconnect them with the original reason
+     */
+    public KickOutcome kicked(UUID player, String kickedFrom, KickReason reason, boolean staysConnected) {
+        if (!KickClassifier.rescues(reason)) {
+            return KickOutcome.keep();
+        }
+        Locale locale = players.locale(player);
+        KickOutcome giveUp = staysConnected ? KickOutcome.keep() : KickOutcome.disconnect(TransferMessages.lost(locale));
+        if (!guard.mayRescue(player)) {
+            LOG.log(Level.INFO, "Kick from {0} not caught: the player was moved too often in a short time", kickedFrom);
+            return giveUp;
+        }
+        Set<String> exclude = new HashSet<>(guard.tried(player));
+        exclude.add(kickedFrom);
+        Optional<String> target = loads.groupOf(kickedFrom)
+                .flatMap(group -> loads.choose(player, group, exclude, servers::exists, servers::playersOn));
+        if (target.isEmpty() && !staysConnected) {
+            target = loads.choose(player, fallbackGroup, exclude, servers::exists, servers::playersOn);
+        }
+        if (target.isEmpty()) {
+            return giveUp;
+        }
+        guard.rescued(player, kickedFrom, target.get());
+        return KickOutcome.move(target.get(), TransferMessages.rescued(locale));
+    }
+
     private Optional<String> enter(UUID player, String proxysChoice, Set<String> exclude) {
         return loads.groupOf(proxysChoice)
                 .flatMap(group -> loads.choose(player, group, exclude, servers::exists, servers::playersOn));
@@ -149,6 +196,7 @@ public final class ProxyBridge implements CloudClientListener {
     /** The player left the proxy. {@code session} is the player object of the login that ended. */
     public void playerDisconnected(Object session, UUID uuid) {
         loads.arrived(uuid);
+        guard.forget(uuid);
         synchronized (tracker) {
             tracker.disconnected(session, uuid).ifPresent(sender::send);
         }

@@ -98,7 +98,8 @@ Der Proxy schickt einen Spieler auf den Server der Gruppe mit der geringsten Las
 
 - den ersten Server beim Join (die `try`-Liste von Velocity bestimmt nur die Gruppe);
 - eine Weiterleitung in eine Gruppe, etwa zurück in die Lobby nach einem Kick;
-- die Umzüge eines geleerten Servers (der Node plant sie mit derselben Regel, `TransferPlanner`).
+- die Umzüge eines geleerten Servers (der Node plant sie mit derselben Regel, `TransferPlanner`);
+- einen Spieler, dessen Server gestoppt wurde, abgestürzt ist, die Verbindung verloren hat oder voll ist: ein anderer Server derselben Gruppe, sonst die Lobby, sonst wird der Spieler mit dem ursprünglichen Grund getrennt. Bans, die Whitelist und gewollte Kicks fängt der Proxy nie ab. Jeder Server wird pro Vorfall nur einmal versucht, und pro Spieler werden höchstens 3 Kicks in 60 Sekunden abgefangen (Einzelheiten in [bridges.md](bridges.md#catching-kicks)).
 
 Hauptproxy und Legacy-Proxy arbeiten gleich. Der Node teilt den Proxys mit `ServerCapacity` die Plätze jedes Backends mit und ob es offen ist (siehe [protocol.md](protocol.md)); ein Backend, das geleert wird, ist geschlossen. Ein Backend ohne Plätze (von einem älteren Node) wählt der Proxy so, wie Velocity es täte.
 

@@ -9,12 +9,17 @@ import com.velocitypowered.api.event.player.ServerConnectedEvent;
 import com.velocitypowered.api.event.proxy.ListenerBoundEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.network.ListenerType;
+import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
+import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.scheduler.ScheduledTask;
 import java.time.Duration;
 import java.util.Optional;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import net.vectora.cloud.bridge.BridgeConnection;
 import net.vectora.cloud.bridge.BridgeSender;
+import net.vectora.cloud.bridge.KickOutcome;
 import net.vectora.cloud.bridge.ProxyBridge;
 import net.vectora.cloud.bridge.ProxyRole;
 import net.vectora.cloud.client.CloudClientSettings;
@@ -32,6 +37,8 @@ import net.vectora.cloud.client.CloudClientSettings;
  *   <li>Status: every {@link #STATUS_PERIOD} with players and the shown player limit.</li>
  *   <li>Player events: join on the first backend, switch, quit, checked against the reported
  *       state ({@code PlayerTracker}).</li>
+ *   <li>Kicks: a player whose server stopped, crashed or is full goes to another server of the
+ *       group or to the lobby ({@code ProxyBridge.kicked}).</li>
  * </ul>
  */
 public final class VelocityBridgePlugin {
@@ -98,17 +105,59 @@ public final class VelocityBridgePlugin {
     }
 
     /**
-     * A backend kicked the player and the proxy sends them on into a group (lobby fallback): the
-     * target is replaced by the backend of the same group with the lowest load, never the one that
-     * kicked. A disconnect or a notice stays as the proxy or another plugin decided.
+     * A backend kicked the player or refused the connect.
+     *
+     * <ul>
+     *   <li>A stop, crash, lost connection, timeout or full server ({@code ProxyBridge.kicked}):
+     *       the player goes to another server of the group, else to the lobby, else is
+     *       disconnected with the original reason. A player who still is on another server only
+     *       moves inside the group and otherwise stays.</li>
+     *   <li>Any other kick (ban, whitelist, a kick someone meant) stays as the proxy decided; only a
+     *       redirect into a group goes to its emptiest server, never back to the one that
+     *       kicked.</li>
+     * </ul>
      */
     @Subscribe
     public void onKickedFromServer(KickedFromServerEvent event) {
         ProxyBridge target = bridge;
-        if (target == null || !(event.getResult() instanceof KickedFromServerEvent.RedirectPlayer redirect)) {
+        if (target == null) {
             return;
         }
+        Player player = event.getPlayer();
         String kickedFrom = event.getServer().getServerInfo().getName();
+        boolean staysConnected = player.getCurrentServer()
+                .map(current -> !current.getServerInfo().getName().equals(kickedFrom)).orElse(false);
+        KickOutcome outcome = target.kicked(player.getUniqueId(), kickedFrom,
+                KickReasons.of(event.getServerKickReason()), staysConnected);
+        switch (outcome.action()) {
+            case MOVE -> {
+                Optional<RegisteredServer> server = proxy.getServer(outcome.server());
+                if (server.isPresent()) {
+                    event.setResult(KickedFromServerEvent.RedirectPlayer.create(server.get(),
+                            Component.text(outcome.message(), NamedTextColor.YELLOW)));
+                } else {
+                    disconnectWithReason(event, outcome);
+                }
+            }
+            case DISCONNECT -> disconnectWithReason(event, outcome);
+            case KEEP -> rebalance(event, target, kickedFrom);
+        }
+    }
+
+    /** Disconnects with the backend's reason, else the proxy's own disconnect, else the bridge's text. */
+    private static void disconnectWithReason(KickedFromServerEvent event, KickOutcome outcome) {
+        Component reason = event.getServerKickReason().orElseGet(() ->
+                event.getResult() instanceof KickedFromServerEvent.DisconnectPlayer disconnect
+                        ? disconnect.getReasonComponent()
+                        : Component.text(outcome.message(), NamedTextColor.RED));
+        event.setResult(KickedFromServerEvent.DisconnectPlayer.create(reason));
+    }
+
+    /** A redirect of the proxy into a group goes to the group's emptiest server instead. */
+    private void rebalance(KickedFromServerEvent event, ProxyBridge target, String kickedFrom) {
+        if (!(event.getResult() instanceof KickedFromServerEvent.RedirectPlayer redirect)) {
+            return;
+        }
         target.redirect(event.getPlayer().getUniqueId(), kickedFrom, redirect.getServer().getServerInfo().getName())
                 .flatMap(proxy::getServer)
                 .ifPresent(server -> event.setResult(

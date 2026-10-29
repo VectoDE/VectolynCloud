@@ -136,4 +136,17 @@ class ServerLoadsTest {
         assertEquals(german, TransferMessages.text(net.vectora.protocol.message.TransferPlayer.Reason.SCALE_DOWN,
                 java.util.Locale.of("de", "AT")));
     }
+
+    @Test
+    void rescueAndLostTextsFollowTheClientLanguage() {
+        java.util.List<java.util.function.Function<java.util.Locale, String>> texts =
+                java.util.List.of(TransferMessages::rescued, TransferMessages::lost);
+        for (var text : texts) {
+            String german = text.apply(java.util.Locale.GERMANY);
+            String english = text.apply(java.util.Locale.US);
+            assertFalse(german.equals(english), german);
+            assertEquals(english, text.apply(null));
+            assertEquals(german, text.apply(java.util.Locale.of("de", "CH")));
+        }
+    }
 }
