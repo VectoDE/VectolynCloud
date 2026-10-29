@@ -6,11 +6,20 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.Socket;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import net.vectora.cloud.api.auth.Scope;
 import net.vectora.cloud.api.backend.BackupOrder;
 import net.vectora.cloud.config.CloudHome;
@@ -196,6 +205,21 @@ class ApiServerTest {
             HttpResponse<String> created = api.send("PUT", "/api/v1/groups/lobby", api.admin, good);
             assertEquals(201, created.statusCode(), created.body());
             assertTrue(Files.readString(home.resolve("groups/lobby.yml")).contains("-XX:MaxGCPauseMillis=200"));
+
+            // A property only some library reads (Fabric's extra mods, Paper's Maven mirror) is refused too.
+            for (String flag : List.of("-Dfabric.addMods=//evil.example/share/x.jar",
+                    "-Dorg.bukkit.plugin.java.LibraryLoader.centralURL=https://evil.example/m2", "-Dmyplugin.debug=true")) {
+                String body = GROUP.replace("\"catalog\":[]", "\"catalog\":[],\"process\":{\"jvm-flags\":[\"" + flag + "\"]}");
+                assertEquals(422, api.send("PUT", "/api/v1/groups/lobby", api.admin, body).statusCode(), flag);
+            }
+            // The operator's own flag (console or file) is not refused there and stays when the API changes the group.
+            api.config.apply(new net.vectora.cloud.config.operation.PutGroup("lobby",
+                    api.config.snapshot().groups().get("lobby").withProcess(new net.vectora.cloud.config.model.ProcessConfig(
+                            List.of("-Dmyplugin.debug=true"), null, null, null))));
+            String kept = GROUP.replace("768M", "1G")
+                    .replace("\"catalog\":[]", "\"catalog\":[],\"process\":{\"jvm-flags\":[\"-Dmyplugin.debug=true\"]}");
+            assertEquals(200, api.send("PUT", "/api/v1/groups/lobby", api.admin, kept).statusCode());
+            assertTrue(api.get("/api/v1/config/warnings", api.admin).body().contains("jvm-flag-not-listed"));
         }
     }
 
@@ -392,6 +416,101 @@ class ApiServerTest {
             }
             assertFalse(all.toString().contains(api.admin), "the token reached a response");
             assertFalse(all.toString().contains(hash), "the token hash reached a response");
+        }
+    }
+
+    @Test
+    void oddTargetsAndMethodsNeverReachAHandler() throws Exception {
+        try (TestApi api = new TestApi(home)) {
+            // Sent as raw bytes, so no client library normalizes them first.
+            for (String target : List.of("//api/v1/services", "/api/v1//services", "/api/v1/services/",
+                    "/api/v1/%2e%2e/services", "/api/v1/services/%2e%2e", "/api/v1/services/..", "/api/v1/./services",
+                    "/api/v1/services/lobby%2D1", "/api/v1/services?x=%00", "http://127.0.0.1/api/v1/services")) {
+                assertEquals(400, rawStatus(api, "GET", target, api.admin), target);
+            }
+            assertEquals(404, rawStatus(api, "GET", "/API/v1/services", api.admin));
+            assertEquals(404, rawStatus(api, "GET", "/api/v1/Services", api.admin));
+            assertEquals(405, rawStatus(api, "HEAD", "/api/v1/services", api.admin));
+            assertEquals(405, rawStatus(api, "OPTIONS", "/api/v1/services", api.admin));
+            assertEquals(405, rawStatus(api, "get", "/api/v1/services", api.admin));
+            // Without a token the same targets are 401 before any of these rules.
+            assertEquals(401, rawStatus(api, "GET", "/api/v1/%2e%2e/services", null));
+            assertEquals(401, rawStatus(api, "HEAD", "/api/v1/services", null));
+            // Counter-check: the clean target works over the same raw connection.
+            assertEquals(200, rawStatus(api, "GET", "/api/v1/services", api.admin));
+        }
+    }
+
+    @Test
+    void concurrentWritesWithTheSameETagLetOnlyOneThrough() throws Exception {
+        try (TestApi api = new TestApi(home)) {
+            assertEquals(201, api.send("PUT", "/api/v1/groups/lobby", api.admin, GROUP).statusCode());
+            ExecutorService pool = Executors.newFixedThreadPool(8);
+            try {
+                for (int round = 0; round < 5; round++) {
+                    String etag = api.get("/api/v1/groups/lobby", api.admin).headers().firstValue("ETag").orElseThrow();
+                    CountDownLatch start = new CountDownLatch(1);
+                    List<Future<Integer>> results = new ArrayList<>();
+                    for (int i = 0; i < 8; i++) {
+                        String body = GROUP.replace("768M", (900 + round * 10 + i) + "M");
+                        results.add(pool.submit(() -> {
+                            start.await();
+                            return api.send(HttpRequest.newBuilder(api.uri("/api/v1/groups/lobby"))
+                                    .header("Authorization", "Bearer " + api.admin)
+                                    .header("Content-Type", "application/json").header("If-Match", etag)
+                                    .PUT(HttpRequest.BodyPublishers.ofString(body)).build()).statusCode();
+                        }));
+                    }
+                    start.countDown();
+                    int ok = 0;
+                    int failed = 0;
+                    for (Future<Integer> result : results) {
+                        int status = result.get();
+                        ok += status == 200 ? 1 : 0;
+                        failed += status == 412 ? 1 : 0;
+                    }
+                    assertEquals(1, ok, "round " + round);
+                    assertEquals(7, failed, "round " + round);
+                }
+            } finally {
+                pool.shutdownNow();
+            }
+        }
+    }
+
+    @Test
+    void apiAndDatabaseSectionsNeedAdmin() throws Exception {
+        try (TestApi api = new TestApi(home)) {
+            String writer = api.token("writer", Scope.CONFIG_WRITE);
+            String cloud = api.get("/api/v1/config", api.admin).body();
+            String docker = cloud.replace("\"mode\":\"managed\"", "\"mode\":\"docker\"")
+                    .replace("\"user\":\"luckperms\"", "\"user\":\"luckperms\",\"docker-image\":\"evil/mariadb:1\"");
+            HttpResponse<String> refused = api.send("PUT", "/api/v1/config", writer, docker);
+            assertEquals(403, refused.statusCode(), refused.body());
+            assertTrue(refused.body().contains("admin"), refused.body());
+            String cors = cloud.replace("\"tls\":", "\"cors-origins\":[\"https://evil.example\"],\"tls\":");
+            assertEquals(403, api.send("PUT", "/api/v1/config", writer, cors).statusCode());
+            assertEquals("managed", api.config.snapshot().cloud().database().mode().name().toLowerCase(java.util.Locale.ROOT));
+            // Counter-checks: other sections are fine with config:write, the same change is fine with admin.
+            assertEquals(200, api.send("PUT", "/api/v1/config", writer,
+                    cloud.replace("\"network-name\":\"Vectora\"", "\"network-name\":\"Other\"")).statusCode());
+            String current = api.get("/api/v1/config", api.admin).body();
+            assertEquals(200, api.send("PUT", "/api/v1/config", api.admin,
+                    current.replace("\"tls\":", "\"cors-origins\":[\"https://dashboard.example\"],\"tls\":")).statusCode());
+        }
+    }
+
+    private static int rawStatus(TestApi api, String method, String target, String token) throws Exception {
+        try (Socket socket = new Socket("127.0.0.1", api.address.getPort())) {
+            socket.setSoTimeout(10_000);
+            String request = method + " " + target + " HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                    + (token == null ? "" : "Authorization: Bearer " + token + "\r\n") + "Connection: close\r\n\r\n";
+            OutputStream out = socket.getOutputStream();
+            out.write(request.getBytes(StandardCharsets.US_ASCII));
+            out.flush();
+            InputStream in = socket.getInputStream();
+            String status = new String(in.readNBytes(12), StandardCharsets.US_ASCII);
+            return Integer.parseInt(status.substring(9, 12));
         }
     }
 

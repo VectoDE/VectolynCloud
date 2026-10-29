@@ -39,7 +39,7 @@ vectora> api scopes
 - Revoking works at once: the next request fails, and open WebSockets of that token are closed with code `1008`.
 - At most 100 tokens. Names follow the group name rule `[a-z0-9][a-z0-9_-]{0,31}`.
 
-Send the token as `Authorization: Bearer vct_...`. Browsers cannot set headers on a WebSocket, so the event stream also takes it as the subprotocol `vectora.bearer.<token>` next to `vectora.v1`; the server answers with `vectora.v1` only and never echoes the token.
+Send the token as `Authorization: Bearer vct_...`. Browsers cannot set headers on a WebSocket, so the event stream also takes it as the subprotocol `vectora.bearer.<token>` next to `vectora.v1`; the server answers with `vectora.v1` only and never echoes the token. An upgrade that offers subprotocols but not `vectora.v1` is refused with `400 subprotocol-required`.
 
 ### Scopes
 
@@ -48,13 +48,15 @@ Send the token as `Authorization: Bearer vct_...`. Browsers cannot set headers o
 | `services:read` | list and read services, event stream |
 | `services:write` | start, stop, restart, send a console command |
 | `config:read` | read `cloud.yml`, groups, tasks, server switches, warnings, setup status |
-| `config:write` | write and delete groups and tasks, set `wanted`, write `cloud.yml`, reload |
+| `config:write` | write and delete groups and tasks, set `wanted`, write `cloud.yml` except `api` and `database`, reload |
 | `backups:read` | list backups |
 | `backups:write` | create a backup |
 | `node:read` | node status |
 | `admin` | everything above |
 
-A write scope does not include the read scope. A missing scope gives `403 missing-scope`. `GET /api/v1/tokens/self` works with any valid token and shows its id, name, scopes and creation time.
+A write scope does not include the read scope. A missing scope gives `403 missing-scope`. Changing the `api` or `database` section of `cloud.yml` needs `admin`: they decide who can reach the node and which image `docker compose` runs with the database root password.
+
+**What the write scopes can reach.** `config:write` is not a shell on the node: JVM flags are limited by the [allowlist](config.md#jvm-flag-allowlist), templates are folders of the cloud home, and software and plugins come only from the download sources with their checksums. `services:write` can send any console command to a server, which is what an operator at the server console can do; with plugins that offer console commands for files or scripts, that reaches further. Give it only to scripts you would also let use the server console. `GET /api/v1/tokens/self` works with any valid token and shows its id, name, scopes and creation time.
 
 ## Endpoints
 
@@ -89,15 +91,15 @@ All paths start with `/api/v1`. Bodies are `application/json` in UTF-8, with the
 
 Every write goes through `ConfigService.apply`: the whole configuration is validated (ports, EULA before `setup-complete`, TLS for a public API, the JVM flag allowlist), written atomically, and the listeners of the node see the change as if it was typed at the console. On an error nothing is written and the answer is `422 invalid-config` with the list of errors.
 
-**Wanted.** There are two switches, and a group runs only if both are on: the group's own `wanted` in `groups/<name>.yml`, and the switch of its server kind in `cloud.yml` (`servers:`, the kind whose template folder the group uses). `PUT /groups/{name}/wanted` sets the group's switch; `PUT /tasks/{name}/wanted` sets the switch of the task's group (tasks have none of their own, so this affects every task of that group). Both answer `{"group": "lobby", "wanted": false, "server-kind": "lobby", "server-kind-wanted": true, "runs": false}`. `PUT /servers/{kind}` sets the kind's switch.
+**Wanted.** There are two switches, and a group runs only if both are on: the group's own `wanted` in `groups/<name>.yml`, and the switch of its server kind in `cloud.yml` (`servers:`, the kind whose template folder the group uses). A PandaSpigot group on a template of its own follows `servers.legacy-server`. The 1.8.8 part of the network (PandaSpigot, the `Legacy-Proxy` and `Legacy-Server` templates) also needs `legacy-proxy.enabled`, and the database template never runs as a service. This is the rule the node plans with. `PUT /groups/{name}/wanted` sets the group's switch; `PUT /tasks/{name}/wanted` sets the switch of the task's group (tasks have none of their own, so this affects every task of that group). Both answer `{"group": "lobby", "wanted": false, "server-kind": "lobby", "server-kind-wanted": true, "runs": false}`; `runs` applies the whole rule. `PUT /servers/{kind}` sets the kind's switch.
 
 **Delete.** `DELETE` needs the name repeated as `?confirm=<name>`, otherwise `400 confirmation-required`. That stops a script from deleting the wrong thing with one typo.
 
-**Concurrent edits.** `GET` of a group, task or `cloud.yml` returns an `ETag`. Send it back as `If-Match` with `PUT` or `DELETE`; if the document changed in between, the answer is `412 precondition-failed` and nothing is written. `If-Match: *` only requires the document to exist. Without `If-Match` the write is unconditional.
+**Concurrent edits.** `GET` of a group, task or `cloud.yml` returns an `ETag`. Send it back as `If-Match` with `PUT` or `DELETE`; if the document changed in between, the answer is `412 precondition-failed` and nothing is written. The check runs together with the write, so of several writers with the same `ETag` exactly one gets through. `If-Match: *` only requires the document to exist. Without `If-Match` the write is unconditional.
 
 **Shutdown.** While the node shuts down, start, restart, reload and backup creation answer `503 shutting-down`. Reads and stops still work.
 
-**Backups.** `BackupAccess` (list, create) is implemented by `BackupServiceAccess` over the `BackupService` of cloud-backup. Backups made through the API have the reason `manual`, like `backup create` at the console. A busy backup gives `409`, an unknown service `422`. Answers carry the backup id, never a path. Until the node passes the adapter in, both endpoints answer `501 not-available`.
+**Backups.** `BackupAccess` (list, create) is implemented by `BackupServiceAccess` over the `BackupService` of cloud-backup. Backups made through the API have the reason `manual`, like `backup create` at the console. A busy backup gives `409`, an unknown service `422`. Answers carry the backup id, never a path. Other failures (files, database dump, a broken archive) answer `503 unavailable` with the reason only, for example `(io)`; the details go to the node log. Until the node passes the adapter in, both endpoints answer `501 not-available`.
 
 ### Errors
 
@@ -118,7 +120,7 @@ Messages name fields and rules, never values. Messages of the node (for example 
 
 | Status | Codes |
 |---|---|
-| 400 | `invalid-json`, `unknown-field`, `body-required`, `invalid-value`, `invalid-target`, `invalid-path`, `invalid-query`, `confirmation-required` |
+| 400 | `invalid-json`, `unknown-field`, `body-required`, `invalid-value`, `invalid-target`, `invalid-path`, `invalid-query`, `confirmation-required`, `subprotocol-required` |
 | 401 | `unauthorized` |
 | 403 | `missing-scope`, `origin-not-allowed` |
 | 404 | `not-found` |

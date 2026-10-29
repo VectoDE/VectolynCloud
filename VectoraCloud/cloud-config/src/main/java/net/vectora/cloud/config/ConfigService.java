@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.time.Duration;
 import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -90,8 +89,9 @@ public final class ConfigService implements AutoCloseable {
 
     /**
      * Problems that do not stop the configuration from loading, for example a JVM flag in a
-     * hand-edited group file that is not on the allowlist ({@link JvmFlagPolicy#warnings}). A change
-     * through {@link #apply} cannot add such a flag; it fails with the same codes instead.
+     * group file that is not on the allowlist ({@link JvmFlagPolicy#warnings}). The REST API cannot
+     * add such a flag (it checks its changes with {@link JvmFlagPolicy#refusedChanges}); the console,
+     * the setup assistant and the files are the operator's own and may.
      *
      * @return the warnings of the current snapshot, empty if there are none
      */
@@ -131,11 +131,7 @@ public final class ConfigService implements AutoCloseable {
             for (ConfigOperation operation : operations) {
                 after = Objects.requireNonNull(operation.apply(after), "operation returned null");
             }
-            List<ConfigError> errors = new ArrayList<>(ConfigValidator.validate(after));
-            errors.addAll(JvmFlagPolicy.refusedChanges(before, after));
-            if (!errors.isEmpty()) {
-                throw new ConfigException(errors);
-            }
+            requireValid(after);
             Set<String> files = store.save(before, after, Set.of());
             current = after;
             ConfigChanged change = new ConfigChanged(before, after, files, ConfigChanged.Origin.OPERATION, operations);

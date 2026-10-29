@@ -220,7 +220,9 @@ paths:
       summary: Set the group's own wanted switch
       description: |
         Scope: config:write. A group runs only if its own switch and the switch of its server kind
-        in cloud.yml are both on.
+        in cloud.yml are both on (PandaSpigot on a template of its own: legacy-server); the 1.8.8
+        part also needs legacy-proxy.enabled, and the database template never runs. `runs`
+        applies the whole rule.
       operationId: setGroupWanted
       requestBody: {$ref: "#/components/requestBodies/Wanted"}
       responses:
@@ -350,8 +352,9 @@ paths:
       tags: [config]
       summary: Replace cloud.yml
       description: |
-        Scope: config:write. The whole configuration is validated; changes to `api:` take effect at
-        the next start of the node.
+        Scope: config:write; changing `api` or `database` needs admin (403 missing-scope). The
+        whole configuration is validated; changes to `api:` take effect at the next start of the
+        node.
       operationId: putConfig
       parameters: [{$ref: "#/components/parameters/IfMatch"}]
       requestBody:
@@ -450,7 +453,7 @@ paths:
     post:
       tags: [backups]
       summary: Create a backup
-      description: "Scope: backups:write. Refused while the node shuts down."
+      description: "Scope: backups:write. Refused while the node shuts down. Failures of the node answer 503 unavailable with the reason only."
       operationId: createBackup
       requestBody:
         required: true
@@ -498,7 +501,8 @@ paths:
       summary: Live events (WebSocket)
       description: |
         Scope: services:read. Upgrade to a WebSocket; a plain GET answers 426. Browsers pass the
-        token as subprotocol `vectora.bearer.<token>` next to `vectora.v1`. Every text frame is an
+        token as subprotocol `vectora.bearer.<token>` next to `vectora.v1`; offering subprotocols
+        without `vectora.v1` answers 400 subprotocol-required. Every text frame is an
         `Event`. Output lines are redacted. Revoking the token closes the stream with 1008,
         shutdown with 1001.
       operationId: events
@@ -588,7 +592,7 @@ components:
     Error:
       description: |
         400 invalid-json, unknown-field, body-required, invalid-value, invalid-target, invalid-path,
-        invalid-query, confirmation-required; 401 unauthorized; 403 missing-scope,
+        invalid-query, confirmation-required, subprotocol-required; 401 unauthorized; 403 missing-scope,
         origin-not-allowed; 404 not-found; 405 method-not-allowed; 409 conflict;
         412 precondition-failed; 413 body-too-large; 415 unsupported-media-type; 422 invalid-config,
         invalid; 426 upgrade-required; 429 rate-limited (Retry-After); 500 io-error,

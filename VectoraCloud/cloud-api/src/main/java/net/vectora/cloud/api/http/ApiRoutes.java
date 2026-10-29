@@ -5,8 +5,12 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
+import java.util.function.Function;
 import net.vectora.cloud.api.auth.ApiToken;
 import net.vectora.cloud.api.auth.Scope;
 import net.vectora.cloud.api.backend.ApiBackend;
@@ -22,6 +26,7 @@ import net.vectora.cloud.config.model.ConfigSnapshot;
 import net.vectora.cloud.config.model.GroupConfig;
 import net.vectora.cloud.config.model.Language;
 import net.vectora.cloud.config.model.ServerKind;
+import net.vectora.cloud.config.model.ServerSoftware;
 import net.vectora.cloud.config.model.TaskConfig;
 import net.vectora.cloud.config.operation.ConfigOperation;
 import net.vectora.cloud.config.operation.PutGroup;
@@ -30,6 +35,7 @@ import net.vectora.cloud.config.operation.RemoveGroup;
 import net.vectora.cloud.config.operation.RemoveTask;
 import net.vectora.cloud.config.operation.SetGroupWanted;
 import net.vectora.cloud.config.operation.SetServerWanted;
+import net.vectora.cloud.config.validation.JvmFlagPolicy;
 
 /**
  * The REST endpoints under {@value #PREFIX}. Every write is a {@link ConfigOperation} for
@@ -45,6 +51,8 @@ public final class ApiRoutes {
     public static final String EVENTS = PREFIX + "/events";
     /** Longest console command sent to a service. */
     public static final int MAX_COMMAND_LENGTH = 1024;
+    /** Template of the legacy proxy, as {@code ServicePlanner.LEGACY_PROXY_TEMPLATE} in cloud-node. */
+    static final String LEGACY_PROXY_TEMPLATE = "Legacy-Proxy";
 
     /** One endpoint. */
     @FunctionalInterface
@@ -100,9 +108,9 @@ public final class ApiRoutes {
         r.add("PUT", PREFIX + "/groups/{name}", Scope.CONFIG_WRITE, this::putGroup);
         r.add("DELETE", PREFIX + "/groups/{name}", Scope.CONFIG_WRITE, q -> {
             String name = q.param("name");
-            ifMatch(q, Optional.of(group(name)));
+            group(name); // 404 for an unknown group
             confirm(q, name);
-            apply(new RemoveGroup(name));
+            applyIfMatch(q, s -> Optional.ofNullable(s.groups().get(name)), new RemoveGroup(name));
             return ApiResponse.noContent();
         });
         r.add("PUT", PREFIX + "/groups/{name}/wanted", Scope.CONFIG_WRITE,
@@ -116,9 +124,9 @@ public final class ApiRoutes {
         r.add("PUT", PREFIX + "/tasks/{name}", Scope.CONFIG_WRITE, this::putTask);
         r.add("DELETE", PREFIX + "/tasks/{name}", Scope.CONFIG_WRITE, q -> {
             String name = q.param("name");
-            ifMatch(q, Optional.of(task(name)));
+            task(name); // 404 for an unknown task
             confirm(q, name);
-            apply(new RemoveTask(name));
+            applyIfMatch(q, s -> Optional.ofNullable(s.tasks().get(name)), new RemoveTask(name));
             return ApiResponse.noContent();
         });
         r.add("PUT", PREFIX + "/tasks/{name}/wanted", Scope.CONFIG_WRITE, q -> {
@@ -135,9 +143,11 @@ public final class ApiRoutes {
         r.add("GET", PREFIX + "/config", Scope.CONFIG_READ, q -> ApiResponse.document(200, config.snapshot().cloud()));
         r.add("PUT", PREFIX + "/config", Scope.CONFIG_WRITE, q -> {
             CloudConfig next = q.json(CloudConfig.class);
-            ifMatch(q, Optional.of(config.snapshot().cloud()));
-            apply(snapshot -> snapshot.withCloud(next));
-            return ApiResponse.document(200, config.snapshot().cloud());
+            ConfigSnapshot after = applyIfMatch(q, s -> Optional.of(s.cloud()), snapshot -> {
+                requireAdminForSensitiveSections(q.token(), snapshot.cloud(), next);
+                return snapshot.withCloud(next);
+            });
+            return ApiResponse.document(200, after.cloud());
         });
         r.add("POST", PREFIX + "/config/reload", Scope.CONFIG_WRITE, q -> {
             refuseDuringShutdown();
@@ -213,19 +223,25 @@ public final class ApiRoutes {
     private ApiResponse putGroup(ApiRequest q) throws Exception {
         String name = q.param("name");
         GroupConfig next = q.json(GroupConfig.class);
-        Optional<GroupConfig> current = Optional.ofNullable(config.snapshot().groups().get(name));
-        ifMatch(q, current);
-        apply(new PutGroup(name, next));
-        return ApiResponse.document(current.isPresent() ? 200 : 201, config.snapshot().groups().get(name));
+        AtomicBoolean existed = new AtomicBoolean();
+        ConfigSnapshot after = applyIfMatch(q, s -> {
+            Optional<GroupConfig> current = Optional.ofNullable(s.groups().get(name));
+            existed.set(current.isPresent());
+            return current;
+        }, new PutGroup(name, next));
+        return ApiResponse.document(existed.get() ? 200 : 201, after.groups().get(name));
     }
 
     private ApiResponse putTask(ApiRequest q) throws Exception {
         String name = q.param("name");
         TaskConfig next = q.json(TaskConfig.class);
-        Optional<TaskConfig> current = Optional.ofNullable(config.snapshot().tasks().get(name));
-        ifMatch(q, current);
-        apply(new PutTask(name, next));
-        return ApiResponse.document(current.isPresent() ? 200 : 201, config.snapshot().tasks().get(name));
+        AtomicBoolean existed = new AtomicBoolean();
+        ConfigSnapshot after = applyIfMatch(q, s -> {
+            Optional<TaskConfig> current = Optional.ofNullable(s.tasks().get(name));
+            existed.set(current.isPresent());
+            return current;
+        }, new PutTask(name, next));
+        return ApiResponse.document(existed.get() ? 200 : 201, after.tasks().get(name));
     }
 
     private ApiResponse setWanted(ServerKind kind, ApiRequest q) throws Exception {
@@ -234,23 +250,65 @@ public final class ApiRoutes {
     }
 
     /**
-     * Sets the group's own switch (since #44). A group runs only if this and the switch of its
-     * server kind in {@code cloud.yml} are both on; the answer shows both.
+     * Sets the group's own switch (since #44). The answer shows the group's switch, the switch of
+     * its server kind and whether the group runs, by {@link #runs}.
      */
     private ApiResponse setGroupWanted(String name, ApiRequest q) throws Exception {
-        apply(new SetGroupWanted(name, wanted(q)));
-        ConfigSnapshot snapshot = config.snapshot();
+        boolean wanted = wanted(q);
+        AtomicReference<ConfigSnapshot> result = new AtomicReference<>();
+        apply(snapshot -> {
+            ConfigSnapshot after = new SetGroupWanted(name, wanted).apply(snapshot);
+            result.set(after);
+            return after;
+        });
+        ConfigSnapshot snapshot = result.get();
         GroupConfig group = snapshot.groups().get(name);
-        Optional<ServerKind> kind = kindOfTemplate(group.template());
-        boolean kindWanted = kind.map(k -> snapshot.cloud().servers() == null || snapshot.cloud().servers().isWanted(k))
-                .orElse(true);
+        Optional<ServerKind> kind = switchOf(group);
+        boolean kindWanted = kind.map(k -> k != ServerKind.DATABASE && kindSwitch(snapshot.cloud(), k)).orElse(true);
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("group", name);
         body.put("wanted", group.wantedOrDefault());
         body.put("server-kind", kind.map(ServerKind::key).orElse(null));
         body.put("server-kind-wanted", kindWanted);
-        body.put("runs", group.wantedOrDefault() && kindWanted);
+        body.put("runs", runs(group, snapshot.cloud()));
         return ApiResponse.ok(body);
+    }
+
+    /**
+     * Whether services of a group may run. The same rule as {@code ServicePlanner.isWanted(GroupConfig,
+     * CloudConfig)} in cloud-node, which this module cannot see: the group's own switch, the switch of
+     * its server kind ({@link #switchOf}; the database template never runs as a service), and for the
+     * 1.8.8 part of the network (PandaSpigot, the {@code Legacy-Proxy} and {@code Legacy-Server}
+     * templates) also {@code legacy-proxy.enabled}.
+     *
+     * @param group the group
+     * @param cloud {@code cloud.yml}
+     * @return whether it runs
+     */
+    static boolean runs(GroupConfig group, CloudConfig cloud) {
+        boolean legacy = group.software() == ServerSoftware.PANDASPIGOT || LEGACY_PROXY_TEMPLATE.equals(group.template())
+                || kindOfTemplate(group.template()).orElse(null) == ServerKind.LEGACY_SERVER;
+        if (legacy && (cloud.legacyProxy() == null || !cloud.legacyProxy().enabled())) {
+            return false;
+        }
+        if (!group.wantedOrDefault()) {
+            return false;
+        }
+        Optional<ServerKind> kind = switchOf(group);
+        return kind.isEmpty() || (kind.get() != ServerKind.DATABASE && kindSwitch(cloud, kind.get()));
+    }
+
+    /** The server kind whose switch a group follows; PandaSpigot on a template of its own is a legacy server. */
+    private static Optional<ServerKind> switchOf(GroupConfig group) {
+        Optional<ServerKind> kind = kindOfTemplate(group.template());
+        if (kind.isEmpty() && group.software() == ServerSoftware.PANDASPIGOT) {
+            return Optional.of(ServerKind.LEGACY_SERVER);
+        }
+        return kind;
+    }
+
+    private static boolean kindSwitch(CloudConfig cloud, ServerKind kind) {
+        return cloud.servers() == null || cloud.servers().isWanted(kind);
     }
 
     private static boolean wanted(ApiRequest q) throws ApiException {
@@ -261,9 +319,21 @@ public final class ApiRoutes {
         return body.wanted();
     }
 
+    /**
+     * Applies a change of the API. On top of the validation of {@link ConfigService#apply}, the change
+     * may not add a JVM flag outside the allowlist ({@link JvmFlagPolicy#refusedChanges}); the check
+     * runs inside the operation, against the snapshot it changes.
+     */
     private void apply(ConfigOperation operation) throws ApiException, IOException {
         try {
-            config.apply(operation);
+            config.apply(snapshot -> {
+                ConfigSnapshot after = operation.apply(snapshot);
+                List<ConfigError> refused = JvmFlagPolicy.refusedChanges(snapshot, after);
+                if (!refused.isEmpty()) {
+                    throw new ConfigException(refused);
+                }
+                return after;
+            });
         } catch (ConfigException e) {
             throw ApiException.invalidConfig(e.errors());
         }
@@ -326,8 +396,31 @@ public final class ApiRoutes {
         return result;
     }
 
+    /**
+     * Applies {@code operation} if {@code If-Match} fits the current document. The check runs inside
+     * the operation, so under the lock of {@link ConfigService#apply}: two writers with the same
+     * ETag cannot both succeed, also not against a console change in between.
+     *
+     * @return the snapshot the operation produced
+     */
+    private ConfigSnapshot applyIfMatch(ApiRequest q, Function<ConfigSnapshot, Optional<?>> document,
+                                        ConfigOperation operation) throws ApiException, IOException {
+        AtomicReference<ConfigSnapshot> result = new AtomicReference<>();
+        try {
+            apply(snapshot -> {
+                ifMatch(q, document.apply(snapshot));
+                ConfigSnapshot after = operation.apply(snapshot);
+                result.set(after);
+                return after;
+            });
+        } catch (Refused refused) {
+            throw refused.error;
+        }
+        return result.get();
+    }
+
     /** Checks {@code If-Match} against the ETag of the current document; {@code *} needs one to exist. */
-    private static void ifMatch(ApiRequest q, Optional<?> current) throws ApiException {
+    private static void ifMatch(ApiRequest q, Optional<?> current) {
         String expected = q.ifMatch();
         if (expected == null) {
             return;
@@ -335,8 +428,34 @@ public final class ApiRoutes {
         boolean matches = current.isPresent()
                 && (expected.equals("*") || expected.equals(ApiJson.etag(ApiJson.write(current.get()))));
         if (!matches) {
-            throw new ApiException(412, "precondition-failed",
-                    "The document changed since it was read (If-Match does not match its ETag).");
+            throw new Refused(new ApiException(412, "precondition-failed",
+                    "The document changed since it was read (If-Match does not match its ETag)."));
+        }
+    }
+
+    /**
+     * {@code api} and {@code database} of {@code cloud.yml} decide who can reach the node and which
+     * image the operator's {@code docker compose} runs with the database root password; changing them
+     * needs {@link Scope#ADMIN}, not only {@code config:write}.
+     */
+    private static void requireAdminForSensitiveSections(ApiToken token, CloudConfig current, CloudConfig next) {
+        boolean sensitive = !Objects.equals(current.api(), next.api()) || !Objects.equals(current.database(), next.database());
+        if (sensitive && !token.allows(Scope.ADMIN)) {
+            throw new Refused(new ApiException(403, "missing-scope",
+                    "Changing api or database in cloud.yml needs the scope admin."));
+        }
+    }
+
+    /** Carries an {@link ApiException} out of a {@link ConfigOperation}, which may only throw ConfigException. */
+    private static final class Refused extends RuntimeException {
+
+        private static final long serialVersionUID = 1L;
+
+        private final transient ApiException error;
+
+        Refused(ApiException error) {
+            super(error.getMessage(), null, false, false);
+            this.error = error;
         }
     }
 

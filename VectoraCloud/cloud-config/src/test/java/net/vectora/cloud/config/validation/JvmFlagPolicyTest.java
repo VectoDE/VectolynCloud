@@ -70,14 +70,34 @@ class JvmFlagPolicyTest {
     }
 
     @Test
-    void ownPropertiesOfPluginsAreAllowedOutsideTheReservedNamespaces() {
-        for (String flag : List.of("-Dmyplugin.debug=true", "-Dfake.mode=echo", "-DIReallyKnowWhatIAmDoingISwear",
-                "-Dnet.luckperms.storage=h2")) {
+    void propertiesOfUnknownLibrariesAreNotListed() {
+        // An unknown name may be read by any library on the class path, so the API cannot add it.
+        for (String flag : List.of("-Dmyplugin.debug=true", "-Dnet.luckperms.storage=h2",
+                "-Dcom.example.loader.repository=https://evil.example/maven",
+                "-Dh2.javaObjectSerializer=evil.Serializer", "-Djdk.myplugin.debug=true", "-DJava.Foo=1")) {
+            assertEquals(Verdict.NOT_LISTED, JvmFlagPolicy.check(flag), flag);
+        }
+        // Counter-check: an exact name keeps its value, a known prefix with a plain value is allowed.
+        for (String flag : List.of("-DIReallyKnowWhatIAmDoingISwear", "-Duser.timezone=Europe/Berlin",
+                "-DPaper.IgnoreJavaVersion=true", "-Dnet.kyori.ansi.colorLevel=truecolor", "-Dfabric.debug.x=1")) {
             assertEquals(Verdict.ALLOWED, JvmFlagPolicy.check(flag), flag);
         }
-        // Counter-check: the same shape inside a reserved namespace is not.
-        assertEquals(Verdict.NOT_LISTED, JvmFlagPolicy.check("-Djdk.myplugin.debug=true"));
-        assertEquals(Verdict.NOT_LISTED, JvmFlagPolicy.check("-DJava.Foo=1"));
+    }
+
+    @Test
+    void propertiesUnderAllowedPrefixesThatLoadCodeAreRefused() {
+        // Fabric loads extra mods from any path (a UNC path on Windows fetches it from another host),
+        // JLine 2 runs the programs these name, Netty and Velocity load native libraries from these folders.
+        for (String flag : List.of("-Dfabric.addMods=//evil.example/share/mod.jar", "-Dfabric.addMods=mod.jar",
+                "-DFabric.GameJarPath=x.jar", "-Djline.stty=x", "-Djline.sh=x", "-Dio.netty.native.workdir=x",
+                "-Dvelocity.natives-tmpdir=x", "-Dorg.bukkit.plugin.java.LibraryLoader.centralURL=x")) {
+            assertEquals(Verdict.FORBIDDEN, JvmFlagPolicy.check(flag), flag);
+        }
+        // A path, a URL, a drive or a parent folder as the value of a prefixed property is not listed.
+        for (String flag : List.of("-Dpaper.x=/tmp/y", "-Dvelocity.x=C:y", "-Dfabric.x=https://evil.example",
+                "-Dvectora.x=..", "-Dspark.x=a@b", "-Dgeyser.x=%41")) {
+            assertEquals(Verdict.NOT_LISTED, JvmFlagPolicy.check(flag), flag);
+        }
     }
 
     @Test
@@ -110,7 +130,7 @@ class JvmFlagPolicyTest {
     }
 
     @Test
-    void serviceRefusesNewFlagsButLoadsOldFilesWithAWarning() throws Exception {
+    void serviceKeepsTheOperatorsFlagsAndReportsThemAsWarnings() throws Exception {
         Files.createDirectories(root.resolve("groups"));
         Files.writeString(root.resolve("groups/lobby.yml"), """
                 schema-version: 1
@@ -129,11 +149,16 @@ class JvmFlagPolicyTest {
             assertEquals(List.of(ErrorCode.JVM_FLAG_FORBIDDEN), service.warnings().stream().map(ConfigError::code).toList());
             // Changing something else in the group keeps the old flag.
             service.apply(new SetGroupHeap("lobby", MemorySize.parse("512M"), MemorySize.parse("1G")));
-            ConfigException refused = assertThrows(ConfigException.class, () -> service.apply(new PutGroup("lobby",
-                    withFlags(Samples.lobbyGroup(), "-javaagent:spark.jar", "-agentpath:/tmp/x.so"))));
-            assertEquals(List.of(ErrorCode.JVM_FLAG_FORBIDDEN), refused.errors().stream().map(ConfigError::code).toList());
             assertTrue(Files.readString(root.resolve("groups/lobby.yml")).contains("-javaagent:spark.jar"));
-            assertFalse(Files.readString(root.resolve("groups/lobby.yml")).contains("agentpath"));
+            // The console is the operator's own: ConfigService itself does not refuse; the REST API does
+            // (ApiServerTest), and the flag shows up as a warning.
+            service.apply(new PutGroup("lobby", withFlags(Samples.lobbyGroup(), "-javaagent:spark.jar", "-Dmyplugin.x=1")));
+            assertEquals(List.of(ErrorCode.JVM_FLAG_FORBIDDEN, ErrorCode.JVM_FLAG_NOT_LISTED),
+                    service.warnings().stream().map(ConfigError::code).toList());
+            // The pattern and reserved-flag rules still apply to everyone.
+            assertThrows(ConfigException.class, () -> service.apply(new PutGroup("lobby",
+                    withFlags(Samples.lobbyGroup(), "-jar"))));
+            assertFalse(service.snapshot().groups().get("lobby").processOrDefaults().jvmFlags().contains("-jar"));
         }
     }
 

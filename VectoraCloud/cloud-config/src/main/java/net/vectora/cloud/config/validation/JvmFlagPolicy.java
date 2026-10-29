@@ -21,17 +21,23 @@ import net.vectora.cloud.config.model.GroupConfig;
  * falls into one of three classes ({@link #check}):
  * <ul>
  *   <li>{@link Verdict#ALLOWED}: on the allowlist (GC and sizing flags, boolean {@code -XX} flags,
- *       known system properties, module options, {@code -Xlog} to the console).</li>
+ *       known system properties, module options, {@code -Xlog} to the console). A system property
+ *       is allowed only by its exact name or, with a plain value, by the prefix of the server
+ *       software or a library it ships; any other name is {@link Verdict#NOT_LISTED}, because the
+ *       node cannot know what an unknown library does with it (Paper's library loader, for example,
+ *       takes its Maven repository from a property).</li>
  *   <li>{@link Verdict#FORBIDDEN}: loads code into the JVM, runs a command, opens remote access
  *       or bypasses a gate of the node (agents, {@code -Xbootclasspath}, {@code -XX:OnError=},
  *       JMX remote, {@code @argfiles}, {@code -Dcom.mojang.eula.agree}, ...).</li>
  *   <li>{@link Verdict#NOT_LISTED}: everything else.</li>
  * </ul>
  *
- * <p>Compatibility: files written by hand before the allowlist existed keep working. A flag that is
- * not allowed only becomes an error when a change through {@code ConfigService.apply} adds it
- * ({@link #refusedChanges}); a flag already in the file is reported as a warning ({@link #warnings}).
- * The pattern and reserved-flag checks of {@link ConfigValidator} apply in both cases.
+ * <p>Where it applies: a flag that is not allowed is an error when a change through the REST API
+ * adds it ({@link #refusedChanges}, called by {@code ApiRoutes} inside the operation it hands to
+ * {@code ConfigService.apply}). The console, the setup assistant and the files are the operator's
+ * own, who can change the node anyway; there and for flags already in a file it is a warning
+ * ({@link #warnings}), so files from before the allowlist keep working. The pattern and
+ * reserved-flag checks of {@link ConfigValidator} apply everywhere.
  */
 public final class JvmFlagPolicy {
 
@@ -83,12 +89,20 @@ public final class JvmFlagPolicy {
             "LargePageSizeInBytes", "NativeMemoryTracking", "ObjectAlignmentInBytes", "MarkStackSize",
             "MaxJavaStackTraceDepth", "AdaptiveSizePolicyWeight");
 
-    /** System properties that load classes or libraries, open remote access or bypass the node. */
+    /**
+     * System properties that load classes, libraries or jars, run a program, open remote access or
+     * bypass the node. Some of them sit under an allowed prefix ({@code fabric.addMods} loads extra
+     * mod jars from any path, {@code jline.stty}/{@code jline.sh} name the programs JLine 2 runs,
+     * Netty and Velocity load native libraries from their work folders).
+     */
     private static final List<String> FORBIDDEN_PROPERTIES = List.of(
             "java.system.class.loader", "java.security.manager", "java.security.policy", "java.security.properties",
             "java.library.path", "sun.boot.library.path", "java.class.path", "java.home", "java.ext.dirs",
             "java.endorsed.dirs", "jdk.attach.allowattachself", "java.rmi.server.codebase", "com.mojang.eula.agree",
-            "log4j.configurationfile", "log4j2.configurationfile", "log4j.configuration");
+            "log4j.configurationfile", "log4j2.configurationfile", "log4j.configuration",
+            "fabric.addmods", "fabric.gamejarpath", "fabric.classpathgroups", "fabric.remapclasspathfile",
+            "jline.sh", "jline.stty", "io.netty.native.workdir", "io.netty.tmpdir", "velocity.natives-tmpdir",
+            "org.bukkit.plugin.java.libraryloader.centralurl");
     /** Prefixes of system properties with the same problem. */
     private static final List<String> FORBIDDEN_PROPERTY_PREFIXES = List.of(
             "com.sun.management.jmxremote", "jdk.module.", "log4j2.script", "jdk.internal.", "java.security.");
@@ -99,20 +113,16 @@ public final class JvmFlagPolicy {
             "user.language", "user.country", "user.timezone", "java.awt.headless", "java.net.preferipv4stack",
             "java.net.preferipv6addresses", "log4j2.formatmsgnolookups", "using.aikars.flags", "aikars.new.flags",
             "ireallyknowwhatiamdoingiswear", "disable.watchdog");
-    /** Prefixes of allowed system properties (server software, libraries the servers ship). */
+    /**
+     * Prefixes of allowed system properties (server software, libraries the servers ship). Only with
+     * a plain value ({@link #PLAIN_VALUE}): a path or a URL under one of these prefixes could point a
+     * loader at a jar, a library or a repository somewhere else.
+     */
     private static final List<String> PROPERTY_PREFIXES = List.of(
             "paper.", "velocity.", "fabric.", "vectora.", "terminal.", "jline.", "io.netty.", "net.kyori.",
             "com.velocitypowered.", "geyser.", "floodgate.", "jdk.virtualthreadscheduler.", "spark.");
-    /**
-     * Namespaces of the JDK, logging, native loading, scripting and networking. A property in one of
-     * them is only allowed when it is listed above; any other name (a plugin's own switch such as
-     * {@code -Dmyplugin.debug=true}) is allowed, because the JVM and the server ignore it.
-     */
-    private static final List<String> RESERVED_PROPERTY_PREFIXES = List.of(
-            "java.", "javax.", "jdk.", "sun.", "com.sun.", "oracle.", "com.ibm.", "os.", "user.", "file.",
-            "path.", "line.", "native.", "jna.", "jnr.", "org.lwjgl.", "log4j", "org.apache.logging.", "logback.",
-            "org.slf4j.", "graal.", "polyglot.", "truffle.", "nashorn.", "http.", "https.", "ftp.", "socks",
-            "networkaddress.", "jndi.", "javafx.", "com.mojang.");
+    /** Value of a property allowed by its prefix: no path separator, drive, URL, {@code @} or {@code %}. */
+    private static final Pattern PLAIN_VALUE = Pattern.compile("[A-Za-z0-9_.,+-]{0,128}");
 
     private static final Set<String> SIMPLE = Set.of("-Xrs", "-Xnoclassgc", "-Xint", "-Xmixed", "-Xbatch",
             "-Xshare:auto", "-Xshare:on", "-Xshare:off", "-server", "--enable-preview", "-XX:+UnlockExperimentalVMOptions",
@@ -145,10 +155,12 @@ public final class JvmFlagPolicy {
         var property = PROPERTY.matcher(flag);
         if (property.matches()) {
             String name = property.group(1).toLowerCase(Locale.ROOT);
-            if (PROPERTIES.contains(name) || PROPERTY_PREFIXES.stream().anyMatch(name::startsWith)) {
+            if (PROPERTIES.contains(name)) {
                 return Verdict.ALLOWED;
             }
-            return RESERVED_PROPERTY_PREFIXES.stream().anyMatch(name::startsWith) ? Verdict.NOT_LISTED : Verdict.ALLOWED;
+            String text = property.group(2) == null ? "" : property.group(2).substring(1);
+            boolean plain = PLAIN_VALUE.matcher(text).matches() && !text.contains("..");
+            return plain && PROPERTY_PREFIXES.stream().anyMatch(name::startsWith) ? Verdict.ALLOWED : Verdict.NOT_LISTED;
         }
         if (flag.equals("-Xlog") || flag.startsWith("-Xlog:")) {
             return consoleLog(flag) ? Verdict.ALLOWED : Verdict.NOT_LISTED;
