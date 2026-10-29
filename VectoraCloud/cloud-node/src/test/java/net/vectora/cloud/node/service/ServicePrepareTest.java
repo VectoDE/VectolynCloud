@@ -44,6 +44,33 @@ class ServicePrepareTest {
     }
 
     @Test
+    void aHeldServiceDoesNotStartUntilTheHoldIsReleased() throws Exception {
+        try (TestNetwork net = TestNetwork.create(dir)) {
+            net.group("lobby", ServerKind.LOBBY, ServerSoftware.PAPER, TestNetwork.process("normal", "20s", null));
+            net.task("lobby", "lobby", TaskMode.STATIC, 0, 1);
+            try (ServiceManager manager = net.manager().build()) {
+                ServiceId lobby = new ServiceId("lobby-1");
+                ServiceManager.Hold hold = manager.holdStopped(lobby);
+                ServiceException refused = org.junit.jupiter.api.Assertions.assertThrows(ServiceException.class,
+                        () -> manager.start("lobby"));
+                assertTrue(refused.getMessage().contains("backup"), refused.getMessage());
+                // One hold at a time: a second backup or restore of the same service waits its turn.
+                org.junit.jupiter.api.Assertions.assertThrows(ServiceException.class, () -> manager.holdStopped(lobby));
+                hold.close();
+                hold.close();
+
+                // Counter-check: released, it starts; and a running service cannot be held.
+                manager.start("lobby");
+                TestNetwork.await("lobby-1 running", WAIT, () -> manager.find(lobby)
+                        .map(info -> info.state() == ServiceState.RUNNING).orElse(false));
+                ServiceException running = org.junit.jupiter.api.Assertions.assertThrows(ServiceException.class,
+                        () -> manager.holdStopped(lobby));
+                assertTrue(running.getMessage().contains("running"), running.getMessage());
+            }
+        }
+    }
+
+    @Test
     void aStopWhilePreparedEndsAsStoppedAndNoProcessStarts() throws Exception {
         try (TestNetwork net = TestNetwork.create(dir)) {
             net.group("lobby", ServerKind.LOBBY, ServerSoftware.PAPER, TestNetwork.process("normal", "20s", null));

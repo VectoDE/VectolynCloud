@@ -219,6 +219,42 @@ class ServiceLifecycleIntegrationTest {
     }
 
     @Test
+    void aCrashRestartPassesTheStartGateAndARefusalKeepsItCrashed() throws Exception {
+        try (TestNetwork net = TestNetwork.create(dir)) {
+            RestartConfig once = new RestartConfig(true, 3, TimeSpan.parse("0s"), TimeSpan.parse("1s"));
+            net.group("lobby", ServerKind.LOBBY, ServerSoftware.PAPER, TestNetwork.process("crash", "5s", once));
+            net.task("lobby", "lobby", TaskMode.STATIC, 1, 1);
+            java.util.concurrent.atomic.AtomicInteger gate = new java.util.concurrent.atomic.AtomicInteger();
+            java.util.concurrent.atomic.AtomicBoolean refuse = new java.util.concurrent.atomic.AtomicBoolean();
+            Recorder recorder = new Recorder();
+            try (ServiceManager manager = net.manager().startGate(() -> {
+                gate.incrementAndGet();
+                if (refuse.get()) {
+                    throw new ServiceException("the database is not reachable");
+                }
+            }).build()) {
+                manager.addListener(recorder);
+                manager.startConfigured();
+                TestNetwork.await("a restart", WAIT, () -> recorder.of("lobby-1").stream()
+                        .filter(s -> s.equals("STARTING")).count() == 2);
+                assertTrue(gate.get() >= 2, "the restart after the crash asked the gate too: " + gate.get());
+                // The database goes away: the next restart is refused and the service stays CRASHED.
+                refuse.set(true);
+                int before = gate.get();
+                TestNetwork.await("the gate refused", WAIT, () -> gate.get() > before
+                        && manager.find(new ServiceId("lobby-1")).orElseThrow().state() == ServiceState.CRASHED);
+                Thread.sleep(2500);
+                long starts = recorder.of("lobby-1").stream().filter(s -> s.equals("STARTING")).count();
+                int asked = gate.get();
+                Thread.sleep(2500);
+                assertEquals(asked, gate.get(), "a refused restart is not tried again");
+                assertEquals(starts, recorder.of("lobby-1").stream().filter(s -> s.equals("STARTING")).count());
+                assertEquals(ServiceState.CRASHED, manager.find(new ServiceId("lobby-1")).orElseThrow().state());
+            }
+        }
+    }
+
+    @Test
     void aCrashRestartIsRefusedOnceTheEulaIsTakenBack() throws Exception {
         try (TestNetwork net = TestNetwork.create(dir)) {
             RestartConfig later = new RestartConfig(true, 3, TimeSpan.parse("2s"), TimeSpan.parse("2s"));
