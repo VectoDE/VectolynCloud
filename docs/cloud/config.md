@@ -4,7 +4,7 @@ Module `cloud/config`, package `net.vectora.cloud.config`. This is the one confi
 
 ## Files in the cloud home
 
-The cloud home is the folder the cloud runs in (`VECTORA_HOME`, by default the folder of the start script). It is not part of the repository.
+The cloud home is the folder the cloud runs in (`VECTORA_HOME`, by default the folder of the start script). It is not part of the repository: put it outside the checkout. If the cloud is started in the repository root by mistake, `.gitignore` keeps its files (`cloud.yml`, `nodes.yml`, `groups/`, `tasks/`, `backups/`, `state/`, `cache/`, `temp/`, the server folders) out of commits, but backups and secrets would still sit inside the working tree.
 
 ```
 <home>/cloud.yml           network and this node

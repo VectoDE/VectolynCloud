@@ -145,11 +145,13 @@ val templateResources = tasks.register<TemplateIndex>("templateResources") {
     description = "Puts the server templates and their index into the node's resources."
     templatesRoot = templatesDir
     // Only what the repository tracks belongs in the jar: never a plugin jar or a key someone put
-    // into a template folder of their checkout. Files directly in templates/ (placeholders.md) are
-    // documentation, not a template.
+    // into a template folder of their checkout, and never runtime data or secrets of a cloud home
+    // that was started inside a template folder. Files directly in templates/ (placeholders.md)
+    // are documentation, not a template.
     templates.from(templatesDir.asFileTree.matching {
         include("*/**")
         exclude("*.md")
+        exclude("**/runtime/**", "**/runtime-*/**", "**/secrets/**")
         exclude("**/*.jar", "**/key.pem", "**/*.key", "**/*.secret", "**/*.p12", "**/*.jks", "**/.*", "**/.*/**")
     })
     outputDirectory = layout.buildDirectory.dir("generated/template-resources")

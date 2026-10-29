@@ -101,7 +101,7 @@ The usual way is a fat jar built with the Shadow plugin, which merges all classe
 - **Verifiable.** Each library keeps its published bytes, so its SHA-256 can be compared with Maven Central and is checked on every start. A merged jar can only be checked as a whole.
 - **Nothing to merge.** No conflicts between `META-INF/services` files, `module-info.class`, multi-release `META-INF/versions/` trees, license and notice files, or signature files of signed jars. Shadow needs transformer rules for each of these and fails silently when one is missing.
 - **Checks before loading.** The launcher classes are the only code on the application class path. Nothing of the node or its libraries is loaded before the Java, root and argument checks have passed.
-- **No third-party build plugin.** One supply-chain dependency less in the build; the packing is a few lines in `cloud-launcher/build.gradle.kts`.
+- **No third-party build plugin.** One supply-chain dependency less in the build; the packing is a few lines in `cloud/launcher/build.gradle.kts`.
 
 The cost: the first start of each version writes the libraries to `cache/libs/<version>` (about 7 MB with the stage-2 scaffold), and code that relies on the system class loader instead of the context class loader does not see the node's classes.
 

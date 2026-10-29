@@ -10,6 +10,30 @@ Server-Network/
 # Runtime folders of a cloud home that was put inside the checkout by mistake.
 **/runtime/
 **/runtime-*/
+# A cloud home started in the repository root (working directory = checkout). The home belongs
+# outside the repository; these root-anchored entries only keep its files out of commits.
+/cloud.yml
+/nodes.yml
+/software.lock.yml
+/backup.yml
+/monitor.yml
+/groups/
+/tasks/
+/backups/
+/state/
+/cache/
+/temp/
+/jre/
+/Proxy/
+/Legacy-Proxy/
+/Lobby-Server/
+/Survival-Server/
+/Creative-Server/
+/Mod-Server/
+/End-Server/
+/Minigame-Server/
+/Legacy-Server/
+/Database/
 
 # --- Secrets -------------------------------------------------------------------
 **/secrets/*
