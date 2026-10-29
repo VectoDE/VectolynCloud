@@ -196,11 +196,13 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
+      # On Windows harden-runner's agent only becomes active about a minute into the job and
+      # then cuts off downloads already running (seen with Gradle), so Windows only audits.
       - name: Harden runner
         if: runner.os == 'Linux'
         uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
-          egress-policy: block
+          egress-policy: ${{ runner.os == 'Windows' && 'audit' || 'block' }}
           allowed-endpoints: >
             github.com:443
             api.github.com:443

@@ -21,7 +21,7 @@ Die erste Runde dieser Prüfung war [Issue #71](https://github.com/VectoDE/Vecto
 - **Binary-Artifacts:** Die einzige Binärdatei ist `gradle/wrapper/gradle-wrapper.jar`. [`gradle-wrapper.yml`](../.github/workflows/gradle-wrapper.yml) prüft sie gegen die Prüfsummen, die Gradle veröffentlicht, und `distributionSha256Sum` pinnt die Distribution. Scorecard akzeptiert die Datei nur, wenn dieser Workflow zum Zeitpunkt der Analyse einen erfolgreichen Lauf auf dem neuesten Commit von `main` hat. Deshalb wartet `scorecard.yml` auf ihn.
 - **Fuzzing:** Jazzer-Fuzz-Tests in den Modulen, in jedem Testlauf mit den gespeicherten Eingaben wiederholt und jede Nacht gefuzzt ([`fuzz-nightly.yml`](../.github/workflows/fuzz-nightly.yml)).
 - **Prüfung der Abhängigkeiten:** Jede Gradle-Abhängigkeit wird gegen eine SHA-256-Prüfsumme geprüft, und die CI schlägt fehl, wenn ein Pull Request das abschwächt ([dependency-verification.de.md](dependency-verification.de.md)).
-- **Ausgehender Verkehr:** Jeder Linux-Job startet `step-security/harden-runner` mit `egress-policy: block` und einer eigenen Liste erlaubter Hosts. Braucht ein Job einen neuen Host, schlägt er fehl, bis der Host im Review ergänzt ist. harden-runner gibt es nur für Linux; die Windows- und macOS-Jobs laufen ohne.
+- **Ausgehender Verkehr:** Jeder Job startet `step-security/harden-runner` mit `egress-policy: block` und einer eigenen Liste erlaubter Hosts. Braucht ein Job einen neuen Host, schlägt er fehl, bis der Host im Review ergänzt ist. Unter Windows wird der Agent von harden-runner erst etwa eine Minute nach Jobbeginn aktiv und bricht dann laufende Downloads ab. Die Windows-Jobs protokollieren deshalb nur.
 
 ## Was vorerst nicht 10 erreicht
 

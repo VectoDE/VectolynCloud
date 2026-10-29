@@ -21,7 +21,7 @@ The first round of this check was [issue #71](https://github.com/VectoDE/Vectora
 - **Binary-Artifacts:** the only binary is `gradle/wrapper/gradle-wrapper.jar`. [`gradle-wrapper.yml`](../.github/workflows/gradle-wrapper.yml) checks it against the checksums Gradle publishes, and `distributionSha256Sum` pins the distribution. Scorecard accepts the jar only if that workflow has a successful run on the newest commit of `main` when Scorecard looks, so `scorecard.yml` waits for it.
 - **Fuzzing:** Jazzer fuzz tests in the modules, replayed in every test run and fuzzed nightly ([`fuzz-nightly.yml`](../.github/workflows/fuzz-nightly.yml)).
 - **Dependency verification:** every Gradle dependency is checked against a SHA-256 checksum, and CI fails if a pull request weakens that ([dependency-verification.md](dependency-verification.md)).
-- **Egress:** every Linux job runs `step-security/harden-runner` with `egress-policy: block` and its own list of allowed hosts. A job that needs a new host fails until the host is added in review. harden-runner only works on Linux; the Windows and macOS jobs run without it.
+- **Egress:** every job runs `step-security/harden-runner` with `egress-policy: block` and its own list of allowed hosts. A job that needs a new host fails until the host is added in review. On Windows the harden-runner agent only becomes active about a minute into a job and then cuts off downloads that are already running, so the Windows jobs only audit.
 
 ## What cannot reach 10 for now
 
