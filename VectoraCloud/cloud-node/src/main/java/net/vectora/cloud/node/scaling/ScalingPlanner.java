@@ -54,7 +54,9 @@ import net.vectora.protocol.ServiceId;
  * is not lost. Static services are never emptied or stopped, proxies never scaled. A static
  * service above {@code static-services} (the number was lowered) counts as dynamic: of the static
  * services of a task the ones with the lowest indices stay static. A load that is not known (a
- * running service of the group without a player count) blocks both scale-up and scale-down.
+ * running service of the group without a player count) blocks both scale-up and scale-down. A
+ * service being emptied counts neither for {@code min-services} nor for the load, and is never
+ * chosen a second time.
  */
 public final class ScalingPlanner {
 
@@ -279,7 +281,7 @@ public final class ScalingPlanner {
         ScalingConfig scaling = task.scaling();
         List<ServiceInfo> mine = in.services().stream().filter(s -> name.equals(s.task())).toList();
         Set<ServiceId> demoted = demoted(mine, scaling);
-        long counted = mine.stream().filter(s -> counts(s, in.released(), demoted)).count();
+        long counted = mine.stream().filter(s -> counts(s, in.released(), in.draining(), demoted)).count();
         if (counted >= scaling.minServices()) {
             return null;
         }
@@ -337,7 +339,7 @@ public final class ScalingPlanner {
         }
         List<ServiceInfo> mine = in.services().stream().filter(s -> name.equals(s.task())).toList();
         Set<ServiceId> demoted = demoted(mine, scaling);
-        long counted = mine.stream().filter(s -> counts(s, in.released(), demoted)).count();
+        long counted = mine.stream().filter(s -> counts(s, in.released(), in.draining(), demoted)).count();
         long occupying = mine.stream().filter(ScalingPlanner::occupiesASlot).count();
         Instant paused = in.pausedUntil().get(name);
         boolean isPaused = paused != null && in.now().isBefore(paused);
@@ -402,7 +404,7 @@ public final class ScalingPlanner {
         ScalingConfig scaling = config.scaling();
         List<ServiceInfo> mine = services.stream().filter(s -> task.equals(s.task())).toList();
         Set<ServiceId> demoted = demoted(mine, scaling);
-        long counted = mine.stream().filter(s -> counts(s, released, demoted)).count();
+        long counted = mine.stream().filter(s -> counts(s, released, draining, demoted)).count();
         if (counted <= scaling.minServices()) {
             return Optional.empty();
         }
@@ -481,8 +483,15 @@ public final class ScalingPlanner {
         return s.mode() == TaskMode.DYNAMIC || demoted.contains(s.id());
     }
 
-    /** Counts toward {@code min-services}. */
-    private static boolean counts(ServiceInfo s, Set<ServiceId> released, Set<ServiceId> demoted) {
+    /**
+     * Counts toward {@code min-services}. A service being emptied does not: it is about to stop, so
+     * a service of the task that crashes meanwhile is replaced at once.
+     */
+    private static boolean counts(ServiceInfo s, Set<ServiceId> released, Set<ServiceId> draining,
+                                  Set<ServiceId> demoted) {
+        if (draining.contains(s.id())) {
+            return false;
+        }
         if (!isDynamic(s, demoted)) {
             // A released one still stopping counts until it has stopped, so it comes back at its own
             // index and no second static service is started next to it.

@@ -241,6 +241,15 @@ class ScalingPlannerTest {
     }
 
     @Test
+    void aServiceBeingEmptiedDoesNotCountForMinServices() {
+        Scenario s = new Scenario().task("minigame", TaskMode.DYNAMIC, 2, 3)
+                .running("minigame", 1, TaskMode.DYNAMIC, 10).running("minigame", 2, TaskMode.DYNAMIC, 0);
+        assertEquals(List.of(), s.plan(), "two of two");
+        s.draining.add(new ServiceId("minigame-2"));
+        assertEquals(List.of(new Start("minigame", OptionalInt.empty(), Reason.MIN_SERVICES)), s.plan());
+    }
+
+    @Test
     void theCooldownSpacesTheDecisionsOfATask() {
         Scenario s = new Scenario().task("minigame", TaskMode.DYNAMIC, 1, 3).running("minigame", 1, TaskMode.DYNAMIC, 40);
         s.lastAction.put("minigame", NOW.minusSeconds(59));

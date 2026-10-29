@@ -63,8 +63,10 @@ import net.vectora.protocol.ServiceId;
  * Nothing happens before the setup is complete and the EULA accepted, while {@link #suspend} is on
  * (the {@code setup} command saves in steps), and after {@link #close()}.
  *
- * <p>Starts and stops run on their own threads, at most one per task at a time; a round never
- * waits for a server.
+ * <p>Starts and stops run on their own threads; a round never waits for a server. The starts of a
+ * task run one after the other, and the task gets no other decision meanwhile. A service being
+ * emptied does not hold its task: while it waits for its players to move, a crashed service of
+ * the task is replaced and the task may grow.
  */
 public final class Autoscaler implements ServiceListener, AutoCloseable {
 
@@ -226,20 +228,30 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
         for (Map.Entry<String, List<Decision>> entry : perTask.entrySet()) {
             String task = entry.getKey();
             List<Decision> batch = List.copyOf(entry.getValue());
+            // Starts keep the task busy until they are done. A drain does not: it may take the whole
+            // drain-timeout, and the task must still be filled up or grow meanwhile. Its service is
+            // marked as being emptied right here, before the next round can plan, so the planner
+            // never chooses it again and counts it neither for min-services nor for the load.
+            boolean holdsTask = batch.stream().noneMatch(Drain.class::isInstance);
             synchronized (lock) {
                 if (closed) {
                     break;
                 }
-                busy.add(task);
+                if (holdsTask) {
+                    busy.add(task);
+                } else {
+                    batch.forEach(d -> draining.add(((Drain) d).service()));
+                    lowSince.remove(task);
+                }
                 lastAction.put(task, now);
                 lastHold.remove(task);
             }
             done.addAll(batch);
             try {
-                actions.execute(() -> carryOut(task, batch, snapshot));
+                actions.execute(() -> carryOut(task, batch, holdsTask, snapshot));
             } catch (RejectedExecutionException e) {
                 synchronized (lock) {
-                    busy.remove(task);
+                    release(task, batch, holdsTask);
                 }
             }
         }
@@ -299,7 +311,7 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
         pausedWith.keySet().retainAll(pausedUntil.keySet());
     }
 
-    private void carryOut(String task, List<Decision> batch, ConfigSnapshot snapshot) {
+    private void carryOut(String task, List<Decision> batch, boolean holdsTask, ConfigSnapshot snapshot) {
         try {
             for (Decision decision : batch) {
                 synchronized (lock) {
@@ -311,7 +323,22 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
             }
         } finally {
             synchronized (lock) {
-                busy.remove(task);
+                release(task, batch, holdsTask);
+            }
+        }
+    }
+
+    /**
+     * Ends what {@link #tick} marked for a batch: the busy task, or the services being emptied.
+     * Holds {@code lock}.
+     */
+    private void release(String task, List<Decision> batch, boolean holdsTask) {
+        if (holdsTask) {
+            busy.remove(task);
+        }
+        for (Decision decision : batch) {
+            if (decision instanceof Drain drain) {
+                draining.remove(drain.service());
             }
         }
     }
@@ -344,9 +371,7 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
      * the next attempt.
      */
     private void drainAndStop(Drain drain, ConfigSnapshot snapshot) throws ServiceException {
-        synchronized (lock) {
-            draining.add(drain.service());
-        }
+        // tick() has put the service into draining already.
         try {
             LOG.log(System.Logger.Level.INFO, "Scaling: the players of {0} of task {1} are moved to other servers ({2})",
                     drain.service(), drain.task(), describe(drain.reason(), snapshot.tasks().get(drain.task())));
