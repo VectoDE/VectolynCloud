@@ -12,7 +12,7 @@ junit = "6.1.3"
 snakeyaml = "2.7"
 # VectoraCloud runtime libraries, reasons in docs/cloud/architecture.md.
 netty = "4.2.19.Final"
-jline = "3.30.17"
+jline = "4.4.8"
 jackson = "3.2.4"
 mariadb-java-client = "4.0.0"
 # Fuzz tests (test scope only), see build-logic/src/main/kotlin/vectora.fuzz-conventions.gradle.kts.
