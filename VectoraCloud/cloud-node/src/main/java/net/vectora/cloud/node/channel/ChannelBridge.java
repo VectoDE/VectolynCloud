@@ -60,7 +60,8 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
 
     private static final System.Logger LOG = System.getLogger(ChannelBridge.class.getName());
 
-    private final ServiceManager services;
+    private final Services services;
+    private final Ticker ticker;
     private final Map<ServiceId, ServiceStatus> statuses = new ConcurrentHashMap<>();
     /** Backends sent to the proxies, with the message, so they can be removed after they are gone. */
     private final Map<ServiceId, RegisterServer> registered = new ConcurrentHashMap<>();
@@ -75,7 +76,7 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
     private final Map<ServiceId, Integer> sentSlots = new ConcurrentHashMap<>();
     /** Time between two looks at the players of a backend being emptied. */
     static final Duration DRAIN_POLL = Duration.ofMillis(250);
-    private volatile CloudNetworkServer server;
+    private volatile Channel channel;
     private volatile PlayerListener playerListener;
     private volatile Consumer<ServiceStatus> statusListener;
 
@@ -85,9 +86,136 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
      * @param services the service core
      */
     public ChannelBridge(ServiceManager services) {
-        this.services = Objects.requireNonNull(services, "services");
-        this.players = new NetworkPlayers(services::backendNamed);
+        this(Services.of(services), Ticker.SYSTEM);
         services.addListener(this);
+    }
+
+    /** For tests: a fake service core and a clock of its own; nothing is registered. */
+    ChannelBridge(Services services, Ticker ticker) {
+        this.services = Objects.requireNonNull(services, "services");
+        this.ticker = Objects.requireNonNull(ticker, "ticker");
+        this.players = new NetworkPlayers(services::backendNamed);
+    }
+
+    /** What the bridge asks the service core; {@link ServiceManager} in the node, a fake in tests. */
+    interface Services {
+        boolean markReady(ServiceId id);
+
+        Optional<Boolean> proxyKind(ServiceId id);
+
+        Optional<Boolean> backendKind(ServiceId backend);
+
+        Optional<ServiceId> backendNamed(ServiceId proxy, ServiceId name);
+
+        Optional<RegisterServer> registration(ServiceId backend);
+
+        Map<ServiceId, RegisterServer> registrations(boolean legacy);
+
+        List<ServiceId> runningProxies(boolean legacy);
+
+        OptionalInt slots(ServiceId backend);
+
+        /** Whether the service is known and has a process (or is about to get one) right now. */
+        boolean hasProcess(ServiceId id);
+
+        static Services of(ServiceManager manager) {
+            Objects.requireNonNull(manager, "manager");
+            return new Services() {
+                @Override
+                public boolean markReady(ServiceId id) {
+                    return manager.markReady(id);
+                }
+
+                @Override
+                public Optional<Boolean> proxyKind(ServiceId id) {
+                    return manager.proxyKind(id);
+                }
+
+                @Override
+                public Optional<Boolean> backendKind(ServiceId backend) {
+                    return manager.backendKind(backend);
+                }
+
+                @Override
+                public Optional<ServiceId> backendNamed(ServiceId proxy, ServiceId name) {
+                    return manager.backendNamed(proxy, name);
+                }
+
+                @Override
+                public Optional<RegisterServer> registration(ServiceId backend) {
+                    return manager.registration(backend);
+                }
+
+                @Override
+                public Map<ServiceId, RegisterServer> registrations(boolean legacy) {
+                    return manager.registrations(legacy);
+                }
+
+                @Override
+                public List<ServiceId> runningProxies(boolean legacy) {
+                    return manager.runningProxies(legacy);
+                }
+
+                @Override
+                public OptionalInt slots(ServiceId backend) {
+                    return manager.slots(backend);
+                }
+
+                @Override
+                public boolean hasProcess(ServiceId id) {
+                    return manager.find(id).map(now -> now.state().hasProcess()).orElse(false);
+                }
+            };
+        }
+    }
+
+    /** Where the bridge sends; the cloud network server in the node, a fake in tests. */
+    interface Channel {
+        boolean isConnected(ServiceId service);
+
+        void send(ServiceId service, Message message);
+
+        void disconnect(ServiceId service, Disconnect.Reason reason);
+
+        static Channel of(CloudNetworkServer server) {
+            Objects.requireNonNull(server, "server");
+            return new Channel() {
+                @Override
+                public boolean isConnected(ServiceId service) {
+                    return server.isConnected(service);
+                }
+
+                @Override
+                public void send(ServiceId service, Message message) {
+                    server.send(service, message);
+                }
+
+                @Override
+                public void disconnect(ServiceId service, Disconnect.Reason reason) {
+                    server.disconnect(service, reason);
+                }
+            };
+        }
+    }
+
+    /** The time of {@link #drain}; the system clock in the node, a fake in tests. */
+    interface Ticker {
+        /** The system clock and {@link Thread#sleep}. */
+        Ticker SYSTEM = new Ticker() {
+            @Override
+            public long nanoTime() {
+                return System.nanoTime();
+            }
+
+            @Override
+            public void sleep(Duration duration) throws InterruptedException {
+                Thread.sleep(duration.toMillis());
+            }
+        };
+
+        long nanoTime();
+
+        void sleep(Duration duration) throws InterruptedException;
     }
 
     /**
@@ -105,7 +233,12 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
      * @param value the server
      */
     public void attach(CloudNetworkServer value) {
-        this.server = Objects.requireNonNull(value, "value");
+        attach(Channel.of(value));
+    }
+
+    /** For tests: a fake channel. */
+    void attach(Channel value) {
+        this.channel = Objects.requireNonNull(value, "value");
     }
 
     /**
@@ -125,7 +258,7 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
      * @return whether it has an authenticated connection
      */
     public boolean isConnected(ServiceId id) {
-        CloudNetworkServer current = server;
+        Channel current = channel;
         return current != null && current.isConnected(id);
     }
 
@@ -237,13 +370,13 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
         }
         // Events arrive a moment later; if the service has been started again meanwhile, its new
         // connection must stay.
-        if (services.find(service.id()).map(now -> now.state().hasProcess()).orElse(false)) {
+        if (services.hasProcess(service.id())) {
             return;
         }
         statuses.remove(service.id());
         players.proxyEnded(service.id());
         lists.proxyEnded(service.id());
-        CloudNetworkServer current = server;
+        Channel current = channel;
         if (current != null) {
             current.disconnect(service.id(), Disconnect.Reason.SHUTDOWN);
         }
@@ -330,7 +463,7 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
         boolean empty = false;
         try {
             Set<UUID> sent = new HashSet<>();
-            long deadline = System.nanoTime() + timeout.toNanos();
+            long deadline = ticker.nanoTime() + timeout.toNanos();
             while (true) {
                 // Read again on every look: a player who reached the server while it was being
                 // closed is moved as well.
@@ -339,10 +472,10 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
                     return false;
                 }
                 empty = isEmpty(backend);
-                if (empty || System.nanoTime() >= deadline) {
+                if (empty || ticker.nanoTime() - deadline >= 0) {
                     return empty;
                 }
-                Thread.sleep(DRAIN_POLL.toMillis());
+                ticker.sleep(DRAIN_POLL);
             }
         } finally {
             if (!empty) {
@@ -457,7 +590,7 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
     }
 
     private boolean send(ServiceId proxy, Message message) {
-        CloudNetworkServer current = server;
+        Channel current = channel;
         if (current != null && current.isConnected(proxy)) {
             current.send(proxy, message);
             return true;
