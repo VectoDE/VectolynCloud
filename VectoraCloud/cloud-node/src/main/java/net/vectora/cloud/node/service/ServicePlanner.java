@@ -9,9 +9,9 @@ import java.util.Optional;
 import net.vectora.cloud.config.model.CloudConfig;
 import net.vectora.cloud.config.model.ConfigSnapshot;
 import net.vectora.cloud.config.model.GroupConfig;
+import net.vectora.cloud.config.model.GroupRules;
 import net.vectora.cloud.config.model.RestartConfig;
 import net.vectora.cloud.config.model.ServerKind;
-import net.vectora.cloud.config.model.ServerSoftware;
 import net.vectora.cloud.config.model.TaskConfig;
 import net.vectora.cloud.config.model.TaskMode;
 import net.vectora.cloud.config.model.WantedServers;
@@ -26,122 +26,76 @@ public final class ServicePlanner {
     public static final String DYNAMIC_DIR = "temp/services";
 
     /** Template folder of the legacy proxy (Velocity with {@code bungeeguard}, in front of the 1.8.8 groups). */
-    public static final String LEGACY_PROXY_TEMPLATE = "Legacy-Proxy";
+    public static final String LEGACY_PROXY_TEMPLATE = GroupRules.LEGACY_PROXY_TEMPLATE;
 
     private ServicePlanner() {
     }
 
     /**
-     * The server kind whose template a group uses.
+     * The server kind whose template a group uses ({@link GroupRules#kindOf}).
      *
      * @param group the group
-     * @return the kind, or empty for a template that is none of the nine known folders
+     * @return the kind, or empty for a template that is none of the known folders
      */
     public static Optional<ServerKind> kindOf(GroupConfig group) {
-        for (ServerKind kind : ServerKind.values()) {
-            if (kind.templateFolder().equals(group.template())) {
-                return Optional.of(kind);
-            }
-        }
-        return Optional.empty();
+        return GroupRules.kindOf(group);
     }
 
     /**
-     * The switch under {@code servers:} in {@code cloud.yml} that a group follows: the server kind
-     * of its template, and {@link ServerKind#LEGACY_SERVER} for a PandaSpigot group on a template
-     * of its own, because every PandaSpigot server is a 1.8.8 server behind the legacy proxy.
+     * The switch under {@code servers:} that a group follows ({@link GroupRules#switchOf}).
      *
      * @param group the group
      * @return the switch, or empty for a group of the operator's own that no switch covers
      */
     public static Optional<ServerKind> switchOf(GroupConfig group) {
-        Optional<ServerKind> kind = kindOf(group);
-        if (kind.isEmpty() && group.software() == ServerSoftware.PANDASPIGOT) {
-            return Optional.of(ServerKind.LEGACY_SERVER);
-        }
-        return kind;
+        return GroupRules.switchOf(group);
     }
 
     /**
-     * Tells whether a group is wanted by its own switch and by the switch of its server kind:
-     * <ul>
-     *   <li>{@code wanted: false} in the group file switches the group off, whatever its kind
-     *       (for example one minigame out of several);</li>
-     *   <li>a group on one of the known templates, and every PandaSpigot group, also needs its
-     *       switch under {@code servers:} in {@code cloud.yml} (see {@link #switchOf});</li>
-     *   <li>the database template is never a service of the node (the database module runs it);</li>
-     *   <li>any other group is the operator's own and counts as wanted; whether it runs is decided
-     *       by its task.</li>
-     * </ul>
-     * This overload does not look at {@code legacy-proxy.enabled}; the node uses
-     * {@link #isWanted(GroupConfig, CloudConfig)}.
+     * Whether a group is wanted by its own switch and by the switch of its server kind, without
+     * {@code legacy-proxy.enabled} ({@link GroupRules#isWanted(GroupConfig, WantedServers)}).
      *
      * @param group  the group
      * @param wanted the switches from {@code cloud.yml}
      * @return whether services of the group may be created
      */
     public static boolean isWanted(GroupConfig group, WantedServers wanted) {
-        if (!group.wantedOrDefault()) {
-            return false;
-        }
-        Optional<ServerKind> kind = switchOf(group);
-        if (kind.isEmpty()) {
-            return true;
-        }
-        return kind.get() != ServerKind.DATABASE && wanted.isWanted(kind.get());
+        return GroupRules.isWanted(group, wanted);
     }
 
     /**
-     * Like {@link #isWanted(GroupConfig, WantedServers)}, and the 1.8.8 part of the network (the
-     * legacy proxy, every PandaSpigot group and every group on the {@code Legacy-Server} template)
-     * only while {@code legacy-proxy.enabled} is set. This is the rule for planning, for starts,
-     * for the proxy lists and for {@link ServiceManager#stopUnwanted()} after a reload.
+     * The rule for planning, for starts, for the proxy lists and for
+     * {@link ServiceManager#stopUnwanted()} after a reload
+     * ({@link GroupRules#isWanted(GroupConfig, CloudConfig)}); the API reports the same as
+     * {@code runs}.
      *
      * @param group the group
      * @param cloud {@code cloud.yml}
      * @return whether services of the group may be created
      */
     public static boolean isWanted(GroupConfig group, CloudConfig cloud) {
-        if (needsLegacyProxy(group) && !cloud.legacyProxy().enabled()) {
-            return false;
-        }
-        return isWanted(group, cloud.servers());
+        return GroupRules.isWanted(group, cloud);
     }
 
     /**
-     * Tells why a group is not wanted, for messages. Only meaningful if
-     * {@link #isWanted(GroupConfig, CloudConfig)} is false.
+     * Why a group is not wanted, for messages ({@link GroupRules#unwantedBecause}).
      *
      * @param group the group
      * @param cloud {@code cloud.yml}
      * @return the setting that switches it off, for example {@code servers.lobby}
      */
     public static String unwantedBecause(GroupConfig group, CloudConfig cloud) {
-        if (needsLegacyProxy(group) && !cloud.legacyProxy().enabled()) {
-            return "cloud.yml legacy-proxy.enabled";
-        }
-        if (!group.wantedOrDefault()) {
-            return "wanted: false in its group file";
-        }
-        return switchOf(group).map(kind -> kind == ServerKind.DATABASE
-                ? "the database template runs no service"
-                : "cloud.yml servers." + kind.key()).orElse("cloud.yml servers");
-    }
-
-    /** The legacy proxy and the 1.8.8 servers run only together with {@code legacy-proxy.enabled}. */
-    private static boolean needsLegacyProxy(GroupConfig group) {
-        return isLegacy(group) || kindOf(group).orElse(null) == ServerKind.LEGACY_SERVER;
+        return GroupRules.unwantedBecause(group, cloud);
     }
 
     /**
-     * Tells whether a group belongs to the 1.8.8 part of the network: the legacy proxy (template
-     * {@value #LEGACY_PROXY_TEMPLATE}) or a PandaSpigot server.
+     * Whether a group belongs to the 1.8.8 part of the network ({@link GroupRules#isLegacy}).
      *
      * @param group the group
      * @return whether it runs behind or as the legacy proxy
      */
     public static boolean isLegacy(GroupConfig group) {
-        return group.software() == ServerSoftware.PANDASPIGOT || LEGACY_PROXY_TEMPLATE.equals(group.template());
+        return GroupRules.isLegacy(group);
     }
 
     /**
