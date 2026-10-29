@@ -26,4 +26,6 @@ tasks.withType<Test>().configureEach {
     // The console's terminal providers call native code; Java 24+ warns unless it is allowed.
     // VectoraCloud.jar declares the same in its manifest (Enable-Native-Access, PR 14).
     jvmArgs("--enable-native-access=ALL-UNNAMED")
+    // NodeDatabaseProcessesTest checks that no VECTORA_ variable of the node reaches MariaDB.
+    environment("VECTORA_TEST_ENV_MARKER", "leak")
 }

@@ -32,12 +32,28 @@ public final class NodeMain {
      * @throws IllegalStateException if a node already runs in this JVM
      */
     public static void start(Map<String, String> settings) throws IOException, ConfigException, EnvFormatException {
-        NodeSettings parsed = NodeSettings.parse(settings);
+        start(NodeSettings.parse(settings), options -> { });
+    }
+
+    /**
+     * Opens and starts a node with replaced parts and registers the shutdown hook that closes it
+     * on Ctrl+C, {@code SIGTERM} or {@code docker stop}. {@link #start(Map)} with the real parts;
+     * the signal test with test parts.
+     *
+     * @param parsed the settings
+     * @param customize see {@link CloudNode.Options}
+     * @return the running node
+     * @throws IOException        if the cloud home cannot be read or written
+     * @throws ConfigException    if the configuration is invalid
+     * @throws EnvFormatException if {@code secrets/vectora.env} is malformed
+     */
+    static CloudNode start(NodeSettings parsed, java.util.function.Consumer<CloudNode.Options> customize)
+            throws IOException, ConfigException, EnvFormatException {
         synchronized (NodeMain.class) {
             if (current != null) {
                 throw new IllegalStateException("a node already runs in this JVM");
             }
-            CloudNode node = CloudNode.open(parsed, options -> { });
+            CloudNode node = CloudNode.open(parsed, customize);
             try {
                 node.start();
             } catch (IOException | RuntimeException e) {
@@ -46,6 +62,7 @@ public final class NodeMain {
             }
             Runtime.getRuntime().addShutdownHook(new Thread(node::close, "vectora-shutdown"));
             current = node;
+            return node;
         }
     }
 
