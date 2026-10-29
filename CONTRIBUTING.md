@@ -48,6 +48,7 @@ Forgot it? `git commit --amend -s` for the last commit, `git rebase --signoff ma
 - No formatter is configured yet. Match the surrounding code: 4 spaces, no wildcard imports, clear names over comments.
 - New logic needs tests. Bug fixes get a test that fails without the fix where that is practical.
 - Code that parses untrusted input (network frames, config files, downloads, API requests) also gets a Jazzer `@FuzzTest`. See [docs/cloud/architecture.md](docs/cloud/architecture.md#fuzz-tests).
+- Every dependency and plugin is checked against SHA-256 checksums in `gradle/verification-metadata.xml`. After you add, remove or update one, run `bash gradle/update-verification-metadata.sh`, review the diff and commit it with your change. See [docs/dependency-verification.md](docs/dependency-verification.md).
 - No new third-party plugins. The allowed base is listed in the README; everything else is written in this repository.
 - Every game mode has to work for Bedrock players. Menus are inventory menus, no Bedrock forms.
 - Never commit secrets, IPs, player data, worlds or server jars. Server folders under `Server-Network/` hold templates only.

@@ -47,6 +47,7 @@ Vergessen? `git commit --amend -s` für den letzten Commit, `git rebase --signof
 - Ein Formatter ist noch nicht eingerichtet. Halte dich an den umgebenden Code: 4 Leerzeichen, keine Wildcard-Imports, klare Namen statt Kommentare.
 - Neue Logik braucht Tests. Zu einem Bugfix gehört, wo es machbar ist, ein Test, der ohne den Fix fehlschlägt.
 - Code, der nicht vertrauenswürdige Eingaben verarbeitet (Netzwerk-Frames, Konfigurationsdateien, Downloads, API-Anfragen), bekommt zusätzlich einen Jazzer-`@FuzzTest`. Siehe [docs/cloud/architecture.md](docs/cloud/architecture.md#fuzz-tests).
+- Jede Abhängigkeit und jedes Plugin wird gegen SHA-256-Prüfsummen in `gradle/verification-metadata.xml` geprüft. Wenn du eine hinzufügst, entfernst oder aktualisierst, führe `bash gradle/update-verification-metadata.sh` aus, prüfe den Diff und committe ihn mit deiner Änderung. Siehe [docs/dependency-verification.de.md](docs/dependency-verification.de.md).
 - Keine neuen Fremd-Plugins. Die erlaubte Basis steht im README, alles andere entsteht in diesem Repository.
 - Jeder Spielmodus muss für Bedrock-Spieler funktionieren. Menüs sind Inventar-Menüs, keine Bedrock-Formulare.
 - Nie Secrets, IPs, Spielerdaten, Welten oder Server-Jars committen. Die Ordner unter `Server-Network/` enthalten nur Templates.

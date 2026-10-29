@@ -117,7 +117,7 @@ Von außen sollten nur die Proxy-Ports erreichbar sein.
 ./gradlew build
 ```
 
-Unter Windows `gradlew.bat build`. Der Gradle-Wrapper lädt Gradle selbst herunter.
+Unter Windows `gradlew.bat build`. Der Gradle-Wrapper lädt Gradle selbst herunter. Jede Abhängigkeit wird gegen eine SHA-256-Prüfsumme geprüft, siehe [docs/dependency-verification.de.md](docs/dependency-verification.de.md).
 
 - Gradle startet ab Java 17 und kompiliert mit einer Java-25-Toolchain. Fehlt ein JDK 25, lädt Gradle eins herunter (Foojay-Resolver).
 - Das Bytecode-Ziel ist Java 21 (`--release 21`). Die Server selbst brauchen Java 25, weil Paper 26.3 es verlangt.
