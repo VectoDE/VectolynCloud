@@ -1,0 +1,19 @@
+# Answers for the setup assistant in Docker Compose. Copy to setup.yml and edit.
+# Format and every rule: docs/cloud/setup.md. Used only for the first start; once the setup is
+# complete, the file is ignored and changes go through the console ("config set") or cloud.yml.
+schema-version: 1
+# Required. Set to true only if you accept the Minecraft EULA: https://aka.ms/MinecraftEULA
+eula: false
+language: en
+network-name: Vectora
+network:
+  bind: 0.0.0.0
+  java-port: 25565
+  bedrock-port: 19132
+database:
+  mode: external
+  host: database          # the MariaDB service in compose.yml
+  port: 3306
+  name: luckperms
+  user: luckperms
+  password-file: /run/secrets/vectora-db

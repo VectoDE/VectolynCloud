@@ -19,7 +19,7 @@ German version of the command reference: [console.de.md](console.de.md).
 
 Override with the system property `vectora.console` or the environment variable `VECTORA_CONSOLE`: `auto` (default), `ffm`, `jni`, `dumb` or `plain`. A provider that is not available falls back to the next one in the table, and the log says why.
 
-Both native providers call native code. Java 24 and newer warn about that unless native access is allowed, so `VectoraCloud.jar` has to declare `Enable-Native-Access: ALL-UNNAMED` in its manifest (the tests pass `--enable-native-access=ALL-UNNAMED`).
+Both native providers call native code. Java 24 and newer warn about that unless native access is allowed, so `VectoraCloud.jar` declares `Enable-Native-Access: ALL-UNNAMED` in its manifest (the tests pass `--enable-native-access=ALL-UNNAMED`).
 
 ### On a terminal (JLine)
 

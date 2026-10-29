@@ -47,16 +47,18 @@ Never test against servers you do not own or have no written permission to test.
 
 ## Verifying releases
 
-Release artifacts come with `SHA256SUMS`, a Sigstore bundle per file (`*.sigstore.json`) and SLSA provenance (`*.intoto.jsonl`). Example:
+A release contains `VectoraCloud.jar`, one archive with start scripts for Windows and one for Linux and macOS, `SHA256SUMS`, a Sigstore bundle per file (`*.sigstore.json`) and SLSA provenance (`*.intoto.jsonl`). The container image on GHCR is signed as well. Example:
 
 ```sh
-sha256sum -c SHA256SUMS
-cosign verify-blob VectoraLobby-0.1.0.jar \
-  --bundle VectoraLobby-0.1.0.jar.sigstore.json \
+sha256sum --check --ignore-missing SHA256SUMS
+cosign verify-blob VectoraCloud.jar \
+  --bundle VectoraCloud.jar.sigstore.json \
   --certificate-identity-regexp '^https://github[.]com/VectoDE/Vectora-Network/[.]github/workflows/release[.]yml@refs/tags/v' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
-gh attestation verify VectoraLobby-0.1.0.jar --repo VectoDE/Vectora-Network
+gh attestation verify VectoraCloud.jar --repo VectoDE/Vectora-Network
 ```
+
+All steps, including the image: [docs/cloud/operations.md](docs/cloud/operations.md#verifying-a-release).
 
 ---
 

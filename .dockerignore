@@ -1,0 +1,31 @@
+# Build context of VectoraCloud/dist/docker/Dockerfile (the repository root).
+# The image build needs the Gradle project and the start script, nothing else.
+
+# Never send secrets, server runtimes or local state to the Docker daemon.
+**/secrets/
+**/*.env
+!**/*.env.example
+Server-Network/
+**/runtime/
+**/runtime-*/
+
+# Version control, IDE and agent folders.
+.git/
+.github/
+.claude/
+.idea/
+.vscode/
+*.iml
+
+# Build output and caches; the image builds everything itself.
+**/build/
+**/.gradle/
+**/out/
+**/bin/
+**/*.log
+**/hs_err_pid*
+
+# Documentation is not part of the image.
+docs/
+*.md
+!VectoraCloud/**/src/**/*.md

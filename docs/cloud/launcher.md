@@ -73,7 +73,8 @@ All reads go through the `SystemAccess` interface. The tests replace it and repl
 net/vectora/cloud/launcher/...         launcher classes (release 21) and Bootstrap (release 8)
 META-INF/vectora/libs.index            index, see below
 META-INF/vectora/libs/*.jar            cloud-node, the other cloud modules and every runtime library, unchanged
-META-INF/MANIFEST.MF                   Main-Class: net.vectora.cloud.launcher.Bootstrap, Implementation-Version
+META-INF/MANIFEST.MF                   Main-Class: net.vectora.cloud.launcher.Bootstrap, Implementation-Version,
+                                       Enable-Native-Access: ALL-UNNAMED
 ```
 
 `libs.index` is written by the task `embeddedLibrariesIndex` from the launcher's runtime class path. One line per jar, the layout of `sha256sum`:

@@ -25,6 +25,25 @@ updates:
       actions:
         patterns: ['*']
 
+  # Base images of the VectoraCloud image (pinned by digest) and the MariaDB image in compose.yml.
+  - package-ecosystem: docker
+    directory: /VectoraCloud/dist/docker
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: build(deps)
+    labels: [type:chore, area:infra]
+
+  - package-ecosystem: docker-compose
+    directory: /VectoraCloud/dist/docker
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: build(deps)
+    labels: [type:chore, area:infra]
+
   # Enable once Website/ exists (stage 8).
   # - package-ecosystem: npm
   #   directory: /Website

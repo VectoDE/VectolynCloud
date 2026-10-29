@@ -40,35 +40,44 @@ jobs:
         with:
           cache-disabled: true
 
-      # The tag (v1.2.3) sets the version, so plugin.yml and the jar names match the release.
+      # The tag (v1.2.3) sets the version of every module. The full build runs all tests, but
+      # only VectoraCloud.jar is released: the plugin jars are not part of a release (the
+      # owner's decision of 2026-10-29); operators build them from the repository.
       - name: Build
         env:
           TAG: ${{ github.ref_name }}
         run: bash ./gradlew build --no-daemon --no-build-cache -Pversion="${TAG#v}"
 
-      # Each plugin module produces exactly one jar (no -plain, -sources or -javadoc jars).
-      # Stage 3 replaces them with Vectora-Paper.jar, Vectora-Velocity.jar and
-      # Vectora-Fabric.jar; this list changes with it.
-      - name: Collect jars
+      # The release files: VectoraCloud.jar plus one archive per operating system with the
+      # start scripts, nothing else. The same script runs as a dry run in operations.yml on
+      # every pull request.
+      - name: Package VectoraCloud
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          bash VectoraCloud/dist/package.sh "${TAG#v}" \
+            VectoraCloud/cloud-launcher/build/cloud/VectoraCloud.jar dist
+          ls -l dist
+
+      # SHA256SUMS lists exactly the three release files; the provenance and the attestation
+      # cover every file in it, so nothing may be missing and nothing else may slip in.
+      - name: Checksums
+        id: hash
+        working-directory: dist
         env:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           version="${TAG#v}"
-          mkdir -p dist
-          for jar in \
-            "Vectora-Lobby/build/libs/VectoraLobby-${version}.jar" \
-            "Vectora-PortalBridge/build/libs/VectoraPortalBridge-${version}.jar"; do
-            test -f "$jar" || { echo "::error::missing $jar"; exit 1; }
-            cp "$jar" dist/
-          done
-          ls -l dist
-
-      - name: Checksums
-        id: hash
-        working-directory: dist
-        run: |
-          sha256sum -- *.jar > SHA256SUMS
+          files=(VectoraCloud.jar "VectoraCloud-${version}-windows.zip" "VectoraCloud-${version}-linux-macos.tar.gz")
+          found=$(find . -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort)
+          want=$(printf '%s\n' "${files[@]}" | LC_ALL=C sort)
+          if [ "$found" != "$want" ]; then
+            printf '::error::unexpected release files:\n%s\n' "$found"
+            exit 1
+          fi
+          sha256sum -- "${files[@]}" > SHA256SUMS
           cat SHA256SUMS
           echo "hashes=$(base64 -w0 SHA256SUMS)" >> "$GITHUB_OUTPUT"
 
@@ -80,7 +89,7 @@ jobs:
         # Retries: v0.1.0 failed once with a Rekor 409 (cosign retried an upload that had
         # already landed). A fresh attempt signs again with a new certificate and succeeds.
         run: |
-          for f in *.jar SHA256SUMS; do
+          for f in *.jar *.zip *.tar.gz SHA256SUMS; do
             for attempt in 1 2 3; do
               if cosign sign-blob --yes --bundle "$f.sigstore.json" "$f"; then
                 break
@@ -122,9 +131,125 @@ jobs:
       provenance-name: vectora.intoto.jsonl
       upload-assets: false
 
+  # Container image on GHCR with the signed VectoraCloud.jar of the build job (not rebuilt: the
+  # named build context "jar" replaces the Dockerfile's build stage). Signed with cosign keyless,
+  # with a GitHub build provenance attestation and BuildKit's SBOM and provenance in the registry.
+  # "latest" only for stable releases (same rule as the GitHub release: v0.* and v*-* are
+  # pre-releases).
+  image:
+    name: Container image
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write       # push to ghcr.io
+      id-token: write       # keyless signing (cosign) and attestations
+      attestations: write   # actions/attest-build-provenance
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download dist
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist
+
+      # Only the jar goes into the build context, and only if it is the one in SHA256SUMS.
+      - name: Prepare jar context
+        run: |
+          set -euo pipefail
+          (cd dist && grep -E '^[0-9a-f]{64}  VectoraCloud\.jar$' SHA256SUMS | sha256sum --check --strict -)
+          mkdir jar-context
+          cp dist/VectoraCloud.jar jar-context/
+
+      - name: Image name and tags
+        id: meta
+        env:
+          TAG: ${{ github.ref_name }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          image="ghcr.io/${OWNER,,}/vectora-cloud"
+          tags="${image}:${version}"
+          case "$TAG" in
+            v0.*|*-*) echo "Pre-release: no latest tag." ;;
+            *) tags="${tags},${image}:latest" ;;
+          esac
+          {
+            echo "image=${image}"
+            echo "version=${version}"
+            echo "tags=${tags}"
+          } >> "$GITHUB_OUTPUT"
+          echo "Tags: ${tags}"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: VectoraCloud/dist/docker/Dockerfile
+          build-contexts: jar=jar-context
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          build-args: VERSION=${{ steps.meta.outputs.version }}
+          labels: org.opencontainers.image.revision=${{ github.sha }}
+          sbom: true
+          provenance: mode=max
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      # Signs the multi-arch index by digest, never by tag. Same retry as the blob signatures.
+      - name: Sign image with cosign (keyless)
+        env:
+          REF: ${{ steps.meta.outputs.image }}@${{ steps.push.outputs.digest }}
+        run: |
+          for attempt in 1 2 3; do
+            if cosign sign --yes "$REF"; then
+              exit 0
+            fi
+            echo "::warning::signing $REF failed (attempt $attempt), retrying"
+            sleep $((attempt * 10))
+          done
+          echo "::error::signing $REF failed three times"
+          exit 1
+
+      - name: Attest image build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ steps.meta.outputs.image }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
   release:
     name: Publish GitHub release
-    needs: [build, provenance]
+    needs: [build, provenance, image]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -150,13 +275,22 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
+          IMAGE: ${{ needs.image.outputs.image }}
+          DIGEST: ${{ needs.image.outputs.digest }}
         run: |
+          set -euo pipefail
           prerelease=""
           # 0.x versions and tags with a suffix (v1.0.0-rc.1) are pre-releases.
           case "$TAG" in v0.*|*-*) prerelease="--prerelease" ;; esac
+          notes=$(printf '%s\n' \
+            "Container image: \`${IMAGE}:${TAG#v}\` (\`${IMAGE}@${DIGEST}\`)" \
+            "" \
+            "How to check signatures and provenance: [docs/cloud/operations.md](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/docs/cloud/operations.md#verifying-a-release)")
+          # --notes comes first, the generated notes follow.
           gh release create "$TAG" dist/* \
             --repo "$GITHUB_REPOSITORY" \
             --title "$TAG" \
+            --notes "$notes" \
             --generate-notes \
             --verify-tag \
             $prerelease

@@ -80,7 +80,7 @@ JLine 3 talks to the terminal through a provider. `jline-terminal-ffm` uses the 
 - **Java 22+:** `ffm` first. The choice is a check of the running version (`Runtime.version().feature() >= 22`), never class-path order, so the ffm classes are not even touched on Java 21.
 - **Java 21 path:** `jni` (native helper bundled for Windows, Linux and macOS). If no native provider loads, JLine's `dumb` terminal. Without a terminal at all (Docker without TTY, Pterodactyl, systemd) the console reads stdin line by line.
 - **Tests:** `TerminalSelectorTest.ffmProviderLoadsOnJava25` is tagged `requires-java25` and is skipped on Java 21. On Java 21, `ffmProviderCannotLoadOnJava21` proves the ffm classes do not load there and `detectInATestRunNeverPicksFfmBelowJava22` that the selector never picks them; `jniProviderLoadsOnEveryRuntime` runs on both. The selection logic itself is tested for every combination of version, request and available providers.
-- Both native providers warn on Java 24+ unless native access is allowed. `VectoraCloud.jar` has to carry `Enable-Native-Access: ALL-UNNAMED` in its manifest; the console tests pass `--enable-native-access=ALL-UNNAMED`.
+- Both native providers warn on Java 24+ unless native access is allowed. `VectoraCloud.jar` carries `Enable-Native-Access: ALL-UNNAMED` in its manifest (checked by `CloudJarTest`; a command-line flag would break the Java-8 bootstrap message); the console tests pass `--enable-native-access=ALL-UNNAMED`.
 
 See [console.md](cloud/console.md#terminal).
 
