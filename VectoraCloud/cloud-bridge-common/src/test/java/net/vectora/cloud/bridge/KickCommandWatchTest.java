@@ -61,41 +61,78 @@ class KickCommandWatchTest {
         assertEquals(Optional.empty(), KickCommandWatch.targets("/k", aliases));
     }
 
+    private static final KickCommandWatch.Selectors NONE = KickCommandWatch.Selectors.NONE;
+
     @Test
     void theKickOfAnEntitledKickCommandInTheSameTickIsANetworkKick() {
-        assertTrue(watch.command("/kick Steve Spam", Source.CONSOLE, false, NO_ALIASES));
-        assertTrue(watch.kicked("steve"), "names without case");
-        assertFalse(watch.kicked("Alex"), "another player kicked by a plugin in the same tick");
+        assertTrue(watch.command("/kick Steve Spam", Source.CONSOLE, false, NO_ALIASES, NONE));
+        assertTrue(watch.kicked("steve", "Spam"), "names without case");
+        assertFalse(watch.kicked("Alex", "Spam"), "another player kicked by a plugin in the same tick");
         watch.clear();
-        assertFalse(watch.kicked("Steve"), "the next tick");
+        assertFalse(watch.kicked("Steve", "Spam"), "the next tick");
 
-        assertTrue(watch.command("kick @a", Source.REMOTE_CONSOLE, false, NO_ALIASES));
-        assertTrue(watch.kicked("Alex"), "a selector: anyone");
         // A new line ends the watch of the previous one.
-        assertFalse(watch.command("/say hello", Source.CONSOLE, false, NO_ALIASES));
-        assertFalse(watch.kicked("Alex"));
+        assertTrue(watch.command("/kick Steve", Source.CONSOLE, false, NO_ALIASES, NONE));
+        assertFalse(watch.command("/say hello", Source.CONSOLE, false, NO_ALIASES, NONE));
+        assertFalse(watch.kicked("Steve", ""));
+    }
+
+    @Test
+    void aResolvedSelectorMarksOnlyThePlayersItMatches() {
+        KickCommandWatch.Selectors paper = selector -> selector.equals("@a[distance=..5]")
+                ? Optional.of(List.of("Steve", "Alex")) : Optional.empty();
+        assertTrue(watch.command("kick @a[distance=..5] weg", Source.REMOTE_CONSOLE, false, NO_ALIASES, paper));
+        assertTrue(watch.kicked("alex", "anything"), "a matched player, whatever the reason");
+        assertTrue(watch.kicked("Steve", "weg"));
+        assertFalse(watch.kicked("Notch", "weg"), "a player the selector did not match, same reason, same tick");
+    }
+
+    @Test
+    void anUnresolvedSelectorMarksOnlyKicksWithTheCommandsReason() {
+        // 1.8.8 cannot resolve selectors: only kicks in this tick with the line's reason count.
+        assertTrue(watch.command("kick @a Wartung heute", Source.CONSOLE, false, NO_ALIASES, NONE));
+        assertTrue(watch.kicked("Alex", "§cWartung heute"), "the command's reason, colour codes aside");
+        assertFalse(watch.kicked("Alex", "Flying is not enabled on this server"),
+                "another kick in the same tick, for flying");
+        watch.clear();
+        // Without a reason vanilla kicks with its own text, which the watch reads as empty.
+        watch.expect("@p", "Kicked by an operator.", NONE);
+        assertTrue(watch.kicked("Steve", "Kicked by an operator."));
+        assertFalse(watch.kicked("Steve", "You logged in from another location"));
     }
 
     @Test
     void anUnentitledPlayerOrACommandBlockTriggersNoNetworkKick() {
-        assertFalse(watch.command("/kick Steve", Source.PLAYER, false, NO_ALIASES));
-        assertFalse(watch.kicked("Steve"));
-        assertFalse(watch.command("kick Steve", Source.OTHER, true, NO_ALIASES), "a command block");
-        assertFalse(watch.kicked("Steve"));
+        assertFalse(watch.command("/kick Steve", Source.PLAYER, false, NO_ALIASES, NONE));
+        assertFalse(watch.kicked("Steve", ""));
+        assertFalse(watch.command("kick Steve", Source.OTHER, true, NO_ALIASES, NONE), "a command block");
+        assertFalse(watch.kicked("Steve", ""));
+        assertFalse(watch.command("kick @a", Source.PLAYER, false, NO_ALIASES, NONE));
+        assertFalse(watch.kicked("Steve", ""), "an unentitled selector");
         // Counter-check: the same player with the permission.
-        assertTrue(watch.command("/kick Steve", Source.PLAYER, true, NO_ALIASES));
-        assertTrue(watch.kicked("Steve"));
+        assertTrue(watch.command("/kick Steve", Source.PLAYER, true, NO_ALIASES, NONE));
+        assertTrue(watch.kicked("Steve", ""));
     }
 
     @Test
-    void anExpectedSelectorOrNameWatchesWithoutACommandLine() {
-        watch.expect("@a");
-        assertTrue(watch.kicked("Steve"), "a selector: anyone in this tick");
+    void anExpectedNameWatchesWithoutACommandLine() {
+        watch.expect("Steve", "", NONE);
+        assertTrue(watch.kicked("steve", "anything"));
+        assertFalse(watch.kicked("Alex", ""));
         watch.clear();
-        assertFalse(watch.kicked("Steve"));
-        watch.expect("Steve");
-        assertTrue(watch.kicked("steve"));
-        assertFalse(watch.kicked("Alex"));
+        assertFalse(watch.kicked("Steve", ""));
+    }
+
+    @Test
+    void anAliasArgumentTooLongForANumberIsNoArgument() {
+        Map<String, List<String>> aliases = Map.of("k", List.of("kick $99999999999999999999 $1"));
+        assertEquals(Optional.of(List.of("Steve")), KickCommandWatch.targets("/k Steve", aliases));
+    }
+
+    @Test
+    void theReasonOfAKickCommandIsTheRestOfTheLine() {
+        assertEquals("", KickCommandWatch.reasonOf(new String[] {"Bob"}));
+        assertEquals("zu laut", KickCommandWatch.reasonOf(new String[] {"Bob", "zu", "laut"}));
     }
 
     @Test
