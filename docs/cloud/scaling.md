@@ -97,7 +97,7 @@ A dynamic service stopped with `service stop` is replaced if the task falls belo
 
 ## Where players go
 
-The proxy sends a player to the server of the group with the lowest load in percent (players / slots); of equal ones to the one with fewer players, then by name. Players on their way to a server count there for 10 seconds, so a burst of joins is spread. This applies to:
+The proxy sends a player to the server of the group with the lowest load in percent (players / slots); of equal ones to the one with fewer players, then by name. Players on their way to a server count there for 10 seconds, so a burst of joins is spread. A full server (players, those on their way included, at or above its slots) is skipped. This applies to:
 
 - the first server on join (Velocity's `try` list only decides the group);
 - a redirect into a group, for example the fallback to the lobby after a kick;

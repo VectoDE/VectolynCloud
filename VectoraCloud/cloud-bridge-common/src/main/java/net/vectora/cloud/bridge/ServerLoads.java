@@ -26,6 +26,8 @@ import java.util.function.ToIntFunction;
  *   <li>Players on a backend are what the proxy itself sees, plus players it has just sent there
  *       and who have not arrived yet ({@link #PENDING}). Without that, a burst of logins in the
  *       same moment would all go to the same backend.</li>
+ *   <li>A full backend (players on it, those on their way included, at or above its slots) is
+ *       never chosen.</li>
  *   <li>Equal load: fewer players first, then the name, so the choice is stable.</li>
  * </ul>
  * Thread-safe. No platform type, so it is tested without a proxy.
@@ -134,7 +136,8 @@ public final class ServerLoads {
      * @param exclude backends that must not be chosen (the one the player was kicked from)
      * @param listed  whether the proxy has a server of that name right now
      * @param players players the proxy sees on a backend
-     * @return the backend, or empty if no backend of the group is known, open and listed
+     * @return the backend, or empty if no backend of the group is known, open, listed and below
+     *     its slots
      */
     public synchronized Optional<String> choose(UUID player, String group, Set<String> exclude,
                                                 Predicate<String> listed, ToIntFunction<String> players) {
@@ -154,6 +157,7 @@ public final class ServerLoads {
         for (Pending p : pending.values()) {
             counts.computeIfPresent(p.server(), (name, count) -> count + 1);
         }
+        counts.keySet().removeIf(name -> counts.get(name) >= servers.get(name).slots());
         Optional<String> chosen = counts.keySet().stream().min(Comparator
                 .<String>comparingDouble(name -> (double) counts.get(name) / servers.get(name).slots())
                 .thenComparingInt(counts::get)

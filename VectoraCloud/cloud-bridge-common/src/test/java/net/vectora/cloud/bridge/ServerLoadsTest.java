@@ -84,6 +84,31 @@ class ServerLoadsTest {
     }
 
     @Test
+    void aFullServerIsSkippedPlayersOnTheirWayIncluded() {
+        loads.registered("lobby", "lobby");
+        loads.registered("lobby-2", "lobby");
+        loads.capacity("lobby", 2, true);
+        loads.capacity("lobby-2", 10, true);
+        players.put("lobby", 1);   // 50 %
+        players.put("lobby-2", 9); // 90 %
+        UUID first = UUID.randomUUID();
+        assertEquals(Optional.of("lobby"),
+                loads.choose(first, "lobby", Set.of(), listed::contains, name -> players.getOrDefault(name, 0)),
+                "counter-check: one slot left, lowest load");
+        assertEquals(Optional.of("lobby-2"), choose("lobby", Set.of()),
+                "lobby is full with the player on his way, although the proxy still sees 1 of 2");
+        assertEquals(Optional.empty(), choose("lobby", Set.of()), "lobby-2 is full too (9 + 1 on the way)");
+        loads.arrived(first);
+        players.put("lobby", 2);
+        assertEquals(Optional.empty(), choose("lobby", Set.of()), "players at the slots: full");
+        players.put("lobby", 5);
+        assertEquals(Optional.empty(), choose("lobby", Set.of()), "above the slots: full");
+        // Counter-check: one player leaves lobby, it takes the next one again.
+        players.put("lobby", 1);
+        assertEquals(Optional.of("lobby"), choose("lobby", Set.of()));
+    }
+
+    @Test
     void capacityForAnUnknownServerIsIgnored() {
         assertFalse(loads.capacity("lobby-9", 50, true));
         assertFalse(loads.isOpen("lobby-9"));

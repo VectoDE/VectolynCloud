@@ -97,7 +97,7 @@ Ein dynamischer Dienst, der mit `service stop` angehalten wird, wird ersetzt, we
 
 ## Wohin Spieler gehen
 
-Der Proxy schickt einen Spieler auf den Server der Gruppe mit der geringsten Last in Prozent (Spieler / Plätze), bei Gleichstand auf den mit weniger Spielern, dann nach Name. Spieler auf dem Weg zu einem Server zählen dort 10 Sekunden lang mit, damit sich viele Joins auf einmal verteilen. Das gilt für:
+Der Proxy schickt einen Spieler auf den Server der Gruppe mit der geringsten Last in Prozent (Spieler / Plätze), bei Gleichstand auf den mit weniger Spielern, dann nach Name. Spieler auf dem Weg zu einem Server zählen dort 10 Sekunden lang mit, damit sich viele Joins auf einmal verteilen. Ein voller Server (Spieler samt denen auf dem Weg dorthin erreichen oder überschreiten seine Plätze) wird übersprungen. Das gilt für:
 
 - den ersten Server beim Join (die `try`-Liste von Velocity bestimmt nur die Gruppe);
 - eine Weiterleitung in eine Gruppe, etwa zurück in die Lobby nach einem Kick;
