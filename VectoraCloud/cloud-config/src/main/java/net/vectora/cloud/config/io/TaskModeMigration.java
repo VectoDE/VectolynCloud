@@ -9,7 +9,8 @@ import tools.jackson.databind.node.ObjectNode;
  * <ul>
  *   <li>{@code mode: static}: {@code static-services} and {@code max-services} become
  *       {@code min-services}, so the task keeps its fixed number of static services and is never
- *       scaled, as before;</li>
+ *       scaled, as before. With {@code min-services: 0} the task gets one static service
+ *       (static = min = max = 1) and a warning in the log names the file;</li>
  *   <li>{@code mode: dynamic}: {@code static-services: 0}, min and max stay.</li>
  * </ul>
  * Version 1 had no {@code scale-down-below}. The migration sets it relative to {@code scale-up-at}:
@@ -19,6 +20,8 @@ import tools.jackson.databind.node.ObjectNode;
  * it with its field.
  */
 final class TaskModeMigration implements ConfigMigration {
+
+    private static final System.Logger LOG = System.getLogger(TaskModeMigration.class.getName());
 
     /** Upper limit of the {@code scale-down-below} the migration sets, in percent. */
     static final int MAX_MIGRATED_SCALE_DOWN_BELOW = 50;
@@ -30,6 +33,11 @@ final class TaskModeMigration implements ConfigMigration {
 
     @Override
     public void migrate(ObjectNode root) {
+        migrate(root, "a task file");
+    }
+
+    @Override
+    public void migrate(ObjectNode root, String file) {
         JsonNode mode = root.get("mode");
         if (mode == null || mode.isNull()) {
             // Version 1 required the field; guessing a mode would change what the task does.
@@ -53,8 +61,17 @@ final class TaskModeMigration implements ConfigMigration {
         if (min == null || !min.isIntegralNumber() || !min.canConvertToInt()) {
             return;
         }
-        section.put("static-services", min.intValue());
-        section.put("max-services", min.intValue());
+        int count = min.intValue();
+        if (count == 0) {
+            // A static task with no service ran nothing; one static service is the smallest valid
+            // static task (max-services is at least 1), so it gets that and the log says so.
+            count = 1;
+            section.put("min-services", count);
+            LOG.log(System.Logger.Level.WARNING, "{0}: mode static with min-services 0 migrated to static-services 1,"
+                    + " min-services 1 and max-services 1 (a static task needs at least one service)", file);
+        }
+        section.put("static-services", count);
+        section.put("max-services", count);
     }
 
     /**

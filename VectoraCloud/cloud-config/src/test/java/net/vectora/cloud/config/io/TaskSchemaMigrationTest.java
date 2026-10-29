@@ -6,8 +6,14 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
+import java.text.MessageFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 import net.vectora.cloud.config.Samples;
 import net.vectora.cloud.config.error.ConfigError;
 import net.vectora.cloud.config.error.ConfigException;
@@ -89,6 +95,51 @@ class TaskSchemaMigrationTest {
         assertEquals(ScalingConfig.DEFAULT_SCALE_DOWN_BELOW, plain.scaling().scaleDownBelow());
         assertEquals(ErrorCode.SCALE_DOWN_NOT_BELOW_UP,
                 ConfigValidator.validate(withTask(plain.withGroup("survival"))).getFirst().code());
+    }
+
+    @Test
+    void staticV1WithoutServicesGetsOneStaticServiceAndAWarning() throws ConfigException {
+        List<LogRecord> records = new CopyOnWriteArrayList<>();
+        Logger logger = Logger.getLogger(TaskModeMigration.class.getName());
+        Handler handler = new Handler() {
+            @Override
+            public void publish(LogRecord record) {
+                records.add(record);
+            }
+
+            @Override
+            public void flush() {
+            }
+
+            @Override
+            public void close() {
+            }
+        };
+        logger.addHandler(handler);
+        try {
+            TaskConfig task = read(V1_STATIC.replace("min-services: 2", "min-services: 0")).value();
+            assertEquals(1, task.scaling().staticServices());
+            assertEquals(1, task.scaling().minServices());
+            assertEquals(1, task.scaling().maxServices());
+            assertEquals(List.of(), ConfigValidator.validate(withTask(task)));
+            assertEquals(1, records.size(), records.toString());
+            LogRecord warning = records.getFirst();
+            assertEquals(Level.WARNING, warning.getLevel());
+            String text = MessageFormat.format(warning.getMessage(), warning.getParameters());
+            assertTrue(text.contains("tasks/survival.yml"), text);
+            assertTrue(text.contains("static-services 1") && text.contains("min-services 1")
+                    && text.contains("max-services 1"), text);
+
+            // Counter-check: a static task with services and a dynamic one with min 0 stay as they are, silently.
+            records.clear();
+            assertEquals(2, read(V1_STATIC).value().scaling().staticServices());
+            TaskConfig dynamic = read(V1_DYNAMIC.replace("min-services: 2", "min-services: 0")).value();
+            assertEquals(0, dynamic.scaling().minServices());
+            assertEquals(0, dynamic.scaling().staticServices());
+            assertEquals(List.of(), records);
+        } finally {
+            logger.removeHandler(handler);
+        }
     }
 
     @Test

@@ -76,9 +76,9 @@ public final class ConfigFormat<T> {
     }
 
     /** Runs every migration from {@code fileVersion} up to the current version, in place. */
-    void migrate(ObjectNode root, int fileVersion) {
+    void migrate(ObjectNode root, int fileVersion, String file) {
         for (int version = fileVersion; version < currentVersion; version++) {
-            migrations.get(version - 1).migrate(root);
+            migrations.get(version - 1).migrate(root, file);
             root.put(VERSION_FIELD, version + 1);
         }
     }

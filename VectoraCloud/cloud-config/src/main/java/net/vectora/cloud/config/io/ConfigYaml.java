@@ -73,7 +73,7 @@ public final class ConfigYaml {
             T value;
             if (version < format.currentVersion()) {
                 ObjectNode root = (ObjectNode) tree;
-                format.migrate(root, version);
+                format.migrate(root, version, file);
                 value = ConfigMappers.yaml().treeToValue(root, format.type());
             } else {
                 // Bind from the text, not the tree, so errors keep their line numbers.

@@ -132,7 +132,7 @@ Version 1 had a task-wide `mode` instead of `static-services`. The migration rep
 | `mode` missing | error `required` at `mode` |
 | any other value | error `invalid-value` at `mode` (`static or dynamic`) |
 
-`scale-down-below` did not exist in version 1. The migration sets it to `min(50, scale-up-at / 2)`, rounded down (`scale-up-at` 80 gives 40, 75 gives 37, 50 gives 25, 1 gives 0), so it stays below `scale-up-at`. A version-1 file that already has the field keeps its value. A version-1 task with `mode: static` and `min-services: 0` becomes `max-services: 0` and is then refused by the validator; set `min-services` to at least 1 before the update or fix the file afterwards.
+`scale-down-below` did not exist in version 1. The migration sets it to `min(50, scale-up-at / 2)`, rounded down (`scale-up-at` 80 gives 40, 75 gives 37, 50 gives 25, 1 gives 0), so it stays below `scale-up-at`. A version-1 file that already has the field keeps its value. A version-1 task with `mode: static` and `min-services: 0` ran no service. It becomes one static service (`static-services`, `min-services` and `max-services` 1), and the node logs a warning with the file name and the change.
 
 ### `nodes.yml`
 
