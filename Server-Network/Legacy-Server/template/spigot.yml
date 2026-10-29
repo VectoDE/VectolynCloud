@@ -5,3 +5,8 @@ settings:
   # "bungeeguard"). The bungeeguard-token in it is checked by the Vectora bridge, because
   # PandaSpigot does not check it itself (see docs/cloud/legacy-1.8.8.md).
   bungeecord: true
+  # Restarts are the node's job. With a script here, /restart and a watchdog crash would start a
+  # second server outside the cloud. Without these keys PandaSpigot would add restart-on-crash: true
+  # and restart-script: ./start.sh. The node enforces both values (docs/cloud/template.md).
+  restart-on-crash: false
+  restart-script: ''

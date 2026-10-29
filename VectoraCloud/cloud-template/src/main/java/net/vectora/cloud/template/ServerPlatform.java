@@ -12,31 +12,36 @@ public enum ServerPlatform {
      * Main Velocity proxy ({@code modern} forwarding): {@code forwarding.secret} from
      * {@code VECTORA_FORWARDING_SECRET} and the Floodgate key, no EULA.
      */
-    VELOCITY("plugins/floodgate/key.pem", "VECTORA_FORWARDING_SECRET", false),
+    VELOCITY("plugins/floodgate/key.pem", "VECTORA_FORWARDING_SECRET", false, false),
     /**
      * Legacy Velocity proxy ({@code bungeeguard} forwarding, in front of the 1.8.8 servers):
      * {@code forwarding.secret} from {@code VECTORA_LEGACY_FORWARDING_SECRET}, which must differ from
      * the modern-forwarding secret. No Floodgate key yet: whether Bedrock players reach the 1.8.8
      * groups through this proxy is decided in stage 2, PR 24.
      */
-    VELOCITY_LEGACY(null, "VECTORA_LEGACY_FORWARDING_SECRET", false),
-    /** Paper: Floodgate key and EULA. */
-    PAPER("plugins/floodgate/key.pem", null, true),
-    /** PandaSpigot 1.8.8 behind the legacy proxy: EULA only; Floodgate does not run there. */
-    PANDASPIGOT(null, null, true),
+    VELOCITY_LEGACY(null, "VECTORA_LEGACY_FORWARDING_SECRET", false, false),
+    /** Paper: Floodgate key, EULA, Spigot's restart turned off in {@code spigot.yml}. */
+    PAPER("plugins/floodgate/key.pem", null, true, true),
+    /**
+     * PandaSpigot 1.8.8 behind the legacy proxy: EULA, Spigot's restart turned off in
+     * {@code spigot.yml}; Floodgate does not run there.
+     */
+    PANDASPIGOT(null, null, true, true),
     /** Fabric server with Floodgate-Fabric: Floodgate key under {@code config/} and EULA. */
-    FABRIC("config/floodgate/key.pem", null, true),
+    FABRIC("config/floodgate/key.pem", null, true, false),
     /** No Minecraft software (the database template): nothing is generated. */
-    NONE(null, null, false);
+    NONE(null, null, false, false);
 
     private final String floodgateKey;
     private final String forwardingPlaceholder;
     private final boolean eula;
+    private final boolean spigot;
 
-    ServerPlatform(String floodgateKey, String forwardingPlaceholder, boolean eula) {
+    ServerPlatform(String floodgateKey, String forwardingPlaceholder, boolean eula, boolean spigot) {
         this.floodgateKey = floodgateKey;
         this.forwardingPlaceholder = forwardingPlaceholder;
         this.eula = eula;
+        this.spigot = spigot;
     }
 
     /**
@@ -74,5 +79,15 @@ public enum ServerPlatform {
      */
     public boolean needsEula() {
         return eula;
+    }
+
+    /**
+     * Tells whether the server reads {@code spigot.yml} and would restart itself through its
+     * {@code restart-script}. The node turns that off, because restarts are its job.
+     *
+     * @return whether {@code restart-on-crash} and {@code restart-script} are turned off after rendering
+     */
+    public boolean readsSpigotYml() {
+        return spigot;
     }
 }

@@ -298,6 +298,31 @@ class RealTemplatesTest {
                 .get("proxyOnlineMode").asBoolean());
     }
 
+    @Test
+    void noSpigotTemplateRestartsItselfOutsideTheNode() throws Exception {
+        List<String> checked = new ArrayList<>();
+        for (Path template : templates()) {
+            ServerPlatform platform = platformOf(template);
+            String server = template.getParent().getFileName().toString();
+            Path runtime = out.resolve(server);
+            RenderReport report = TemplateInstaller.install(template, runtime, platform, values(ALL_BUT_SURVIVAL), true);
+            if (!platform.readsSpigotYml()) {
+                assertFalse(Files.exists(template.resolve("spigot.yml")), server + " has a spigot.yml nobody reads");
+                continue;
+            }
+            // The template itself must be right; the node's enforcement is only the safety net.
+            assertTrue(Files.isRegularFile(template.resolve("spigot.yml")), server);
+            assertFalse(report.generated().contains("spigot.yml"), server + ": the node had to fix spigot.yml");
+            tools.jackson.databind.JsonNode settings = new YAMLMapper()
+                    .readTree(Files.readString(runtime.resolve("spigot.yml"))).get("settings");
+            assertFalse(settings.get("restart-on-crash").asBoolean(true), server);
+            assertEquals("", settings.get("restart-script").asString(), server);
+            checked.add(server);
+        }
+        assertTrue(checked.containsAll(List.of("Creative-Server", "End-Server", "Legacy-Server", "Lobby-Server",
+                "Minigame-Server", "Survival-Server")), checked.toString());
+    }
+
     @ParameterizedTest(name = "storage method {0}")
     @ValueSource(strings = {"mariadb", "h2"})
     void luckPermsTakesStorageMethodAndPoolSizeFromTheCloud(String method) throws Exception {

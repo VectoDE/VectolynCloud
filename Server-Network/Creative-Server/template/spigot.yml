@@ -157,8 +157,10 @@ settings:
   log-villager-deaths: true
   log-named-deaths: true
   timeout-time: 60
-  restart-on-crash: true
-  restart-script: ./start.sh
+  # Restarts are the node's job. With a script here, /restart and a watchdog crash would start a
+  # second server outside the cloud. The node enforces both values (docs/cloud/template.md).
+  restart-on-crash: false
+  restart-script: ''
   debug: false
 advancements:
   disable-saving: false
