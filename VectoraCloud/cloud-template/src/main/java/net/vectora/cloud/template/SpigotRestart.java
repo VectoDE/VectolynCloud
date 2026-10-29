@@ -51,6 +51,16 @@ final class SpigotRestart {
     private static final Pattern KEY = Pattern.compile("(['\"]?)(" + ON_CRASH + "|" + SCRIPT + ")\\1[ \t]*:(?:[ \t].*)?");
     private static final Pattern ON_CRASH_OFF = Pattern.compile(ON_CRASH + ":[ \t]+false[ \t]*(?:#.*)?");
     private static final Pattern SCRIPT_OFF = Pattern.compile(SCRIPT + ":[ \t]*(?:''|\"\")[ \t]*(?:#.*)?");
+    /** A bare document marker, maybe with a comment. */
+    private static final Pattern MARKER = Pattern.compile("(?:---|\\.\\.\\.)(?:[ \t]+#.*|[ \t]*)");
+    /**
+     * A key this class can read at the start of a line: plain (starting with a letter, digit or
+     * {@code _}), single-quoted, or double-quoted without escapes, then {@code :}. Anything else (an
+     * explicit key {@code ?}, an anchor, a tag, an escape) could spell {@code settings} or one of the
+     * two keys in a way this class does not see, and a later duplicate would win over the fixed line.
+     */
+    private static final Pattern SIMPLE_KEY = Pattern.compile(
+            "(?:[A-Za-z0-9_][^:#]*?|'(?:[^']|'')*'|\"[^\"\\\\]*\")[ \t]*:(?:[ \t].*)?");
 
     private SpigotRestart() {
     }
@@ -62,7 +72,7 @@ final class SpigotRestart {
      * @param runtime runtime folder
      * @return {@value #FILE} if the file was created or changed, otherwise empty
      * @throws TemplateException if the file is not UTF-8, its {@code settings} are no block mapping,
-     *     or the path is unsafe (a link, a folder)
+     *     a key it must read is no plain or simply quoted key, or the path is unsafe (a link, a folder)
      * @throws IOException if reading or writing fails
      */
     static Optional<String> enforce(Path runtime) throws TemplateException, IOException {
@@ -82,7 +92,8 @@ final class SpigotRestart {
      *
      * @param text content of {@value #FILE}, maybe empty
      * @return the new content; equal to {@code text} if both settings were off already
-     * @throws TemplateException if {@code settings} is no block mapping or appears twice
+     * @throws TemplateException if {@code settings} is no block mapping or appears twice, or a
+     *     top-level key or a key directly in {@code settings} is no plain or simply quoted key
      */
     static String fix(String text) throws TemplateException {
         String eol = text.contains("\r\n") ? "\r\n" : "\n";
@@ -105,6 +116,11 @@ final class SpigotRestart {
             } else if (settings < 0 && (line.startsWith("{") || line.startsWith("["))) {
                 throw new TemplateException(FILE, i + 1, "the file must be a block mapping, so the cloud can"
                         + " turn off restart-on-crash and restart-script");
+            } else if (endsBlock(stripBom(line, i)) && !isMarker(line)
+                    && !SIMPLE_KEY.matcher(stripBom(line, i)).matches()) {
+                throw new TemplateException(FILE, i + 1, "top-level keys must be plain or quoted without escapes"
+                        + " (no ?, -, anchor, tag or flow), so the cloud can turn off restart-on-crash and"
+                        + " restart-script");
             }
         }
 
@@ -142,6 +158,10 @@ final class SpigotRestart {
                 continue;
             }
             String body = line.substring(indent.length());
+            if (!SIMPLE_KEY.matcher(body).matches()) {
+                throw new TemplateException(FILE, i + 1, "keys in settings must be plain or quoted without escapes"
+                        + " (no ?, -, anchor or tag), so the cloud can turn off restart-on-crash and restart-script");
+            }
             Matcher key = KEY.matcher(body);
             if (!key.matches()) {
                 continue;
@@ -203,6 +223,19 @@ final class SpigotRestart {
     /** A line that ends the {@code settings} block: content in the first column, not a comment. */
     private static boolean endsBlock(String line) {
         return !line.isEmpty() && line.charAt(0) != ' ' && line.charAt(0) != '\t' && line.charAt(0) != '#';
+    }
+
+    /**
+     * A bare document marker or a directive in the first column: {@code ---}, {@code ...},
+     * {@code %YAML}. A marker followed by content ({@code --- {settings: ...}}) is none.
+     */
+    private static boolean isMarker(String line) {
+        return MARKER.matcher(line).matches() || line.startsWith("%");
+    }
+
+    /** The line without a byte order mark, which only the first line may start with. */
+    private static String stripBom(String line, int index) {
+        return index == 0 && line.startsWith("﻿") ? line.substring(1) : line;
     }
 
     private static boolean isContent(String line) {

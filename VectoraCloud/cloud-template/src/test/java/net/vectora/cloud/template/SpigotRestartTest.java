@@ -102,12 +102,29 @@ class SpigotRestartTest {
     }
 
     @Test
-    void anUnreadableLayoutIsRefusedNotGuessed() {
+    void anUnreadableLayoutIsRefusedNotGuessed() throws Exception {
         for (String yaml : List.of("settings: {restart-on-crash: true}\n", "settings: &s\n  x: 1\n",
-                "{settings: {}}\n", "settings:\n  x: 1\nsettings:\n  y: 2\n")) {
+                "{settings: {}}\n", "settings:\n  x: 1\nsettings:\n  y: 2\n",
+                // Keys this class cannot read, which a parser would take for one of the two keys or for
+                // settings after the fixed lines, so that the old value would win.
+                "settings:\n  ? restart-script\n  : ./start.sh\n",
+                "settings:\n  &a restart-script: ./start.sh\n",
+                "settings:\n  !!str restart-script: ./start.sh\n",
+                "settings:\n  \"restart\\x2dscript\": ./start.sh\n",
+                "settings:\n  restart-script: ''\n? settings\n: {restart-script: ./start.sh}\n",
+                "settings:\n  restart-script: ''\n\"setting\\x73\":\n  restart-script: ./start.sh\n",
+                "--- {settings: {restart-script: ./start.sh}}\n",
+                "settings:\n  - a\n")) {
             TemplateException e = assertThrows(TemplateException.class, () -> SpigotRestart.fix(yaml), yaml);
             assertTrue(e.getMessage().startsWith("spigot.yml:"), e.getMessage());
         }
+        // Counter-check: a byte order mark before a comment, bare document markers, a directive, quoted
+        // keys and keys with the same prefix are fine.
+        for (String yaml : List.of("﻿# c\nsettings:\n  x: 1\n", "---\nsettings:\n  x: 1\n...\n",
+                "'settings':\n  'restart-script': x\n  \"debug\": false\n  restart-script-x: y\n")) {
+            assertOff(SpigotRestart.fix(yaml));
+        }
+        assertTrue(SpigotRestart.fix("%YAML 1.1\n---\nsettings:\n  x: 1\n").contains("restart-script: ''"));
     }
 
     @Test
