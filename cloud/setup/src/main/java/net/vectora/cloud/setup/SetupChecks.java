@@ -70,7 +70,9 @@ public final class SetupChecks {
         Map<Integer, String> ports = new LinkedHashMap<>();
         if (answers.wants(NetworkServer.PROXY)) {
             ports.put(answers.javaPort(), "java");
-            if (ports.putIfAbsent(answers.bedrockPort(), "bedrock") != null) {
+            // Geyser's NetherNet takes the port after the Bedrock port (ProxyConfig.netherNetPort).
+            if (ports.putIfAbsent(answers.bedrockPort(), "bedrock") != null
+                    || ports.putIfAbsent(answers.bedrockPort() + 1, "nethernet") != null) {
                 problems.add(SetupMessages.CHECK_PORTS_DIFFER);
             }
         }

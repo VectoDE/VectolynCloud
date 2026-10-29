@@ -1057,10 +1057,12 @@ public final class ServiceManager implements AutoCloseable {
     // ------------------------------------------------------------------ running
 
     private void onOutput(Service service, Process process, String line) {
-        if (line.contains(READY_MARKER) && line.contains(")!")) {
-            markReady(service, process);
-        }
         ServiceId id = service.spec.id();
+        // Whichever comes first, this line or the bridge's ServiceReady, marks the service ready;
+        // both say so in the log, so a service never goes RUNNING without a ready line.
+        if (line.contains(READY_MARKER) && line.contains(")!") && markReady(service, process)) {
+            LOG.log(System.Logger.Level.INFO, "{0} is ready (\"Done\" in its console)", id);
+        }
         for (ServiceListener listener : listeners) {
             try {
                 listener.output(id, line);
@@ -1750,6 +1752,7 @@ public final class ServiceManager implements AutoCloseable {
         Set<Integer> fixed = new HashSet<>();
         fixed.add(snapshot.cloud().proxy().port());
         fixed.add(snapshot.cloud().proxy().bedrockPort());
+        fixed.add(snapshot.cloud().proxy().netherNetPort());
         if (snapshot.cloud().legacyProxy().enabled()) {
             fixed.add(snapshot.cloud().legacyProxy().port());
         }

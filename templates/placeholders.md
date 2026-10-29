@@ -46,7 +46,8 @@ The cloud assigns these for each service it creates.
 |---|---|---|
 | `VECTORA_PROXY_BIND` | Address the Java listener binds to. | `0.0.0.0` |
 | `VECTORA_PROXY_PORT` | Java port of the proxy (also the query port). | `25565` |
-| `VECTORA_BEDROCK_PORT` | Geyser Bedrock port (UDP, plus TCP for built-in signaling). | `19132` |
+| `VECTORA_BEDROCK_PORT` | Geyser Bedrock port: UDP for RakNet, TCP for NetherNet built-in signaling. | `19132` |
+| `VECTORA_BEDROCK_NETHERNET_PORT` | UDP port of Geyser's NetherNet (WebRTC) traffic, always `bedrock-port` + 1. | `19133` |
 | `VECTORA_PROXY_SERVERS` | One TOML line per wanted backend: `name = "host:port"`. | `lobby = "127.0.0.1:25566"` and so on |
 | `VECTORA_PROXY_TRY` | Comma-separated, quoted server names tried on login, e.g. `"lobby"`. | `"lobby"` |
 | `VECTORA_PROXY_FORCED_HOSTS` | One TOML line per forced host: `"host" = [ "server" ]`. May be empty. | `"creative.deine-domain.de" = [ "creative" ]` (placeholder domain) |

@@ -109,7 +109,8 @@ Default ports of the current setup:
 | Service | Port |
 |---|---|
 | Proxy, Java | 25565 |
-| Proxy, Bedrock (Geyser, UDP) | 19132 |
+| Proxy, Bedrock (Geyser: RakNet UDP, NetherNet signaling TCP) | 19132 |
+| Proxy, Bedrock NetherNet (Geyser, UDP, always Bedrock + 1) | 19133 |
 | Lobby | 25566 |
 | Survival | 25567 |
 | Mod server | 25568 |

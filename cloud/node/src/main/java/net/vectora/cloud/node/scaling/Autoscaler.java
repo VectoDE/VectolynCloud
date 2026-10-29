@@ -102,7 +102,9 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
     private final Set<ServiceId> draining = new HashSet<>();
     private final Set<ServiceId> released = new HashSet<>();
     private final Set<String> busy = new HashSet<>();
-    /** Running services whose unknown player count was logged; logged again after they reported. */
+    /** Running services without a known player count, since when; dropped once they report. */
+    private final Map<ServiceId, Instant> unknownSince = new HashMap<>();
+    /** Those of them whose unknown player count was logged; logged again after they reported. */
     private final Set<ServiceId> unknownCounts = new HashSet<>();
     private final Map<String, Hold> lastHold = new HashMap<>();
     private boolean suspended;
@@ -198,7 +200,7 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
                 return List.of();
             }
             remember(snapshot, services, values, now);
-            warnUnknownCounts(snapshot, services, values);
+            warnUnknownCounts(snapshot, services, values, now);
             // Copies made here, under the lock: the round goes on to change lastAction while the
             // planner's input must stay as it was read.
             input = new ScalingPlanner.Input(snapshot, node, services, values, new HashMap<>(lastAction),
@@ -264,9 +266,13 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
 
     /**
      * Names the running services whose player count is unknown, once until they report again: such
-     * a service holds back scaling of its whole group. Holds {@code lock}.
+     * a service holds back scaling of its whole group. A service is named only once its count has
+     * been unknown for {@link ScalingSignals#reportGrace()}: right after it became ready, its
+     * bridge has not reported yet, and that is no reason for a warning. Holds {@code lock}.
      */
-    private void warnUnknownCounts(ConfigSnapshot snapshot, List<ServiceInfo> services, ScalingPlanner.Signals values) {
+    private void warnUnknownCounts(ConfigSnapshot snapshot, List<ServiceInfo> services, ScalingPlanner.Signals values,
+                                   Instant at) {
+        Duration grace = signals.reportGrace();
         Set<ServiceId> now = new HashSet<>();
         for (ServiceInfo s : services) {
             TaskConfig task = snapshot.tasks().get(s.task());
@@ -277,11 +283,13 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
                 continue;
             }
             now.add(s.id());
-            if (unknownCounts.add(s.id())) {
+            Instant since = unknownSince.computeIfAbsent(s.id(), id -> at);
+            if (!since.plus(grace).isAfter(at) && unknownCounts.add(s.id())) {
                 LOG.log(System.Logger.Level.WARNING, "Scaling: group {0} is not scaled while {1} reports no player"
                         + " count (no bridge report within stale-after of monitor.yml)", s.group(), s.id());
             }
         }
+        unknownSince.keySet().retainAll(now);
         unknownCounts.retainAll(now);
     }
 

@@ -26,6 +26,20 @@ public interface ScalingSignals {
      */
     ScalingPlanner.Signals read();
 
+    /** {@link #reportGrace()} unless the monitor says otherwise: the default {@code stale-after}. */
+    Duration DEFAULT_REPORT_GRACE = Duration.ofSeconds(60);
+
+    /**
+     * How long a running service may go without a known player count before the autoscaler warns
+     * about it. A service that has just become ready has not reported yet: the bridge's first
+     * report comes a few seconds later and reaches the monitor with its next sample.
+     *
+     * @return {@code stale-after} of {@code monitor.yml}, {@link #DEFAULT_REPORT_GRACE} if unknown
+     */
+    default Duration reportGrace() {
+        return DEFAULT_REPORT_GRACE;
+    }
+
     /**
      * The newest report of a service's bridge.
      *
@@ -50,17 +64,25 @@ public interface ScalingSignals {
         Objects.requireNonNull(watched, "watched");
         Objects.requireNonNull(clock, "clock");
         long nodeHeap = Runtime.getRuntime().maxMemory() == Long.MAX_VALUE ? 0 : Runtime.getRuntime().maxMemory();
-        return () -> {
-            Map<ServiceId, Integer> fromProxies = new HashMap<>();
-            for (NetworkPlayers.Player player : players.online()) {
-                fromProxies.merge(player.service(), 1, Integer::sum);
+        return new ScalingSignals() {
+            @Override
+            public ScalingPlanner.Signals read() {
+                Map<ServiceId, Integer> fromProxies = new HashMap<>();
+                for (NetworkPlayers.Player player : players.online()) {
+                    fromProxies.merge(player.service(), 1, Integer::sum);
+                }
+                List<Report> reports = monitor.services().stream()
+                        .filter(view -> view.latest().isPresent())
+                        .map(view -> new Report(view.service().id(), view.latest().get()))
+                        .toList();
+                return merge(reports, fromProxies, watched, monitor.node(), clock.instant(),
+                        monitor.config().staleAfter().duration(), nodeHeap);
             }
-            List<Report> reports = monitor.services().stream()
-                    .filter(view -> view.latest().isPresent())
-                    .map(view -> new Report(view.service().id(), view.latest().get()))
-                    .toList();
-            return merge(reports, fromProxies, watched, monitor.node(), clock.instant(),
-                    monitor.config().staleAfter().duration(), nodeHeap);
+
+            @Override
+            public Duration reportGrace() {
+                return monitor.config().staleAfter().duration();
+            }
         };
     }
 

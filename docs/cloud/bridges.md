@@ -6,7 +6,7 @@ The bridges connect the proxies and servers that VectoraCloud starts to the [clo
 |---|---|---|---|
 | `plugins/bridge/common` | (bundled into the three below) | | Send queue, server registry and player state of the proxy, tick meter, BungeeGuard check. No platform API. |
 | `plugins/bridge/velocity` | `VectoraCloudBridgeVelocity-<version>.jar` | Velocity 4.3, main proxy and legacy proxy (Java 25) | Adds and removes dynamic servers, reports player events and status, ready signal. |
-| `plugins/bridge/paper` | `VectoraCloudBridgePaper-<version>.jar` | Paper 26.3 (Java 25) | Ready signal and status. |
+| `plugins/bridge/paper` | `VectoraCloudBridgePaper-<version>.jar` | Paper 26.3 (Java 25) | Ready signal and status, network kicks, safe spawn after a join. |
 | `plugins/bridge/legacy` | `VectoraCloudBridgeLegacy-<version>.jar` | PandaSpigot 1.8.8 (Java 21) | Ready signal and status, plus the check of the legacy proxy's `bungeeguard-token`. |
 
 Each jar contains the bridge core, `common/client` and `common/protocol`, all Vectora code. No third-party library is bundled, and none is needed at runtime besides the platform itself.
@@ -130,6 +130,7 @@ Players online and the shown player limit. A proxy has no game loop and reports 
 - Ready: a task for the first server tick, which runs after "Done".
 - Status: every 100 ticks with `Bukkit.getTPS()[0]` and `Bukkit.getAverageTickTime()`, and at once when a player joins or leaves. The player events of the network come from the proxy; a backend sends none, so the cloud sees each of them once.
 - Network kicks: a `/kick` of an entitled sender and `networkKick` of the moderation go to the proxy as `NetworkKick` ([Network-wide kicks](#network-wide-kicks)).
+- Safe spawn: one tick after a join the bridge checks the blocks at the player's feet and head. If either is not passable, the player is moved on top of the highest block of the column (`SafeSpawn`). Paper 26.3 no longer keeps the spawn chunks loaded, so a first join can land at the world's bottom (`y = -63`) inside stone and every move ends in "moved wrongly". A player in a free spot, a cave included, is never moved. The log line names no player.
 
 ## Legacy bridge: BungeeGuard check
 

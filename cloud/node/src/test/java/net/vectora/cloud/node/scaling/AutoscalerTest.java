@@ -176,17 +176,26 @@ class AutoscalerTest {
         };
         logger.addHandler(handler);
         try {
+            // Just ready: the bridge has not reported yet, which is no reason for a warning.
+            f.scaler.tick();
+            f.advance(ScalingSignals.DEFAULT_REPORT_GRACE.minusSeconds(1));
+            f.scaler.tick();
+            assertEquals(List.of(), warnings, "no warning within the grace time");
+            f.advance(Duration.ofSeconds(1));
             f.scaler.tick();
             f.scaler.tick();
             assertEquals(1, warnings.size(), "once while it stays unknown: " + warnings);
             assertTrue(warnings.get(0).contains("minigame-1") && warnings.get(0).contains("group minigame"),
                     warnings.get(0));
 
-            // Counter-check: known in between, then unknown again, warns again.
+            // Counter-check: known in between, then unknown again, warns again after the grace time.
             f.players.put(new ServiceId("minigame-1"), 5);
             f.scaler.tick();
             assertEquals(1, warnings.size(), "no warning while known");
             f.players.remove(new ServiceId("minigame-1"));
+            f.scaler.tick();
+            assertEquals(1, warnings.size(), "the grace time starts again");
+            f.advance(ScalingSignals.DEFAULT_REPORT_GRACE);
             f.scaler.tick();
             assertEquals(2, warnings.size(), "again after it was known");
         } finally {

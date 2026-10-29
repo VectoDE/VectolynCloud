@@ -16,6 +16,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.logging.Level;
@@ -31,6 +32,8 @@ import net.vectora.cloud.bridge.StatusSnapshot;
 import net.vectora.cloud.client.CloudClientSettings;
 import net.vectora.protocol.ServiceId;
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.ConsoleCommandSender;
 import org.bukkit.command.ProxiedCommandSender;
@@ -52,6 +55,8 @@ import org.bukkit.plugin.java.JavaPlugin;
  *
  * <ul>
  *   <li>Ready: the first server tick, which comes after "Done".</li>
+ *   <li>Safe spawn: a player who joins inside blocks is moved on top of the column
+ *       ({@link SafeSpawn}).</li>
  *   <li>Status: every {@value #STATUS_PERIOD_TICKS} ticks with Paper's TPS and MSPT, and at once
  *       when a player joins or leaves.</li>
  *   <li>Network kicks: the bridge puts its own command in place of {@code kick} and
@@ -93,6 +98,14 @@ public final class PaperBridgePlugin extends JavaPlugin implements Listener {
         // quit event. Registered as executors, the handlers need nothing from the event.
         getServer().getPluginManager().registerEvent(PlayerJoinEvent.class, this, EventPriority.MONITOR,
                 (listener, event) -> report(0), this, false);
+        // A first join can place the player inside blocks (SafeSpawn): check once the player is in.
+        getServer().getPluginManager().registerEvent(PlayerJoinEvent.class, this, EventPriority.MONITOR,
+                (listener, event) -> {
+                    if (event instanceof PlayerJoinEvent join) {
+                        Player player = join.getPlayer();
+                        getServer().getScheduler().runTask(this, () -> rescue(player));
+                    }
+                }, this, false);
         getServer().getPluginManager().registerEvent(PlayerQuitEvent.class, this, EventPriority.MONITOR,
                 (listener, event) -> report(-1), this, false);
         // Network kicks: the bridge's own kick command, also after every reload of the dispatcher.
@@ -314,6 +327,43 @@ public final class PaperBridgePlugin extends JavaPlugin implements Listener {
             result.put(entry.getKey().toLowerCase(Locale.ROOT), Arrays.asList(entry.getValue()));
         }
         return result;
+    }
+
+    /** Moves a player who stands inside blocks on top of the column ({@link SafeSpawn}). */
+    private void rescue(Player player) {
+        if (!player.isOnline()) {
+            return;
+        }
+        Location at = player.getLocation();
+        World world = at.getWorld();
+        int x = at.getBlockX();
+        int z = at.getBlockZ();
+        SafeSpawn.Column column = new SafeSpawn.Column() {
+            @Override
+            public boolean passable(int y) {
+                if (y >= world.getMaxHeight()) {
+                    return true;
+                }
+                return y >= world.getMinHeight() && world.getBlockAt(x, y, z).isPassable();
+            }
+
+            @Override
+            public int highest() {
+                return world.getHighestBlockYAt(x, z);
+            }
+
+            @Override
+            public int top() {
+                return world.getMaxHeight() - 2;
+            }
+        };
+        OptionalInt target = SafeSpawn.rescue(column, at.getBlockY());
+        if (target.isPresent()) {
+            // No player name in the log, like everywhere else in the bridge.
+            getLogger().info("A player joined inside blocks at y=" + at.getBlockY() + "; moved on top to y="
+                    + target.getAsInt());
+            player.teleportAsync(new Location(world, x + 0.5, target.getAsInt(), z + 0.5, at.getYaw(), at.getPitch()));
+        }
     }
 
     private void report(int adjust) {

@@ -18,7 +18,7 @@ All das läuft auf dem Proxy. Die Backends laufen auf der neuesten Minecraft-Ver
 
 - Auf dem Proxy laufen Velocity, Geyser, Floodgate, ViaVersion 5.12.2, ViaBackwards 5.12.2 und ViaRewind 4.2.0. ViaBackwards und ViaRewind übersetzen für ältere Java-Clients bis 1.8 ([#5](https://github.com/VectoDE/VectoraCloud/issues/5)).
 - Floodgate läuft auf jedem Backend, auch auf dem Fabric-Mod-Server (Floodgate-Fabric 2.2.7-b69, [#4](https://github.com/VectoDE/VectoraCloud/issues/4)). Alle Server nutzen denselben Floodgate-Schlüssel.
-- Geyser lauscht auf Port 19132 und nutzt in der aktuellen Konfiguration den NetherNet-Transport.
+- Geyser nimmt beide Bedrock-Transporte an (`transport: both`): RakNet auf UDP 19132, NetherNet mit eingebautem Signaling auf TCP 19132 und dessen WebRTC-Verkehr auf UDP 19133 (immer `bedrock-port` + 1). Ist das Netzwerk von außen erreichbar, alle drei weiterleiten.
 
 ## Regeln für Spielinhalte
 
