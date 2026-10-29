@@ -55,6 +55,18 @@ If no source works, the launcher prints a boxed `WARNING` (German: `WARNUNG`) an
 
 Values may follow as the next argument or after `=` (`--home=/data`). Each option may appear once. Unknown arguments, positional arguments, missing or invalid values and switches with a value are errors. The parser is hand-written; seven options do not justify a library in the one module that has to load before everything else.
 
+## Local start from the repository
+
+For development and tests, `./gradlew :cloud:node:runLocal` builds `VectoraCloud.jar` (`:cloud:launcher:cloudJar`) and starts it on the Java 25 toolchain with `run/` in the repository root as working directory and `--home`. The folder is created if it is missing. Standard input is passed through, so the setup assistant asks and the console takes commands in the same terminal. `.gitignore` ignores `run/` completely: configuration, secrets, worlds, logs and downloaded software stay local.
+
+The task puts the jar on the class path and calls `Bootstrap` directly instead of using `-jar`; the launcher still finds `libs.index` there. The manifest attribute `Enable-Native-Access` only applies with `-jar`, so the task passes `--enable-native-access=ALL-UNNAMED` itself. Under Gradle the process has no console of its own, so the task also sets `stdout.encoding` and `stderr.encoding` to UTF-8; otherwise Java would fall back to the platform encoding and German messages would arrive garbled. Further launcher options go after `--args`, for example `./gradlew :cloud:node:runLocal --args="--lang en"`; `--home` and `--allow-root` are added by the task and must not be repeated there.
+
+Gradle runs the cloud as a child of its daemon, so the cloud never sees a real terminal: the console runs in plain mode, one line at a time from stdin, without line editing, completion or history ([console](console.md#without-a-terminal-plain)). Secrets typed into the setup assistant stay visible on screen; the question warns first. `--console=plain` keeps Gradle's progress line out of the questions. Ctrl+C reaches Gradle, not the console: it cancels the build and ends the cloud process. On Linux and macOS that is a SIGTERM and the node shuts down cleanly through its shutdown hook; on Windows the process is terminated without it, and servers that are still running are ended as orphans on the next start ([node](node.md#orphans)). Stop the network with `shutdown` in the console instead. For a real terminal, build it with `./gradlew :cloud:launcher:cloudJar` and start `cloud/launcher/build/cloud/VectoraCloud.jar` yourself: `java -jar cloud/launcher/build/cloud/VectoraCloud.jar --home run`.
+
+`-PallowRoot=true` adds `--allow-root` for a development shell that runs as root or administrator, like `-Pe2eAllowRoot=true` for the end-to-end test. No secret is passed on the command line; the setup assistant writes them to `run/secrets/`.
+
+Production operators do not use this task. They start the released `VectoraCloud.jar` in their own cloud home outside any checkout ([operations](operations.md)).
+
 ## Platform detection
 
 `PlatformDetector` produces a `Platform` value: operating system, architecture (`x86_64`, `aarch64` or the raw `os.arch`), container, Pterodactyl and terminal. The setup assistant will use it, for example to skip the Docker database mode inside Pterodactyl or to ask nothing without a terminal.

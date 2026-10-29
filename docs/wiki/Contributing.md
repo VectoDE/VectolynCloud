@@ -7,7 +7,7 @@ The full rules are in [CONTRIBUTING.md](https://github.com/VectoDE/VectoraCloud/
 1. Look at the [roadmap](https://github.com/users/VectoDE/projects/11) and pick or open an issue. Issues labelled `good first issue` are meant for newcomers.
 2. For anything bigger than a small fix, wait for a reply on the issue before you start.
 3. Branch from `main`, keep commits small, write [Conventional Commits](https://www.conventionalcommits.org/) and sign off every commit with `git commit -s`.
-4. Run `./gradlew build`, then open a pull request with `Fixes #123`.
+4. Run `./gradlew build`, then open a pull request with `Fixes #123`. To try a change in a running network, use `./gradlew :cloud:node:runLocal`; it runs in `run/`, which Git ignores.
 
 Things that matter in this project:
 

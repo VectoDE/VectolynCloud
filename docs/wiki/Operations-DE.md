@@ -27,6 +27,8 @@ Das Container-Image heißt `ghcr.io/vectode/vectora-cloud:<version>`. `latest` z
 | Docker | `docker run --init -v vectora:/data ghcr.io/vectode/vectora-cloud:<version>` oder `compose.yml` mit MariaDB |
 | Pterodactyl | Egg importieren, eine Allocation pro Port, das PID-Limit von 512 in Wings erhöhen |
 
+Gib der Cloud einen eigenen Ordner als Cloud-Home, außerhalb jedes Checkouts des Repositorys. Der Ordner `run/`, den `./gradlew :cloud:node:runLocal` nutzt, ist nur zum Entwickeln da.
+
 Du brauchst Java 21 oder neuer. Ein älteres Java bekommt eine klare Meldung statt eines Absturzes. Als root oder Administrator läuft die Cloud nur, wenn du sie mit `--allow-root` startest.
 
 ## Erster Start

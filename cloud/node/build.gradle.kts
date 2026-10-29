@@ -230,6 +230,37 @@ val e2eLiveTest by tasks.registering(Test::class) {
     }
 }
 
+// Local development start: the freshly built VectoraCloud.jar with run/ in the repository root as
+// its cloud home. run/ is fully ignored by .gitignore, so worlds, logs, downloads and secrets the
+// cloud writes there never reach a commit. Operators use their own home outside any checkout.
+// The setup assistant asks on the console, so stdin is passed through.
+val localHome: Directory = rootProject.layout.projectDirectory.dir("run")
+tasks.register<JavaExec>("runLocal") {
+    description = "Starts the built VectoraCloud.jar with run/ in the repository root as cloud home."
+    group = ApplicationPlugin.APPLICATION_GROUP
+    val jar: FileCollection = cloudJar
+    val home = localHome
+    inputs.files(jar).withPropertyName("cloudJar").withPathSensitivity(PathSensitivity.NONE)
+    classpath = jar
+    // The Main-Class of the jar; the launcher finds libs.index on the class path just as with -jar.
+    mainClass = "net.vectora.cloud.launcher.Bootstrap"
+    // With -jar the manifest attribute Enable-Native-Access does this.
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
+    // Under Gradle the process has no console, so Java would fall back to the platform encoding
+    // (cp1252 on Windows) and German messages would arrive garbled in a UTF-8 terminal.
+    jvmArgs("-Dstdout.encoding=UTF-8", "-Dstderr.encoding=UTF-8")
+    workingDir = home.asFile
+    // -PallowRoot=true for a developer shell that runs as administrator or root (passes --allow-root).
+    val allowRoot = providers.gradleProperty("allowRoot").map { it.toBoolean() }.orElse(false)
+    // An argument provider, not args(): --args="--lang en" replaces args, but adds to these.
+    argumentProviders.add(CommandLineArgumentProvider {
+        listOf("--home", home.asFile.absolutePath) + (if (allowRoot.get()) listOf("--allow-root") else emptyList())
+    })
+    standardInput = System.`in`
+    doFirst { home.asFile.mkdirs() }
+    outputs.upToDateWhen { false }
+}
+
 tasks.withType<Test>().configureEach {
     // The console's terminal providers call native code; Java 24+ warns unless it is allowed.
     // VectoraCloud.jar declares the same in its manifest (Enable-Native-Access, PR 14).

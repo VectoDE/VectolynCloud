@@ -67,6 +67,18 @@ VectoraCloud wird wie CloudNet eingerichtet und konfiguriert:
 
 Ab Etappe 8 soll das Web-Dashboard dasselbe können, auch die Ersteinrichtung und die Server-Auswahl. Assistent, Dateien, Konsolenbefehle und Dashboard arbeiten auf einer gemeinsamen Konfigurationsschicht.
 
+## Aus dem Repository: VectoraCloud lokal starten
+
+So probierst du den aktuellen Stand von VectoraCloud oder eine eigene Änderung aus:
+
+```sh
+./gradlew :cloud:node:runLocal --console=plain
+```
+
+Das baut `VectoraCloud.jar` und startet es mit `run/` im Wurzelverzeichnis des Repositorys als Cloud-Home. Der Einrichtungsassistent fragt im selben Terminal. Konfiguration, Secrets, Welten, Logs und Downloads bleiben alle in `run/`, und Git ignoriert den Ordner komplett. Beende das Netzwerk mit `shutdown` in der Konsole; wer neu anfangen will, löscht `run/`. Läuft deine Shell als Administrator oder root, hängst du `-PallowRoot=true` an.
+
+`run/` ist nur zum Entwickeln da. Ein echtes Netzwerk startest du aus einem Release in einem eigenen Cloud-Home außerhalb des Checkouts, siehe [Betrieb](Operations-DE). Details zum Task: [docs/cloud/launcher.md](https://github.com/VectoDE/VectoraCloud/blob/main/docs/cloud/launcher.md#local-start-from-the-repository) (Englisch).
+
 ## Plugins bauen
 
 ```sh

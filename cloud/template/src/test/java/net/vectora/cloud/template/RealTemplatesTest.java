@@ -360,6 +360,8 @@ class RealTemplatesTest {
         // Server-Network/ folder that checkouts from before the repository layout change may hold.
         assertTrue(lines.contains("**/runtime/"), lines.toString());
         assertTrue(lines.contains("Server-Network/"), lines.toString());
+        // run/: the local cloud home of ./gradlew :cloud:node:runLocal, with secrets and worlds.
+        assertTrue(lines.contains("/run/"), lines.toString());
         for (Path template : templates()) {
             // Templates sit directly below templates/; the build maps them to <Server>/template/.
             assertEquals(templatesRoot(), template.getParent(), template.toString());

@@ -15,7 +15,7 @@ Thanks for wanting to help. Vectora is at an early stage, so the rules below are
 
 1. Fork the repository and create a branch from `main` (`fix/end-portal-return`, `feat/lobby-navigator`).
 2. Make small, focused commits.
-3. Run `./gradlew build` before you push.
+3. Run `./gradlew build` before you push. To try a change in a running network, start it with `./gradlew :cloud:node:runLocal`; it runs in `run/`, which Git ignores.
 4. Open a pull request against `main` and fill in the template. Link the issue with `Fixes #123`.
 5. CI, CodeQL and dependency review have to pass, and every review conversation has to be resolved. A maintainer reviews and merges with squash. `main` takes no direct pushes or force pushes.
 
@@ -51,7 +51,7 @@ Forgot it? `git commit --amend -s` for the last commit, `git rebase --signoff ma
 - Every dependency and plugin is checked against SHA-256 checksums in `gradle/verification-metadata.xml`. After you add, remove or update one, run `bash gradle/update-verification-metadata.sh`, review the diff and commit it with your change. See [docs/dependency-verification.md](docs/dependency-verification.md).
 - No new third-party plugins. The allowed base is listed in the README; everything else is written in this repository.
 - Every game mode has to work for Bedrock players. Menus are inventory menus, no Bedrock forms.
-- Never commit secrets, IPs, player data, worlds or server jars. `templates/` holds templates only; server runtimes live in the cloud home outside the repository.
+- Never commit secrets, IPs, player data, worlds or server jars. `templates/` holds templates only; server runtimes live in `run/` (local development, ignored by Git) or in a cloud home outside the repository.
 
 ## Languages
 

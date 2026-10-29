@@ -1,17 +1,22 @@
 # --- Local backups -----------------------------------------------------------
 .local-backup/
 
+# --- Local cloud home ------------------------------------------------------------
+# ./gradlew :cloud:node:runLocal starts the built VectoraCloud.jar with run/ as its cloud home.
+# Everything in it (configuration, secrets, worlds, logs, downloaded software) stays local.
+/run/
+
 # --- Server runtime (worlds, jars, logs, real secrets) -------------------------
 # Only templates/<Server>/ is tracked. runtime/ folders, secrets and everything else the cloud
-# writes belong in the cloud home outside the repository.
+# writes belong in run/ or in a cloud home outside the repository.
 # Checkouts from before the layout change may still hold a Server-Network/ folder with runtime
 # data and secrets; it stays ignored as a whole so none of it can be committed by accident.
 Server-Network/
 # Runtime folders of a cloud home that was put inside the checkout by mistake.
 **/runtime/
 **/runtime-*/
-# A cloud home started in the repository root (working directory = checkout). The home belongs
-# outside the repository; these root-anchored entries only keep its files out of commits.
+# A cloud home started directly in the repository root (working directory = checkout) instead of
+# run/; these root-anchored entries only keep its files out of commits.
 /cloud.yml
 /nodes.yml
 /software.lock.yml

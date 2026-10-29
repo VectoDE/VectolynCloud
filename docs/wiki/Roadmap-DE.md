@@ -10,7 +10,7 @@ Vectora entsteht in acht Etappen. Jede Etappe bekommt einen eigenen Plan und end
 
 **Stand: abgeschlossen.** Erschienen als signiertes Pre-Release [v0.1.0](https://github.com/VectoDE/VectoraCloud/releases/tag/v0.1.0).
 
-Server stoppen, Welten und Stand lokal sichern; Server-Ordner nach `Server-Network/` umziehen, getrennt in Template und Runtime; Startskripte und ini-Pfade anpassen; `.gitignore`; Secrets auslagern und neu erzeugen; bekannte Fehler beheben (Floodgate auf Fabric, ViaBackwards/ViaRewind, DB-Pools, ini-Pfade); Gradle-Build für die vorhandenen Plugins; Grundausstattung des Repos; GitHub-Einrichtung; erster Push nach gitleaks-Prüfung.
+Server stoppen, Welten und Stand lokal sichern; Server-Ordner nach `Server-Network/` umziehen, getrennt in Template und Runtime (inzwischen abgelöst durch `templates/<Server>/` im Repository und das Cloud-Home außerhalb davon); Startskripte und ini-Pfade anpassen; `.gitignore`; Secrets auslagern und neu erzeugen; bekannte Fehler beheben (Floodgate auf Fabric, ViaBackwards/ViaRewind, DB-Pools, ini-Pfade); Gradle-Build für die vorhandenen Plugins; Grundausstattung des Repos; GitHub-Einrichtung; erster Push nach gitleaks-Prüfung.
 
 ## 2. VectoraCloud-Kern ([#11](https://github.com/VectoDE/VectoraCloud/issues/11))
 
