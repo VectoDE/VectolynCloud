@@ -201,6 +201,10 @@ class ServiceCoreUnitTest {
         GroupConfig velocity = group("Proxy", ServerSoftware.VELOCITY);
         assertEquals(List.of("java", "-Xms256M", "-Xmx1G", "-jar", "velocity.jar"),
                 ServiceManager.command(java8, spec(velocity, 25565), "velocity.jar"));
+        // CraftBukkit 1.8 refuses "--nogui" as an unknown option and exits; it takes the bare word.
+        List<String> legacy = ServiceManager.command(java21, spec(group("Legacy-Server", ServerSoftware.PANDASPIGOT),
+                30001), "pandaspigot.jar");
+        assertEquals(List.of("-jar", "pandaspigot.jar", "nogui"), legacy.subList(legacy.size() - 3, legacy.size()));
         assertEquals(ServerPlatform.PANDASPIGOT, ServiceManager.platformOf(group("Legacy-Server", ServerSoftware.PANDASPIGOT)));
         assertEquals(ServerPlatform.VELOCITY_LEGACY, ServiceManager.platformOf(
                 group(ServicePlanner.LEGACY_PROXY_TEMPLATE, ServerSoftware.VELOCITY)));

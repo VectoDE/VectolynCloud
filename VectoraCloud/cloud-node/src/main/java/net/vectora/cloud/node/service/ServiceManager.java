@@ -1500,7 +1500,8 @@ public final class ServiceManager implements AutoCloseable {
 
     /**
      * The command line of a service: Java, heap, the group's JVM flags, {@code -jar} and the
-     * server's own arguments ({@code --nogui} for everything but Velocity). No shell is involved,
+     * server's own arguments ({@code --nogui} for Paper and Fabric, {@code nogui} for PandaSpigot,
+     * nothing for Velocity). No shell is involved,
      * so nothing in it is interpreted a second time.
      */
     static List<String> command(JavaRuntimeResolver.JavaRuntime runtime, ServiceSpec spec, String jar) {
@@ -1516,7 +1517,11 @@ public final class ServiceManager implements AutoCloseable {
         }
         command.add("-jar");
         command.add(jar);
-        if (spec.group().software() != ServerSoftware.VELOCITY) {
+        if (spec.group().software() == ServerSoftware.PANDASPIGOT) {
+            // CraftBukkit 1.8 parses its options strictly: "--nogui" is unknown, prints the help and
+            // ends the server with exit code 0. The bare word is passed through to the GUI check.
+            command.add("nogui");
+        } else if (spec.group().software() != ServerSoftware.VELOCITY) {
             command.add("--nogui");
         }
         return command;
