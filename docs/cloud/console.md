@@ -28,7 +28,8 @@ Both native providers call native code. Java 24 and newer warn about that unless
 - Log lines appear above the prompt; the line being typed stays.
 - History in `<home>/state/console.history`, at most 500 lines, restricted to the owner. Not stored: answers to questions, secrets, lines of commands marked sensitive, lines that start with a space. If the file is a symbolic link, the history stays in memory.
 - History expansion (`!!`) is off, so a `!` in a value stays as typed.
-- Ctrl+C and Ctrl+D run `shutdown`, exactly as if it was typed.
+- Ctrl+C and Ctrl+D at the prompt ask first: "Press Ctrl+C again within 3 seconds to stop every service and the cloud, or type shutdown." A second Ctrl+C or Ctrl+D within `Console.CONFIRM_WINDOW` (3 s) runs `shutdown`, exactly as if it was typed; a typed line or a later key starts over. A single slip of the finger does not stop the network.
+- Ctrl+C while a command runs (not at the prompt) is ignored: the terminal's signal handler is `SIG_IGN`, so the JVM does not start its shutdown in the middle of a command.
 - Secrets are masked with `ffm` and `jni`. JLine's `dumb` terminal cannot switch off the echo of the operating system, so a secret typed there stays visible; the question warns first (see below).
 
 ### Without a terminal (plain)
@@ -36,7 +37,7 @@ Both native providers call native code. Java 24 and newer warn about that unless
 - Reads stdin as UTF-8, one line per command. No prompt is printed, because the output usually ends up in a log viewer. No colors, no history.
 - Lines longer than 4096 characters are refused.
 - The end of stdin only stops reading; the cloud keeps running. Under systemd and in Docker without `-i`, stdin is empty from the start. Stop the cloud with a signal (SIGTERM, `docker stop`), which the node handles.
-- Ctrl+C does not reach the console here. To cancel a question, type `!cancel`.
+- Ctrl+C does not reach the console here. It goes to the JVM as a signal, like SIGTERM, and the node shuts down cleanly through its shutdown hook (every service gets its stop command). To cancel a question, type `!cancel`.
 - Secrets cannot be masked. Whatever feeds stdin may show them, for example a terminal whose output is piped (`java -jar VectoraCloud.jar | tee cloud.log`) or a panel. The question warns first.
 
 ## Command line syntax
@@ -62,7 +63,11 @@ Without arguments it lists every command. With a command it shows the usage line
 
 ### `shutdown`, `exit`
 
-Stops every service and the cloud. Ctrl+C and Ctrl+D on a terminal run the same command.
+Stops every service and the cloud. On a terminal, Ctrl+C or Ctrl+D pressed twice within 3 seconds run the same command.
+
+### `service`
+
+Registered by the node: lists, starts, stops and watches the servers (`service list`, `info`, `start`, `stop`, `restart`, `command`, `screen`). Details in [node.md](node.md#console-commands).
 
 ### `clear`, `cls`
 

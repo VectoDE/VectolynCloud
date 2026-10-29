@@ -38,7 +38,7 @@ Locally:
 | `Vectora-CloudClient` | 21 | Vectora-Protocol | Java 21 | runs inside proxies and servers; JDK sockets only, no Netty (see [network.md](cloud/network.md)) |
 | `VectoraCloud/cloud-config`, `cloud-template`, `cloud-download`, `cloud-network`, `cloud-database`, `cloud-launcher` | 21 (`Bootstrap` in `cloud-launcher`: 8) | Jackson 3, Netty 4.2, MariaDB Connector/J 4 (all Java 17 or lower) | Java 21 | |
 | `VectoraCloud/cloud-console` | 21 | cloud-config, JLine 3 | Java 21 | JLine `ffm` provider only on Java 22+, see below |
-| `VectoraCloud/cloud-node` | 21 | as above, plus JLine 3 | Java 21 | |
+| `VectoraCloud/cloud-node` | 21 | as above, plus cloud-console (brings JLine 3) | Java 21 | |
 | `VectoraCloud/cloud-bridge-velocity` | 21 | velocity-api 4.3.1 (class files for Java 25) | Java 25 (Velocity 4.3) | uses `disableAutoTargetJvm()` |
 | `VectoraCloud/cloud-bridge-paper` | 21 | paper-api 26.3 (class files for Java 25) | Java 25 (Paper 26.3) | uses `disableAutoTargetJvm()` |
 
