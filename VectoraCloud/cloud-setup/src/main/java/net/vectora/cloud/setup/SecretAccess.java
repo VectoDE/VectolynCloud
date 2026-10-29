@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import net.vectora.cloud.config.secret.OwnerOnlyPermissions;
 import net.vectora.cloud.console.Text;
@@ -30,6 +31,10 @@ public final class SecretAccess {
     public static final String ADMINISTRATORS_SID = "S-1-5-32-544";
     /** Used when the localized name cannot be found. */
     public static final String ADMINISTRATORS_FALLBACK = "BUILTIN\\Administrators";
+    /** How long {@code whoami} may take; a domain lookup can hang, and the note is not worth a stuck start. */
+    static final long WHOAMI_TIMEOUT_MILLIS = 10_000;
+    /** Most output read from {@code whoami}; the group list is a few kilobytes. */
+    static final int WHOAMI_MAX_OUTPUT = 256 * 1024;
 
     private SecretAccess() {
     }
@@ -87,24 +92,47 @@ public final class SecretAccess {
         if (!Files.isRegularFile(whoami)) {
             return Optional.empty();
         }
+        Process process;
         try {
-            Process process = new ProcessBuilder(whoami.toString(), "/groups", "/fo", "csv", "/nh")
+            process = new ProcessBuilder(whoami.toString(), "/groups", "/fo", "csv", "/nh")
                     .redirectErrorStream(true)
                     .start();
-            process.getOutputStream().close();
-            byte[] output;
+        } catch (IOException | RuntimeException e) {
+            return Optional.empty();
+        }
+        return output(process, WHOAMI_TIMEOUT_MILLIS).map(bytes -> new String(bytes, consoleCharset()));
+    }
+
+    /**
+     * The output of {@code process} if it exits with 0 within {@code timeoutMillis}, otherwise empty.
+     * The output is read on a thread of its own, so the timeout also holds while the process is
+     * silent and keeps its output open; a process still running at the deadline is killed.
+     */
+    static Optional<byte[]> output(Process process, long timeoutMillis) {
+        AtomicReference<byte[]> output = new AtomicReference<>();
+        Thread reader = Thread.ofVirtual().name("whoami-output").unstarted(() -> {
             try (InputStream in = process.getInputStream()) {
-                output = in.readNBytes(256 * 1024);
+                output.set(in.readNBytes(WHOAMI_MAX_OUTPUT));
+            } catch (IOException e) {
+                // stays null: no note about the group name
             }
-            if (!process.waitFor(10, TimeUnit.SECONDS)) {
+        });
+        try {
+            process.getOutputStream().close();
+            reader.start();
+            if (!process.waitFor(timeoutMillis, TimeUnit.MILLISECONDS)) {
                 process.destroyForcibly();
                 return Optional.empty();
             }
-            return process.exitValue() == 0 ? Optional.of(new String(output, consoleCharset())) : Optional.empty();
+            reader.join(timeoutMillis);
+            byte[] bytes = output.get();
+            return process.exitValue() == 0 && bytes != null ? Optional.of(bytes) : Optional.empty();
         } catch (InterruptedException e) {
+            process.destroyForcibly();
             Thread.currentThread().interrupt();
             return Optional.empty();
         } catch (IOException | RuntimeException e) {
+            process.destroyForcibly();
             if (e instanceof InterruptedIOException) {
                 Thread.currentThread().interrupt();
             }

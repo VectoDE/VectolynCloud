@@ -4,14 +4,20 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import net.vectora.cloud.config.CloudHome;
 import net.vectora.cloud.config.model.Language;
 import net.vectora.cloud.config.secret.SecretGenerator;
 import net.vectora.cloud.config.secret.SecretStore;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.condition.EnabledOnOs;
 import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
@@ -58,6 +64,76 @@ class SecretAccessTest {
         assertTrue(windows.contains("VORDEFINIERT\\Administratoren (S-1-5-32-544)") || windows.equals(open), windows);
         assertTrue(posix.contains("root") || posix.contains("Administrators") || posix.equals(SetupMessages.ACCESS_OPEN.get(Language.EN)),
                 posix);
+    }
+
+    @Test
+    @Timeout(20)
+    void aSilentProcessIsKilledAtTheDeadline() {
+        HangingProcess process = new HangingProcess();
+        long start = System.nanoTime();
+        assertTrue(SecretAccess.output(process, 300).isEmpty());
+        assertTrue(process.destroyed.getCount() == 0, "the process was killed");
+        assertTrue(System.nanoTime() - start < TimeUnit.SECONDS.toNanos(10), "the timeout held while the output stayed open");
+    }
+
+    /** A process that writes nothing and keeps its output open until it is killed. */
+    private static final class HangingProcess extends Process {
+        private final CountDownLatch destroyed = new CountDownLatch(1);
+
+        @Override
+        public OutputStream getOutputStream() {
+            return OutputStream.nullOutputStream();
+        }
+
+        @Override
+        public InputStream getInputStream() {
+            return new InputStream() {
+                @Override
+                public int read() throws IOException {
+                    try {
+                        destroyed.await();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    return -1;
+                }
+            };
+        }
+
+        @Override
+        public InputStream getErrorStream() {
+            return InputStream.nullInputStream();
+        }
+
+        @Override
+        public int waitFor() throws InterruptedException {
+            destroyed.await();
+            return 1;
+        }
+
+        @Override
+        public boolean waitFor(long timeout, TimeUnit unit) throws InterruptedException {
+            return destroyed.await(timeout, unit);
+        }
+
+        @Override
+        public int exitValue() {
+            if (destroyed.getCount() > 0) {
+                throw new IllegalThreadStateException("running");
+            }
+            return 1;
+        }
+
+        @Override
+        public void destroy() {
+            destroyed.countDown();
+        }
+
+        @Override
+        public Process destroyForcibly() {
+            destroyed.countDown();
+            return this;
+        }
     }
 
     @Test
