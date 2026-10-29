@@ -104,10 +104,25 @@ val cloudJar = tasks.register<Jar>("cloudJar") {
             "Main-Class" to "net.vectora.cloud.launcher.Bootstrap",
             "Implementation-Title" to "VectoraCloud",
             "Implementation-Version" to project.version.toString(),
+            // JLine's jni and ffm terminal providers call native code; Java 24+ warns unless it is
+            // allowed. The node's class loader is an unnamed module too, so ALL-UNNAMED covers it.
+            // Only the manifest can carry this: a --enable-native-access flag in the start scripts
+            // would make Java 8 to 16 fail with "Unrecognized option" before the bootstrap can
+            // print its "you need Java 21" message. Java 21 to 23 ignore the attribute.
+            "Enable-Native-Access" to "ALL-UNNAMED",
         )
     }
 }
 
 tasks.named("assemble") {
     dependsOn(cloudJar)
+}
+
+// CloudJarTest opens the real VectoraCloud.jar (manifest and layout).
+tasks.named<Test>("test") {
+    val jar = cloudJar.flatMap { it.archiveFile }
+    inputs.file(jar).withPathSensitivity(PathSensitivity.NONE).withPropertyName("cloudJar")
+    jvmArgumentProviders.add(CommandLineArgumentProvider {
+        listOf("-Dvectora.cloudJar=${jar.get().asFile.absolutePath}")
+    })
 }
