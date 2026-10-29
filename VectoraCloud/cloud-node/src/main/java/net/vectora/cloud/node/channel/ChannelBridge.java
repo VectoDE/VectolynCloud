@@ -2,6 +2,7 @@ package net.vectora.cloud.node.channel;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -76,6 +77,10 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
     private final Map<ServiceId, Integer> sentSlots = new ConcurrentHashMap<>();
     /** Time between two looks at the players of a backend being emptied. */
     static final Duration DRAIN_POLL = Duration.ofMillis(250);
+    /** How long a player who is still on a backend being emptied gets before his move is sent again. */
+    static final Duration RETRY_FIRST = Duration.ofSeconds(2);
+    /** The longest wait between two moves of the same player; the wait doubles up to it. */
+    static final Duration RETRY_MAX = Duration.ofSeconds(8);
     private volatile Channel channel;
     private volatile PlayerListener playerListener;
     private volatile Consumer<ServiceStatus> statusListener;
@@ -444,7 +449,9 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
     /**
      * Empties a backend before it stops: the proxies send no new player there, every player on it is
      * moved ({@code TransferPlayer}) to the other open backends of its group, the emptiest first
-     * ({@link TransferPlanner}), and the call waits until the proxies report none left. If players
+     * ({@link TransferPlanner}), and the call waits until the proxies report none left. A player
+     * still on it {@link #RETRY_FIRST} after his move was sent gets it again, with a wait that
+     * doubles up to {@link #RETRY_MAX}: a proxy may have lost or refused the first one. If players
      * are left after {@code timeout} (a move failed, no other backend), the backend is opened again.
      * Nobody is kicked.
      *
@@ -462,12 +469,12 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
         announceCapacity(backend);
         boolean empty = false;
         try {
-            Set<UUID> sent = new HashSet<>();
+            Map<UUID, Sent> sent = new HashMap<>();
             long deadline = ticker.nanoTime() + timeout.toNanos();
             while (true) {
                 // Read again on every look: a player who reached the server while it was being
-                // closed is moved as well.
-                if (!moveAway(backend, listed.get(), sent)) {
+                // closed is moved as well, and one whose move did not happen is sent again.
+                if (!moveAway(backend, listed.get(), sent, ticker.nanoTime())) {
                     // Players on it and nowhere to go: no need to wait for moves that are never sent.
                     return false;
                 }
@@ -485,12 +492,37 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
     }
 
     /**
-     * Sends {@code TransferPlayer} for every player on the backend that was not sent yet.
+     * When the move of a player was last sent: the next one is due at {@code dueAt} (a
+     * {@link Ticker#nanoTime} value), after {@code waitNanos}.
+     */
+    private record Sent(long dueAt, long waitNanos) {
+
+        /** After one more send at {@code now}: the wait doubles, up to {@link ChannelBridge#RETRY_MAX}. */
+        Sent next(long now) {
+            long wait = Math.min(waitNanos * 2, RETRY_MAX.toNanos());
+            return new Sent(now + wait, wait);
+        }
+
+        static Sent first(long now) {
+            return new Sent(now + RETRY_FIRST.toNanos(), RETRY_FIRST.toNanos());
+        }
+    }
+
+    /**
+     * Sends {@code TransferPlayer} for every player on the backend whose move was not sent yet or
+     * is due again. A player who has left the backend is forgotten.
      *
      * @return false if players are on it and no other backend of the group can take them
      */
-    private boolean moveAway(ServiceId backend, RegisterServer listed, Set<UUID> sent) {
-        List<NetworkPlayers.Player> on = players.on(backend).stream().filter(p -> !sent.contains(p.uuid())).toList();
+    private boolean moveAway(ServiceId backend, RegisterServer listed, Map<UUID, Sent> sent, long now) {
+        List<NetworkPlayers.Player> present = players.on(backend);
+        Set<UUID> still = new HashSet<>();
+        present.forEach(p -> still.add(p.uuid()));
+        sent.keySet().retainAll(still);
+        List<NetworkPlayers.Player> on = present.stream().filter(p -> {
+            Sent last = sent.get(p.uuid());
+            return last == null || now - last.dueAt() >= 0;
+        }).toList();
         if (on.isEmpty()) {
             return true;
         }
@@ -508,11 +540,20 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
         }
         Map<UUID, ServiceId> moves = TransferPlanner.assign(
                 on.stream().map(NetworkPlayers.Player::uuid).toList(), targets);
+        int again = 0;
         for (NetworkPlayers.Player player : on) {
             ServiceId to = moves.get(player.uuid());
-            if (to != null && send(player.proxy(), new TransferPlayer(player.uuid(), to, TransferPlayer.Reason.SCALE_DOWN))) {
-                sent.add(player.uuid());
+            if (to != null && send(player.proxy(), new TransferPlayer(player.uuid(), to,
+                    TransferPlayer.Reason.SCALE_DOWN))) {
+                Sent last = sent.get(player.uuid());
+                sent.put(player.uuid(), last == null ? Sent.first(now) : last.next(now));
+                if (last != null) {
+                    again++;
+                }
             }
+        }
+        if (again > 0) {
+            LOG.log(System.Logger.Level.DEBUG, "{0} players on {1} were sent their move again", again, backend);
         }
         return true;
     }

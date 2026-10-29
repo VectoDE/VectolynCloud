@@ -65,6 +65,49 @@ class ChannelBridgeDrainTest {
     }
 
     @Test
+    void aMoveThatDidNotHappenIsSentAgainWithAWaitThatDoubles() throws InterruptedException {
+        Fixture f = new Fixture().backend(ONE).backend(TWO);
+        f.join(ALEX, ONE);
+        f.join(STEVE, ONE);
+        f.status(ONE, 2);
+        f.ticker.onSleep = poll -> {
+            if (f.ticker.slept().equals(Duration.ofSeconds(1))) {
+                // Steve's move worked; Alex's proxy never carried his out.
+                f.move(STEVE, ONE, TWO);
+                f.status(ONE, 1);
+            }
+        };
+        assertFalse(f.bridge.drain(ONE, Duration.ofSeconds(20)));
+        // Waits of 2, 4, 8 and 8 seconds: sent at 0, 2, 6 and 14 s; the next would be at 22 s.
+        assertEquals(List.of(Duration.ZERO, Duration.ofSeconds(2), Duration.ofSeconds(6), Duration.ofSeconds(14)),
+                f.channel.sentAt(ALEX));
+        assertEquals(List.of(Duration.ZERO), f.channel.sentAt(STEVE), "Steve has moved: no second message");
+        assertEquals(ChannelBridge.RETRY_FIRST, Duration.ofSeconds(2));
+        assertEquals(ChannelBridge.RETRY_MAX, Duration.ofSeconds(8));
+    }
+
+    @Test
+    void aPlayerWhoComesBackIsMovedAgainAtOnce() throws InterruptedException {
+        Fixture f = new Fixture().backend(ONE).backend(TWO);
+        f.join(ALEX, ONE);
+        f.status(ONE, 1);
+        f.ticker.onSleep = poll -> {
+            if (poll == 1) {
+                // Moved, but the backend's own report still counts him.
+                f.move(ALEX, ONE, TWO);
+            } else if (poll == 2) {
+                f.move(ALEX, TWO, ONE);
+            } else if (poll == 3) {
+                f.move(ALEX, ONE, TWO);
+                f.status(ONE, 0);
+            }
+        };
+        // Back on it at 0.5 s: a new move at once, not after the wait of his first one.
+        assertTrue(f.bridge.drain(ONE, TIMEOUT));
+        assertEquals(List.of(Duration.ZERO, Duration.ofMillis(500)), f.channel.sentAt(ALEX));
+    }
+
+    @Test
     void playersLeftAfterTheTimeoutOpenTheBackendAgain() throws InterruptedException {
         Fixture f = new Fixture().backend(ONE).backend(TWO);
         f.join(ALEX, ONE);
@@ -114,8 +157,8 @@ class ChannelBridgeDrainTest {
 
     private static final class Fixture {
         final FakeServices services = new FakeServices();
-        final FakeChannel channel = new FakeChannel();
         final FakeTicker ticker = new FakeTicker();
+        final FakeChannel channel = new FakeChannel(ticker);
         final ChannelBridge bridge = new ChannelBridge(services, ticker);
 
         Fixture() {
@@ -135,6 +178,7 @@ class ChannelBridgeDrainTest {
                     message.port(), Path.of("x"), OptionalLong.of(1), Optional.empty(), OptionalInt.empty(), 0),
                     ServiceState.STARTING);
             channel.sent.clear();
+            channel.times.clear();
             return this;
         }
 
@@ -202,9 +246,15 @@ class ChannelBridgeDrainTest {
         }
     }
 
-    /** The proxy is always connected; every message is recorded. */
+    /** The proxy is always connected; every message is recorded with the time it was sent. */
     private static final class FakeChannel implements ChannelBridge.Channel {
         final List<Message> sent = new ArrayList<>();
+        final List<Duration> times = new ArrayList<>();
+        final FakeTicker ticker;
+
+        FakeChannel(FakeTicker ticker) {
+            this.ticker = ticker;
+        }
 
         @Override
         public boolean isConnected(ServiceId service) {
@@ -214,6 +264,18 @@ class ChannelBridgeDrainTest {
         @Override
         public void send(ServiceId service, Message message) {
             sent.add(message);
+            times.add(ticker.slept());
+        }
+
+        /** When a move was sent for this player. */
+        List<Duration> sentAt(UUID player) {
+            List<Duration> result = new ArrayList<>();
+            for (int i = 0; i < sent.size(); i++) {
+                if (sent.get(i) instanceof TransferPlayer move && move.uuid().equals(player)) {
+                    result.add(times.get(i));
+                }
+            }
+            return result;
         }
 
         @Override
