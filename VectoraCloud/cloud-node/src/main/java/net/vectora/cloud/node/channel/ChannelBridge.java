@@ -2,13 +2,16 @@ package net.vectora.cloud.node.channel;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 import net.vectora.cloud.network.ChannelListener;
 import net.vectora.cloud.network.CloudNetworkServer;
 import net.vectora.cloud.network.ServiceEvent;
@@ -74,7 +77,7 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
     static final Duration DRAIN_POLL = Duration.ofMillis(250);
     private volatile CloudNetworkServer server;
     private volatile PlayerListener playerListener;
-    private volatile java.util.function.Consumer<ServiceStatus> statusListener;
+    private volatile Consumer<ServiceStatus> statusListener;
 
     /**
      * Creates the bridge and registers it as listener of the service core.
@@ -136,7 +139,7 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
             }
             case ServiceEvent.StatusReported reported -> {
                 statuses.put(reported.service(), reported.status());
-                java.util.function.Consumer<ServiceStatus> listener = statusListener;
+                Consumer<ServiceStatus> listener = statusListener;
                 if (listener != null) {
                     listener.accept(reported.status());
                 }
@@ -191,7 +194,7 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
      *
      * @param value the listener
      */
-    public void statusListener(java.util.function.Consumer<ServiceStatus> value) {
+    public void statusListener(Consumer<ServiceStatus> value) {
         this.statusListener = Objects.requireNonNull(value, "value");
     }
 
@@ -326,7 +329,7 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
         announceCapacity(backend);
         boolean empty = false;
         try {
-            Set<java.util.UUID> sent = new java.util.HashSet<>();
+            Set<UUID> sent = new HashSet<>();
             long deadline = System.nanoTime() + timeout.toNanos();
             while (true) {
                 // Read again on every look: a player who reached the server while it was being
@@ -353,7 +356,7 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
      *
      * @return false if players are on it and no other backend of the group can take them
      */
-    private boolean moveAway(ServiceId backend, RegisterServer listed, Set<java.util.UUID> sent) {
+    private boolean moveAway(ServiceId backend, RegisterServer listed, Set<UUID> sent) {
         List<NetworkPlayers.Player> on = players.on(backend).stream().filter(p -> !sent.contains(p.uuid())).toList();
         if (on.isEmpty()) {
             return true;
@@ -370,7 +373,7 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
         if (targets.isEmpty()) {
             return false;
         }
-        Map<java.util.UUID, ServiceId> moves = TransferPlanner.assign(
+        Map<UUID, ServiceId> moves = TransferPlanner.assign(
                 on.stream().map(NetworkPlayers.Player::uuid).toList(), targets);
         for (NetworkPlayers.Player player : on) {
             ServiceId to = moves.get(player.uuid());
@@ -436,7 +439,7 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
         // RUNNING between the snapshot below and stale() would be withdrawn right after it was sent.
         synchronized (listLock) {
             Map<ServiceId, RegisterServer> current = services.registrations(legacy.get());
-            java.util.Set<ServiceId> names = new java.util.HashSet<>();
+            Set<ServiceId> names = new HashSet<>();
             current.values().forEach(message -> names.add(message.name()));
             for (ServiceId stale : lists.stale(proxy, names)) {
                 if (send(proxy, new UnregisterServer(stale))) {

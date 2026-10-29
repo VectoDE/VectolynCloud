@@ -4,8 +4,10 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -24,6 +26,7 @@ import net.vectora.cloud.config.model.ConfigSnapshot;
 import net.vectora.cloud.config.model.GroupConfig;
 import net.vectora.cloud.config.model.RestartConfig;
 import net.vectora.cloud.config.model.ScalingConfig;
+import net.vectora.cloud.config.model.ServerSoftware;
 import net.vectora.cloud.config.model.TaskConfig;
 import net.vectora.cloud.config.model.TaskMode;
 import net.vectora.cloud.node.scaling.ScalingPlanner.Decision;
@@ -203,7 +206,7 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
         Set<String> held = new HashSet<>();
         // A task below min-services gets several starts in one round; they run one after the other
         // in one action, so the task still has one action at a time.
-        Map<String, List<Decision>> perTask = new java.util.LinkedHashMap<>();
+        Map<String, List<Decision>> perTask = new LinkedHashMap<>();
         for (Decision decision : ScalingPlanner.plan(input)) {
             synchronized (lock) {
                 if (closed || busy.contains(decision.task())) {
@@ -256,7 +259,7 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
             TaskConfig task = snapshot.tasks().get(s.task());
             GroupConfig group = snapshot.groups().get(s.group());
             if (s.state() != ServiceState.RUNNING || task == null || group == null
-                    || group.software() == net.vectora.cloud.config.model.ServerSoftware.VELOCITY
+                    || group.software() == ServerSoftware.VELOCITY
                     || values.playersOf(s.id()).isPresent()) {
                 continue;
             }
@@ -439,7 +442,7 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
     private static List<Object> filesOf(ConfigSnapshot snapshot, String task) {
         TaskConfig t = snapshot.tasks().get(task);
         GroupConfig g = t == null ? null : snapshot.groups().get(t.group());
-        return java.util.Arrays.asList(t, g);
+        return Arrays.asList(t, g);
     }
 
     @Override

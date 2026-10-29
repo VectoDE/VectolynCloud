@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
 import java.util.logging.Handler;
@@ -129,8 +130,7 @@ public final class CloudNode implements AutoCloseable {
     /** Set once start() has given up on the setup; a later first completion then starts the servers. */
     private volatile boolean startedWithoutSetup;
     /** The configured services have been started once; from then on the autoscaler keeps them. */
-    private final java.util.concurrent.atomic.AtomicBoolean configuredStarted =
-            new java.util.concurrent.atomic.AtomicBoolean();
+    private final AtomicBoolean configuredStarted = new AtomicBoolean();
     /** Set while the {@code setup} command runs; its config changes are reconciled once it ends. */
     private volatile boolean setupRunning;
     private volatile ConfigSnapshot beforeSetup;
