@@ -37,6 +37,7 @@ class ChannelBridgeDrainTest {
     private static final ServiceId PROXY = new ServiceId("proxy-1");
     private static final ServiceId ONE = new ServiceId("minigame-1");
     private static final ServiceId TWO = new ServiceId("minigame-2");
+    private static final ServiceId THREE = new ServiceId("minigame-3");
     private static final UUID ALEX = new UUID(0, 1);
     private static final UUID STEVE = new UUID(0, 2);
     private static final Duration TIMEOUT = Duration.ofSeconds(10);
@@ -83,6 +84,39 @@ class ChannelBridgeDrainTest {
         assertEquals(List.of(Duration.ZERO), f.channel.sentAt(STEVE), "Steve has moved: no second message");
         assertEquals(ChannelBridge.RETRY_FIRST, Duration.ofSeconds(2));
         assertEquals(ChannelBridge.RETRY_MAX, Duration.ofSeconds(8));
+    }
+
+    @Test
+    void aMoveSentAgainKeepsItsTargetWhileThatOneIsOpenWithRoom() throws InterruptedException {
+        Fixture f = new Fixture().backend(ONE).backend(TWO).backend(THREE);
+        f.join(ALEX, ONE);
+        f.status(ONE, 1);
+        f.ticker.onSleep = poll -> {
+            if (poll == 1) {
+                // minigame-2 fills up a little; minigame-3 would now be the emptiest.
+                f.join(STEVE, TWO);
+                f.join(new UUID(0, 3), TWO);
+            }
+        };
+        assertEquals(DrainResult.TIMEOUT, f.bridge.drain(ONE, Duration.ofSeconds(3)));
+        assertEquals(List.of(new TransferPlayer(ALEX, TWO, TransferPlayer.Reason.SCALE_DOWN),
+                new TransferPlayer(ALEX, TWO, TransferPlayer.Reason.SCALE_DOWN)), f.channel.transfers(),
+                "no second hop to minigame-3");
+    }
+
+    @Test
+    void aMoveSentAgainGoesElsewhereOnceItsTargetIsGone() throws InterruptedException {
+        Fixture f = new Fixture().backend(ONE).backend(TWO).backend(THREE);
+        f.join(ALEX, ONE);
+        f.status(ONE, 1);
+        f.ticker.onSleep = poll -> {
+            if (poll == 1) {
+                f.services.backends.remove(TWO);
+            }
+        };
+        assertEquals(DrainResult.TIMEOUT, f.bridge.drain(ONE, Duration.ofSeconds(3)));
+        assertEquals(List.of(new TransferPlayer(ALEX, TWO, TransferPlayer.Reason.SCALE_DOWN),
+                new TransferPlayer(ALEX, THREE, TransferPlayer.Reason.SCALE_DOWN)), f.channel.transfers());
     }
 
     @Test

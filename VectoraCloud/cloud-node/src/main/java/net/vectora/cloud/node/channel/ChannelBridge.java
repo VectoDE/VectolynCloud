@@ -451,7 +451,8 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
      * moved ({@code TransferPlayer}) to the other open backends of its group, the emptiest first
      * ({@link TransferPlanner}), and the call waits until the proxies report none left. A player
      * still on it {@link #RETRY_FIRST} after his move was sent gets it again, with a wait that
-     * doubles up to {@link #RETRY_MAX}: a proxy may have lost or refused the first one. If players
+     * doubles up to {@link #RETRY_MAX}: a proxy may have lost or refused the first one. The move is
+     * sent again to the same backend as long as that one is open and has room. If players
      * are left after {@code timeout} (a move failed, no other backend), the backend is opened again.
      * Nobody is kicked.
      *
@@ -509,19 +510,19 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
     }
 
     /**
-     * When the move of a player was last sent: the next one is due at {@code dueAt} (a
-     * {@link Ticker#nanoTime} value), after {@code waitNanos}.
+     * When the move of a player was last sent and where to: the next one is due at {@code dueAt}
+     * (a {@link Ticker#nanoTime} value), after {@code waitNanos}.
      */
-    private record Sent(long dueAt, long waitNanos) {
+    private record Sent(ServiceId to, long dueAt, long waitNanos) {
 
         /** After one more send at {@code now}: the wait doubles, up to {@link ChannelBridge#RETRY_MAX}. */
-        Sent next(long now) {
+        Sent next(ServiceId target, long now) {
             long wait = Math.min(waitNanos * 2, RETRY_MAX.toNanos());
-            return new Sent(now + wait, wait);
+            return new Sent(target, now + wait, wait);
         }
 
-        static Sent first(long now) {
-            return new Sent(now + RETRY_FIRST.toNanos(), RETRY_FIRST.toNanos());
+        static Sent first(ServiceId target, long now) {
+            return new Sent(target, now + RETRY_FIRST.toNanos(), RETRY_FIRST.toNanos());
         }
     }
 
@@ -555,15 +556,14 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
         if (targets.isEmpty()) {
             return false;
         }
-        Map<UUID, ServiceId> moves = TransferPlanner.assign(
-                on.stream().map(NetworkPlayers.Player::uuid).toList(), targets);
+        Map<UUID, ServiceId> moves = plan(on, targets, sent);
         int again = 0;
         for (NetworkPlayers.Player player : on) {
             ServiceId to = moves.get(player.uuid());
             if (to != null && send(player.proxy(), new TransferPlayer(player.uuid(), to,
                     TransferPlayer.Reason.SCALE_DOWN))) {
                 Sent last = sent.get(player.uuid());
-                sent.put(player.uuid(), last == null ? Sent.first(now) : last.next(now));
+                sent.put(player.uuid(), last == null ? Sent.first(to, now) : last.next(to, now));
                 if (last != null) {
                     again++;
                 }
@@ -573,6 +573,42 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
             LOG.log(System.Logger.Level.DEBUG, "{0} players on {1} were sent their move again", again, backend);
         }
         return true;
+    }
+
+    /**
+     * Where the players go. A player whose move is sent again keeps the target of his last one as
+     * long as it is still a target (open, same group) with room left, counting the players kept
+     * there: a late proxy then finishes the first move instead of starting a second hop. Everyone
+     * else is planned by {@link TransferPlanner} on the loads with the kept players counted.
+     */
+    private static Map<UUID, ServiceId> plan(List<NetworkPlayers.Player> on, List<TransferPlanner.Target> targets,
+                                             Map<UUID, Sent> sent) {
+        Map<ServiceId, int[]> load = new HashMap<>();
+        Map<ServiceId, Integer> slots = new HashMap<>();
+        for (TransferPlanner.Target target : targets) {
+            load.put(target.name(), new int[] {target.players()});
+            slots.put(target.name(), target.slots());
+        }
+        Map<UUID, ServiceId> moves = new HashMap<>();
+        List<UUID> rest = new ArrayList<>();
+        for (NetworkPlayers.Player player : on) {
+            Sent last = sent.get(player.uuid());
+            int[] count = last == null ? null : load.get(last.to());
+            if (count != null && count[0] < slots.get(last.to())) {
+                count[0]++;
+                moves.put(player.uuid(), last.to());
+            } else {
+                rest.add(player.uuid());
+            }
+        }
+        if (!rest.isEmpty()) {
+            List<TransferPlanner.Target> counted = new ArrayList<>();
+            for (TransferPlanner.Target target : targets) {
+                counted.add(new TransferPlanner.Target(target.name(), load.get(target.name())[0], target.slots()));
+            }
+            moves.putAll(TransferPlanner.assign(rest, counted));
+        }
+        return moves;
     }
 
     /**
