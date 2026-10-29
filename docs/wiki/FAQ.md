@@ -3,7 +3,7 @@
 [Deutsch](FAQ-DE)
 
 **Is there an official Vectora server I can join?**
-No, and there won't be one. Vectora is a kit: we publish the code and releases, and every operator runs their own network. The project is in stage 1 of 8; releases are announced in [Discussions → Announcements](https://github.com/VectoDE/Vectora-Network/discussions/categories/announcements).
+No, and there won't be one. Vectora is a kit: we publish the code and releases, and every operator runs their own network. The project is in stage 2 of 8 (see [Roadmap](Roadmap)); releases are announced in [Discussions → Announcements](https://github.com/VectoDE/Vectora-Network/discussions/categories/announcements).
 
 **Which Minecraft versions can play?**
 The goal is Java 1.8 to 26.3 plus Bedrock. See [Crossplay](Crossplay) for what works today.

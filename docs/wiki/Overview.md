@@ -8,7 +8,7 @@ We do not run a network, servers or a domain, and we host no website, Discord bo
 
 ## Status
 
-The project is in **stage 1 of 8** (foundation). The existing servers are moving into the repository, secrets are leaving the tree, and the Gradle build is being set up. There is no release yet. See [Roadmap](Roadmap).
+The project is in **stage 2 of 8** (VectoraCloud core). Stage 1, the foundation, is finished and out as the signed pre-release [v0.1.0](https://github.com/VectoDE/Vectora-Network/releases/tag/v0.1.0). There is no usable cloud release yet. Progress: [Roadmap](Roadmap) and [#11](https://github.com/VectoDE/Vectora-Network/issues/11).
 
 ## Goal
 
