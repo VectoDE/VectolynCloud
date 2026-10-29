@@ -2,6 +2,8 @@
 
 `VectoraCloud/cloud-template` (package `net.vectora.cloud.template`) turns `Server-Network/<Server>/template/` into the server's `runtime/` folder. It replaces the `{{VECTORA_*}}` placeholders, writes the files that come from secrets, and builds the proxy's server list from the wanted servers. The placeholders themselves are listed in [`Server-Network/placeholders.md`](../../Server-Network/placeholders.md).
 
+The node carries a copy of every template in its jar and writes it into a home that does not have it ([node.md](node.md#built-in-templates)); outside the repository checkout, `<home>/<Server>/template/` plays the part of `Server-Network/<Server>/template/`.
+
 The module does not read `cloud.yml` or `secrets/` itself. The caller (later `cloud-node`) passes the values through the `PlaceholderValues` interface.
 
 ## API

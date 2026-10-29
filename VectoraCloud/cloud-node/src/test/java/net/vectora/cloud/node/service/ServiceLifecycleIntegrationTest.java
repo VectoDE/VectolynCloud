@@ -218,6 +218,35 @@ class ServiceLifecycleIntegrationTest {
         }
     }
 
+    /**
+     * A server that ends with exit code 0 although nobody asked it to stop (CraftBukkit 1.8 on an
+     * unknown option, Spigot's watchdog or {@code /restart} without a restart script) is down all
+     * the same: it takes the crash path and is started again.
+     */
+    @Test
+    void anUnaskedExitWithCodeZeroIsRestartedLikeACrash() throws Exception {
+        try (TestNetwork net = TestNetwork.create(dir)) {
+            RestartConfig twice = new RestartConfig(true, 2, TimeSpan.parse("0s"), TimeSpan.parse("1s"));
+            net.group("lobby", ServerKind.LOBBY, ServerSoftware.PAPER, TestNetwork.process("exit-0", "5s", twice));
+            net.task("lobby", "lobby", TaskMode.STATIC, 1, 1);
+            Recorder recorder = new Recorder();
+            try (ServiceManager manager = net.manager().build()) {
+                manager.addListener(recorder);
+                manager.startConfigured();
+                ServiceId lobby = new ServiceId("lobby-1");
+                TestNetwork.await("three unasked ends", WAIT, () -> recorder.of("lobby-1").stream()
+                        .filter(s -> s.equals("CRASHED")).count() == 3);
+                Thread.sleep(1500);
+                ServiceInfo info = manager.find(lobby).orElseThrow();
+                assertEquals(ServiceState.CRASHED, info.state());
+                assertEquals(0, info.exitCode().getAsInt());
+                assertEquals(3, recorder.of("lobby-1").stream().filter(s -> s.equals("STARTING")).count(),
+                        "one start plus two restarts, then it gives up");
+                assertFalse(recorder.of("lobby-1").contains("STOPPED"), "never STOPPED without a stop request");
+            }
+        }
+    }
+
     @Test
     void aCrashRestartPassesTheStartGateAndARefusalKeepsItCrashed() throws Exception {
         try (TestNetwork net = TestNetwork.create(dir)) {

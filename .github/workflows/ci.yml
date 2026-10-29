@@ -226,13 +226,42 @@ jobs:
         if: needs.changes.outputs.cloud != 'true'
         run: echo "Nothing under VectoraCloud/, Server-Network/, Vectora-Protocol/ or Vectora-CloudClient/ changed. Integration is not needed."
 
-      # Scaffold. The real integration test (VectoraCloud.jar starting Velocity and Paper with
-      # H2 storage, plus a fake server jar) replaces this step once the jar exists.
-      - name: Integration tests (scaffold, no tests yet)
+      # VectoraCloud.jar in an empty folder, as its own process, without network: setup file,
+      # built-in templates, every default server (fake server jars that log in like a bridge),
+      # Java 21 for PandaSpigot and 25 for the rest, the proxies' server lists and the shutdown.
+      # See docs/cloud/node.md#end-to-end-test.
+      - name: Checkout
         if: needs.changes.outputs.cloud == 'true'
-        run: |
-          echo "Integration job scaffold: there is no VectoraCloud.jar to start yet."
-          {
-            echo "### Integration"
-            echo "Scaffold only. The integration test arrives together with VectoraCloud.jar."
-          } >> "$GITHUB_STEP_SUMMARY"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Both JDKs are installed: the servers need exactly 21 and 25. The last one runs Gradle.
+      - name: Set up JDK 21 and 25
+        if: needs.changes.outputs.cloud == 'true'
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: |
+            21
+            25
+
+      - name: Set up Gradle
+        if: needs.changes.outputs.cloud == 'true'
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      - name: End-to-end test of VectoraCloud.jar
+        if: needs.changes.outputs.cloud == 'true'
+        run: >-
+          bash ./gradlew :VectoraCloud:cloud-node:e2eTest --no-daemon --stacktrace
+          -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64,JAVA_HOME_25_X64
+
+      - name: Upload test report
+        if: failure() && needs.changes.outputs.cloud == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: integration-e2e
+          path: VectoraCloud/cloud-node/build/reports/tests/e2eTest/
+          retention-days: 7

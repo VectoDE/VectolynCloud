@@ -5,7 +5,8 @@ name: Managed MariaDB
 # starts it on a free port, sets up root, the application database and user, checks bind address,
 # rights and shutdown, then deletes everything. It never touches Server-Network/*/runtime/.
 # cloud-backup reuses such a throwaway server to dump it with the real mariadb-dump
-# (see docs/cloud/backup.md).
+# (see docs/cloud/backup.md). Last, VectoraCloud.jar runs with mode: managed and fake servers
+# (docs/cloud/node.md#end-to-end-test).
 #
 # Weekly, on demand, and on pull requests that change the database module or this workflow.
 # The normal CI excludes these tests (tag "mariadb"), because they need internet access and take
@@ -21,6 +22,7 @@ on:
       - 'VectoraCloud/cloud-database/**'
       - 'VectoraCloud/cloud-backup/**'
       - 'VectoraCloud/cloud-download/src/main/java/net/vectora/cloud/download/provider/MariaDbProvider.java'
+      - 'VectoraCloud/cloud-node/src/main/java/net/vectora/cloud/node/database/**'
       - '.github/workflows/managed-mariadb.yml'
 
 permissions:
@@ -94,6 +96,21 @@ jobs:
           -PtestJava="$TEST_JAVA"
           -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64,JAVA_HOME_25_X64
 
+      # VectoraCloud.jar with mode: managed: the node downloads MariaDB, sets it up before the first
+      # server and stops it after the last one (fake servers, see docs/cloud/node.md#end-to-end-test).
+      - name: Run the end-to-end test with managed MariaDB
+        # The cloud itself always runs on 25 here; once per operating system is enough. GitHub's
+        # Windows runners run as administrator, so the launcher needs --allow-root there.
+        if: matrix.java == '25'
+        shell: bash
+        env:
+          ALLOW_ROOT: ${{ runner.os == 'Windows' }}
+        run: >-
+          bash ./gradlew :VectoraCloud:cloud-node:e2eTest --no-daemon --stacktrace
+          -Pe2eDatabase=managed
+          -Pe2eAllowRoot="$ALLOW_ROOT"
+          -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64,JAVA_HOME_25_X64
+
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -102,4 +119,5 @@ jobs:
           path: |
             VectoraCloud/cloud-database/build/reports/tests/
             VectoraCloud/cloud-backup/build/reports/tests/
+            VectoraCloud/cloud-node/build/reports/tests/e2eTest/
           retention-days: 7

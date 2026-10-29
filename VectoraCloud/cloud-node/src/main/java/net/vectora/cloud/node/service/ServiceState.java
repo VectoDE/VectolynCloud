@@ -7,16 +7,18 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  *
  * <pre>
  * PREPARED ──▶ STARTING ──▶ RUNNING ──▶ STOPPING ──▶ STOPPED
- *                 │            │                        ▲
- *                 └──────┬─────┴──── exit 0 ────────────┘
- *                        └──── exit ≠ 0 ──▶ CRASHED
+ *                 │            │
+ *                 └──────┬─────┘
+ *                        └──── exit without a stop request ──▶ CRASHED
  * STOPPED, CRASHED ──▶ PREPARED  (next start of a static service, restart after a crash)
  * CRASHED ──▶ STOPPED            (stopped by the operator while a restart was pending)
  * </pre>
  *
  * <p>A process that ends while the node asked it to stop is {@link #STOPPED}, whatever its exit
- * code. A process that ends without being asked is {@link #STOPPED} with exit code 0 (for example
- * {@code /stop} typed in game) and {@link #CRASHED} otherwise.
+ * code. A process that ends without being asked is {@link #CRASHED}, also with exit code 0
+ * (CraftBukkit 1.8 on an unknown option, Spigot's watchdog or {@code /restart} without a restart
+ * script, {@code /stop} typed in game), so the restart after a crash brings it back. Only while the
+ * node itself shuts down is an exit with 0 {@link #STOPPED}.
  */
 public enum ServiceState {
     /** Id, port and folder are assigned; the process does not run yet. */
@@ -29,7 +31,7 @@ public enum ServiceState {
     @JsonProperty("stopping") STOPPING,
     /** The process ended normally or was stopped by the node. */
     @JsonProperty("stopped") STOPPED,
-    /** The process ended on its own with an exit code other than 0, or could not be started. */
+    /** The process ended without a stop request (whatever its exit code), or could not be started. */
     @JsonProperty("crashed") CRASHED;
 
     /**

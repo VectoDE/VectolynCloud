@@ -2,9 +2,9 @@ package net.vectora.cloud.api;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.http.DefaultFullHttpRequest;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
@@ -76,6 +76,11 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
     private Pending pending;
     private boolean busy;
     private boolean closeAfterResponse;
+    /** A response with {@code Connection: close} is on its way; the rest of the input is dropped. */
+    private boolean lingering;
+
+    /** How long a closing connection keeps reading what the client still sends. */
+    static final int LINGER_SECONDS = 2;
 
     ApiHttpHandler(ApiServer server) {
         super(false);
@@ -90,6 +95,9 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, HttpObject msg) {
         try {
+            if (lingering) {
+                return; // released below; the connection closes after its last response
+            }
             if (msg instanceof HttpRequest request) {
                 if (busy || pending != null) {
                     closeAfterResponse = true; // pipelining is not supported: answer the first, then close
@@ -418,12 +426,35 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
         }
     }
 
-    private static void send(ChannelHandlerContext ctx, FullHttpResponse response, boolean close) {
+    private void send(ChannelHandlerContext ctx, FullHttpResponse response, boolean close) {
         response.headers().set(HttpHeaderNames.CONNECTION, close ? HttpHeaderValues.CLOSE : HttpHeaderValues.KEEP_ALIVE);
         var future = ctx.writeAndFlush(response);
         if (close) {
-            future.addListener(ChannelFutureListener.CLOSE);
+            lingering = true;
+            future.addListener(done -> lingeringClose(ctx));
         }
+    }
+
+    /**
+     * Ends a connection after a response that closes it. Closing at once while the client is still
+     * sending (a body above the limit) makes the system answer with a reset, and the client may then
+     * lose the response; Windows does that reliably. So the output is shut down first, whatever the
+     * client still sends is read and dropped, and the connection closes when the client closes its
+     * side, or after {@value #LINGER_SECONDS} seconds at the latest.
+     */
+    private static void lingeringClose(ChannelHandlerContext ctx) {
+        if (!(ctx.channel() instanceof SocketChannel socket) || !socket.isActive()) {
+            ctx.close();
+            return;
+        }
+        socket.shutdownOutput().addListener(shut -> {
+            if (!shut.isSuccess()) {
+                ctx.close();
+                return;
+            }
+            socket.config().setAutoRead(true);
+            ctx.executor().schedule(() -> ctx.close(), LINGER_SECONDS, TimeUnit.SECONDS);
+        });
     }
 
     private ApiException map(Exception e) {

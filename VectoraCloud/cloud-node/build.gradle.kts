@@ -91,8 +91,132 @@ val bridgeResources = tasks.register<BridgeIndex>("bridgeResources") {
     outputDirectory = layout.buildDirectory.dir("generated/bridge-resources")
 }
 
+/**
+ * Copies the server templates into the node's resources and writes templates.index: one line per
+ * file, "<sha256 hex>  <Server>/template/<path>". BuiltInTemplates writes a missing template folder
+ * from them, so VectoraCloud.jar in an empty folder has every template (docs/cloud/node.md).
+ */
+abstract class TemplateIndex : DefaultTask() {
+
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val templates: ConfigurableFileCollection
+
+    @get:Internal
+    abstract val serverNetwork: DirectoryProperty
+
+    @get:OutputDirectory
+    abstract val outputDirectory: DirectoryProperty
+
+    @TaskAction
+    fun write() {
+        val root = serverNetwork.get().asFile
+        val target = outputDirectory.get().asFile.resolve("net/vectora/cloud/node/templates")
+        target.deleteRecursively()
+        target.mkdirs()
+        val lines = templates.files.filter { it.isFile }
+            .map { it to it.relativeTo(root).invariantSeparatorsPath }
+            .sortedBy { it.second }
+            .map { (file, path) ->
+                val bytes = file.readBytes()
+                val copy = target.resolve(path)
+                copy.parentFile.mkdirs()
+                copy.writeBytes(bytes)
+                MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) } + "  " + path
+            }
+        check(lines.isNotEmpty()) { "No template found under ${root.path}" }
+        target.resolve("templates.index").writeText(
+            "# VectoraCloud server templates, format 1: <sha256>  <Server>/template/<path>\n" +
+                lines.joinToString("") { "$it\n" },
+            Charsets.UTF_8,
+        )
+    }
+}
+
+val serverNetworkDir = rootProject.layout.projectDirectory.dir("Server-Network")
+val templateResources = tasks.register<TemplateIndex>("templateResources") {
+    description = "Puts the server templates and their index into the node's resources."
+    serverNetwork = serverNetworkDir
+    // Only what the repository tracks belongs in the jar: never a plugin jar or a key someone put
+    // into a template folder of their checkout.
+    templates.from(serverNetworkDir.asFileTree.matching {
+        include("*/template/**")
+        exclude("**/*.jar", "**/key.pem", "**/*.key", "**/*.secret", "**/*.p12", "**/*.jks", "**/.*", "**/.*/**")
+    })
+    outputDirectory = layout.buildDirectory.dir("generated/template-resources")
+}
+
 sourceSets.main {
     resources.srcDir(bridgeResources)
+    resources.srcDir(templateResources)
+}
+
+// The end-to-end test starts the real VectoraCloud.jar as a process in an empty folder, with fake
+// server software and without network (CloudJarEndToEndTest, docs/cloud/node.md#end-to-end-test).
+// It takes a few minutes and starts about ten JVMs, so it is not part of the normal build; the
+// Integration job of ci.yml runs it with ./gradlew :VectoraCloud:cloud-node:e2eTest.
+val cloudJar: Configuration = configurations.create("cloudJar") {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    isTransitive = false
+}
+
+dependencies {
+    cloudJar(project(mapOf("path" to ":VectoraCloud:cloud-launcher", "configuration" to "cloudJarElements")))
+}
+
+tasks.test {
+    useJUnitPlatform {
+        excludeTags("e2e")
+    }
+}
+
+val e2eToolchains = extensions.getByType<JavaToolchainService>()
+val e2eJava21 = e2eToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+val e2eJava25 = e2eToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(25) }
+
+/** Common setup of the two tasks that start VectoraCloud.jar as a process. */
+fun Test.startsTheCloudJar() {
+    group = LifecycleBasePlugin.VERIFICATION_GROUP
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    val jar: FileCollection = cloudJar
+    val java21 = e2eJava21
+    val java25 = e2eJava25
+    inputs.files(jar).withPropertyName("cloudJar").withPathSensitivity(PathSensitivity.NONE)
+    jvmArgumentProviders.add(CommandLineArgumentProvider {
+        listOf(
+            "-Dvectora.e2e.cloudJar=${jar.singleFile.absolutePath}",
+            // The servers get exactly Java 21 (PandaSpigot) and 25 (everything else).
+            "-Dvectora.e2e.java21=${java21.get().executablePath.asFile.absolutePath}",
+            "-Dvectora.e2e.java25=${java25.get().executablePath.asFile.absolutePath}",
+        )
+    })
+    // -Pe2eAllowRoot=true for a developer shell that runs as administrator or root.
+    providers.gradleProperty("e2eAllowRoot").orNull?.let { systemProperty("vectora.e2e.allowRoot", it) }
+    // -Pe2eDatabase=managed: the cloud downloads and runs its own MariaDB (managed-mariadb.yml).
+    providers.gradleProperty("e2eDatabase").orNull?.let { systemProperty("vectora.e2e.database", it) }
+    outputs.upToDateWhen { false }
+    outputs.cacheIf { false }
+}
+
+val e2eTest by tasks.registering(Test::class) {
+    description = "Starts VectoraCloud.jar in an empty folder with fake servers and checks the whole network."
+    startsTheCloudJar()
+    useJUnitPlatform {
+        includeTags("e2e")
+        excludeTags("e2e-live")
+    }
+}
+
+// The same with real downloads and real Velocity, Paper and PandaSpigot: needs internet access
+// and a few GB of memory, so only on purpose and in the weekly cloud-e2e-live.yml.
+val e2eLiveTest by tasks.registering(Test::class) {
+    description = "Starts VectoraCloud.jar with real downloads and real servers (needs internet access)."
+    startsTheCloudJar()
+    useJUnitPlatform {
+        includeTags("e2e-live")
+    }
 }
 
 tasks.withType<Test>().configureEach {

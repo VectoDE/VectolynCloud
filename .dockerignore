@@ -29,3 +29,8 @@ Server-Network/
 docs/
 *.md
 !VectoraCloud/**/src/**/*.md
+
+# The node carries the server templates in VectoraCloud.jar (docs/cloud/node.md#built-in-templates),
+# so the templates, and only they, come back in. secrets/ and runtime/ stay out (rules above).
+!Server-Network/*/template/
+!Server-Network/*/template/**

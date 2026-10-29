@@ -20,6 +20,8 @@ import java.nio.file.Path;
  *       line as {@code > line}, and on {@code stop} (Paper) or {@code shutdown} (Velocity) writes
  *       {@code stopped-cleanly} and exits 0;</li>
  *   <li>{@code crash}: exits with code 3 right after starting;</li>
+ *   <li>{@code exit-0}: exits with code 0 right after starting, unasked (like CraftBukkit 1.8 on an
+ *       unknown option, or Spigot's watchdog without a restart script);</li>
  *   <li>{@code ignore-stop}: never reacts to {@code stop}; ends on the termination request;</li>
  *   <li>{@code ignore-term}: like {@code ignore-stop}, and its shutdown hook blocks, so only the
  *       forced end stops it (on Linux and macOS).</li>
@@ -32,7 +34,8 @@ import java.nio.file.Path;
  * (to prove secrets in rendered files are masked), and creates {@code world/level.dat} like a
  * real server creating its world.
  *
- * <p>With {@code -Dfake.cloud=true} it connects to the cloud channel through
+ * <p>With {@code -Dfake.cloud=true}, or {@code fake.cloud=true} in the jar's defaults (a jar from
+ * {@link FakeServerJar#writeConnected}, for groups whose JVM flags the test does not write), it connects to the cloud channel through
  * {@code FakeCloudBridge} (loaded by name, so this class keeps using only the JDK; packed by
  * {@link FakeServerJar#writeWithCloudClient}) and does not print {@code Done (…)!}: it reports
  * readiness only through {@code CloudClient.markReady()}, so the service becomes RUNNING only if
@@ -58,6 +61,7 @@ public final class FakeServer {
         out.println("[fake] args " + String.join(" ", args));
         out.println("[fake] token " + token);
         out.println("[fake] platform " + System.getenv("VECTORA_SERVICE_PLATFORM"));
+        out.println("[fake] java " + Runtime.version().feature());
         out.println("[fake] legacy secret " + (System.getenv("VECTORA_LEGACY_FORWARDING_SECRET") == null
                 ? "absent" : "present"));
         Files.writeString(Path.of("token.txt"), token == null ? "" : token, StandardCharsets.UTF_8);
@@ -75,11 +79,15 @@ public final class FakeServer {
             out.println("[fake] crashing on purpose");
             System.exit(3);
         }
+        if (mode.equals("exit-0")) {
+            out.println("[fake] ending on its own with exit code 0");
+            System.exit(0);
+        }
         if (mode.equals("ignore-term")) {
             Runtime.getRuntime().addShutdownHook(new Thread(FakeServer::sleepForever));
         }
         AutoCloseable bridge = null;
-        if (Boolean.getBoolean("fake.cloud")) {
+        if (Boolean.parseBoolean(System.getProperty("fake.cloud", defaults().getProperty("fake.cloud", "false")))) {
             bridge = (AutoCloseable) Class.forName("net.vectora.cloud.node.fake.FakeCloudBridge")
                     .getMethod("connect", PrintStream.class).invoke(null, out);
         } else {
@@ -107,6 +115,17 @@ public final class FakeServer {
             System.exit(0);
         }
         sleepForever();
+    }
+
+    /** {@value FakeServerJar#DEFAULTS} in the jar, written by {@link FakeServerJar#writeConnected}. */
+    private static java.util.Properties defaults() throws java.io.IOException {
+        java.util.Properties defaults = new java.util.Properties();
+        try (java.io.InputStream in = FakeServer.class.getResourceAsStream("/" + FakeServerJar.DEFAULTS)) {
+            if (in != null) {
+                defaults.load(in);
+            }
+        }
+        return defaults;
     }
 
     private static void sleepForever() {

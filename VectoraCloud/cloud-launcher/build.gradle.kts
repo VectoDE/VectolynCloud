@@ -118,6 +118,13 @@ tasks.named("assemble") {
     dependsOn(cloudJar)
 }
 
+// The jar for cloud-node's e2eTest, which starts it as a process (docs/cloud/node.md#end-to-end-test).
+val cloudJarElements: Configuration = configurations.create("cloudJarElements") {
+    isCanBeConsumed = true
+    isCanBeResolved = false
+}
+artifacts.add(cloudJarElements.name, cloudJar)
+
 // CloudJarTest opens the real VectoraCloud.jar (manifest and layout).
 tasks.named<Test>("test") {
     val jar = cloudJar.flatMap { it.archiveFile }
