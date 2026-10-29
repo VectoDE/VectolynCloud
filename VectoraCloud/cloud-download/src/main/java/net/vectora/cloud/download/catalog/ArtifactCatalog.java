@@ -25,7 +25,7 @@ public final class ArtifactCatalog {
     public static final String RESOURCE = "/net/vectora/cloud/download/catalog/catalog.yml";
 
     private static final Set<String> ENTRY_KEYS = Set.of("id", "kind", "type", "provider", "project", "platform",
-            "game-version", "targets", "replaced-by", "alternative");
+            "game-version", "targets", "replaced-by", "alternative", "version");
 
     private static final YAMLMapper MAPPER = YAMLMapper.builder()
             .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
@@ -123,7 +123,8 @@ public final class ArtifactCatalog {
                     enumValue(CatalogEntry.GameVersionUse.class, text(node, "game-version", context, true), context),
                     targets,
                     text(node, "replaced-by", context, false),
-                    text(node, "alternative", context, false));
+                    text(node, "alternative", context, false),
+                    text(node, "version", context, false));
         } catch (IllegalArgumentException e) {
             throw new IOException(context + ": " + e.getMessage(), e);
         }
