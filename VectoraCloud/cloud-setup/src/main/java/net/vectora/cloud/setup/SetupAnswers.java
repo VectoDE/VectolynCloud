@@ -29,8 +29,9 @@ import net.vectora.cloud.config.secret.Secret;
  * @param legacyPort       Java port of the legacy proxy
  * @param heap             maximum heap per group name
  * @param services         static, minimum and maximum services per task name (not for the proxies)
- * @param drainTimeouts    {@code drain-timeout} per group name, only for groups that set one; a
- *                         group without an entry keeps what its file says
+ * @param drainTimeouts    {@code drain-timeout} per group name, only for groups that set one. The
+ *                         defaults hold every value the group files have, so an existing group
+ *                         without an entry gets the field removed (the default 30s applies)
  * @param maxMemory        {@code max-memory} of this node in {@code nodes.yml}; null means automatic
  * @param memoryReserve    {@code memory-reserve} of this node as written to the file; null means
  *                         every default
@@ -129,6 +130,14 @@ public record SetupAnswers(Language language, boolean eulaAccepted, String netwo
     public SetupAnswers withDrainTimeout(String group, TimeSpan value) {
         Map<String, TimeSpan> copy = new TreeMap<>(drainTimeouts);
         copy.put(group, Objects.requireNonNull(value, "value"));
+        return new SetupAnswers(language, eulaAccepted, networkName, servers, groupSwitches, bind, javaPort, bedrockPort,
+                legacyPort, heap, services, copy, maxMemory, memoryReserve, database, databasePassword);
+    }
+
+    /** A copy without a {@code drain-timeout} for {@code group}, so the default 30s applies. */
+    public SetupAnswers withoutDrainTimeout(String group) {
+        Map<String, TimeSpan> copy = new TreeMap<>(drainTimeouts);
+        copy.remove(group);
         return new SetupAnswers(language, eulaAccepted, networkName, servers, groupSwitches, bind, javaPort, bedrockPort,
                 legacyPort, heap, services, copy, maxMemory, memoryReserve, database, databasePassword);
     }

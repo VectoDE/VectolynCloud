@@ -48,11 +48,11 @@ The scaler reads the configuration again in every round, so all three take effec
 
 ### Group settings for the scaler
 
-`drain-timeout` in `groups/<name>.yml` (5s to 10m, default 30s) is how long a service of the group may take to send its players elsewhere before the scaler stops it. Stored and checked now, used by a later change. File, `group set <name> drain-timeout 45s`, `PUT /api/v1/groups/{name}` or `drain-timeout:` in the setup file.
+`drain-timeout` in `groups/<name>.yml` (5s to 10m, default 30s) is how long a service of the group may take to send its players elsewhere before the scaler stops it. Stored and checked now, used by a later change. File, `group set <name> drain-timeout 45s`, `PUT /api/v1/groups/{name}`, `drain-timeout:` in the setup file or the advanced settings of the setup assistant.
 
 ### Node settings for the scaler
 
-In `nodes.yml` each node may set `max-memory` (at least 512M, missing: worked out by the node) and `memory-reserve` with `system` (default 1G), `node-overhead` (default 256M) and `database` (default 512M, counted only when the cloud runs the database in `managed` or `docker` mode), each 1M to 64G. The reserve is memory the node keeps for itself. Stored and checked now; the memory budget below uses them from a later change on. File, `node set <id> <field> <value>`, `PUT /api/v1/nodes/{name}` or `node:` in the setup file. See [config.md](config.md#nodesyml).
+In `nodes.yml` each node may set `max-memory` (at least 512M, missing: worked out by the node) and `memory-reserve` with `system` (default 1G), `node-overhead` (default 256M) and `database` (default 512M, counted only when the cloud runs the database in `managed` or `docker` mode), each 1M to 64G. The reserve is memory the node keeps for itself. Stored and checked now; the memory budget below uses them from a later change on. File, `node set <id> <field> <value>`, `PUT /api/v1/nodes/{name}`, `node:` in the setup file or the advanced settings of the setup assistant. See [config.md](config.md#nodesyml).
 
 ## Which tasks are scaled
 

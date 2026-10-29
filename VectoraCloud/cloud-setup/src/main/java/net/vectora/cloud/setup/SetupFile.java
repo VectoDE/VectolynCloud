@@ -50,9 +50,9 @@ import net.vectora.cloud.console.Text;
  *                      the suggestion
  * @param drainTimeout  optional {@code drain-timeout} per group name (5s to 10m); a group without
  *                      an entry keeps what its file says, a new group gets the default 30s. The
- *                      console assistant does not ask for it.
+ *                      console assistant asks for it under "advanced settings".
  * @param node          optional memory settings of this node in {@code nodes.yml}; the console
- *                      assistant does not ask for them
+ *                      assistant asks for them under "advanced settings"
  * @param database      database settings
  */
 public record SetupFile(int schemaVersion, Language language, Boolean eula, String networkName, Servers servers,
@@ -130,11 +130,15 @@ public record SetupFile(int schemaVersion, Language language, Boolean eula, Stri
      * key keeps what {@code nodes.yml} says; a field of {@code memory-reserve} replaces only that
      * field.
      *
-     * @param maxMemory     {@code max-memory}, at least 512M
+     * @param maxMemory     {@code max-memory}: a size of at least 512M, or {@value #AUTO} to remove the
+     *                      limit so the node works it out
      * @param memoryReserve {@code memory-reserve}: {@code system}, {@code node-overhead},
-     *                      {@code database}, each up to 64G
+     *                      {@code database}, each 1M to 64G
      */
-    public record Node(MemorySize maxMemory, MemoryReserve memoryReserve) {
+    public record Node(String maxMemory, MemoryReserve memoryReserve) {
+
+        /** Value of {@code max-memory} that removes the limit. */
+        public static final String AUTO = "auto";
     }
 
     /**
@@ -270,7 +274,16 @@ public record SetupFile(int schemaVersion, Language language, Boolean eula, Stri
             }
         }
         if (node != null) {
-            MemorySize max = node.maxMemory() != null ? node.maxMemory() : answers.maxMemory();
+            MemorySize max = answers.maxMemory();
+            if (Node.AUTO.equals(node.maxMemory())) {
+                max = null;
+            } else if (node.maxMemory() != null) {
+                try {
+                    max = MemorySize.parse(node.maxMemory());
+                } catch (IllegalArgumentException e) {
+                    problems.add(SetupMessages.FILE_NODE_MAX_MEMORY);
+                }
+            }
             MemoryReserve reserve = node.memoryReserve() != null ? node.memoryReserve().over(answers.memoryReserve())
                     : answers.memoryReserve();
             answers = answers.withNodeMemory(max, reserve);

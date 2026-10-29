@@ -155,7 +155,7 @@ nodes:
       database: 512M         # only counted when this cloud runs the database (managed or docker)
 ```
 
-`max-memory` caps the memory the node gives its services. `memory-reserve` is memory the node keeps for itself and never hands to services. Only the fields that are set are written; a missing field or section means the default shown above. `NodeConfig.memoryReserve()` returns the reserve with the defaults filled in. The `database` part counts only when `servers.database` is on and the database runs in `managed` or `docker` mode. Both settings are stored and validated now; the node uses them from a later change on. They can be changed with `node set` in the console, `PUT /nodes/{name}` in the API and the `node:` section of the setup file.
+`max-memory` caps the memory the node gives its services. `memory-reserve` is memory the node keeps for itself and never hands to services. Only the fields that are set are written; a missing field or section means the default shown above. `NodeConfig.memoryReserve()` returns the reserve with the defaults filled in. The `database` part counts only when `servers.database` is on and the database runs in `managed` or `docker` mode. Both settings are stored and validated now; the node uses them from a later change on. They can be changed with `node set` in the console, `PUT /nodes/{name}` in the API, the `node:` section of the setup file and the advanced settings of the setup assistant.
 
 ### Names
 

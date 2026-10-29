@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
@@ -23,6 +24,7 @@ import net.vectora.cloud.config.model.MemoryReserve;
 import net.vectora.cloud.config.model.MemorySize;
 import net.vectora.cloud.config.model.ServerKind;
 import net.vectora.cloud.config.model.TimeSpan;
+import net.vectora.cloud.config.operation.PutNode;
 import net.vectora.cloud.config.secret.SecretStore;
 import net.vectora.cloud.console.Console;
 import org.junit.jupiter.api.AfterEach;
@@ -243,6 +245,19 @@ class SetupFileTest {
         assertEquals(MemorySize.parse("8G"), node.maxMemory());
         assertEquals(new MemoryReserve(MemorySize.parse("2G"), null, null), node.reserve(), "only the given field is written");
         assertEquals(MemorySize.parse("512M"), node.memoryReserve().database());
+    }
+
+    @Test
+    void maxMemoryAutoRemovesTheLimit() throws Exception {
+        var before = config.snapshot().nodes().nodes().getFirst();
+        config.apply(List.of(new PutNode(before.withMaxMemory(MemorySize.parse("8G")))));
+        String typo = refused("schema-version: 1\neula: true\nnode:\n  max-memory: lots\n", false).describe(Language.EN);
+        assertTrue(typo.contains("node.max-memory: write auto"), typo);
+        assertEquals(MemorySize.parse("8G"), config.snapshot().nodes().nodes().getFirst().maxMemory(), "refused: unchanged");
+
+        assertEquals(SetupResult.Status.COMPLETED, SetupWizard.nonInteractive(config,
+                env("schema-version: 1\neula: true\nnode:\n  max-memory: auto\n", false), null).status());
+        assertEquals(null, config.snapshot().nodes().nodes().getFirst().maxMemory());
     }
 
     @Test

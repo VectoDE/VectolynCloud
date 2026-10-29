@@ -254,7 +254,8 @@ public final class SetupPlan {
                     ops.add(new SetGroupHeap(group, min, max));
                 }
                 TimeSpan drain = answers.drainTimeouts().get(group);
-                if (drain != null && !drain.equals(current.groups().get(group).drainTimeout())) {
+                // The defaults hold every value of the files, so a missing entry was removed on purpose.
+                if (!Objects.equals(drain, current.groups().get(group).drainTimeout())) {
                     ops.add(new SetGroupDrainTimeout(group, drain));
                 }
             }

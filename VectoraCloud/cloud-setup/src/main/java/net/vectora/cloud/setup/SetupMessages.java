@@ -109,6 +109,36 @@ public final class SetupMessages {
                     + " 0/1/8: nur dynamisch, einer immer bereit, höchstens 8.");
     /** Services question; %1$s is the server, %2$s the task. */
     public static final Text SERVICES_OF = Text.of("%1$s (task %2$s), static/min/max", "%1$s (Task %2$s), statisch/min/max");
+    /** Advanced settings question. */
+    public static final Text ADVANCED = Text.of(
+            "Advanced settings (drain time per group, memory of this node)?",
+            "Erweiterte Einstellungen (Abbauzeit pro Gruppe, Speicher dieses Nodes)?");
+    /** Advanced settings heading. */
+    public static final Text ADVANCED_HEADING = Text.of("Advanced settings", "Erweiterte Einstellungen");
+    /** Advanced settings: how Enter works. */
+    public static final Text ADVANCED_HELP = Text.of(
+            "Enter keeps the value in brackets. \"default\" goes back to the default, \"auto\" lets the node work out its memory.",
+            "Enter übernimmt den Wert in Klammern. \"default\" stellt den Standard wieder her, \"auto\" lässt den Node seinen Speicher selbst bestimmen.");
+    /** Drain timeout question; %1$s the group. */
+    public static final Text DRAIN_TIMEOUT_OF = Text.of(
+            "Drain time of %1$s (5s to 10m, players move before the scaler stops a service)",
+            "Abbauzeit von %1$s (5s bis 10m, so lange wechseln Spieler, bevor der Scaler einen Dienst stoppt)");
+    /** Max memory question; %1$s the node. */
+    public static final Text MAX_MEMORY_OF = Text.of(
+            "Memory node %1$s may give its services (at least 512M, or auto)",
+            "Speicher, den Node %1$s seinen Diensten geben darf (mindestens 512M, oder auto)");
+    /** Reserve for the system; %1$s the node. */
+    public static final Text RESERVE_SYSTEM_OF = Text.of(
+            "Memory node %1$s keeps for the system (1M to 64G)",
+            "Speicher, den Node %1$s für das System freihält (1M bis 64G)");
+    /** Reserve for the node itself; %1$s the node. */
+    public static final Text RESERVE_NODE_OVERHEAD_OF = Text.of(
+            "Memory node %1$s keeps for itself (1M to 64G)",
+            "Speicher, den Node %1$s für sich selbst freihält (1M bis 64G)");
+    /** Reserve for the database; %1$s the node. */
+    public static final Text RESERVE_DATABASE_OF = Text.of(
+            "Memory node %1$s keeps for the database it runs (1M to 64G)",
+            "Speicher, den Node %1$s für die eigene Datenbank freihält (1M bis 64G)");
     /** Database heading. */
     public static final Text DATABASE = Text.of("Database (LuckPerms, later the Vectora plugin)",
             "Datenbank (LuckPerms, später das Vectora-Plugin)");
@@ -338,6 +368,9 @@ public final class SetupMessages {
     public static final Text FILE_UNKNOWN_DRAIN_GROUP = Text.of(
             "drain-timeout: %1$s is neither an existing group nor a group the setup creates.",
             "drain-timeout: %1$s ist weder eine vorhandene Gruppe noch eine, die die Einrichtung anlegt.");
+    /** node.max-memory that is neither auto nor a size. */
+    public static final Text FILE_NODE_MAX_MEMORY = Text.of(
+            "node.max-memory: write auto or a size like 8G.", "node.max-memory: schreib auto oder eine Größe wie 8G.");
     /** Unknown task under services; %1$s the task. */
     public static final Text FILE_UNKNOWN_SERVICES_TASK = Text.of(
             "services: %1$s is neither an existing task nor one the setup creates (the proxies always run one service).",
@@ -406,6 +439,17 @@ public final class SetupMessages {
     public static final Text CHECK_PASSWORD_FORM = Text.of(
             "The password must be one line without spaces at either end.",
             "Das Passwort muss eine Zeile ohne Leerzeichen am Anfang oder Ende sein.");
+
+    /** Drain timeout rule. */
+    public static final Text CHECK_DRAIN_TIMEOUT = Text.of(
+            "Between 5s and 10m, written like 45s or 2m.", "Zwischen 5s und 10m, geschrieben wie 45s oder 2m.");
+    /** Max memory rule. */
+    public static final Text CHECK_MAX_MEMORY = Text.of(
+            "At least 512M, written like 8G, or auto.", "Mindestens 512M, geschrieben wie 8G, oder auto.");
+    /** Reserve rule. */
+    public static final Text CHECK_RESERVE = Text.of(
+            "Between 1M and 64G, written like 512M or 2G, or default.",
+            "Zwischen 1M und 64G, geschrieben wie 512M oder 2G, oder default.");
 
     /** {@code text} with its placeholders filled, in both languages. */
     public static Text fill(Text text, Object... args) {
