@@ -14,6 +14,7 @@ import net.vectora.cloud.config.error.ConfigException;
 import net.vectora.cloud.config.secret.EnvFormatException;
 import net.vectora.cloud.config.secret.Secret;
 import net.vectora.cloud.config.secret.SecretStore;
+import net.vectora.cloud.config.validation.ConfigNames;
 import net.vectora.cloud.monitor.config.MonitorConfig;
 import net.vectora.cloud.monitor.config.MonitorConfigLoader;
 import net.vectora.cloud.monitor.console.MonitorCommands;
@@ -75,6 +76,7 @@ public final class MonitorRuntime implements AutoCloseable {
      * @param origin    name shown in notifications, for example the node id
      * @return the runtime
      * @throws ConfigException if {@code monitor.yml} is invalid
+     * @throws IllegalArgumentException if {@code origin} is no valid node id
      */
     public static MonitorRuntime open(Path home, ServiceDirectory directory, SecretStore secrets,
                                       UnaryOperator<String> redactor, String origin) throws ConfigException {
@@ -87,6 +89,11 @@ public final class MonitorRuntime implements AutoCloseable {
         Objects.requireNonNull(secrets, "secrets");
         Objects.requireNonNull(redactor, "redactor");
         Objects.requireNonNull(origin, "origin");
+        // It goes into every notification: only a node id (lower case, digits, - and _), nothing
+        // that could change the message's layout. The value itself is not repeated.
+        if (!ConfigNames.isValidName(origin)) {
+            throw new IllegalArgumentException("origin must be a node id (1 to 32 of a-z 0-9 _ -, no device name)");
+        }
         MonitorConfigLoader.Settings settings = MonitorConfigLoader.load(home);
         MonitorConfig config = settings.config();
         List<Notifier> notifiers = new ArrayList<>();

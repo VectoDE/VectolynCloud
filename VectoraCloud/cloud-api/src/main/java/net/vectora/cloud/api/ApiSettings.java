@@ -34,8 +34,18 @@ public record ApiSettings(String bind, int port, Optional<ApiTls.Material> tls, 
      * @param api the section
      * @param tls the key material ({@link ApiTls#prepare}) when {@code api.tls.enabled}, otherwise empty
      * @return the settings with {@link ApiLimits#defaults()}
+     * @throws IllegalArgumentException if {@code api.tls.enabled} and {@code tls} disagree: with TLS
+     *                                  on and no material the server would speak plain HTTP
      */
     public static ApiSettings of(ApiConfig api, Optional<ApiTls.Material> tls) {
+        Objects.requireNonNull(tls, "tls");
+        boolean enabled = api.tls() != null && api.tls().enabled();
+        if (enabled && tls.isEmpty()) {
+            throw new IllegalArgumentException("api.tls.enabled is set in cloud.yml, but no key material was prepared");
+        }
+        if (!enabled && tls.isPresent()) {
+            throw new IllegalArgumentException("key material was given, but api.tls.enabled is off in cloud.yml");
+        }
         return new ApiSettings(api.bind(), api.port(), tls, api.corsOrigins(), ApiLimits.defaults());
     }
 
