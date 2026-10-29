@@ -54,7 +54,7 @@ Dependabot aktualisiert `gradle/libs.versions.toml` und die Build-Dateien, aber 
 
 1. Dependabot öffnet oder aktualisiert einen Pull Request, der `gradle/**`, eine `*.gradle.kts`-Datei oder `gradle.properties` ändert.
 2. Der Job `regenerate` checkt den Dependabot-Commit aus und führt `gradle/update-verification-metadata.sh` aus. Er hat ein Token nur mit Leserechten und keine gespeicherten Zugangsdaten. Ändert sich mehr als die Metadaten-Datei, schlägt er fehl.
-3. Der Job `commit` hat als einziger `contents: write` und führt keinen Code aus dem Pull Request aus. Er prüft, dass das Artefakt genau eine normale Metadaten-Datei ist, committet sie mit Sign-off als `github-actions[bot]` und pusht sie auf den Dependabot-Branch. Hat Dependabot den Branch inzwischen verschoben, schlägt der Push fehl, und der nächste Lauf übernimmt.
+3. Der Job `commit` hat als einziger `contents: write` und führt weder Gradle noch Build-Code aus. Er prüft das Artefakt mit [`.github/scripts/check-verification-metadata.py`](../.github/scripts/check-verification-metadata.py): genau eine normale Metadaten-Datei, nur Einträge aus `<component>`/`<artifact>`/`<sha256>`, ein unveränderter Block `<configuration>` und keine geänderte Prüfsumme für ein Artefakt, das schon in der Datei steht. Ein Versionssprung kann Einträge hinzufügen, aber keinen ersetzen. Danach committet er die Datei mit Sign-off als `github-actions[bot]` und pusht sie auf den Dependabot-Branch. Hat Dependabot den Branch inzwischen verschoben, schlägt der Push fehl, und der nächste Lauf übernimmt.
 4. Ein Push mit `GITHUB_TOKEN` startet keine anderen Workflows. Ein Maintainer prüft den Commit nach der Checkliste oben und pusht danach einen leeren Commit auf den Branch. Dann laufen CI, CodeQL und Dependency Review auf dem neuen Stand:
 
    ```sh
@@ -94,6 +94,7 @@ pandaspigot-api gibt es nur als Snapshot, deshalb legt der Build einen eindeutig
 ## CI
 
 - Der Job `Validate Gradle wrapper` prüft: Die Datei existiert, prüft Metadaten und hat SHA-256-Einträge. Sie enthält keine XML-Kommentare, keine PGP-Schlüssel, keinen übrig gebliebenen Workaround-Eintrag und keine vertrauenswürdigen Artefakte außer `-javadoc.jar`/`-sources.jar`. `gradle.properties` setzt `strict`. Kein Workflow, keine Gradle-Build-Datei, keine Properties-Datei und kein Dockerfile schaltet die Prüfung ab oder schreibt die Datei neu (lange Optionen, `-F`/`-M`, die Property in jeder Schreibweise).
-- Der Dependabot-Workflow übernimmt eine neu geschriebene Datei nur, wenn ihr Block `<configuration>` unverändert ist.
+- Derselbe Job prüft die Datei mit `.github/scripts/check-verification-metadata.py`: nur einfache SHA-256-Einträge, keine PGP-Einträge, kein `<also-trust>`, kein DOCTYPE, keine Duplikate.
+- Der Dependabot-Workflow übernimmt eine neu geschriebene Datei nur, wenn ihr Block `<configuration>` unverändert ist und sich keine vorhandene Prüfsumme geändert hat.
 - Alle anderen Jobs führen Gradle mit eingeschalteter Prüfung aus. Eine fehlende oder falsche Prüfsumme lässt also `Build`, `Tests on Java 21`, `Integration`, CodeQL und das Release scheitern.
 - Änderungen unter `gradle/`, `build-logic/`, `settings.gradle.kts` oder `gradle.properties` starten auch den Job `Integration`.

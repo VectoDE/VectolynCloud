@@ -10,8 +10,9 @@ name: Dependabot verification metadata
 #   Dependabot opened from a branch of this repository and when Dependabot triggered the run.
 # - "regenerate" runs Gradle (and with it the build scripts and plugins of the pull request) with a
 #   read-only token and without persisted credentials. Its only output is the metadata file.
-# - "commit" has contents: write but runs no code from the pull request. It checks that the
-#   artifact is a single verification metadata file, copies it over and pushes one commit to the
+# - "commit" has contents: write and runs no build code. It checks that the
+#   artifact is a single verification metadata file that only adds or removes checksums
+#   (.github/scripts/check-verification-metadata.py), copies it over and pushes one commit to the
 #   Dependabot branch. The push fails if the branch moved in the meantime.
 # - A push with GITHUB_TOKEN starts no new workflow runs. A maintainer reviews the commit and then
 #   pushes an empty signed-off commit to the branch, which runs every check on the new head.
@@ -107,7 +108,8 @@ jobs:
         with:
           egress-policy: audit
 
-      # Credentials stay in the checkout for the push. Nothing from the pull request is executed.
+      # Credentials stay in the checkout for the push. No Gradle and no build code runs here; the
+      # only script is the stdlib checker, a file Dependabot never edits.
       - name: Checkout the Dependabot commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -127,16 +129,13 @@ jobs:
           src="$DIR/verification-metadata.xml"
           [ "$(find "$DIR" -mindepth 1 | wc -l)" -eq 1 ] || fail "The artifact must hold exactly one file."
           if [ ! -f "$src" ] || [ -L "$src" ]; then fail "The artifact holds no regular verification-metadata.xml."; fi
-          [ "$(wc -c < "$src")" -lt 5000000 ] || fail "The metadata file is unexpectedly large."
-          sed -n 2p "$src" | grep -q '^<verification-metadata xmlns="https://schema.gradle.org/dependency-verification"' \
-            || fail "The file is not Gradle verification metadata."
-          if grep -q '<!--' "$src"; then fail "The metadata file must not contain XML comments."; fi
-          # The build code of the pull request produced the file. It may add or change checksums,
-          # but the <configuration> block (trusted artifacts, keys, verification switches) has to
-          # be byte for byte the one already on the branch.
-          config() { tr -d '\r' < "$1" | awk '/<configuration>/ { f = 1 } f { print } /<\/configuration>/ { exit }'; }
-          [ "$(config "$src")" = "$(config gradle/verification-metadata.xml)" ] \
-            || fail "The <configuration> block changed. Only checksums may change in this workflow."
+          # The build code of the pull request (and anything it left running) produced the file,
+          # so it is checked strictly with the script from this checkout (stdlib only, run with -I):
+          # plain <component>/<artifact>/<sha256> entries, no DOCTYPE, entities, comments, PGP or
+          # also-trust, the <configuration> block unchanged, and no checksum of an artifact that
+          # is already in the file may change. New versions only add entries.
+          python3 -I .github/scripts/check-verification-metadata.py "$src" --base gradle/verification-metadata.xml \
+            || fail "The regenerated metadata was rejected (see above)."
           cp "$src" gradle/verification-metadata.xml
           git diff --stat
 

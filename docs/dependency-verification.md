@@ -54,7 +54,7 @@ Dependabot updates `gradle/libs.versions.toml` and the build files, but not `gra
 
 1. Dependabot opens or updates a pull request that touches `gradle/**`, a `*.gradle.kts` file or `gradle.properties`.
 2. Job `regenerate` checks out the Dependabot commit and runs `gradle/update-verification-metadata.sh`. It has a read-only token and no stored credentials. If anything other than the metadata file changes, it fails.
-3. Job `commit` (only token with `contents: write`, runs no code from the pull request) checks that the artifact is one plain metadata file, commits it with sign-off as `github-actions[bot]` and pushes it to the Dependabot branch. If Dependabot moved the branch in the meantime, the push fails and the next run takes over.
+3. Job `commit` (only token with `contents: write`, runs no Gradle and no build code) checks the artifact with [`.github/scripts/check-verification-metadata.py`](../.github/scripts/check-verification-metadata.py): one plain metadata file, only `<component>`/`<artifact>`/`<sha256>` entries, an unchanged `<configuration>` block, and no changed checksum for an artifact that is already in the file. A version bump can add entries, never replace one. Then it commits the file with sign-off as `github-actions[bot]` and pushes it to the Dependabot branch. If Dependabot moved the branch in the meantime, the push fails and the next run takes over.
 4. A push with `GITHUB_TOKEN` does not start other workflows. A maintainer reviews the commit using the checklist above and then pushes an empty commit to the branch, which runs CI, CodeQL and dependency review on the new head:
 
    ```sh
@@ -94,6 +94,7 @@ pandaspigot-api is only published as a snapshot, so the build pins one unique sn
 ## CI
 
 - The job `Validate Gradle wrapper` checks that the file exists, verifies metadata and has SHA-256 entries; that it has no XML comments, no PGP keys, no leftover workaround entry and no trusted artifacts besides `-javadoc.jar`/`-sources.jar`; that `gradle.properties` sets `strict`; and that no workflow, Gradle build file, properties file or Dockerfile switches verification off or rewrites the file (long options, `-F`/`-M`, the property in any syntax).
-- The Dependabot workflow only accepts a regenerated file whose `<configuration>` block is unchanged.
+- The same job runs `.github/scripts/check-verification-metadata.py` on the file: only plain SHA-256 entries, no PGP entries, `<also-trust>`, DOCTYPE or duplicates.
+- The Dependabot workflow only accepts a regenerated file whose `<configuration>` block is unchanged and in which no existing checksum changed.
 - Every other job runs Gradle with verification on, so a missing or wrong checksum fails `Build`, `Tests on Java 21`, `Integration`, CodeQL and the release.
 - Changes under `gradle/`, `build-logic/`, `settings.gradle.kts` or `gradle.properties` also start the `Integration` job.

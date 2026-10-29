@@ -69,6 +69,8 @@ jobs:
               || ! grep -qF '<trust file=".*-sources[.]jar" regex="true"' "$f"; then
             fail "$f may only trust -javadoc.jar and -sources.jar files."
           fi
+          # Structure: plain SHA-256 entries only, no PGP, <also-trust>, DOCTYPE or duplicates.
+          python3 -I .github/scripts/check-verification-metadata.py "$f" || fail "$f has entries Gradle would accept without a plain SHA-256."
           grep -qxF 'org.gradle.dependency.verification=strict' gradle.properties \
             || fail "gradle.properties must set org.gradle.dependency.verification=strict."
           # Long and short Gradle options (-F for the verification mode, -M for writing the
