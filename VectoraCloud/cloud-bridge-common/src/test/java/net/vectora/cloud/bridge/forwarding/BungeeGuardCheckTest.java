@@ -3,10 +3,15 @@ package net.vectora.cloud.bridge.forwarding;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import net.vectora.cloud.bridge.forwarding.BungeeGuardCheck.Accepted;
 import net.vectora.cloud.bridge.forwarding.BungeeGuardCheck.Reason;
@@ -83,6 +88,44 @@ class BungeeGuardCheckTest {
         assertFalse(tooShort.getMessage().contains("short-secret"));
         assertThrows(IllegalArgumentException.class, () -> ForwardingSecret.of("has space in the secret!"));
         assertThrows(IllegalArgumentException.class, () -> ForwardingSecret.of("quote\"inside-the-secret"));
+    }
+
+    @Test
+    void aTokenWithJsonEscapesAsVelocityWritesItIsAccepted() {
+        // Velocity's Gson escapes '=' as \u003d (HTML-safe mode) and adds an empty signature.
+        String escaped = Handshakes.SECRET.replace("=", "\\u003d");
+        String handshake = Handshakes.forwarded("[{\"name\":\"bungeeguard-token\",\"value\":\"" + escaped
+                + "\",\"signature\":\"\"}]");
+        assertInstanceOf(Accepted.class, check.check(handshake));
+        // Counter-check: an escape that decodes to another character is a wrong token.
+        String other = Handshakes.SECRET.replace("=", "\\u003e");
+        assertEquals(new Rejected(Reason.WRONG_TOKEN), check.check(Handshakes.forwarded(
+                "[{\"name\":\"bungeeguard-token\",\"value\":\"" + other + "\"}]")));
+        // The property name may be escaped as well; it still counts as the token.
+        assertEquals(new Rejected(Reason.WRONG_TOKEN), check.check(Handshakes.forwarded(
+                "[{\"name\":\"\\u0062ungeeguard-token\",\"value\":\"wrong-wrong-wrong-wrong\"}]")));
+    }
+
+    /** The stored fuzz inputs reach the outcome their name says, so the fuzzer starts on every path. */
+    @Test
+    void theStoredFuzzInputsCoverEveryOutcome() throws IOException {
+        List<String> accepted = List.of("right-token", "velocity-escaped-token", "ipv6");
+        Map<String, Reason> rejected = Map.of("wrong-token", Reason.WRONG_TOKEN, "two-tokens", Reason.WRONG_TOKEN,
+                "missing-token", Reason.MISSING_TOKEN, "direct-connection", Reason.MALFORMED);
+        for (String name : accepted) {
+            assertInstanceOf(Accepted.class, check.check(fuzzInput(name)), name);
+        }
+        for (Map.Entry<String, Reason> entry : rejected.entrySet()) {
+            assertEquals(new Rejected(entry.getValue()), check.check(fuzzInput(entry.getKey())), entry.getKey());
+        }
+    }
+
+    private static String fuzzInput(String name) throws IOException {
+        String path = "ForwardedHandshakeFuzzTestInputs/checkNeverThrowsAndNeverPassesTheToken/" + name;
+        try (InputStream in = BungeeGuardCheckTest.class.getResourceAsStream(path)) {
+            assertNotNull(in, path);
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        }
     }
 
     @Test
