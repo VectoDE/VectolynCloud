@@ -10,6 +10,7 @@ import net.vectora.cloud.bridge.KickCommandWatch;
 import org.bukkit.command.BlockCommandSender;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.ConsoleCommandSender;
+import org.bukkit.command.ProxiedCommandSender;
 import org.bukkit.command.RemoteConsoleCommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.minecart.CommandMinecart;
@@ -57,6 +58,27 @@ class KickSourceTest {
         assertEquals(KickCommandWatch.Source.OTHER, source(BlockCommandSender.class));
         assertFalse(entitled(BlockCommandSender.class, true));
         assertFalse(entitled(CommandMinecart.class, true));
+    }
+
+    /** A proxied sender (a plugin's {@code execute as}) whose caller is a sender of the given type. */
+    private static boolean entitledThroughProxy(Class<?> callerType, boolean permitted) {
+        Object caller = sender(callerType, permitted);
+        Object proxied = Proxy.newProxyInstance(ProxiedCommandSender.class.getClassLoader(),
+                new Class<?>[] {ProxiedCommandSender.class}, (proxy, method, args) -> switch (method.getName()) {
+                    case "getCaller" -> caller;
+                    case "hasPermission", "isOp" -> true;
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                });
+        return PaperBridgePlugin.entitled((CommandSender) proxied);
+    }
+
+    @Test
+    @Tag("requires-java25") // loads paper-api 26.3 classes (class file version 69)
+    void aProxiedSenderCountsAsItsCaller() {
+        assertTrue(entitledThroughProxy(ConsoleCommandSender.class, false));
+        assertFalse(entitledThroughProxy(Player.class, false), "a normal player behind an operator's proxy");
     }
 
     @Test

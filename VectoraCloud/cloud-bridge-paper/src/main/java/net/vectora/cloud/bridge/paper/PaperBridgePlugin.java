@@ -1,5 +1,14 @@
 package net.vectora.cloud.bridge.paper;
 
+import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.mojang.brigadier.tree.CommandNode;
+import com.mojang.brigadier.tree.LiteralCommandNode;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import io.papermc.paper.command.brigadier.Commands;
+import io.papermc.paper.command.brigadier.argument.ArgumentTypes;
+import io.papermc.paper.command.brigadier.argument.resolvers.selector.PlayerSelectorArgumentResolver;
+import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -7,6 +16,10 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.function.Predicate;
+import java.util.logging.Level;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TranslatableComponent;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
@@ -20,6 +33,7 @@ import net.vectora.protocol.ServiceId;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.ConsoleCommandSender;
+import org.bukkit.command.ProxiedCommandSender;
 import org.bukkit.command.RemoteConsoleCommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventPriority;
@@ -40,11 +54,15 @@ import org.bukkit.plugin.java.JavaPlugin;
  *   <li>Ready: the first server tick, which comes after "Done".</li>
  *   <li>Status: every {@value #STATUS_PERIOD_TICKS} ticks with Paper's TPS and MSPT, and at once
  *       when a player joins or leaves.</li>
- *   <li>Network kicks: a {@code /kick} of the console, of RCON or of a player with
- *       {@value KickCommandWatch#PERMISSION} ({@link KickCommandWatch}, aliases of
- *       {@code commands.yml} and selectors included) followed by the kick of a target in the same
- *       tick is sent to the proxy as {@code NetworkKick}, which takes the player off the network.
- *       Command blocks are no source. The moderation uses {@link #networkKick}.</li>
+ *   <li>Network kicks: the bridge puts its own command in place of {@code kick} and
+ *       {@code minecraft:kick} (Brigadier, {@link KickCommandNode}). It has the vanilla shape,
+ *       {@code kick <targets> [<reason>]} with selectors, and kicks through {@link #networkKick},
+ *       which tells the proxy ({@code NetworkKick}) to take the player off the network. Only the
+ *       console, RCON and a player with {@value KickCommandWatch#PERMISSION} (operators by
+ *       default) can use it; command blocks are no source. As the command sits in the dispatcher's
+ *       root, {@code execute ... run kick}, {@code dispatchCommand}, {@code performCommand} and
+ *       aliases of {@code commands.yml} run it too. The command line watch ({@link KickCommandWatch})
+ *       stays for the {@code kick} commands of other plugins and as a fallback.</li>
  * </ul>
  *
  * <p>Network-wide player events ({@code PlayerJoin} and so on) are reported by the proxy only, so
@@ -58,6 +76,8 @@ public final class PaperBridgePlugin extends JavaPlugin implements Listener {
     private final KickCommandWatch kicks = new KickCommandWatch();
     private BridgeSender sender;
     private ServiceId service;
+    /** The player {@link #networkKick} is kicking right now; its kick event is already reported. */
+    private UUID kicking;
 
     @Override
     public void onEnable() {
@@ -75,7 +95,11 @@ public final class PaperBridgePlugin extends JavaPlugin implements Listener {
                 (listener, event) -> report(0), this, false);
         getServer().getPluginManager().registerEvent(PlayerQuitEvent.class, this, EventPriority.MONITOR,
                 (listener, event) -> report(-1), this, false);
-        // Network kicks: the command line first, then the kick it causes in the same tick.
+        // Network kicks: the bridge's own kick command, also after every reload of the dispatcher.
+        getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS,
+                event -> registerKick(event.registrar()));
+        // Second way for the kick commands of other plugins: the command line first, then the kick
+        // it causes in the same tick.
         getServer().getPluginManager().registerEvent(PlayerCommandPreprocessEvent.class, this, EventPriority.MONITOR,
                 (listener, event) -> {
                     if (event instanceof PlayerCommandPreprocessEvent command) {
@@ -133,18 +157,73 @@ public final class PaperBridgePlugin extends JavaPlugin implements Listener {
             return false;
         }
         report(player, reason);
-        player.kick(Component.translatable().key(KickClassifier.MODERATION_KEY + ".kick").fallback("%s")
-                .arguments(Component.text(reason)).build(), PlayerKickEvent.Cause.PLUGIN);
+        String text = reason.strip();
+        Component shown = text.isEmpty() ? Component.translatable(KickClassifier.VANILLA_KICK_KEY) : Component.text(text);
+        UUID before = kicking;
+        kicking = player.getUniqueId();
+        try {
+            player.kick(Component.translatable().key(KickClassifier.MODERATION_KEY + ".kick").fallback("%s")
+                    .arguments(shown).build(), PlayerKickEvent.Cause.PLUGIN);
+        } finally {
+            kicking = before;
+        }
         return true;
     }
 
     /**
-     * Who issued a command, for {@link KickCommandWatch}.
+     * Puts the bridge's command in place of {@code kick} and {@code minecraft:kick}. Paper lets a
+     * plugin command take a vanilla name, so {@code kick} is registered the regular way;
+     * {@code minecraft:kick} is no name a plugin can register and is replaced in the dispatcher.
+     * If that fails, the vanilla command stays and the command line watch is the only way left.
+     */
+    private void registerKick(Commands registrar) {
+        Predicate<CommandSourceStack> requirement = Commands.restricted(source -> entitled(source.getSender()));
+        Set<String> labels = registrar.register(kickNode("kick", requirement),
+                "Kicks players off the whole network (VectoraCloud)");
+        CommandNode<CommandSourceStack> root = registrar.getDispatcher().getRoot();
+        try {
+            if (!labels.contains("kick")) {
+                KickCommandNode.replace(root, kickNode("kick", requirement));
+            }
+            if (root.getChild("minecraft:kick") != null) {
+                KickCommandNode.replace(root, kickNode("minecraft:kick", requirement));
+            }
+        } catch (IllegalStateException e) {
+            getLogger().log(Level.WARNING, "The kick command could not be replaced everywhere: only the "
+                    + "command line watch turns a /kick into a network kick", e);
+        }
+    }
+
+    private LiteralCommandNode<CommandSourceStack> kickNode(String literal, Predicate<CommandSourceStack> requirement) {
+        return KickCommandNode.build(literal, requirement, ArgumentTypes.players(), this::kick);
+    }
+
+    /** The bridge's {@code kick}: every target leaves the network, like the vanilla command reports it. */
+    private int kick(CommandContext<CommandSourceStack> context, String reason) throws CommandSyntaxException {
+        CommandSourceStack source = context.getSource();
+        List<Player> targets = context.getArgument(KickCommandNode.TARGETS, PlayerSelectorArgumentResolver.class)
+                .resolve(source);
+        Component shown = reason.isEmpty() ? Component.translatable(KickClassifier.VANILLA_KICK_KEY) : Component.text(reason);
+        int kicked = 0;
+        for (Player target : targets) {
+            if (networkKick(source.getSender(), target, reason)) {
+                kicked++;
+                source.sendSuccess(Component.translatable("commands.kick.success", target.displayName(), shown), true);
+            }
+        }
+        return kicked;
+    }
+
+    /**
+     * Who issued a command, for {@link KickCommandWatch}. A proxied sender counts as its caller.
      *
      * @param sender the sender of the command
      * @return the console, RCON, a player, or {@code OTHER} for command blocks and the rest
      */
     static KickCommandWatch.Source source(CommandSender sender) {
+        if (sender instanceof ProxiedCommandSender proxied) {
+            return source(proxied.getCaller());
+        }
         if (sender instanceof RemoteConsoleCommandSender) {
             return KickCommandWatch.Source.REMOTE_CONSOLE;
         }
@@ -164,6 +243,9 @@ public final class PaperBridgePlugin extends JavaPlugin implements Listener {
      * @return see {@link KickCommandWatch#entitled}
      */
     static boolean entitled(CommandSender sender) {
+        if (sender instanceof ProxiedCommandSender proxied) {
+            return entitled(proxied.getCaller());
+        }
         KickCommandWatch.Source source = source(sender);
         return KickCommandWatch.entitled(source,
                 source == KickCommandWatch.Source.PLAYER && sender.hasPermission(KickCommandWatch.PERMISSION));
@@ -188,22 +270,22 @@ public final class PaperBridgePlugin extends JavaPlugin implements Listener {
         if (sender == null) {
             return;
         }
-        if (kicks.command(line, source(issuer), entitledPlayer(issuer), aliases())) {
+        KickCommandWatch.Source source = source(issuer);
+        if (kicks.command(line, source, source == KickCommandWatch.Source.PLAYER && entitled(issuer), aliases())) {
             getServer().getScheduler().runTask(this, kicks::clear);
         }
-    }
-
-    private static boolean entitledPlayer(CommandSender issuer) {
-        return issuer instanceof Player && issuer.hasPermission(KickCommandWatch.PERMISSION);
     }
 
     /**
      * The kick of a target of a watched {@code /kick}. The kick cause is not used: Paper marks
      * {@code KICK_COMMAND} deprecated since 26.2, and a {@code /kick} that a plugin such as
      * Essentials provides kicks with the cause {@code PLUGIN}. The command line and its target in
-     * the same tick decide, as on 1.8.8.
+     * the same tick decide, as on 1.8.8. A kick of {@link #networkKick} is reported already.
      */
     private void kicked(PlayerKickEvent event) {
+        if (event.getPlayer().getUniqueId().equals(kicking)) {
+            return;
+        }
         if (kicks.kicked(event.getPlayer().getName())) {
             report(event.getPlayer(), plain(event.reason()));
         }
