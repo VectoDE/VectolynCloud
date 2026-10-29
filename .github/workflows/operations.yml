@@ -1,0 +1,431 @@
+name: Operations
+
+# Dry run of everything the release ships besides the plugin jars, without publishing anything:
+# start scripts on Linux, macOS and Windows, the release archives (VectoraCloud/dist/package.sh,
+# the same script release.yml runs), the systemd unit on a real systemd, the container image
+# (built from source and through the release path with the jar as named context, both without
+# push), compose.yml and the Pterodactyl egg. Nothing here has write permissions or secrets.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'VectoraCloud/**'
+      - 'Vectora-Protocol/**'
+      - 'Vectora-CloudClient/**'
+      - 'build-logic/**'
+      - 'gradle/**'
+      - '*.gradle.kts'
+      - 'gradle.properties'
+      - '.dockerignore'
+      - '.gitattributes'
+      - '.github/scripts/**'
+      - '.github/workflows/operations.yml'
+      - '.github/workflows/release.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'VectoraCloud/**'
+      - 'Vectora-Protocol/**'
+      - 'Vectora-CloudClient/**'
+      - 'build-logic/**'
+      - 'gradle/**'
+      - '*.gradle.kts'
+      - 'gradle.properties'
+      - '.dockerignore'
+      - '.gitattributes'
+      - '.github/scripts/**'
+      - '.github/workflows/operations.yml'
+      - '.github/workflows/release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: operations-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ACTIONLINT_IMAGE: rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+
+jobs:
+  lint:
+    name: Lint scripts, workflows, egg and compose
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Line endings
+        run: |
+          set -euo pipefail
+          for f in VectoraCloud/dist/start.bat VectoraCloud/dist/start.ps1; do
+            if [ "$(grep -c $'\r$' "$f" || true)" -ne "$(wc -l < "$f")" ]; then
+              echo "::error file=$f::needs CRLF line ends (.gitattributes)"; exit 1
+            fi
+          done
+          for f in VectoraCloud/dist/start.sh VectoraCloud/dist/package.sh .github/scripts/smoke-start-unix.sh; do
+            if grep -q $'\r' "$f"; then
+              echo "::error file=$f::needs LF line ends (.gitattributes)"; exit 1
+            fi
+          done
+          echo "Line endings OK."
+
+      - name: ShellCheck
+        run: |
+          set -euo pipefail
+          shellcheck --version
+          shellcheck VectoraCloud/dist/start.sh VectoraCloud/dist/package.sh .github/scripts/smoke-start-unix.sh
+          # The installer script inside the egg (runs with ash in ghcr.io/pterodactyl/installers:alpine).
+          jq -r '.scripts.installation.script' VectoraCloud/dist/pterodactyl/egg-vectora-cloud.json \
+            | shellcheck --shell=sh -
+          echo "ShellCheck OK."
+
+      - name: Pterodactyl egg
+        run: python3 -I .github/scripts/check-egg.py VectoraCloud/dist/pterodactyl/egg-vectora-cloud.json
+
+      # The official image pinned by digest (it brings ShellCheck for the run: blocks), instead of
+      # an unpinned "go install" or a downloaded binary.
+      - name: actionlint
+        run: |
+          docker run --rm --volume "$PWD:/repo:ro" --workdir /repo "$ACTIONLINT_IMAGE" -color
+
+      - name: Compose file
+        working-directory: VectoraCloud/dist/docker
+        run: |
+          set -euo pipefail
+          mkdir -p secrets
+          printf 'ci-only' > secrets/db_password
+          printf 'ci-only' > secrets/db_root_password
+          cp setup.example.yml setup.yml
+          docker compose -f compose.yml config --quiet
+          echo "compose.yml OK."
+
+  jar:
+    name: Build VectoraCloud.jar and release archives
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      - name: Build VectoraCloud.jar
+        run: bash ./gradlew :VectoraCloud:cloud-launcher:cloudJar --no-daemon --stacktrace
+
+      # Same call as in release.yml, with a dummy version.
+      - name: Package (dry run)
+        run: |
+          set -euo pipefail
+          bash VectoraCloud/dist/package.sh 0.0.0-ci \
+            VectoraCloud/cloud-launcher/build/cloud/VectoraCloud.jar ops-dist
+          (cd ops-dist && sha256sum -- *.jar *.zip *.tar.gz | tee SHA256SUMS)
+          tar -tzvf ops-dist/VectoraCloud-0.0.0-ci-linux-macos.tar.gz
+          unzip -l ops-dist/VectoraCloud-0.0.0-ci-windows.zip
+
+      # The archives must not depend on when they are built (reproducible release files).
+      - name: Package again and compare
+        run: |
+          set -euo pipefail
+          bash VectoraCloud/dist/package.sh 0.0.0-ci \
+            VectoraCloud/cloud-launcher/build/cloud/VectoraCloud.jar "$RUNNER_TEMP/again"
+          (cd "$RUNNER_TEMP/again" && sha256sum -- *.jar *.zip *.tar.gz) | diff - <(cd ops-dist && sha256sum -- *.jar *.zip *.tar.gz)
+          echo "Archives are reproducible."
+
+      - name: Upload
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ops-dist
+          path: ops-dist/
+          if-no-files-found: error
+          retention-days: 3
+
+  start-scripts:
+    name: Start scripts (${{ matrix.os }})
+    needs: jar
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: Harden runner
+        if: runner.os == 'Linux'
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ops-dist
+          path: ops-dist
+
+      # Java 17 is too old on purpose: the bootstrap must print its "you need Java 21" message.
+      - name: Set up JDK 17
+        id: java17
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up JDK 25
+        id: java25
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: start.sh
+        if: runner.os != 'Windows'
+        env:
+          JAVA17: ${{ steps.java17.outputs.path }}
+          JAVA25: ${{ steps.java25.outputs.path }}
+        run: bash .github/scripts/smoke-start-unix.sh ops-dist
+
+      - name: PSScriptAnalyzer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $results = @('VectoraCloud/dist/start.ps1', '.github/scripts/smoke-start-windows.ps1') |
+            ForEach-Object { Invoke-ScriptAnalyzer -Path $_ -Severity Warning, Error }
+          if ($results) {
+            $results | Format-Table -AutoSize | Out-String -Width 200 | Write-Output
+            exit 1
+          }
+          Write-Output 'PSScriptAnalyzer OK.'
+
+      # Windows PowerShell 5.1, the version every Windows has; start.ps1 must work there.
+      - name: start.bat and start.ps1
+        if: runner.os == 'Windows'
+        shell: powershell
+        env:
+          JAVA17: ${{ steps.java17.outputs.path }}
+          JAVA25: ${{ steps.java25.outputs.path }}
+        run: .github/scripts/smoke-start-windows.ps1 -Dist ops-dist -Java25 $env:JAVA25 -Java17 $env:JAVA17
+
+  systemd:
+    name: systemd unit
+    needs: jar
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ops-dist
+          path: ops-dist
+
+      - name: Set up JDK 25
+        id: java
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      # Exactly the steps from the unit's header and docs/cloud/operations.md, plus a drop-in
+      # that points JAVA_HOME at the runner's JDK.
+      - name: Install
+        env:
+          JAVA_DIR: ${{ steps.java.outputs.path }}
+        run: |
+          set -euo pipefail
+          sudo useradd --system --user-group --home-dir /opt/vectora --create-home --shell /usr/sbin/nologin vectora
+          sudo install -o vectora -g vectora -m 0644 ops-dist/VectoraCloud.jar /opt/vectora/VectoraCloud.jar
+          sudo install -o vectora -g vectora -m 0755 VectoraCloud/dist/start.sh /opt/vectora/start.sh
+          sudo install -o root -g root -m 0644 VectoraCloud/dist/systemd/vectora-cloud.service /etc/systemd/system/vectora-cloud.service
+          sudo mkdir -p /etc/systemd/system/vectora-cloud.service.d
+          printf '[Service]\nEnvironment=JAVA_HOME=%s\n' "$JAVA_DIR" \
+            | sudo tee /etc/systemd/system/vectora-cloud.service.d/java.conf
+          sudo systemctl daemon-reload
+          systemd-analyze --version | head -n 1
+          sudo systemd-analyze verify /etc/systemd/system/vectora-cloud.service
+
+      # Without a setup the node starts, opens its channel and starts no server: enough to prove
+      # that the hardening (read-only system, private /tmp, syscall filter) lets the JVM run.
+      - name: Start, check, stop
+        run: |
+          set -euo pipefail
+          sudo systemctl start vectora-cloud
+          for _ in $(seq 1 60); do
+            if sudo journalctl -u vectora-cloud --no-pager | grep -q 'Cloud channel listens on'; then
+              break
+            fi
+            sleep 2
+          done
+          sudo journalctl -u vectora-cloud --no-pager
+          sudo journalctl -u vectora-cloud --no-pager | grep -q 'Cloud channel listens on'
+          systemctl is-active vectora-cloud
+          pid=$(systemctl show -p MainPID --value vectora-cloud)
+          user=$(ps -o user= -p "$pid")
+          echo "Main PID $pid runs as $user"
+          test "$user" = vectora
+          sudo test -f /opt/vectora/cloud.yml
+          sudo systemctl stop vectora-cloud
+          result=$(systemctl show -p Result --value vectora-cloud)
+          status=$(systemctl show -p ExecMainStatus --value vectora-cloud)
+          echo "Result=$result ExecMainStatus=$status"
+          sudo journalctl -u vectora-cloud --no-pager | tail -n 20
+          test "$result" = success
+
+      - name: Exposure score
+        if: always()
+        run: sudo systemd-analyze security vectora-cloud.service --no-pager || true
+
+  image:
+    name: Container image (no push)
+    needs: jar
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ops-dist
+          path: ops-dist
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # The default path: everything from source, as "docker build" and "docker compose build" do.
+      - name: Build from source (linux/amd64)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: VectoraCloud/dist/docker/Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: vectora-cloud:source
+
+      - name: Prepare jar context
+        run: |
+          mkdir jar-context
+          cp ops-dist/VectoraCloud.jar jar-context/
+
+      # The release path: the jar comes in as named context and replaces the build stage.
+      - name: Build release path (linux/amd64, linux/arm64)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: VectoraCloud/dist/docker/Dockerfile
+          build-contexts: jar=jar-context
+          platforms: linux/amd64,linux/arm64
+          push: false
+          build-args: VERSION=0.0.0-ci
+
+      - name: Build release path (linux/amd64, loaded)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: VectoraCloud/dist/docker/Dockerfile
+          build-contexts: jar=jar-context
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: vectora-cloud:release
+          build-args: VERSION=0.0.0-ci
+
+      - name: Smoke test
+        run: |
+          set -euo pipefail
+          expect() {  # expect <exit code> <command...>
+            local code=$1; shift
+            local rc=0
+            "$@" || rc=$?
+            if [ "$rc" -ne "$code" ]; then echo "::error::exit $rc, expected $code: $*"; exit 1; fi
+            echo "ok (exit $rc): $*"
+          }
+          for image in vectora-cloud:source vectora-cloud:release; do
+            expect 0 docker run --rm "$image" --version
+            expect 0 docker run --rm "$image" --help
+            expect 2 docker run --rm --user 0:0 "$image" --lang en --version
+            expect 0 docker run --rm --user 0:0 "$image" --allow-root --version
+            test "$(docker run --rm --entrypoint id "$image" -u)" = 1000
+            test "$(docker run --rm --entrypoint id "$image" -g)" = 1000
+            test "$(docker inspect -f '{{.Config.StopSignal}}' "$image")" = SIGTERM
+          done
+          # The release image must contain exactly the jar of the release files.
+          want=$(sha256sum ops-dist/VectoraCloud.jar | cut -d' ' -f1)
+          got=$(docker run --rm --entrypoint sha256sum vectora-cloud:release /opt/vectora/VectoraCloud.jar | cut -d' ' -f1)
+          echo "release jar $want, in image $got"
+          test "$want" = "$got"
+          # Informational: the source build should produce the same jar (reproducible build).
+          src=$(docker run --rm --entrypoint sha256sum vectora-cloud:source /opt/vectora/VectoraCloud.jar | cut -d' ' -f1)
+          if [ "$src" = "$want" ]; then echo "Source build jar is identical."; else echo "::notice::source build jar differs ($src)"; fi
+
+      # Long-running start: health check, volume owner, and a clean stop with SIGTERM.
+      - name: Run, health check, stop
+        run: |
+          set -euo pipefail
+          docker volume create vectora-ci
+          docker run -d --name vectora-ci --init -v vectora-ci:/data \
+            --health-interval=5s --health-start-period=60s vectora-cloud:release --non-interactive
+          for _ in $(seq 1 45); do
+            health=$(docker inspect -f '{{.State.Health.Status}}' vectora-ci)
+            [ "$health" = healthy ] && break
+            [ "$(docker inspect -f '{{.State.Running}}' vectora-ci)" = true ] || break
+            sleep 2
+          done
+          docker logs vectora-ci
+          echo "Health: $health"
+          test "$health" = healthy
+          test "$(docker exec vectora-ci stat -c %u /data)" = 1000
+          docker exec vectora-ci test -f /data/cloud.yml
+          docker stop -t 120 vectora-ci
+          code=$(docker inspect -f '{{.State.ExitCode}}' vectora-ci)
+          echo "Exit code after docker stop: $code"
+          docker logs vectora-ci 2>&1 | tail -n 20
+          # 143 = ended by SIGTERM after the shutdown hook ran; 0 = ended normally.
+          case "$code" in 0|143) ;; *) echo "::error::unexpected exit code $code"; exit 1 ;; esac
+          docker rm vectora-ci

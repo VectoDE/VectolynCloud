@@ -13,6 +13,7 @@ Vectora ist ein Open-Source-Baukasten unter GPL-3.0, mit dem du dein eigenes Min
 | [Getting Started](Getting-Started) | [Erste Schritte](Getting-Started-DE) |
 | [Server Network](Server-Network) | [Server-Netzwerk](Server-Network-DE) |
 | [Crossplay](Crossplay) | [Crossplay](Crossplay-DE) |
+| [Operations](Operations) | [Betrieb](Operations-DE) |
 | [Roadmap](Roadmap) | [Roadmap](Roadmap-DE) |
 | [FAQ](FAQ) | [FAQ](FAQ-DE) |
 | [Contributing](Contributing) | [Mitmachen](Contributing-DE) |
