@@ -174,6 +174,27 @@ class BuiltinCommandsTest {
     }
 
     @Test
+    void fallbackGroupMustExistAndEmptyMeansTheDefault() throws Exception {
+        assertEquals(Outcome.DONE, run("config get fallback-group"));
+        assertTrue(terminal.output().contains("fallback-group = lobby"), terminal.output());
+        String before = cloudFile();
+        assertEquals(Outcome.FAILED, run("config set fallback-group hub"));
+        assertTrue(terminal.output().contains("Group \"hub\" does not exist."), terminal.output());
+        assertEquals(Outcome.FAILED, run("config set fallback-group Hub!"));
+        assertEquals(before, cloudFile(), "nothing written after rejected changes");
+        // Counter-check: an existing group is taken and written; "" goes back to the default.
+        run("group create hub Lobby-Server paper 26.3");
+        assertEquals(Outcome.DONE, run("config set fallback-group hub"));
+        assertEquals("hub", config.snapshot().cloud().fallbackGroup());
+        assertTrue(cloudFile().contains("fallback-group: \"hub\"") || cloudFile().contains("fallback-group: hub"),
+                cloudFile());
+        assertEquals(Outcome.FAILED, run("group delete hub --yes"), "named as fallback group");
+        assertEquals(Outcome.DONE, run("config set fallback-group ''"));
+        assertEquals(null, config.snapshot().cloud().fallbackGroup());
+        assertFalse(cloudFile().contains("fallback-group"));
+    }
+
+    @Test
     void groupSetDrainTimeout() throws Exception {
         run("group create lobby Lobby-Server paper 26.3");
         assertEquals(Outcome.DONE, run("group info lobby"));

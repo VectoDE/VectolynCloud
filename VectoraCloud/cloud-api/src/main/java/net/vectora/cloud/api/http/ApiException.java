@@ -4,6 +4,7 @@ import java.io.Serial;
 import java.util.List;
 import java.util.Objects;
 import net.vectora.cloud.config.error.ConfigError;
+import net.vectora.cloud.config.error.ErrorCode;
 
 /**
  * An error answer: HTTP status, a stable code and an English message. The message is built by the
@@ -73,7 +74,7 @@ public final class ApiException extends Exception {
      */
     static ApiException invalidBody(List<ConfigError> errors) {
         boolean unknown = !errors.isEmpty()
-                && errors.getFirst().code() == net.vectora.cloud.config.error.ErrorCode.UNKNOWN_FIELD;
+                && errors.getFirst().code() == ErrorCode.UNKNOWN_FIELD;
         return new ApiException(400, unknown ? "unknown-field" : "invalid-json",
                 "The body is not a valid document; see errors.", errors, 0);
     }

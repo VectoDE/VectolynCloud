@@ -1,6 +1,7 @@
 package net.vectora.protocol.message;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -11,6 +12,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import net.vectora.protocol.Protocol;
+import net.vectora.protocol.ProtocolVersion;
 import org.junit.jupiter.api.Test;
 
 class MessageRegistryTest {
@@ -50,9 +53,12 @@ class MessageRegistryTest {
         expected.put(ServiceStatus.class, 0x11);
         expected.put(RegisterServer.class, 0x20);
         expected.put(UnregisterServer.class, 0x21);
+        expected.put(ServerCapacity.class, 0x22);
         expected.put(PlayerJoin.class, 0x30);
         expected.put(PlayerQuit.class, 0x31);
         expected.put(PlayerSwitch.class, 0x32);
+        expected.put(TransferPlayer.class, 0x33);
+        expected.put(NetworkKick.class, 0x34);
         expected.put(ChannelMessage.class, 0x40);
         expected.put(Request.class, 0x50);
         expected.put(Response.class, 0x51);
@@ -61,6 +67,23 @@ class MessageRegistryTest {
             assertEquals(type, registry.byId(id).orElseThrow().type());
         });
         assertEquals(expected.size(), registry.types().size());
+    }
+
+    /** Version 1.1 added three messages; a 1.0 connection never carries them, everything else is 1.0. */
+    @Test
+    void newMessagesAreOnlyAvailableFromTheVersionThatAddedThem() {
+        ProtocolVersion v10 = new ProtocolVersion(1, 0);
+        ProtocolVersion v11 = new ProtocolVersion(1, 1);
+        Set<Class<?>> since11 = Set.of(ServerCapacity.class, TransferPlayer.class, NetworkKick.class);
+        for (MessageType<?> type : registry.types()) {
+            boolean added = since11.contains(type.type());
+            assertEquals(added ? v11 : v10, type.since(), type.type().getSimpleName());
+            assertEquals(!added, type.availableIn(v10), type.type().getSimpleName());
+            assertTrue(type.availableIn(v11), type.type().getSimpleName());
+            assertTrue(type.availableIn(new ProtocolVersion(1, 9)), type.type().getSimpleName());
+            assertFalse(type.availableIn(new ProtocolVersion(2, 1)), type.type().getSimpleName());
+        }
+        assertEquals(v11, Protocol.PROTOCOL_VERSION);
     }
 
     @Test

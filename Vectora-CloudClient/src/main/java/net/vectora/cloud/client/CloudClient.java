@@ -38,6 +38,7 @@ import net.vectora.protocol.message.Hello;
 import net.vectora.protocol.message.Message;
 import net.vectora.protocol.message.MessageCodec;
 import net.vectora.protocol.message.MessageLimits;
+import net.vectora.protocol.message.NetworkKick;
 import net.vectora.protocol.message.Ping;
 import net.vectora.protocol.message.PlayerJoin;
 import net.vectora.protocol.message.PlayerQuit;
@@ -212,13 +213,18 @@ public final class CloudClient implements AutoCloseable {
 
     /**
      * Sends a player event of a proxy ({@code PlayerJoin}, {@code PlayerQuit},
-     * {@code PlayerSwitch}). Not repeated after a reconnect.
+     * {@code PlayerSwitch}) or a backend's {@code NetworkKick}. Not repeated after a reconnect.
      *
      * @return whether it was sent now
-     * @throws IllegalArgumentException for any other message type; use the dedicated methods
+     * @throws IllegalArgumentException for any other message type (use the dedicated methods) and
+     *     for a {@code NetworkKick} that names another service
      */
     public boolean send(Message message) {
-        if (!(message instanceof PlayerJoin || message instanceof PlayerQuit || message instanceof PlayerSwitch)) {
+        if (message instanceof NetworkKick kick) {
+            if (!kick.server().equals(serviceId())) {
+                throw new IllegalArgumentException("a backend may only report its own kicks");
+            }
+        } else if (!(message instanceof PlayerJoin || message instanceof PlayerQuit || message instanceof PlayerSwitch)) {
             throw new IllegalArgumentException(message.getClass().getSimpleName()
                     + " is not sent with send(); use markReady, reportStatus, publish or request");
         }

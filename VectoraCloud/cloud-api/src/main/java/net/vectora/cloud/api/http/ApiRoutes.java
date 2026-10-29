@@ -39,6 +39,7 @@ import net.vectora.cloud.config.operation.RemoveGroup;
 import net.vectora.cloud.config.operation.RemoveTask;
 import net.vectora.cloud.config.operation.SetGroupWanted;
 import net.vectora.cloud.config.operation.SetServerWanted;
+import net.vectora.cloud.config.validation.ConfigNames;
 import net.vectora.cloud.config.validation.JvmFlagPolicy;
 
 /**
@@ -228,7 +229,8 @@ public final class ApiRoutes {
 
     private ApiResponse putGroup(ApiRequest q) throws Exception {
         String name = q.param("name");
-        GroupConfig next = ApiJson.readDocument(q.body(), CloudHome.groupFileName(name), ConfigFormat.GROUP);
+        GroupConfig next = ApiJson.readDocument(q.body(), CloudHome.groupFileName(ConfigNames.safeArgument(name)),
+                ConfigFormat.GROUP);
         AtomicBoolean existed = new AtomicBoolean();
         ConfigSnapshot after = applyIfMatch(q, s -> {
             Optional<GroupConfig> current = Optional.ofNullable(s.groups().get(name));
@@ -241,7 +243,8 @@ public final class ApiRoutes {
     private ApiResponse putTask(ApiRequest q) throws Exception {
         String name = q.param("name");
         // A body of schema-version 1 (with mode) runs through the migration of a task file.
-        TaskConfig next = ApiJson.readDocument(q.body(), CloudHome.taskFileName(name), ConfigFormat.TASK);
+        TaskConfig next = ApiJson.readDocument(q.body(), CloudHome.taskFileName(ConfigNames.safeArgument(name)),
+                ConfigFormat.TASK);
         AtomicBoolean existed = new AtomicBoolean();
         ConfigSnapshot after = applyIfMatch(q, s -> {
             Optional<TaskConfig> current = Optional.ofNullable(s.tasks().get(name));

@@ -8,8 +8,8 @@ import net.vectora.protocol.PacketWriter;
  */
 public sealed interface Message
         permits Hello, AuthResult, Ping, Pong, Disconnect,
-                ServiceReady, ServiceStatus, RegisterServer, UnregisterServer,
-                PlayerJoin, PlayerQuit, PlayerSwitch,
+                ServiceReady, ServiceStatus, RegisterServer, UnregisterServer, ServerCapacity,
+                PlayerJoin, PlayerQuit, PlayerSwitch, TransferPlayer, NetworkKick,
                 ChannelMessage, Request, Response {
 
     /** Writes the payload of this message. */

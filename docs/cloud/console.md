@@ -82,9 +82,9 @@ Clears the screen. Without an ANSI terminal it says so and does nothing.
 | `config list` | Shows every key with its value. |
 | `config reload` | Reads every configuration file again; an invalid file keeps the current configuration and prints the errors. |
 
-Keys: `network-name`, `language`, `eula-accepted`, `setup-complete`, `node-id`, `servers.<proxy|lobby|survival|creative|mod|end|database|minigame|legacy-server>`, `proxy.bind`, `proxy.port`, `proxy.bedrock-port`, `legacy-proxy.enabled`, `legacy-proxy.port`, `database.mode`, `database.host`, `database.port`, `database.name`, `database.user`, `database.docker-image`, `api.enabled`, `api.bind`, `api.port`, `api.tls.enabled`, `api.tls.keystore`, `api.cors-origins`.
+Keys: `network-name`, `language`, `eula-accepted`, `setup-complete`, `node-id`, `fallback-group`, `servers.<proxy|lobby|survival|creative|mod|end|database|minigame|legacy-server>`, `proxy.bind`, `proxy.port`, `proxy.bedrock-port`, `legacy-proxy.enabled`, `legacy-proxy.port`, `database.mode`, `database.host`, `database.port`, `database.name`, `database.user`, `database.docker-image`, `api.enabled`, `api.bind`, `api.port`, `api.tls.enabled`, `api.tls.keystore`, `api.cors-origins`.
 
-Values follow the file rules: `true` or `false` only, whole numbers, enum values in lower case. `""` clears `database.docker-image`, `api.tls.keystore` and `api.cors-origins`. `api.cors-origins` takes a comma-separated list of origins. Secrets are not in `cloud.yml`; they stay in `secrets/vectora.env`.
+Values follow the file rules: `true` or `false` only, whole numbers, enum values in lower case. `""` clears `fallback-group` (back to the default `lobby`), `database.docker-image`, `api.tls.keystore` and `api.cors-origins`. `fallback-group` must name an existing group. `api.cors-origins` takes a comma-separated list of origins. Secrets are not in `cloud.yml`; they stay in `secrets/vectora.env`.
 
 ### `setup`
 

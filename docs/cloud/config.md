@@ -29,6 +29,7 @@ language: en                 # en or de
 eula-accepted: false         # eula.txt is written only after this is true
 setup-complete: false        # needs eula-accepted: true
 node-id: node-1              # must exist in nodes.yml
+# fallback-group: lobby      # optional: where the proxies send a kicked player when the player's own group has no free server; default lobby, must be an existing group when set
 servers:                     # the "wanted" switch per server; a missing entry counts as false
   proxy: true
   lobby: true
@@ -97,7 +98,7 @@ process:                     # optional, see docs/cloud/node.md; every key has a
 
 `process.jvm-flags` must not set what the node controls: `-Xms`, `-Xmx`, `-jar`, `-cp`/`-classpath`/`--class-path`, `-XX:Flags=`, `-XX:VMOptionsFile=`, and the version and help switches are rejected. On top of that, a change through the [REST API](api.md) may only add flags from the [allowlist](#jvm-flag-allowlist).
 
-`drain-timeout` is how long a service of the group may take to send its players to other services before the scaler stops it. It is stored and validated now; the scaler uses it from a later change on.
+`drain-timeout` is how long a service of the group may take to send its players to other services before the scaler stops it. If players are still on it after that time, the stop is called off and it keeps running; see [scaling.md](scaling.md#rules).
 
 `transitional` marks the third-party plugins the cloud installs until Vectora's own replacement is ready (LuckPerms, TAB, PlaceholderAPI, WorldEdit, WorldGuard, Chunky, spark, ProxyPortal). `mod` entries are only allowed with `fabric`, `plugin` entries only without it. `pandaspigot` only runs `1.8.8`.
 
@@ -111,7 +112,7 @@ scaling:
   min-services: 1            # 0 to 1000
   max-services: 4            # 1 to 1000, at least min-services
   players-per-service: 50
-  scale-up-at: 75            # percent of players-per-service, 1 to 100
+  scale-up-at: 75            # load of the group in percent, 1 to 100
   scale-down-below: 50       # percent, 0 to 99, lower than scale-up-at; default 50
   scale-down-after: 5m       # s, m or h; at most 7 days
   cooldown: 60s
@@ -119,8 +120,6 @@ nodes: [node-1]              # empty: any node
 ```
 
 A task mixes static and dynamic services. The first `static-services` services are static: they keep their folder (`<template>/runtime`, `runtime-2`, …) and are never stopped by the scaler. Every service above that is dynamic: it runs in `temp/services/<id>` and its folder is deleted when it stops. `static-services = max-services` is a purely static task, `static-services = 0` a purely dynamic one.
-
-`scale-down-below` is stored and validated now; the scaling rule that uses it follows in a later change.
 
 What the node does with these values (when a service starts or stops, the memory budget, what is never stopped) is in [scaling.md](scaling.md).
 
@@ -155,7 +154,7 @@ nodes:
       database: 512M         # only counted when this cloud runs the database (managed or docker)
 ```
 
-`max-memory` caps the memory the node gives its services. `memory-reserve` is memory the node keeps for itself and never hands to services. Only the fields that are set are written; a missing field or section means the default shown above. `NodeConfig.memoryReserve()` returns the reserve with the defaults filled in. The `database` part counts only when `servers.database` is on and the database runs in `managed` or `docker` mode. Both settings are stored and validated now; the node uses them from a later change on. They can be changed with `node set` in the console, `PUT /nodes/{name}` in the API, the `node:` section of the setup file and the advanced settings of the setup assistant.
+`max-memory` caps the memory the node gives its services: the scaler's memory budget is `max-memory`, at most the measured memory of the machine. Without it the node takes the measured memory minus `memory-reserve`, memory the node keeps for itself and never hands to services; see [scaling.md](scaling.md#memory-budget). Only the fields that are set are written; a missing field or section means the default shown above. `NodeConfig.memoryReserve()` returns the reserve with the defaults filled in. The `database` part counts only when `servers.database` is on and the database runs in `managed` or `docker` mode. Both can be changed with `node set` in the console, `PUT /nodes/{name}` in the API, the `node:` section of the setup file and the advanced settings of the setup assistant.
 
 ### Names
 
@@ -210,6 +209,7 @@ Besides types and patterns, `ConfigValidator` checks the configuration as a whol
 - A node's `max-memory`, if set, lies between 512M and the largest size the cloud accepts.
 - Every field of a node's `memory-reserve`, if set, lies between 1M and 64G (`out-of-range`).
 - Tasks refer to existing groups and nodes; `node-id` refers to an existing node; node ids are unique.
+- `fallback-group`, if set, is a valid group name and an existing group (`unknown-group`), so a group cannot be deleted while it is named there. Without the field the default `lobby` is used and need not exist; the proxies then find no server there.
 - Catalog ids are unique per group and fit the software.
 - `docker-image` only and always with `mode: docker`.
 - An enabled API on a non-loopback address needs TLS.

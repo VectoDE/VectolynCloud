@@ -23,6 +23,7 @@ import net.vectora.protocol.message.Disconnect;
 import net.vectora.protocol.message.Envelope;
 import net.vectora.protocol.message.Hello;
 import net.vectora.protocol.message.Message;
+import net.vectora.protocol.message.NetworkKick;
 import net.vectora.protocol.message.Ping;
 import net.vectora.protocol.message.PlayerJoin;
 import net.vectora.protocol.message.PlayerQuit;
@@ -121,7 +122,8 @@ final class ConnectionHandler extends SimpleChannelInboundHandler<Envelope> {
         }
         handshakeTimer.cancel(false);
         decoder.authenticated();
-        session = server.newSession((ServiceId) peer, ctx.channel());
+        // The lower minor version of both sides: the cloud sends nothing the peer would not know.
+        session = server.newSession((ServiceId) peer, ctx.channel(), hello.version().negotiate(Protocol.PROTOCOL_VERSION));
         // Registered before the answer goes out, so the cloud can send to the service as soon as
         // the service knows it is accepted.
         server.register(session);
@@ -152,12 +154,20 @@ final class ConnectionHandler extends SimpleChannelInboundHandler<Envelope> {
             case PlayerJoin join -> server.messageReceived(session, join);
             case PlayerQuit quit -> server.messageReceived(session, quit);
             case PlayerSwitch change -> server.messageReceived(session, change);
+            // A backend reports only its own kicks; whether the sender is a backend at all is the
+            // node's business.
+            case NetworkKick kick -> {
+                if (ownReport(ctx, kick.server())) {
+                    server.messageReceived(session, kick);
+                }
+            }
             case ChannelMessage channelMessage -> server.channelMessage(session, channelMessage);
             case Request request -> server.incomingRequest(session, envelope.requestId(), request);
             case Response response -> session.complete(envelope.requestId(), response);
             default -> {
                 // Pong needs nothing: any inbound frame already resets the idle timer. Hello,
-                // AuthResult, RegisterServer and UnregisterServer never come from a service.
+                // AuthResult, RegisterServer, UnregisterServer, ServerCapacity and TransferPlayer
+                // never come from a service: only the cloud moves players.
                 if (!(message instanceof Pong)) {
                     violation(ctx, message.getClass().getSimpleName() + " from a peer");
                 }

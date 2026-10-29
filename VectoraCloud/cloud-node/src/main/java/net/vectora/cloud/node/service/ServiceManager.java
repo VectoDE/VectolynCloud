@@ -768,7 +768,8 @@ public final class ServiceManager implements AutoCloseable {
             List<String> command = command(runtime, spec, jar);
             Map<String, String> environment;
             synchronized (lock) {
-                environment = environment(spec, platform, legacySecret, token, channelHost, channelPort);
+                environment = environment(spec, platform, legacySecret, token, channelHost, channelPort,
+                        snapshot.cloud().fallbackGroupOrDefault());
             }
             log = ServiceOutput.openLog(home.resolve(ServiceOutput.LOG_DIR), spec.id().value());
 
@@ -896,6 +897,40 @@ public final class ServiceManager implements AutoCloseable {
      */
     private static String proxyName(ServiceSpec spec) {
         return spec.isStatic() && spec.index() == 1 ? spec.groupName() : spec.id().value();
+    }
+
+    /**
+     * The players a backend is meant for: {@code players-per-service} of its task in the current
+     * configuration.
+     *
+     * @param backend the service
+     * @return the slots, empty for a proxy, an unknown service or one whose task is gone
+     */
+    public OptionalInt slots(ServiceId backend) {
+        ConfigSnapshot snapshot = config.get();
+        synchronized (lock) {
+            Service service = services.get(backend);
+            if (service == null || service.spec.isProxy()) {
+                return OptionalInt.empty();
+            }
+            TaskConfig task = snapshot.tasks().get(service.spec.taskName());
+            return task == null || task.scaling() == null ? OptionalInt.empty()
+                    : OptionalInt.of(task.scaling().playersPerService());
+        }
+    }
+
+    /**
+     * Whether a backend is listed by the legacy proxy ({@code true}, PandaSpigot) or the main proxy.
+     *
+     * @param backend the service
+     * @return the kind, empty for a proxy or an unknown service
+     */
+    public Optional<Boolean> backendKind(ServiceId backend) {
+        synchronized (lock) {
+            Service service = services.get(backend);
+            return service == null || service.spec.isProxy() ? Optional.empty()
+                    : Optional.of(isLegacyBackend(service.spec));
+        }
     }
 
     /**
@@ -1400,12 +1435,14 @@ public final class ServiceManager implements AutoCloseable {
         }
         service.state = next;
         ServiceInfo info = service.info();
+        // The configuration as it is at the change, not at the delivery a moment later.
+        ConfigSnapshot at = config.get();
         persist();
         try {
             events.execute(() -> {
                 for (ServiceListener listener : listeners) {
                     try {
-                        listener.stateChanged(info, previous);
+                        listener.stateChanged(info, previous, at);
                     } catch (RuntimeException e) {
                         LOG.log(System.Logger.Level.WARNING, "A service listener failed", e);
                     }
@@ -1637,10 +1674,12 @@ public final class ServiceManager implements AutoCloseable {
      * variable, plus the service's id, group, task, port, platform ({@code ServerPlatform} name),
      * token and where the cloud channel listens. A PandaSpigot server also gets the forwarding
      * secret of the legacy proxy, for the {@code bungeeguard} check of its bridge; no other
-     * service gets a secret of {@code vectora.env} in its environment.
+     * service gets a secret of {@code vectora.env} in its environment. The two proxies also get
+     * the fallback group for kicked players ({@code fallback-group} of {@code cloud.yml}).
      */
     static Map<String, String> environment(ServiceSpec spec, ServerPlatform platform, Optional<Secret> legacySecret,
-                                           AuthToken token, String channelHost, int channelPort) {
+                                           AuthToken token, String channelHost, int channelPort,
+                                           String fallbackGroup) {
         Map<String, String> env = new HashMap<>();
         System.getenv().forEach((key, value) -> {
             if (!key.toUpperCase(java.util.Locale.ROOT).startsWith(ServiceEnvironment.PREFIX)) {
@@ -1654,6 +1693,9 @@ public final class ServiceManager implements AutoCloseable {
         env.put(ServiceEnvironment.SERVICE_PLATFORM, platform.name());
         if (platform == ServerPlatform.PANDASPIGOT) {
             legacySecret.ifPresent(secret -> env.put(ServiceEnvironment.LEGACY_FORWARDING_SECRET, secret.reveal()));
+        }
+        if (platform == ServerPlatform.VELOCITY || platform == ServerPlatform.VELOCITY_LEGACY) {
+            env.put(ServiceEnvironment.FALLBACK_GROUP, fallbackGroup);
         }
         env.put(ServiceEnvironment.SERVICE_TOKEN, token.value());
         env.put(ServiceEnvironment.CLOUD_HOST, channelHost(channelHost));

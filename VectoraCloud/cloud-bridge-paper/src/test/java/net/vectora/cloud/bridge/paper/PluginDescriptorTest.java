@@ -30,6 +30,13 @@ class PluginDescriptorTest {
     }
 
     @Test
+    void theNetworkKickPermissionGoesToOperatorsByDefault() throws IOException {
+        Map<?, ?> permissions = (Map<?, ?>) descriptor().get("permissions");
+        Map<?, ?> kick = (Map<?, ?>) permissions.get("vectora.moderation.kick");
+        assertEquals("op", kick.get("default"));
+    }
+
+    @Test
     void versionIsExpandedFromGradle() throws IOException {
         assertEquals(System.getProperty("vectora.expectedVersion"), descriptor().get("version"));
     }

@@ -105,6 +105,8 @@ Every write goes through `ConfigService.apply`: the whole configuration is valid
 
 **Nodes.** `PUT /nodes/{name}` takes the whole node as in `nodes.yml`, for example `{"host": "127.0.0.1", "port": 7010, "service-ports": {"first": 30000, "last": 30999}, "max-memory": "8G", "memory-reserve": {"system": "2G"}}`. `id` may be left out; if it is set, it must match the path, otherwise `400 invalid-value`. `max-memory` (at least 512M) and every field of `memory-reserve` (1M to 64G; defaults `system` 1G, `node-overhead` 256M, `database` 512M) are optional; a field left out is removed from the file and its default applies. The same validator as for the file answers `422` (for example `out-of-range` at `nodes[0].memory-reserve.system`). `ETag` and `If-Match` work as for groups. There is no `DELETE`; removing a node stays in the file.
 
+**Fallback group.** `fallback-group` in `PUT /config` names the group the proxies send a kicked player to when the player's own group has no free server, for example `"fallback-group": "hub"`. It is optional (default `lobby`, then not returned); a group that does not exist answers `422 invalid-config` with `unknown-group`. Leaving the field out sets it back to the default. The proxies get it when they start (see [bridges.md](bridges.md#catching-kicks)).
+
 **Groups.** `drain-timeout` is optional (5s to 10m, default 30s), for example `"drain-timeout": "45s"`; outside the range the answer is `422 out-of-range`.
 
 **Shutdown.** While the node shuts down, start, restart, reload and backup creation answer `503 shutting-down`. Reads and stops still work.

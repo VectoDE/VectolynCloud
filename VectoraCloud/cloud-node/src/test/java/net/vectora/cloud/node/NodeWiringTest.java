@@ -223,6 +223,17 @@ class NodeWiringTest {
             node.config().apply(List.of(new AcceptEula(), new CompleteSetup()));
             NodeFixture.await("lobby-1 running", () -> NodeEndToEndTest.state(node, new ServiceId("lobby-1"))
                     == ServiceState.RUNNING);
+
+            // Taken back and given again: the autoscaler, already running, brings lobby-1 back on
+            // its own; the configured start is not run a second time next to it.
+            node.config().apply(List.of(snapshot -> snapshot.withCloud(
+                    snapshot.cloud().withSetupComplete(false).withEulaAccepted(false))));
+            NodeFixture.await("lobby-1 stopped", () -> NodeEndToEndTest.state(node, new ServiceId("lobby-1"))
+                    == ServiceState.STOPPED);
+            node.config().apply(List.of(new AcceptEula(), new CompleteSetup()));
+            NodeFixture.await("lobby-1 running again", () -> NodeEndToEndTest.state(node, new ServiceId("lobby-1"))
+                    == ServiceState.RUNNING);
+            assertEquals(1, node.services().services().size(), "the same lobby-1, no second service");
         } finally {
             node.close();
         }
@@ -308,6 +319,72 @@ class NodeWiringTest {
             node.services().stop(lobby);
             Thread.sleep(Autoscaler.INTERVAL.toMillis() + 1000);
             assertEquals(ServiceState.STOPPED, NodeEndToEndTest.state(node, lobby), "a stop by hand is kept");
+        } finally {
+            node.close();
+        }
+    }
+
+    @Test
+    void aSurplusServiceWithPlayersIsEmptiedThroughTheProxyBeforeItStops() throws Exception {
+        // 10 slots per minigame server; min-services 2 at first, so both start and get a player.
+        NodeFixture fixture = NodeFixture.create(dir, true, List.of(
+                new PutGroup("proxy", NodeFixture.group(ServerKind.PROXY.templateFolder(), ServerSoftware.VELOCITY,
+                        "-Dfake.cloud=true")),
+                NodeFixture.task("proxy", "proxy", TaskMode.STATIC, 1, 1),
+                new PutGroup("minigame", NodeFixture.group(ServerKind.MINIGAME.templateFolder(), ServerSoftware.PAPER,
+                        "-Dfake.cloud=true")),
+                new PutTask("minigame", new TaskConfig(TaskConfig.SCHEMA_VERSION, "minigame",
+                        new ScalingConfig(0, 2, 2, 10, 90, 50, TimeSpan.parse("0s"), TimeSpan.parse("0s")), List.of()))));
+        fixture.file("Proxy/template/velocity.toml", """
+                bind = "{{VECTORA_PROXY_BIND}}:{{VECTORA_PROXY_PORT}}"
+                [servers]
+                {{VECTORA_PROXY_SERVERS}}
+                try = [ {{VECTORA_PROXY_TRY}} ]
+                """);
+        fixture.file("monitor.yml", "schema-version: 1\nsample-interval: 1s\n");
+        ServiceId proxy = new ServiceId("proxy-1");
+        ServiceId first = new ServiceId("minigame-1");
+        ServiceId second = new ServiceId("minigame-2");
+        java.util.UUID steve = java.util.UUID.fromString("00000000-0000-4000-8000-000000000001");
+        java.util.UUID alex = java.util.UUID.fromString("00000000-0000-4000-8000-000000000002");
+        Path proxyLog = fixture.home.resolve("logs/services/proxy-1.log");
+        CloudNode node = CloudNode.open(fixture.settings(), fixture.options());
+        try {
+            node.start();
+            for (ServiceId id : List.of(proxy, first, second)) {
+                NodeFixture.await(id + " running", () -> NodeEndToEndTest.state(node, id) == ServiceState.RUNNING);
+            }
+            NodeFixture.await("minigame-2 listed with its slots", () -> NodeFixture.read(proxyLog)
+                    .contains("[fake] capacity minigame-2 10 open=true"));
+            node.services().sendCommand(proxy, "player join " + steve + " Steve minigame-1");
+            node.services().sendCommand(proxy, "player join " + alex + " Alex minigame-2");
+            NodeFixture.await("both joined", () -> node.channel().players().on(second).size() == 1
+                    && node.channel().players().on(first).size() == 1);
+
+            // min-services 1: 2 of 20 players, 2 of 10 without one server (20 % < 50 %), so minigame-2
+            // (equal load, higher index) is closed on the proxy and Alex is moved to minigame-1.
+            node.config().apply(new PutTask("minigame", new TaskConfig(TaskConfig.SCHEMA_VERSION, "minigame",
+                    new ScalingConfig(0, 1, 2, 10, 90, 50, TimeSpan.parse("0s"), TimeSpan.parse("0s")), List.of())));
+            awaitReporting(node, "the transfer", () -> NodeFixture.read(proxyLog)
+                            .contains("[fake] transfer " + alex + " minigame-1 SCALE_DOWN"),
+                    Map.of(first, "status 1 10", second, "status 1 10"));
+            assertTrue(NodeFixture.read(proxyLog).contains("[fake] capacity minigame-2 10 open=false"),
+                    "closed before the move");
+            assertFalse(NodeFixture.read(proxyLog).contains("[fake] transfer " + steve), "Steve stays");
+            assertEquals(ServiceState.RUNNING, NodeEndToEndTest.state(node, second), "not stopped with a player on it");
+
+            // The proxy reports the move, but minigame-2 only counts as empty once its own bridge
+            // reports no player too (the higher of both counts decides).
+            node.services().sendCommand(proxy, "player switch " + alex + " Alex minigame-2 minigame-1");
+            awaitReporting(node, "the proxy list emptied", () -> node.channel().players().on(second).isEmpty(),
+                    Map.of(first, "status 2 10", second, "status 1 10"));
+            assertEquals(ServiceState.RUNNING, NodeEndToEndTest.state(node, second),
+                    "not stopped while its bridge still counts a player");
+            awaitReporting(node, "minigame-2 stopped", () -> node.services().find(second).isEmpty()
+                            || NodeEndToEndTest.state(node, second) == ServiceState.STOPPED,
+                    Map.of(first, "status 2 10", second, "status 0 10"));
+            assertEquals(ServiceState.RUNNING, NodeEndToEndTest.state(node, first));
+            assertEquals(2, node.channel().players().on(first).size());
         } finally {
             node.close();
         }

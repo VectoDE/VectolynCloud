@@ -229,8 +229,9 @@ class ServiceCoreUnitTest {
         NodeConfig node = NodeConfig.defaults();
         Secret legacy = Secret.of("legacy-secret-0123456789abcdef");
         Map<String, String> env = ServiceManager.environment(spec(group("Lobby-Server", ServerSoftware.PAPER), 30007),
-                ServerPlatform.PAPER, Optional.of(legacy), token, node.host(), node.port());
+                ServerPlatform.PAPER, Optional.of(legacy), token, node.host(), node.port(), "hub");
         assertEquals("lobby-1", env.get("VECTORA_SERVICE_ID"));
+        assertFalse(env.containsKey(ServiceEnvironment.FALLBACK_GROUP), "only the proxies get the fallback group");
         assertEquals("lobby", env.get("VECTORA_SERVICE_GROUP"));
         assertEquals("30007", env.get("VECTORA_SERVICE_PORT"));
         assertEquals("PAPER", env.get(ServiceEnvironment.SERVICE_PLATFORM));
@@ -250,16 +251,21 @@ class ServiceCoreUnitTest {
 
         // Counter-check: the PandaSpigot server gets it, under the protocol's constant.
         Map<String, String> panda = ServiceManager.environment(spec(group("Legacy-Server", ServerSoftware.PANDASPIGOT),
-                30008), ServerPlatform.PANDASPIGOT, Optional.of(legacy), token, node.host(), node.port());
+                30008), ServerPlatform.PANDASPIGOT, Optional.of(legacy), token, node.host(), node.port(), "hub");
+        assertFalse(panda.containsKey(ServiceEnvironment.FALLBACK_GROUP));
         assertEquals("PANDASPIGOT", panda.get(ServiceEnvironment.SERVICE_PLATFORM));
         assertEquals(legacy.reveal(), panda.get(ServiceEnvironment.LEGACY_FORWARDING_SECRET));
         assertEquals("VECTORA_SERVICE_PLATFORM", ServiceEnvironment.SERVICE_PLATFORM);
         assertEquals("VECTORA_LEGACY_FORWARDING_SECRET", ServiceEnvironment.LEGACY_FORWARDING_SECRET);
+        assertEquals("VECTORA_FALLBACK_GROUP", ServiceEnvironment.FALLBACK_GROUP);
         for (ServerPlatform platform : List.of(ServerPlatform.VELOCITY, ServerPlatform.VELOCITY_LEGACY,
                 ServerPlatform.FABRIC)) {
             Map<String, String> other = ServiceManager.environment(spec(group("Proxy", ServerSoftware.VELOCITY), 25565),
-                    platform, Optional.of(legacy), token, node.host(), node.port());
+                    platform, Optional.of(legacy), token, node.host(), node.port(), "hub");
             assertEquals(platform.name(), other.get(ServiceEnvironment.SERVICE_PLATFORM));
+            // Counter-check: both proxies get the fallback group, the Fabric server does not.
+            assertEquals(platform == ServerPlatform.FABRIC ? null : "hub", other.get(ServiceEnvironment.FALLBACK_GROUP),
+                    platform.name());
             assertFalse(other.containsKey(ServiceEnvironment.LEGACY_FORWARDING_SECRET), platform.name());
             assertFalse(other.containsValue(legacy.reveal()), platform.name());
         }

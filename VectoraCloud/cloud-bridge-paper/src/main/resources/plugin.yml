@@ -2,5 +2,9 @@ name: VectoraCloudBridge
 version: '${pluginVersion}'
 main: net.vectora.cloud.bridge.paper.PaperBridgePlugin
 api-version: '26.3'
-description: Connects a Paper server to VectoraCloud (ready signal and status).
+description: Connects a Paper server to VectoraCloud (ready signal, status and network kicks).
 author: Vectora
+permissions:
+  vectora.moderation.kick:
+    description: A /kick of this player takes the target off the whole network instead of to another server.
+    default: op

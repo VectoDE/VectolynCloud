@@ -30,6 +30,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import net.vectora.protocol.AuthToken;
 import net.vectora.protocol.ChannelName;
 import net.vectora.protocol.PeerId;
+import net.vectora.protocol.ProtocolVersion;
 import net.vectora.protocol.ServiceId;
 import net.vectora.protocol.message.AuthResult;
 import net.vectora.protocol.message.ChannelMessage;
@@ -38,6 +39,7 @@ import net.vectora.protocol.message.Envelope;
 import net.vectora.protocol.message.Hello;
 import net.vectora.protocol.message.Message;
 import net.vectora.protocol.message.MessageCodec;
+import net.vectora.protocol.message.MessageRegistry;
 import net.vectora.protocol.message.Request;
 import net.vectora.protocol.message.Response;
 import net.vectora.protocol.message.ServiceStatus;
@@ -221,7 +223,8 @@ public final class CloudNetworkServer implements AutoCloseable {
     /**
      * Sends a message to one service, for example {@code RegisterServer} to a proxy.
      *
-     * @return {@code false} if the service is not connected
+     * @return {@code false} if the service is not connected, or if its connection uses a protocol
+     *     version that does not have this message yet (a bridge of an older build)
      * @throws IllegalArgumentException for {@code Hello}, {@code AuthResult}, {@code Request} and
      *     {@code Response}, which only the connection itself or {@link #request} send
      */
@@ -232,6 +235,11 @@ public final class CloudNetworkServer implements AutoCloseable {
         }
         ServiceSession session = sessions.get(service);
         if (session == null) {
+            return false;
+        }
+        if (!MessageRegistry.standard().typeOf(message).availableIn(session.version())) {
+            LOG.log(Level.DEBUG, "{0} is not sent to {1}: its connection uses protocol {2}",
+                    message.getClass().getSimpleName(), service.value(), session.version());
             return false;
         }
         session.channel().writeAndFlush(Envelope.of(message));
@@ -333,8 +341,8 @@ public final class CloudNetworkServer implements AutoCloseable {
         }
     }
 
-    ServiceSession newSession(ServiceId service, Channel channel) {
-        return new ServiceSession(service, channel, settings.maxPendingRequests());
+    ServiceSession newSession(ServiceId service, Channel channel, ProtocolVersion version) {
+        return new ServiceSession(service, channel, version, settings.maxPendingRequests());
     }
 
     /** Registers an authenticated session; an older connection of the same service is replaced. */

@@ -4,8 +4,10 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -24,13 +26,15 @@ import net.vectora.cloud.config.model.ConfigSnapshot;
 import net.vectora.cloud.config.model.GroupConfig;
 import net.vectora.cloud.config.model.RestartConfig;
 import net.vectora.cloud.config.model.ScalingConfig;
+import net.vectora.cloud.config.model.ServerSoftware;
 import net.vectora.cloud.config.model.TaskConfig;
 import net.vectora.cloud.config.model.TaskMode;
+import net.vectora.cloud.node.channel.ChannelBridge.DrainResult;
 import net.vectora.cloud.node.scaling.ScalingPlanner.Decision;
+import net.vectora.cloud.node.scaling.ScalingPlanner.Drain;
 import net.vectora.cloud.node.scaling.ScalingPlanner.Held;
 import net.vectora.cloud.node.scaling.ScalingPlanner.Hold;
 import net.vectora.cloud.node.scaling.ScalingPlanner.Start;
-import net.vectora.cloud.node.scaling.ScalingPlanner.Stop;
 import net.vectora.cloud.node.service.ServiceException;
 import net.vectora.cloud.node.service.ServiceInfo;
 import net.vectora.cloud.node.service.ServiceListener;
@@ -47,7 +51,8 @@ import net.vectora.protocol.ServiceId;
  * <p>What it remembers between rounds:
  * <ul>
  *   <li>when each task last got a decision ({@code cooldown});</li>
- *   <li>since when each running service has had no players ({@code scale-down-after});</li>
+ *   <li>since when each task could do with one dynamic service fewer ({@code scale-down-after});</li>
+ *   <li>which services are being emptied right now ({@link Drain});</li>
  *   <li>static services that stopped because their group was switched off, or {@code eula-accepted}
  *       or {@code setup-complete} was taken back: they come back once the switch is on again. A
  *       service stopped by hand stays down;</li>
@@ -59,8 +64,10 @@ import net.vectora.protocol.ServiceId;
  * Nothing happens before the setup is complete and the EULA accepted, while {@link #suspend} is on
  * (the {@code setup} command saves in steps), and after {@link #close()}.
  *
- * <p>Starts and stops run on their own threads, at most one per task at a time; a round never
- * waits for a server.
+ * <p>Starts and stops run on their own threads; a round never waits for a server. The starts of a
+ * task run one after the other, and the task gets no other decision meanwhile. A service being
+ * emptied does not hold its task: while it waits for its players to move, a crashed service of
+ * the task is replaced and the task may grow.
  */
 public final class Autoscaler implements ServiceListener, AutoCloseable {
 
@@ -89,9 +96,14 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
     /** Task and group file at the moment a task was paused; a change ends the pause. */
     private final Map<String, List<Object>> pausedWith = new HashMap<>();
     private final Map<String, Integer> failures = new HashMap<>();
-    private final Map<ServiceId, Instant> emptySince = new HashMap<>();
+    /** Per task, since when it could do with one dynamic service fewer ({@code scale-down-after}). */
+    private final Map<String, Instant> lowSince = new HashMap<>();
+    /** Services whose players are being moved away. */
+    private final Set<ServiceId> draining = new HashSet<>();
     private final Set<ServiceId> released = new HashSet<>();
     private final Set<String> busy = new HashSet<>();
+    /** Running services whose unknown player count was logged; logged again after they reported. */
+    private final Set<ServiceId> unknownCounts = new HashSet<>();
     private final Map<String, Hold> lastHold = new HashMap<>();
     private boolean suspended;
     private boolean closed;
@@ -186,13 +198,18 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
                 return List.of();
             }
             remember(snapshot, services, values, now);
+            warnUnknownCounts(snapshot, services, values);
             // Copies made here, under the lock: the round goes on to change lastAction while the
             // planner's input must stay as it was read.
             input = new ScalingPlanner.Input(snapshot, node, services, values, new HashMap<>(lastAction),
-                    new HashMap<>(pausedUntil), new HashMap<>(emptySince), new HashSet<>(released), now);
+                    new HashMap<>(pausedUntil), new HashMap<>(lowSince), new HashSet<>(released),
+                    new HashSet<>(draining), now);
         }
         List<Decision> done = new ArrayList<>();
         Set<String> held = new HashSet<>();
+        // A task below min-services gets several starts in one round; they run one after the other
+        // in one action, so the task still has one action at a time.
+        Map<String, List<Decision>> perTask = new LinkedHashMap<>();
         for (Decision decision : ScalingPlanner.plan(input)) {
             synchronized (lock) {
                 if (closed || busy.contains(decision.task())) {
@@ -206,16 +223,36 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
                     done.add(decision);
                     continue;
                 }
-                busy.add(decision.task());
-                lastAction.put(decision.task(), now);
-                lastHold.remove(decision.task());
             }
-            done.add(decision);
+            perTask.computeIfAbsent(decision.task(), task -> new ArrayList<>()).add(decision);
+        }
+        for (Map.Entry<String, List<Decision>> entry : perTask.entrySet()) {
+            String task = entry.getKey();
+            List<Decision> batch = List.copyOf(entry.getValue());
+            // Starts keep the task busy until they are done. A drain does not: it may take the whole
+            // drain-timeout, and the task must still be filled up or grow meanwhile. Its service is
+            // marked as being emptied right here, before the next round can plan, so the planner
+            // never chooses it again and counts it neither for min-services nor for the load.
+            boolean holdsTask = batch.stream().noneMatch(Drain.class::isInstance);
+            synchronized (lock) {
+                if (closed) {
+                    break;
+                }
+                if (holdsTask) {
+                    busy.add(task);
+                } else {
+                    batch.forEach(d -> draining.add(((Drain) d).service()));
+                    lowSince.remove(task);
+                }
+                lastAction.put(task, now);
+                lastHold.remove(task);
+            }
+            done.addAll(batch);
             try {
-                actions.execute(() -> carryOut(decision, snapshot));
+                actions.execute(() -> carryOut(task, batch, holdsTask, snapshot));
             } catch (RejectedExecutionException e) {
                 synchronized (lock) {
-                    busy.remove(decision.task());
+                    release(task, batch, holdsTask);
                 }
             }
         }
@@ -225,29 +262,86 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
         return List.copyOf(done);
     }
 
+    /**
+     * Names the running services whose player count is unknown, once until they report again: such
+     * a service holds back scaling of its whole group. Holds {@code lock}.
+     */
+    private void warnUnknownCounts(ConfigSnapshot snapshot, List<ServiceInfo> services, ScalingPlanner.Signals values) {
+        Set<ServiceId> now = new HashSet<>();
+        for (ServiceInfo s : services) {
+            TaskConfig task = snapshot.tasks().get(s.task());
+            GroupConfig group = snapshot.groups().get(s.group());
+            if (s.state() != ServiceState.RUNNING || task == null || group == null
+                    || group.software() == ServerSoftware.VELOCITY
+                    || values.playersOf(s.id()).isPresent()) {
+                continue;
+            }
+            now.add(s.id());
+            if (unknownCounts.add(s.id())) {
+                LOG.log(System.Logger.Level.WARNING, "Scaling: group {0} is not scaled while {1} reports no player"
+                        + " count (no bridge report within stale-after of monitor.yml)", s.group(), s.id());
+            }
+        }
+        unknownCounts.retainAll(now);
+    }
+
     /** Updates what the rounds remember. Holds {@code lock}. */
     private void remember(ConfigSnapshot snapshot, List<ServiceInfo> services, ScalingPlanner.Signals values,
                           Instant now) {
         Set<ServiceId> present = new HashSet<>();
         for (ServiceInfo s : services) {
             present.add(s.id());
-            Integer players = values.players().get(s.id());
-            if (s.state() == ServiceState.RUNNING && players != null && players == 0) {
-                emptySince.putIfAbsent(s.id(), now);
-            } else {
-                emptySince.remove(s.id());
-            }
             boolean stable = s.state() == ServiceState.RUNNING && s.startedAt()
                     .map(at -> !at.plusSeconds(RestartConfig.STABLE_AFTER_SECONDS).isAfter(now)).orElse(false);
             if (stable) {
                 failures.remove(s.task());
             }
         }
-        emptySince.keySet().retainAll(present);
+        // The low-load condition has to hold without a break for scale-down-after.
+        for (String task : snapshot.tasks().keySet()) {
+            if (ScalingPlanner.scaleDownCandidate(snapshot, task, services, values, released, draining).isPresent()) {
+                lowSince.putIfAbsent(task, now);
+            } else {
+                lowSince.remove(task);
+            }
+        }
+        lowSince.keySet().retainAll(snapshot.tasks().keySet());
         released.retainAll(present);
         pausedUntil.entrySet().removeIf(e -> !now.isBefore(e.getValue())
                 || !filesOf(snapshot, e.getKey()).equals(pausedWith.get(e.getKey())));
         pausedWith.keySet().retainAll(pausedUntil.keySet());
+    }
+
+    private void carryOut(String task, List<Decision> batch, boolean holdsTask, ConfigSnapshot snapshot) {
+        try {
+            for (Decision decision : batch) {
+                synchronized (lock) {
+                    if (closed) {
+                        return;
+                    }
+                }
+                carryOut(decision, snapshot);
+            }
+        } finally {
+            synchronized (lock) {
+                release(task, batch, holdsTask);
+            }
+        }
+    }
+
+    /**
+     * Ends what {@link #tick} marked for a batch: the busy task, or the services being emptied.
+     * Holds {@code lock}.
+     */
+    private void release(String task, List<Decision> batch, boolean holdsTask) {
+        if (holdsTask) {
+            busy.remove(task);
+        }
+        for (Decision decision : batch) {
+            if (decision instanceof Drain drain) {
+                draining.remove(drain.service());
+            }
+        }
     }
 
     private void carryOut(Decision decision, ConfigSnapshot snapshot) {
@@ -258,10 +352,8 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
                         : target.startDynamic(start.task());
                 LOG.log(System.Logger.Level.INFO, "Scaling: {0} of task {1} is started ({2})", info.id(),
                         start.task(), describe(start.reason(), snapshot.tasks().get(start.task())));
-            } else if (decision instanceof Stop stop) {
-                LOG.log(System.Logger.Level.INFO, "Scaling: {0} of task {1} is stopped ({2})", stop.service(),
-                        stop.task(), describe(stop.reason(), snapshot.tasks().get(stop.task())));
-                target.stop(stop.service());
+            } else if (decision instanceof Drain drain) {
+                drainAndStop(drain, snapshot);
             }
         } catch (ServiceException | RuntimeException e) {
             LOG.log(System.Logger.Level.WARNING, "Scaling: task {0} could not be scaled: {1}", decision.task(),
@@ -269,20 +361,87 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
             if (decision instanceof Start) {
                 failed(decision.task());
             }
+        }
+    }
+
+    /**
+     * Closes a service on the proxies, empties it, then stops it; also one that looks empty, since a
+     * player may have been routed there just now. If it cannot be emptied (no other server of the
+     * group, players left after the group's {@code drain-timeout} ({@link #drainTimeout}), or the
+     * wait was interrupted), the stop is called off and the service keeps running; nobody is
+     * kicked. If the stop fails, the service is opened again. Either way the task waits
+     * {@code scale-down-after} again before the next attempt.
+     */
+    private void drainAndStop(Drain drain, ConfigSnapshot snapshot) throws ServiceException {
+        // tick() has put the service into draining already.
+        try {
+            LOG.log(System.Logger.Level.INFO, "Scaling: the players of {0} of task {1} are moved to other servers ({2})",
+                    drain.service(), drain.task(), describe(drain.reason(), snapshot.tasks().get(drain.task())));
+            Duration timeout = drainTimeout(snapshot, drain.task());
+            DrainResult result;
+            try {
+                result = target.drain(drain.service(), timeout);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                LOG.log(System.Logger.Level.WARNING, "Scaling: {0} keeps running: moving its players was"
+                        + " interrupted", drain.service());
+                return;
+            }
+            switch (result) {
+                case NO_TARGET -> {
+                    LOG.log(System.Logger.Level.WARNING, "Scaling: {0} keeps running: no other open server of its"
+                            + " group can take its players", drain.service());
+                    return;
+                }
+                case TIMEOUT -> {
+                    LOG.log(System.Logger.Level.WARNING, "Scaling: {0} keeps running: players are still on it"
+                            + " after {1} s, a move did not work", drain.service(), timeout.toSeconds());
+                    return;
+                }
+                case EMPTY -> {
+                    // Stopped below.
+                }
+            }
+            LOG.log(System.Logger.Level.INFO, "Scaling: {0} of task {1} is empty and is stopped", drain.service(),
+                    drain.task());
+            try {
+                target.stop(drain.service());
+            } catch (ServiceException | RuntimeException e) {
+                // It keeps running: the proxies may send players there again.
+                target.reopen(drain.service());
+                throw e;
+            }
         } finally {
             synchronized (lock) {
-                busy.remove(decision.task());
+                draining.remove(drain.service());
+                lowSince.remove(drain.task());
             }
         }
+    }
+
+    /**
+     * How long the players of a service of this task get to move before its stop is called off:
+     * {@code drain-timeout} of the task's group, 30 seconds when it is not set or the task or group
+     * is gone.
+     *
+     * @param snapshot the configuration
+     * @param task     task name
+     * @return the timeout
+     */
+    static Duration drainTimeout(ConfigSnapshot snapshot, String task) {
+        TaskConfig config = snapshot.tasks().get(task);
+        GroupConfig group = config == null ? null : snapshot.groups().get(config.group());
+        return group == null ? GroupConfig.DEFAULT_DRAIN_TIMEOUT.duration() : group.drainTimeoutOrDefault().duration();
     }
 
     private static String describe(ScalingPlanner.Reason reason, TaskConfig task) {
         ScalingConfig s = task == null ? null : task.scaling();
         return switch (reason) {
             case MIN_SERVICES -> "min-services is " + (s == null ? "?" : s.minServices());
-            case PLAYERS -> s == null ? "players"
-                    : "every running service has reached " + s.scaleUpAt() + " % of " + s.playersPerService() + " players";
-            case EMPTY -> s == null ? "empty" : "empty for " + s.scaleDownAfter() + ", another service has room";
+            case LOAD -> s == null ? "load" : "the load of the group has reached " + s.scaleUpAt() + " %";
+            case LOW_LOAD -> s == null ? "low load"
+                    : "with one service fewer the load stays below " + s.scaleDownBelow() + " %, for "
+                    + s.scaleDownAfter();
             case ABOVE_MAX -> "empty, and max-services is " + (s == null ? "?" : s.maxServices());
         };
     }
@@ -322,11 +481,21 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
     private static List<Object> filesOf(ConfigSnapshot snapshot, String task) {
         TaskConfig t = snapshot.tasks().get(task);
         GroupConfig g = t == null ? null : snapshot.groups().get(t.group());
-        return java.util.Arrays.asList(t, g);
+        return Arrays.asList(t, g);
     }
 
     @Override
     public void stateChanged(ServiceInfo service, ServiceState previous) {
+        stateChanged(service, previous, config.get());
+    }
+
+    /**
+     * Remembers crashes and released static services. Whether a static service stopped because its
+     * group was switched off is judged by the configuration at the moment of the change
+     * ({@code at}), not at delivery: a switch flipped back on in between does not hide it.
+     */
+    @Override
+    public void stateChanged(ServiceInfo service, ServiceState previous, ConfigSnapshot at) {
         switch (service.state()) {
             case CRASHED -> {
                 // PREPARED -> CRASHED is a start that failed before its process ran; the start
@@ -341,7 +510,7 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
                 }
             }
             case STOPPING, STOPPED -> {
-                if (service.mode() == TaskMode.STATIC && !mayRun(config.get(), service.group())) {
+                if (service.mode() == TaskMode.STATIC && !mayRun(at, service.group())) {
                     synchronized (lock) {
                         released.add(service.id());
                     }

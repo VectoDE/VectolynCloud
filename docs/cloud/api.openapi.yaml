@@ -692,7 +692,7 @@ components:
           example: "45s"
           description: >-
             Optional, 5s to 10m; missing means 30s and is not returned. How long a service may take
-            to send its players elsewhere before the scaler stops it (used from a later change on).
+            to send its players elsewhere before the scaler stops it; after that the stop is called off.
     Task:
       type: object
       description: >-
@@ -733,7 +733,7 @@ components:
           minimum: 0
           maximum: 99
           default: 50
-          description: "Percent, below scale-up-at. Stored and checked; the scaling rule that uses it follows in a later change."
+          description: "Percent, below scale-up-at. A dynamic service is removed once the rest of the group would stay below it."
         scale-down-after: {type: string, example: "5m"}
         cooldown: {type: string, example: "60s"}
     Node:
@@ -768,6 +768,15 @@ components:
     CloudConfig:
       type: object
       description: "cloud.yml, see docs/cloud/config.md. Unknown fields are refused."
+      properties:
+        fallback-group:
+          type: string
+          pattern: "^[a-z0-9][a-z0-9_-]{0,31}$"
+          example: lobby
+          description: >-
+            Group the proxies send a kicked player to when no other server of the player's own group is
+            free. Optional, default lobby (then not returned). When set it must be an existing group,
+            otherwise 422 invalid-config with the error code unknown-group. The proxies read it when they start.
     NodeStatus:
       type: object
       properties:

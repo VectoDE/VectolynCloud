@@ -51,7 +51,23 @@ final class SetupApplier {
      */
     static SetupResult apply(ConfigService config, SecretStore secrets, SetupAnswers answers, SetupEnvironment env)
             throws SetupException, IOException {
+        return apply(config, secrets, answers, null, env);
+    }
+
+    /**
+     * Writes {@code answers}, merged with the files as they are now: a setting the operator left as
+     * {@code shown} keeps what the files hold at this moment ({@link SetupPlan#rebase}), so a change
+     * made through the API or the console while the assistant ran is not reset.
+     *
+     * @param shown the defaults the assistant showed, or null to write {@code answers} as they are
+     * @return as {@link #apply(ConfigService, SecretStore, SetupAnswers, SetupEnvironment)}
+     * @throws SetupException if a check fails; nothing was written
+     * @throws IOException    if a file cannot be written
+     */
+    static SetupResult apply(ConfigService config, SecretStore secrets, SetupAnswers answered, SetupAnswers shown,
+                             SetupEnvironment env) throws SetupException, IOException {
         ConfigSnapshot current = config.snapshot();
+        SetupAnswers answers = shown == null ? answered : SetupPlan.rebase(answered, shown, SetupPlan.defaults(current, env));
         boolean first = !current.cloud().setupComplete();
         boolean stored;
         try {

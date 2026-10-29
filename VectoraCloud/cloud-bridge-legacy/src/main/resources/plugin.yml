@@ -5,3 +5,7 @@ main: net.vectora.cloud.bridge.legacy.LegacyBridgePlugin
 load: STARTUP
 description: Connects a PandaSpigot 1.8.8 server to VectoraCloud and checks the legacy proxy's bungeeguard-token.
 author: Vectora
+permissions:
+  vectora.moderation.kick:
+    description: A /kick of this player takes the target off the whole network instead of to another server.
+    default: op

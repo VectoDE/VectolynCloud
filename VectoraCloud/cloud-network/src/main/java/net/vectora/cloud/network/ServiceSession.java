@@ -12,6 +12,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import net.vectora.protocol.ProtocolVersion;
 import net.vectora.protocol.ServiceId;
 import net.vectora.protocol.message.Disconnect;
 import net.vectora.protocol.message.Envelope;
@@ -26,6 +27,7 @@ final class ServiceSession {
 
     private final ServiceId service;
     private final Channel channel;
+    private final ProtocolVersion version;
     private final int maxPendingRequests;
     private final Map<Integer, CompletableFuture<Response>> outgoing = new ConcurrentHashMap<>();
     private final AtomicInteger nextRequestId = new AtomicInteger();
@@ -33,14 +35,20 @@ final class ServiceSession {
     private volatile boolean replaced;
     private volatile Disconnect.Reason closedByCloud;
 
-    ServiceSession(ServiceId service, Channel channel, int maxPendingRequests) {
+    ServiceSession(ServiceId service, Channel channel, ProtocolVersion version, int maxPendingRequests) {
         this.service = service;
         this.channel = channel;
+        this.version = version;
         this.maxPendingRequests = maxPendingRequests;
     }
 
     ServiceId service() {
         return service;
+    }
+
+    /** The version the connection uses: the lower one of the service and the cloud. */
+    ProtocolVersion version() {
+        return version;
     }
 
     Channel channel() {

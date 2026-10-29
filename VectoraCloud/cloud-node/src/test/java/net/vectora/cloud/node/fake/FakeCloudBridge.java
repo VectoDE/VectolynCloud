@@ -10,6 +10,8 @@ import net.vectora.protocol.message.PlayerJoin;
 import net.vectora.protocol.message.PlayerQuit;
 import net.vectora.protocol.message.PlayerSwitch;
 import net.vectora.protocol.message.RegisterServer;
+import net.vectora.protocol.message.ServerCapacity;
+import net.vectora.protocol.message.TransferPlayer;
 import net.vectora.protocol.message.UnregisterServer;
 
 /**
@@ -43,6 +45,12 @@ public final class FakeCloudBridge {
                                 + " group=" + register.group() + " legacy=" + register.legacy());
                     } else if (received.message() instanceof UnregisterServer unregister) {
                         out.println("[fake] unregister " + unregister.name());
+                    } else if (received.message() instanceof ServerCapacity capacity) {
+                        out.println("[fake] capacity " + capacity.name() + " " + capacity.slots()
+                                + " open=" + capacity.open());
+                    } else if (received.message() instanceof TransferPlayer transfer) {
+                        // The test answers with "player switch", as a proxy reports the move.
+                        out.println("[fake] transfer " + transfer.uuid() + " " + transfer.to() + " " + transfer.reason());
                     } else {
                         out.println("[fake] cloud message");
                     }

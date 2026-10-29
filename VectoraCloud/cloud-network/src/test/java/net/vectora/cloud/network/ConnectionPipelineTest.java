@@ -9,10 +9,17 @@ import io.netty.channel.embedded.EmbeddedChannel;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
 import net.vectora.protocol.AuthToken;
 import net.vectora.protocol.ChannelName;
 import net.vectora.protocol.Protocol;
+import net.vectora.protocol.ProtocolVersion;
 import net.vectora.protocol.ServiceId;
+import net.vectora.protocol.message.Message;
+import net.vectora.protocol.message.NetworkKick;
+import net.vectora.protocol.message.ServerCapacity;
+import net.vectora.protocol.message.TransferPlayer;
+import net.vectora.protocol.message.UnregisterServer;
 import net.vectora.protocol.VarInts;
 import net.vectora.protocol.message.AuthResult;
 import net.vectora.protocol.message.ChannelMessage;
@@ -92,6 +99,75 @@ class ConnectionPipelineTest {
             channel.unsafe().outboundBuffer().setUserDefinedWritability(1, true);
             channel.runPendingTasks();
             assertTrue(channel.config().isAutoRead(), "reading resumes once the queue has drained");
+        }
+    }
+
+    /** Only the cloud moves players: a service that sends TransferPlayer or ServerCapacity is cut off. */
+    @Test
+    void transferAndCapacityFromAServiceAreProtocolViolations() {
+        for (Message forbidden : List.of(
+                new TransferPlayer(UUID.randomUUID(), new ServiceId("lobby-2"), TransferPlayer.Reason.SCALE_DOWN),
+                new ServerCapacity(new ServiceId("lobby-2"), 50, true))) {
+            try (EmbeddedConnection connection = new EmbeddedConnection(server)) {
+                connection.receive(CODEC.encode(Envelope.of(new Hello(Protocol.PROTOCOL_VERSION, LOBBY, token))));
+                connection.receive(CODEC.encode(Envelope.of(forbidden)));
+                List<Envelope> sent = connection.sent();
+                assertEquals(Envelope.of(new Disconnect(Disconnect.Reason.PROTOCOL_ERROR)), sent.get(sent.size() - 1),
+                        forbidden.getClass().getSimpleName());
+                assertFalse(connection.isOpen());
+            }
+        }
+        // Counter-check: a message a service may send keeps the connection open.
+        try (EmbeddedConnection connection = new EmbeddedConnection(server)) {
+            connection.receive(CODEC.encode(Envelope.of(new Hello(Protocol.PROTOCOL_VERSION, LOBBY, token))));
+            connection.receive(CODEC.encode(Envelope.of(new ChannelMessage(new ChannelName("c"), new byte[] {1}))));
+            assertTrue(connection.isOpen());
+        }
+    }
+
+    /** A backend reports only its own kicks: a NetworkKick that names another service cuts it off. */
+    @Test
+    void networkKickOnlyForTheSendersOwnServer() {
+        List<ServiceEvent> events = new java.util.concurrent.CopyOnWriteArrayList<>();
+        CloudNetworkServer listened = CloudNetworkServer.builder(NetworkSettings.defaults(), tokens)
+                .listener(events::add).build();
+        NetworkKick own = new NetworkKick(UUID.randomUUID(), LOBBY, "Spam");
+        try (EmbeddedConnection connection = new EmbeddedConnection(listened)) {
+            connection.receive(CODEC.encode(Envelope.of(new Hello(Protocol.PROTOCOL_VERSION, LOBBY, token))));
+            connection.receive(CODEC.encode(Envelope.of(own)));
+            assertTrue(connection.isOpen());
+            assertTrue(events.contains(new ServiceEvent.MessageReceived(LOBBY, own)), events.toString());
+        }
+        try (EmbeddedConnection connection = new EmbeddedConnection(listened)) {
+            connection.receive(CODEC.encode(Envelope.of(new Hello(Protocol.PROTOCOL_VERSION, LOBBY, token))));
+            connection.receive(CODEC.encode(Envelope.of(
+                    new NetworkKick(UUID.randomUUID(), new ServiceId("lobby-2"), "Spam"))));
+            List<Envelope> sent = connection.sent();
+            assertEquals(Envelope.of(new Disconnect(Disconnect.Reason.PROTOCOL_ERROR)), sent.get(sent.size() - 1));
+            assertFalse(connection.isOpen());
+        }
+    }
+
+    /** A 1.0 bridge never gets a message of 1.1; a 1.1 bridge does. */
+    @Test
+    void messagesOfANewerMinorVersionAreNotSentToAnOlderPeer() {
+        Message transfer = new TransferPlayer(UUID.randomUUID(), new ServiceId("lobby-2"), TransferPlayer.Reason.SCALE_DOWN);
+        try (EmbeddedConnection connection = new EmbeddedConnection(server)) {
+            connection.receive(CODEC.encode(Envelope.of(new Hello(new ProtocolVersion(1, 0), LOBBY, token))));
+            connection.sent();
+            assertFalse(server.send(LOBBY, transfer));
+            assertTrue(server.send(LOBBY, new UnregisterServer(new ServiceId("lobby-2"))));
+            connection.channel().runPendingTasks();
+            // sent() returns everything written so far: the AuthResult, then only the UnregisterServer.
+            assertEquals(List.of(Envelope.of(new UnregisterServer(new ServiceId("lobby-2")))),
+                    connection.sent().subList(1, connection.sent().size()));
+        }
+        try (EmbeddedConnection connection = new EmbeddedConnection(server)) {
+            connection.receive(CODEC.encode(Envelope.of(new Hello(Protocol.PROTOCOL_VERSION, LOBBY, token))));
+            connection.sent();
+            assertTrue(server.send(LOBBY, transfer));
+            connection.channel().runPendingTasks();
+            assertEquals(List.of(Envelope.of(transfer)), connection.sent().subList(1, connection.sent().size()));
         }
     }
 

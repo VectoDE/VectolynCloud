@@ -56,6 +56,13 @@ class ServerRegistryTest {
             runtime.remove(name);
             log.add("-" + name);
         }
+
+        final Map<String, Integer> players = new HashMap<>();
+
+        @Override
+        public int playersOn(String name) {
+            return players.getOrDefault(name, 0);
+        }
     }
 
     private final FakeServers servers = new FakeServers(Set.of("lobby"));

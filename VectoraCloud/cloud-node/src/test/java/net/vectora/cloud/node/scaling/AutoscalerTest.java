@@ -32,13 +32,14 @@ import net.vectora.cloud.config.model.TaskConfig;
 import net.vectora.cloud.config.model.TaskMode;
 import net.vectora.cloud.config.model.TimeSpan;
 import net.vectora.cloud.config.model.WantedServers;
+import net.vectora.cloud.node.channel.ChannelBridge.DrainResult;
 import net.vectora.cloud.node.scaling.ScalingPlanner.Decision;
+import net.vectora.cloud.node.scaling.ScalingPlanner.Drain;
 import net.vectora.cloud.node.scaling.ScalingPlanner.Hold;
 import net.vectora.cloud.node.scaling.ScalingPlanner.Held;
 import net.vectora.cloud.node.scaling.ScalingPlanner.Memory;
 import net.vectora.cloud.node.scaling.ScalingPlanner.Reason;
 import net.vectora.cloud.node.scaling.ScalingPlanner.Start;
-import net.vectora.cloud.node.scaling.ScalingPlanner.Stop;
 import net.vectora.cloud.node.service.ServiceException;
 import net.vectora.cloud.node.service.ServiceInfo;
 import net.vectora.cloud.node.service.ServiceState;
@@ -73,27 +74,148 @@ class AutoscalerTest {
     }
 
     @Test
-    void scalesUpOnPlayersAndDownAfterTheEmptyTimeWithTheCooldownInBetween() {
+    void scalesUpOnLoadAndDownAfterTheLowLoadTimeWithTheCooldownInBetween() {
         Fixture f = new Fixture().task("minigame", TaskMode.DYNAMIC, 1, 3);
         f.target.add("minigame", 1, TaskMode.DYNAMIC, ServiceState.RUNNING);
         f.players.put(new ServiceId("minigame-1"), 40);
-        assertEquals(List.of(new Start("minigame", OptionalInt.empty(), Reason.PLAYERS)), f.scaler.tick());
+        assertEquals(List.of(new Start("minigame", OptionalInt.empty(), Reason.LOAD)), f.scaler.tick());
         f.target.setState("minigame-2", ServiceState.RUNNING);
         f.players.put(new ServiceId("minigame-1"), 10);
         f.players.put(new ServiceId("minigame-2"), 0);
 
-        // minigame-2 is empty from now on; the cooldown (60 s) and scale-down-after (5 min) both count.
+        // The load is low from now on; the cooldown (60 s) and scale-down-after (5 min) both count.
         f.advance(Duration.ofSeconds(30));
         assertEquals(List.of(), f.scaler.tick(), "cooldown");
         f.advance(Duration.ofMinutes(5).minusSeconds(1));
-        assertEquals(List.of(), f.scaler.tick(), "empty for 4:59");
+        assertEquals(List.of(), f.scaler.tick(), "low for 4:59");
         f.advance(Duration.ofSeconds(1));
-        assertEquals(List.of(new Stop("minigame", new ServiceId("minigame-2"), Reason.EMPTY)), f.scaler.tick());
-        assertEquals(List.of("start minigame", "stop minigame-2"), f.target.calls);
+        assertEquals(List.of(new Drain("minigame", new ServiceId("minigame-2"), Reason.LOW_LOAD)), f.scaler.tick());
+        assertEquals(List.of("start minigame", "drain minigame-2", "stop minigame-2"), f.target.calls,
+                "an empty service is closed and checked as well before it stops");
     }
 
     @Test
-    void aPlayerJoiningResetsTheEmptyTime() {
+    void aStopThatFailsAfterTheDrainOpensTheServiceAgain() {
+        Fixture f = new Fixture().task("minigame", TaskMode.DYNAMIC, 1, 3);
+        f.target.add("minigame", 1, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.target.add("minigame", 2, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.players.put(new ServiceId("minigame-1"), 10);
+        f.players.put(new ServiceId("minigame-2"), 0);
+        f.target.failStops = true;
+        f.scaler.tick();
+        f.advance(Duration.ofMinutes(5));
+        assertEquals(List.of(new Drain("minigame", new ServiceId("minigame-2"), Reason.LOW_LOAD)), f.scaler.tick());
+        assertEquals(List.of("drain minigame-2", "stop minigame-2", "reopen minigame-2"), f.target.calls);
+
+        // Counter-check: a stop that works leaves it closed until it is gone.
+        f.target.failStops = false;
+        f.target.calls.clear();
+        f.scaler.tick();
+        f.advance(Duration.ofMinutes(5));
+        f.scaler.tick();
+        assertEquals(List.of("drain minigame-2", "stop minigame-2"), f.target.calls);
+    }
+
+    @Test
+    void theDrainWaitsTheDrainTimeoutOfTheGroup() {
+        Fixture f = new Fixture().task("minigame", TaskMode.DYNAMIC, 1, 3);
+        f.groups.put("minigame", f.groups.get("minigame").withDrainTimeout(TimeSpan.parse("45s")));
+        f.target.add("minigame", 1, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.target.add("minigame", 2, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.players.put(new ServiceId("minigame-1"), 10);
+        f.players.put(new ServiceId("minigame-2"), 0);
+        f.scaler.tick();
+        f.advance(Duration.ofMinutes(5));
+        f.scaler.tick();
+        assertEquals(List.of(Duration.ofSeconds(45)), f.target.drainTimeouts);
+
+        // Counter-check: without drain-timeout the default of 30 seconds.
+        f.groups.put("minigame", f.groups.get("minigame").withDrainTimeout(null));
+        f.target.add("minigame", 2, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.scaler.tick();
+        f.advance(Duration.ofMinutes(5));
+        f.scaler.tick();
+        assertEquals(List.of(Duration.ofSeconds(45), Duration.ofSeconds(30)), f.target.drainTimeouts);
+    }
+
+    @Test
+    void everyMissingServiceComesBackInOneRoundAfterTheEulaWasGivenAgain() {
+        Fixture f = new Fixture().task("lobby", TaskMode.STATIC, 3, 3);
+        for (int i = 1; i <= 3; i++) {
+            f.target.add("lobby", i, TaskMode.STATIC, ServiceState.STOPPED);
+        }
+        ConfigSnapshot withoutEula = f.snapshot().withCloud(f.cloud.withEulaAccepted(false).withSetupComplete(false));
+        for (ServiceInfo s : List.copyOf(f.target.services.values())) {
+            f.scaler.stateChanged(s, ServiceState.STOPPING, withoutEula);
+        }
+        assertEquals(3, f.scaler.tick().size(), "all three at once");
+        assertEquals(List.of("start lobby 1", "start lobby 2", "start lobby 3"), f.target.calls);
+    }
+
+    @Test
+    void anUnknownPlayerCountIsWarnedOnceNamingTheServiceAndAgainAfterItWasKnown() {
+        Fixture f = new Fixture().task("minigame", TaskMode.DYNAMIC, 1, 3);
+        f.target.add("minigame", 1, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        List<String> warnings = new ArrayList<>();
+        java.util.logging.Logger logger = java.util.logging.Logger.getLogger(Autoscaler.class.getName());
+        java.util.logging.Handler handler = new java.util.logging.Handler() {
+            @Override
+            public void publish(java.util.logging.LogRecord r) {
+                if (r.getLevel() == java.util.logging.Level.WARNING) {
+                    warnings.add(java.text.MessageFormat.format(r.getMessage(), r.getParameters()));
+                }
+            }
+
+            @Override
+            public void flush() {
+            }
+
+            @Override
+            public void close() {
+            }
+        };
+        logger.addHandler(handler);
+        try {
+            f.scaler.tick();
+            f.scaler.tick();
+            assertEquals(1, warnings.size(), "once while it stays unknown: " + warnings);
+            assertTrue(warnings.get(0).contains("minigame-1") && warnings.get(0).contains("group minigame"),
+                    warnings.get(0));
+
+            // Counter-check: known in between, then unknown again, warns again.
+            f.players.put(new ServiceId("minigame-1"), 5);
+            f.scaler.tick();
+            assertEquals(1, warnings.size(), "no warning while known");
+            f.players.remove(new ServiceId("minigame-1"));
+            f.scaler.tick();
+            assertEquals(2, warnings.size(), "again after it was known");
+        } finally {
+            logger.removeHandler(handler);
+        }
+    }
+
+    @Test
+    void aRiseOfTheLoadResetsTheLowLoadTime() {
+        Fixture f = new Fixture().task("minigame", TaskMode.DYNAMIC, 1, 3);
+        f.target.add("minigame", 1, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.target.add("minigame", 2, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.players.put(new ServiceId("minigame-1"), 10);
+        f.players.put(new ServiceId("minigame-2"), 0);
+        assertEquals(List.of(), f.scaler.tick());
+        f.advance(Duration.ofMinutes(4));
+        // 25 of 50 without minigame-2: not below 50 %.
+        f.players.put(new ServiceId("minigame-1"), 25);
+        assertEquals(List.of(), f.scaler.tick());
+        f.players.put(new ServiceId("minigame-1"), 10);
+        assertEquals(List.of(), f.scaler.tick(), "low again from now on");
+        f.advance(Duration.ofMinutes(4));
+        assertEquals(List.of(), f.scaler.tick(), "low again for 4 minutes only, 8 minutes after the first time");
+        f.advance(Duration.ofMinutes(1));
+        assertEquals(List.of(new Drain("minigame", new ServiceId("minigame-2"), Reason.LOW_LOAD)), f.scaler.tick());
+    }
+
+    @Test
+    void aPlayerOnTheSurplusServiceDoesNotResetTheTimeButIsMovedAway() {
         Fixture f = new Fixture().task("minigame", TaskMode.DYNAMIC, 1, 3);
         f.target.add("minigame", 1, TaskMode.DYNAMIC, ServiceState.RUNNING);
         f.target.add("minigame", 2, TaskMode.DYNAMIC, ServiceState.RUNNING);
@@ -103,12 +225,162 @@ class AutoscalerTest {
         f.advance(Duration.ofMinutes(4));
         f.players.put(new ServiceId("minigame-2"), 1);
         assertEquals(List.of(), f.scaler.tick());
-        f.players.put(new ServiceId("minigame-2"), 0);
-        assertEquals(List.of(), f.scaler.tick(), "empty again from now on");
-        f.advance(Duration.ofMinutes(4));
-        assertEquals(List.of(), f.scaler.tick(), "empty again for 4 minutes only, 8 minutes after the first time");
         f.advance(Duration.ofMinutes(1));
-        assertEquals(List.of(new Stop("minigame", new ServiceId("minigame-2"), Reason.EMPTY)), f.scaler.tick());
+        assertEquals(List.of(new Drain("minigame", new ServiceId("minigame-2"), Reason.LOW_LOAD)), f.scaler.tick());
+        assertEquals(List.of("drain minigame-2", "stop minigame-2"), f.target.calls);
+    }
+
+    @Test
+    void aServiceThatCannotBeEmptiedKeepsRunningAndTheTaskWaitsScaleDownAfterAgain() {
+        Fixture f = new Fixture().task("minigame", TaskMode.DYNAMIC, 1, 3);
+        f.target.add("minigame", 1, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.target.add("minigame", 2, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.players.put(new ServiceId("minigame-1"), 10);
+        f.players.put(new ServiceId("minigame-2"), 2);
+        f.target.drainResult = DrainResult.TIMEOUT;
+        assertEquals(List.of(), f.scaler.tick());
+        f.advance(Duration.ofMinutes(5));
+        assertEquals(List.of(new Drain("minigame", new ServiceId("minigame-2"), Reason.LOW_LOAD)), f.scaler.tick());
+        assertEquals(List.of("drain minigame-2"), f.target.calls, "no stop, no kick");
+        assertEquals(ServiceState.RUNNING, f.target.services.get(new ServiceId("minigame-2")).state());
+
+        f.advance(Duration.ofMinutes(5).minusSeconds(1));
+        assertEquals(List.of(), f.scaler.tick(), "the low-load time starts again after the attempt");
+        // Counter-check: once scale-down-after has passed again, the next attempt comes.
+        f.target.drainResult = DrainResult.EMPTY;
+        f.scaler.tick();
+        f.advance(Duration.ofMinutes(5));
+        assertEquals(List.of(new Drain("minigame", new ServiceId("minigame-2"), Reason.LOW_LOAD)), f.scaler.tick());
+        assertEquals(List.of("drain minigame-2", "drain minigame-2", "stop minigame-2"), f.target.calls);
+    }
+
+    @Test
+    void theLogSaysWhyAServiceCouldNotBeEmptied() {
+        assertEquals("Scaling: minigame-2 keeps running: players are still on it after 30 s, a move did not work",
+                failedDrain(DrainResult.TIMEOUT, false));
+        assertEquals("Scaling: minigame-2 keeps running: no other open server of its group can take its players",
+                failedDrain(DrainResult.NO_TARGET, false));
+        assertEquals("Scaling: minigame-2 keeps running: moving its players was interrupted",
+                failedDrain(DrainResult.EMPTY, true));
+    }
+
+    /** One drain that does not empty minigame-2; returns the warning, checks there was no stop. */
+    private static String failedDrain(DrainResult result, boolean interrupted) {
+        Fixture f = new Fixture().task("minigame", TaskMode.DYNAMIC, 1, 3);
+        f.target.add("minigame", 1, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.target.add("minigame", 2, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.players.put(new ServiceId("minigame-1"), 10);
+        f.players.put(new ServiceId("minigame-2"), 2);
+        f.target.drainResult = result;
+        f.target.drainInterrupted = interrupted;
+        f.scaler.tick();
+        f.advance(Duration.ofMinutes(5));
+        List<String> warnings = new ArrayList<>();
+        java.util.logging.Logger logger = java.util.logging.Logger.getLogger(Autoscaler.class.getName());
+        java.util.logging.Handler handler = warningsInto(warnings);
+        logger.addHandler(handler);
+        try {
+            // The direct executor carries the drain out on this thread.
+            assertEquals(List.of(new Drain("minigame", new ServiceId("minigame-2"), Reason.LOW_LOAD)), f.scaler.tick());
+        } finally {
+            logger.removeHandler(handler);
+        }
+        assertEquals(interrupted, Thread.interrupted(), "the interrupt is passed on, and only then");
+        assertEquals(List.of("drain minigame-2"), f.target.calls, "no stop, no kick");
+        assertEquals(1, warnings.size(), warnings.toString());
+        return warnings.getFirst();
+    }
+
+    private static java.util.logging.Handler warningsInto(List<String> warnings) {
+        return new java.util.logging.Handler() {
+            @Override
+            public void publish(java.util.logging.LogRecord r) {
+                if (r.getLevel() == java.util.logging.Level.WARNING) {
+                    warnings.add(java.text.MessageFormat.format(r.getMessage(), r.getParameters()));
+                }
+            }
+
+            @Override
+            public void flush() {
+            }
+
+            @Override
+            public void close() {
+            }
+        };
+    }
+
+    @Test
+    void aServiceBeingEmptiedIsNotChosenAgainAndTheLowLoadTimeStartsAnew() {
+        Fixture f = new Fixture().task("minigame", TaskMode.DYNAMIC, 1, 4);
+        List<Runnable> queued = new ArrayList<>();
+        Autoscaler scaler = Autoscaler.create(f.target, f::snapshot, f::signals, f.clock(), queued::add);
+        f.target.add("minigame", 1, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.target.add("minigame", 2, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.target.add("minigame", 3, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.players.put(new ServiceId("minigame-1"), 5);
+        f.players.put(new ServiceId("minigame-2"), 2);
+        f.players.put(new ServiceId("minigame-3"), 1);
+        scaler.tick();
+        f.advance(Duration.ofMinutes(5));
+        assertEquals(List.of(new Drain("minigame", new ServiceId("minigame-3"), Reason.LOW_LOAD)), scaler.tick());
+        // The drain has not run yet: the next round must not empty minigame-3 a second time, and
+        // minigame-2 waits a full scale-down-after of its own.
+        f.advance(Duration.ofMinutes(10));
+        assertEquals(List.of(), scaler.tick(), "minigame-3 is being emptied already");
+        f.target.duringDrain = () -> {
+            f.advance(Duration.ofMinutes(5).minusSeconds(1));
+            assertEquals(List.of(), scaler.tick(), "while minigame-3 is emptied");
+        };
+        queued.forEach(Runnable::run);
+        assertEquals(List.of("drain minigame-3", "stop minigame-3"), f.target.calls);
+    }
+
+    @Test
+    void aServiceThatCrashesWhileAnotherIsEmptiedIsReplacedInTheNextRound() {
+        Fixture f = new Fixture().task("minigame", TaskMode.DYNAMIC, 2, 4);
+        List<Runnable> queued = new ArrayList<>();
+        Autoscaler scaler = Autoscaler.create(f.target, f::snapshot, f::signals, f.clock(), queued::add);
+        f.target.add("minigame", 1, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.target.add("minigame", 2, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.target.add("minigame", 3, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.players.put(new ServiceId("minigame-1"), 10);
+        f.players.put(new ServiceId("minigame-2"), 10);
+        f.players.put(new ServiceId("minigame-3"), 0);
+        scaler.tick();
+        f.advance(Duration.ofMinutes(5));
+        assertEquals(List.of(new Drain("minigame", new ServiceId("minigame-3"), Reason.LOW_LOAD)), scaler.tick());
+        // Counter-check: while nothing crashed, the round during the drain does nothing.
+        f.advance(Autoscaler.INTERVAL);
+        assertEquals(List.of(), scaler.tick(), "minigame-1 and -2 are the minimum");
+
+        // minigame-1 crashes without a restart; the service core forgets it. minigame-3 is still
+        // being emptied (up to its drain-timeout) and does not count.
+        ServiceInfo crashed = f.target.services.remove(new ServiceId("minigame-1"));
+        f.players.remove(crashed.id());
+        scaler.stateChanged(f.target.info("minigame", 1, TaskMode.DYNAMIC, ServiceState.CRASHED, T0),
+                ServiceState.RUNNING);
+        f.advance(Autoscaler.INTERVAL);
+        assertEquals(List.of(new Start("minigame", OptionalInt.empty(), Reason.MIN_SERVICES)), scaler.tick());
+        queued.forEach(Runnable::run);
+        assertEquals(List.of("drain minigame-3", "stop minigame-3", "start minigame"), f.target.calls);
+    }
+
+    @Test
+    void aReleasedStaticServiceIsJudgedByTheConfigurationAtTheMomentItStopped() {
+        Fixture f = new Fixture().task("lobby", TaskMode.STATIC, 1, 1);
+        f.target.add("lobby", 1, TaskMode.STATIC, ServiceState.STOPPED);
+        ConfigSnapshot whenItStopped = f.snapshot().withCloud(f.cloud.withServers(WantedServers.all()
+                .with(ServerKind.LOBBY, false)));
+        // The switch is on again by the time the event is delivered: the stop was still its doing.
+        f.scaler.stateChanged(f.target.services.get(new ServiceId("lobby-1")), ServiceState.STOPPING, whenItStopped);
+        assertEquals(List.of(new Start("lobby", OptionalInt.of(1), Reason.MIN_SERVICES)), f.scaler.tick());
+
+        // Counter-check: judged by the configuration at delivery, it would count as stopped by hand.
+        Fixture g = new Fixture().task("lobby", TaskMode.STATIC, 1, 1);
+        g.target.add("lobby", 1, TaskMode.STATIC, ServiceState.STOPPED);
+        g.scaler.stateChanged(g.target.services.get(new ServiceId("lobby-1")), ServiceState.STOPPING, g.snapshot());
+        assertEquals(List.of(), g.scaler.tick());
     }
 
     @Test
@@ -201,11 +473,13 @@ class AutoscalerTest {
         Fixture f = new Fixture().task("minigame", TaskMode.DYNAMIC, 2, 3);
         List<Runnable> queued = new ArrayList<>();
         Autoscaler scaler = Autoscaler.create(f.target, f::snapshot, f::signals, f.clock(), queued::add);
-        assertEquals(1, scaler.tick().size());
+        assertEquals(2, scaler.tick().size(), "both missing services in one round");
+        assertEquals(1, queued.size(), "one action for the task, which starts them one after the other");
         f.advance(Duration.ofMinutes(5));
-        assertEquals(List.of(), scaler.tick(), "the first start has not run yet");
+        assertEquals(List.of(), scaler.tick(), "the starts have not run yet");
         queued.forEach(Runnable::run);
-        assertEquals(1, scaler.tick().size(), "the second service once the first start is done");
+        assertEquals(List.of("start minigame", "start minigame"), f.target.calls);
+        assertEquals(List.of(), scaler.tick(), "min-services is met");
     }
 
     @Test
@@ -217,7 +491,7 @@ class AutoscalerTest {
         assertEquals(List.of(new Held("minigame", Hold.MEMORY_UNKNOWN)), f.scaler.tick());
         assertEquals(List.of(), f.target.calls);
         f.memory = ROOMY;
-        assertEquals(List.of(new Start("minigame", OptionalInt.empty(), Reason.PLAYERS)), f.scaler.tick(),
+        assertEquals(List.of(new Start("minigame", OptionalInt.empty(), Reason.LOAD)), f.scaler.tick(),
                 "a hold is no decision: no cooldown");
     }
 
@@ -290,8 +564,16 @@ class AutoscalerTest {
     private static final class FakeTarget implements ScalingTarget {
         final Map<ServiceId, ServiceInfo> services = new LinkedHashMap<>();
         final List<String> calls = new ArrayList<>();
+        final List<Duration> drainTimeouts = new ArrayList<>();
         boolean failStarts;
         boolean crashEvent;
+        boolean failStops;
+        /** How a drain ends; only {@code EMPTY} takes the players off the service. */
+        DrainResult drainResult = DrainResult.EMPTY;
+        /** Whether a drain is interrupted, as on a node that is stopping. */
+        boolean drainInterrupted;
+        /** Runs once inside the next drain, while the service is being emptied. */
+        Runnable duringDrain;
         Fixture fixture;
 
         ServiceInfo info(String task, int index, TaskMode mode, ServiceState state, Instant startedAt) {
@@ -343,10 +625,36 @@ class AutoscalerTest {
         }
 
         @Override
-        public ServiceInfo stop(ServiceId service) {
+        public ServiceInfo stop(ServiceId service) throws ServiceException {
             calls.add("stop " + service.value());
+            if (failStops) {
+                throw new ServiceException("stop failed");
+            }
             setState(service.value(), ServiceState.STOPPED);
             return services.get(service);
+        }
+
+        @Override
+        public void reopen(ServiceId service) {
+            calls.add("reopen " + service.value());
+        }
+
+        @Override
+        public DrainResult drain(ServiceId service, Duration timeout) throws InterruptedException {
+            calls.add("drain " + service.value());
+            drainTimeouts.add(timeout);
+            if (duringDrain != null) {
+                Runnable during = duringDrain;
+                duringDrain = null;
+                during.run();
+            }
+            if (drainInterrupted) {
+                throw new InterruptedException("test");
+            }
+            if (drainResult == DrainResult.EMPTY) {
+                fixture.players.put(service, 0);
+            }
+            return drainResult;
         }
     }
 }

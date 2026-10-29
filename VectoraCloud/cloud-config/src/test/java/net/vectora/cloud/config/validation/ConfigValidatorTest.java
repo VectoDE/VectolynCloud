@@ -286,6 +286,25 @@ class ConfigValidatorTest {
     }
 
     @Test
+    void theFallbackGroupMustBeAValidExistingGroup() {
+        assertEquals("lobby", valid.cloud().fallbackGroupOrDefault(), "default");
+        assertEquals(Set.of("cloud.yml fallback-group UNKNOWN_GROUP"),
+                codes(withCloud(valid.cloud().withFallbackGroup("hub"))));
+        assertEquals(Set.of("cloud.yml fallback-group PATTERN_MISMATCH"),
+                codes(withCloud(valid.cloud().withFallbackGroup("Hub!"))));
+        assertEquals(Set.of("cloud.yml fallback-group PATTERN_MISMATCH"),
+                codes(withCloud(valid.cloud().withFallbackGroup("con"))), "a device name is no group name");
+        // Counter-checks: an existing group, and the default without a lobby group.
+        ConfigSnapshot hub = withCloud(valid.cloud().withFallbackGroup("hub")).withGroup("hub", Samples.lobbyGroup());
+        assertEquals(Set.of(), codes(hub));
+        assertEquals("hub", hub.cloud().fallbackGroupOrDefault());
+        assertEquals(Set.of(), codes(valid.withoutTask("lobby").withoutGroup("lobby")),
+                "no fallback-group in the file: the default lobby need not exist");
+        // A named fallback group cannot be removed while it is named.
+        assertEquals(Set.of("cloud.yml fallback-group UNKNOWN_GROUP"), codes(hub.withoutGroup("hub")));
+    }
+
+    @Test
     void nodeIdsAreUnique() {
         NodesConfig twice = new NodesConfig(1, List.of(NodeConfig.defaults(),
                 new NodeConfig("node-1", "10.0.0.2", 7010, new PortRange(31000, 30000))));
@@ -367,7 +386,7 @@ class ConfigValidatorTest {
 
     @Test
     void missingSectionsAreRequired() {
-        CloudConfig empty = new CloudConfig(1, null, null, false, false, null, null, null, null, null, null);
+        CloudConfig empty = new CloudConfig(1, null, null, false, false, null, null, null, null, null, null, null);
         assertEquals(Set.of(
                 "cloud.yml network-name REQUIRED", "cloud.yml language REQUIRED", "cloud.yml node-id REQUIRED",
                 "cloud.yml servers REQUIRED", "cloud.yml proxy REQUIRED", "cloud.yml legacy-proxy REQUIRED",
