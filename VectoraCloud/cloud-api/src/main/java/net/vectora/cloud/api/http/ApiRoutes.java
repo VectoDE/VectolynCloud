@@ -28,6 +28,7 @@ import net.vectora.cloud.config.operation.PutGroup;
 import net.vectora.cloud.config.operation.PutTask;
 import net.vectora.cloud.config.operation.RemoveGroup;
 import net.vectora.cloud.config.operation.RemoveTask;
+import net.vectora.cloud.config.operation.SetGroupWanted;
 import net.vectora.cloud.config.operation.SetServerWanted;
 
 /**
@@ -105,7 +106,10 @@ public final class ApiRoutes {
             return ApiResponse.noContent();
         });
         r.add("PUT", PREFIX + "/groups/{name}/wanted", Scope.CONFIG_WRITE,
-                q -> setWanted(kindOfTemplate(group(q.param("name")).template()), q));
+                q -> {
+                    group(q.param("name")); // 404 for an unknown group
+                    return setGroupWanted(q.param("name"), q);
+                });
 
         r.add("GET", PREFIX + "/tasks", Scope.CONFIG_READ, q -> ApiResponse.ok(config.snapshot().tasks()));
         r.add("GET", PREFIX + "/tasks/{name}", Scope.CONFIG_READ, q -> ApiResponse.document(200, task(q.param("name"))));
@@ -119,11 +123,10 @@ public final class ApiRoutes {
         });
         r.add("PUT", PREFIX + "/tasks/{name}/wanted", Scope.CONFIG_WRITE, q -> {
             TaskConfig task = task(q.param("name"));
-            GroupConfig group = config.snapshot().groups().get(task.group());
-            if (group == null) {
+            if (!config.snapshot().groups().containsKey(task.group())) {
                 throw ApiException.notFound("The group of this task");
             }
-            return setWanted(kindOfTemplate(group.template()), q);
+            return setGroupWanted(task.group(), q);
         });
 
         r.add("GET", PREFIX + "/servers", Scope.CONFIG_READ, q -> ApiResponse.ok(servers(config.snapshot())));
@@ -226,12 +229,36 @@ public final class ApiRoutes {
     }
 
     private ApiResponse setWanted(ServerKind kind, ApiRequest q) throws Exception {
+        apply(new SetServerWanted(kind, wanted(q)));
+        return ApiResponse.ok(servers(config.snapshot()));
+    }
+
+    /**
+     * Sets the group's own switch (since #44). A group runs only if this and the switch of its
+     * server kind in {@code cloud.yml} are both on; the answer shows both.
+     */
+    private ApiResponse setGroupWanted(String name, ApiRequest q) throws Exception {
+        apply(new SetGroupWanted(name, wanted(q)));
+        ConfigSnapshot snapshot = config.snapshot();
+        GroupConfig group = snapshot.groups().get(name);
+        Optional<ServerKind> kind = kindOfTemplate(group.template());
+        boolean kindWanted = kind.map(k -> snapshot.cloud().servers() == null || snapshot.cloud().servers().isWanted(k))
+                .orElse(true);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("group", name);
+        body.put("wanted", group.wantedOrDefault());
+        body.put("server-kind", kind.map(ServerKind::key).orElse(null));
+        body.put("server-kind-wanted", kindWanted);
+        body.put("runs", group.wantedOrDefault() && kindWanted);
+        return ApiResponse.ok(body);
+    }
+
+    private static boolean wanted(ApiRequest q) throws ApiException {
         WantedBody body = q.json(WantedBody.class);
         if (body.wanted() == null) {
             throw ApiException.badRequest("invalid-value", "\"wanted\" must be true or false.");
         }
-        apply(new SetServerWanted(kind, body.wanted()));
-        return ApiResponse.ok(servers(config.snapshot()));
+        return body.wanted();
     }
 
     private void apply(ConfigOperation operation) throws ApiException, IOException {
@@ -282,14 +309,13 @@ public final class ApiRoutes {
         throw ApiException.notFound("Server kind \"" + key + "\"");
     }
 
-    private static ServerKind kindOfTemplate(String template) throws ApiException {
+    private static Optional<ServerKind> kindOfTemplate(String template) {
         for (ServerKind kind : ServerKind.values()) {
             if (kind.templateFolder().equals(template)) {
-                return kind;
+                return Optional.of(kind);
             }
         }
-        throw new ApiException(409, "no-wanted-switch",
-                "The template of this group is none of the server kinds in cloud.yml (servers:), so it has no wanted switch.");
+        return Optional.empty();
     }
 
     private static Map<String, Boolean> servers(ConfigSnapshot snapshot) {

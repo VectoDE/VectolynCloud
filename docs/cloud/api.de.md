@@ -67,7 +67,7 @@ Alle Pfade beginnen mit `/api/v1`. Bodys sind `application/json` in UTF-8, mit d
 
 Jeder Schreibzugriff läuft über `ConfigService.apply`. Geprüft wird die ganze Konfiguration: Ports, EULA vor `setup-complete`, TLS für eine öffentliche API und die Allowlist der JVM-Flags. Danach wird atomar geschrieben, und die Listener des Nodes sehen die Änderung so, als wäre sie an der Konsole eingegeben worden. Bei einem Fehler wird nichts geschrieben, die Antwort ist `422 invalid-config` mit der Fehlerliste.
 
-**Wanted.** `wanted` ist in `cloud.yml` (`servers:`) ein Schalter pro Serverart. `PUT /groups/{name}/wanted` und `PUT /tasks/{name}/wanted` setzen den Schalter der Serverart, deren Template-Ordner die Gruppe nutzt. Bei einer Gruppe mit anderem Template kommt `409 no-wanted-switch`.
+**Wanted.** Es gibt zwei Schalter, und eine Gruppe läuft nur, wenn beide an sind: das eigene `wanted` der Gruppe in `groups/<Name>.yml` und der Schalter ihrer Serverart in `cloud.yml` (`servers:`, die Serverart, deren Template-Ordner die Gruppe nutzt). `PUT /groups/{name}/wanted` setzt den Schalter der Gruppe. `PUT /tasks/{name}/wanted` setzt den Schalter der Gruppe des Tasks, denn Tasks haben keinen eigenen. Das betrifft also alle Tasks dieser Gruppe. Die Antwort zeigt beide Schalter und `runs`. `PUT /servers/{kind}` setzt den Schalter der Serverart.
 
 **Löschen.** `DELETE` verlangt den Namen ein zweites Mal als `?confirm=<name>`, sonst kommt `400 confirmation-required`.
 
@@ -75,7 +75,7 @@ Jeder Schreibzugriff läuft über `ConfigService.apply`. Geprüft wird die ganze
 
 **Herunterfahren.** Während der Node herunterfährt, beantworten Start, Neustart, Reload und das Erstellen eines Backups die Anfrage mit `503 shutting-down`. Lesen und Stoppen gehen weiter.
 
-**Backups.** Die API definiert die Schnittstelle `BackupAccess`. Solange der Node den Backup-Dienst nicht anbindet, antworten beide Endpunkte mit `501 not-available`.
+**Backups.** `BackupServiceAccess` setzt `BackupAccess` über den `BackupService` aus cloud-backup um. Backups über die API haben den Grund `manual`, wie `backup create` an der Konsole. Läuft schon ein Backup, kommt `409`, bei einem unbekannten Dienst `422`. Antworten enthalten die Backup-ID, nie einen Pfad. Solange der Node den Adapter nicht übergibt, antworten beide Endpunkte mit `501 not-available`.
 
 ### Fehler
 

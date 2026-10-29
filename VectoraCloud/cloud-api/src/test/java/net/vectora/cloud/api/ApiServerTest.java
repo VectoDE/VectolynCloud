@@ -223,11 +223,16 @@ class ApiServerTest {
             assertEquals(422, api.send("PUT", "/api/v1/tasks/other", api.admin, task.replace("\"lobby\"", "\"nope\""))
                     .statusCode());
 
-            // Wanted switches: the group belongs to the server kind of its template.
-            assertEquals(200, api.send("PUT", "/api/v1/groups/lobby/wanted", api.admin, "{\"wanted\":false}").statusCode());
-            assertFalse(api.config.snapshot().cloud().servers().isWanted(ServerKind.LOBBY));
+            // Wanted: the group's own switch; the switch of its server kind stays as it is.
+            HttpResponse<String> off = api.send("PUT", "/api/v1/groups/lobby/wanted", api.admin, "{\"wanted\":false}");
+            assertEquals(200, off.statusCode());
+            assertTrue(off.body().contains("\"wanted\":false") && off.body().contains("\"server-kind\":\"lobby\"")
+                    && off.body().contains("\"runs\":false"), off.body());
+            assertFalse(api.config.snapshot().groups().get("lobby").wantedOrDefault());
+            assertTrue(api.config.snapshot().cloud().servers().isWanted(ServerKind.LOBBY), "the kind switch is untouched");
             assertEquals(200, api.send("PUT", "/api/v1/tasks/lobby/wanted", api.admin, "{\"wanted\":true}").statusCode());
-            assertTrue(api.config.snapshot().cloud().servers().isWanted(ServerKind.LOBBY));
+            assertTrue(api.config.snapshot().groups().get("lobby").wantedOrDefault(), "a task switches its group");
+            assertEquals(404, api.send("PUT", "/api/v1/groups/missing/wanted", api.admin, "{\"wanted\":true}").statusCode());
             assertTrue(api.get("/api/v1/servers", api.admin).body().contains("\"lobby\":true"));
 
             // Deleting needs the name repeated; the group is still used by the task.

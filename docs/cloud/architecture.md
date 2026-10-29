@@ -59,6 +59,7 @@ graph TD
     network --> config
     api[cloud-api] --> config
     api --> console
+    api --> backup
     network --> protocol[Vectora-Protocol]
     client[Vectora-CloudClient] --> protocol
     bcom[cloud-bridge-common] --> client

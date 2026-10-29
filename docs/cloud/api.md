@@ -72,7 +72,7 @@ All paths start with `/api/v1`. Bodies are `application/json` in UTF-8, with the
 | `GET /groups/{name}` | config:read | the group, with `ETag` |
 | `PUT /groups/{name}` | config:write | `201` created or `200` replaced, with `ETag` |
 | `DELETE /groups/{name}?confirm={name}` | config:write | `204` |
-| `PUT /groups/{name}/wanted` `{"wanted": false}` | config:write | the server switches |
+| `PUT /groups/{name}/wanted` `{"wanted": false}` | config:write | the group's switch and whether it runs |
 | `GET /tasks`, `GET/PUT /tasks/{name}`, `DELETE /tasks/{name}?confirm={name}`, `PUT /tasks/{name}/wanted` | as for groups | as for groups |
 | `GET /servers` | config:read | `{"proxy": true, "lobby": true, ...}` |
 | `PUT /servers/{kind}` `{"wanted": true}` | config:write | the server switches |
@@ -89,7 +89,7 @@ All paths start with `/api/v1`. Bodies are `application/json` in UTF-8, with the
 
 Every write goes through `ConfigService.apply`: the whole configuration is validated (ports, EULA before `setup-complete`, TLS for a public API, the JVM flag allowlist), written atomically, and the listeners of the node see the change as if it was typed at the console. On an error nothing is written and the answer is `422 invalid-config` with the list of errors.
 
-**Wanted.** `wanted` is a switch per server kind in `cloud.yml` (`servers:`). `PUT /groups/{name}/wanted` and `PUT /tasks/{name}/wanted` set the switch of the kind whose template folder the group uses; a group with another template answers `409 no-wanted-switch`.
+**Wanted.** There are two switches, and a group runs only if both are on: the group's own `wanted` in `groups/<name>.yml`, and the switch of its server kind in `cloud.yml` (`servers:`, the kind whose template folder the group uses). `PUT /groups/{name}/wanted` sets the group's switch; `PUT /tasks/{name}/wanted` sets the switch of the task's group (tasks have none of their own, so this affects every task of that group). Both answer `{"group": "lobby", "wanted": false, "server-kind": "lobby", "server-kind-wanted": true, "runs": false}`. `PUT /servers/{kind}` sets the kind's switch.
 
 **Delete.** `DELETE` needs the name repeated as `?confirm=<name>`, otherwise `400 confirmation-required`. That stops a script from deleting the wrong thing with one typo.
 
@@ -97,7 +97,7 @@ Every write goes through `ConfigService.apply`: the whole configuration is valid
 
 **Shutdown.** While the node shuts down, start, restart, reload and backup creation answer `503 shutting-down`. Reads and stops still work.
 
-**Backups.** The API defines `BackupAccess` (list, create). Until the node wires the backup service in, both endpoints answer `501 not-available`.
+**Backups.** `BackupAccess` (list, create) is implemented by `BackupServiceAccess` over the `BackupService` of cloud-backup. Backups made through the API have the reason `manual`, like `backup create` at the console. A busy backup gives `409`, an unknown service `422`. Answers carry the backup id, never a path. Until the node passes the adapter in, both endpoints answer `501 not-available`.
 
 ### Errors
 
@@ -123,7 +123,7 @@ Messages name fields and rules, never values. Messages of the node (for example 
 | 403 | `missing-scope`, `origin-not-allowed` |
 | 404 | `not-found` |
 | 405 | `method-not-allowed` (the message lists the allowed methods) |
-| 409 | `conflict`, `no-wanted-switch` |
+| 409 | `conflict` |
 | 412 | `precondition-failed` |
 | 413 | `body-too-large` |
 | 415 | `unsupported-media-type` |
@@ -224,7 +224,7 @@ Groups can be written through the API, so `process.jvm-flags` has an allowlist: 
 3. `ApiBackend` on top of the node:
    - `services()`: a `ServiceAccess` over `ServiceManager` (list, find, start by task, stop, restart, command), mapping a service to `ServiceView`. Failures are thrown as `ApiBackendException` with `NOT_FOUND`, `CONFLICT`, `UNAVAILABLE` or `INVALID`.
    - `node()`: `NodeStatus.ofThisJvm(nodeId, version, startedAt, shuttingDown, servicesTotal, servicesRunning)` and `shuttingDown()` of the node.
-   - `backups()`: `Optional.of(...)` over `BackupService` once it exists.
+   - `backups()`: `Optional.of(new BackupServiceAccess(backupService))`.
    - `redact(String)`: the node's `RedactingFilter`.
 4. Events: in the `ServiceListener`, `server.publish(new ApiEvent.ServiceState(view, previous))` on every state change and `server.publish(new ApiEvent.ServiceOutput(id, line))` for every output line; player join and quit from the bridges as `ApiEvent.Player`. `publish` never blocks.
 5. Shutdown: `server.beginShutdown()` first in `CloudNode.close()` (refuses starts and reloads), `server.close()` last (closes streams with `1001`, then the sockets).

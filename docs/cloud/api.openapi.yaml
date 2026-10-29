@@ -217,14 +217,14 @@ paths:
     parameters: [{$ref: "#/components/parameters/Name"}]
     put:
       tags: [groups]
-      summary: Set the wanted switch of the group's server kind
+      summary: Set the group's own wanted switch
       description: |
-        Scope: config:write. Sets `servers.<kind>` in cloud.yml for the kind whose template folder
-        the group uses; 409 no-wanted-switch for any other template.
+        Scope: config:write. A group runs only if its own switch and the switch of its server kind
+        in cloud.yml are both on.
       operationId: setGroupWanted
       requestBody: {$ref: "#/components/requestBodies/Wanted"}
       responses:
-        "200": {$ref: "#/components/responses/Servers"}
+        "200": {$ref: "#/components/responses/GroupWanted"}
         default: {$ref: "#/components/responses/Error"}
 
   /tasks:
@@ -297,12 +297,12 @@ paths:
     parameters: [{$ref: "#/components/parameters/Name"}]
     put:
       tags: [tasks]
-      summary: Set the wanted switch of the server kind of the task's group
-      description: "Scope: config:write"
+      summary: Set the wanted switch of the task's group
+      description: "Scope: config:write. Tasks have no switch of their own; this affects every task of the group."
       operationId: setTaskWanted
       requestBody: {$ref: "#/components/requestBodies/Wanted"}
       responses:
-        "200": {$ref: "#/components/responses/Servers"}
+        "200": {$ref: "#/components/responses/GroupWanted"}
         default: {$ref: "#/components/responses/Error"}
 
   /servers:
@@ -566,6 +566,18 @@ components:
             properties:
               wanted: {type: boolean}
   responses:
+    GroupWanted:
+      description: The group's switch, the switch of its server kind and whether it runs
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              group: {type: string}
+              wanted: {type: boolean}
+              server-kind: {type: [string, "null"]}
+              server-kind-wanted: {type: boolean}
+              runs: {type: boolean}
     Servers:
       description: The wanted switch of every server kind
       content:
@@ -577,7 +589,7 @@ components:
       description: |
         400 invalid-json, unknown-field, body-required, invalid-value, invalid-target, invalid-path,
         invalid-query, confirmation-required; 401 unauthorized; 403 missing-scope,
-        origin-not-allowed; 404 not-found; 405 method-not-allowed; 409 conflict, no-wanted-switch;
+        origin-not-allowed; 404 not-found; 405 method-not-allowed; 409 conflict;
         412 precondition-failed; 413 body-too-large; 415 unsupported-media-type; 422 invalid-config,
         invalid; 426 upgrade-required; 429 rate-limited (Retry-After); 500 io-error,
         internal-error; 501 not-available; 503 shutting-down, busy, unavailable.

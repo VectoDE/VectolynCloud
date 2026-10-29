@@ -13,6 +13,8 @@ dependencies {
     api(project(":VectoraCloud:cloud-config"))
     // The "api token" commands are registered in the console's command registry.
     api(project(":VectoraCloud:cloud-console"))
+    // BackupServiceAccess adapts the backup service to the backup endpoints.
+    api(project(":VectoraCloud:cloud-backup"))
     implementation(platform(libs.netty.bom))
     implementation(libs.netty.transport)
     implementation(libs.netty.handler)

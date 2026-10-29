@@ -3,9 +3,9 @@ package net.vectora.cloud.api.backend;
 import java.util.List;
 
 /**
- * Backups for the API. Prepared for cloud-backup (PR #43): cloud-node implements it with
- * {@code BackupService.list()} and {@code BackupService.create(BackupRequest)}. Until then
- * {@link ApiBackend#backups()} is empty and the backup endpoints answer 501 {@code not-available}.
+ * Backups for the API. {@link BackupServiceAccess} implements it over the {@code BackupService} of
+ * cloud-backup. While {@link ApiBackend#backups()} is empty the backup endpoints answer 501
+ * {@code not-available}.
  */
 public interface BackupAccess {
 

@@ -5,12 +5,12 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * One backup as the API shows it. Built by cloud-node from {@code BackupInfo} of cloud-backup
- * (PR #43); it holds no path, only the id under which {@code backup restore} finds the archive.
+ * One backup as the API shows it, built by {@link BackupServiceAccess} from {@code BackupInfo} of
+ * cloud-backup. It holds no path, only the id under which {@code backup restore} finds the archive.
  *
  * @param id        backup id
  * @param createdAt when it was made (ISO-8601), or null if the manifest cannot be read
- * @param reason    why it was made, for example {@code manual}, {@code scheduled}, {@code version-change}
+ * @param reason    why it was made, for example {@code manual}, {@code scheduled}, {@code pre-update}
  * @param services  the service ids it contains
  * @param database  whether it contains a database dump
  * @param sizeBytes size of the archive
