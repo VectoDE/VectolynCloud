@@ -286,9 +286,10 @@ final class GroupCommands {
         ScalingConfig s = t.scaling() == null ? ScalingConfig.single() : t.scaling();
         return switch (field) {
             case "group" -> t.withGroup(value);
-            // Shorthand: static makes every service static (static = min = max), dynamic none.
+            // Shorthand: static makes min-services (at least 1) static services and nothing above
+            // (static = min = max), like the migration of a version-1 file; dynamic makes none static.
             case "mode" -> t.withScaling(Values.enumValue(file, field, value, TaskMode.class) == TaskMode.STATIC
-                    ? s.withCounts(s.maxServices(), s.maxServices(), s.maxServices())
+                    ? staticCounts(s)
                     : s.withStaticServices(0));
             case "static-services" -> t.withScaling(s.withStaticServices(Values.integer(file, "scaling." + field, value)));
             case "min-services" -> t.withScaling(s.withMinServices(Values.integer(file, "scaling." + field, value)));
@@ -303,6 +304,12 @@ final class GroupCommands {
             case "nodes" -> t.withNodes(nodes(value));
             default -> throw unknownField(file, TASK_FIELDS);
         };
+    }
+
+    /** {@code mode static}: static = min = max = {@code min-services}, at least 1. */
+    static ScalingConfig staticCounts(ScalingConfig s) {
+        int count = Math.max(1, s.minServices());
+        return s.withCounts(count, count, count);
     }
 
     private static List<String> nodes(String value) {

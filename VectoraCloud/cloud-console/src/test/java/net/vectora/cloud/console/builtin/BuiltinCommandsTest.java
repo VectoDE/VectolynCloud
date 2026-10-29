@@ -244,6 +244,32 @@ class BuiltinCommandsTest {
         assertTrue(terminal.output().contains("no wanted switch"));
     }
 
+    private List<Integer> counts(String task) {
+        var s = config.snapshot().tasks().get(task).scaling();
+        return List.of(s.staticServices(), s.minServices(), s.maxServices());
+    }
+
+    @Test
+    void modeStaticTakesMinServicesAndAtLeastOne() throws Exception {
+        run("group create lobby Lobby-Server paper 26.3");
+        run("task create lobby lobby dynamic");
+        run("task set lobby max-services 6");
+        run("task set lobby min-services 3");
+        assertEquals(List.of(0, 3, 6), counts("lobby"));
+        assertEquals(Outcome.DONE, run("task set lobby mode static"));
+        assertEquals(List.of(3, 3, 3), counts("lobby"), "min-services, not max-services");
+
+        // Counter-check: dynamic only clears static-services and keeps min and max.
+        run("task set lobby max-services 6");
+        assertEquals(Outcome.DONE, run("task set lobby mode dynamic"));
+        assertEquals(List.of(0, 3, 6), counts("lobby"));
+
+        run("task set lobby min-services 0");
+        assertEquals(List.of(0, 0, 6), counts("lobby"));
+        assertEquals(Outcome.DONE, run("task set lobby mode static"));
+        assertEquals(List.of(1, 1, 1), counts("lobby"), "min-services 0 becomes one static service, like the migration");
+    }
+
     @Test
     void taskLifecycleAndReferences() throws Exception {
         assertEquals(Outcome.FAILED, run("task create lobby lobby"), "the group must exist");
@@ -265,11 +291,9 @@ class BuiltinCommandsTest {
         assertEquals(Outcome.DONE, run("task set lobby scale-up-at 90"));
         assertEquals(Outcome.DONE, run("task set lobby scale-down-below 80"), "counter-check: below the new scale-up-at");
         assertEquals(Outcome.DONE, run("task set lobby mode static"));
-        assertEquals(net.vectora.cloud.config.model.ScalingConfig.counts(4, 4, 4).staticServices(),
-                config.snapshot().tasks().get("lobby").scaling().staticServices(), "static: every service static");
-        assertEquals(4, config.snapshot().tasks().get("lobby").scaling().minServices());
+        assertEquals(List.of(1, 1, 1), counts("lobby"), "static: static = min = max = min-services");
         assertEquals(Outcome.DONE, run("task info lobby"));
-        assertTrue(terminal.output().contains("static-services     = 4"), terminal.output());
+        assertTrue(terminal.output().contains("static-services     = 1"), terminal.output());
         assertTrue(terminal.output().contains("scale-down-below    = 80"), terminal.output());
         assertEquals(Outcome.DONE, run("task set lobby mode dynamic"));
         assertEquals(0, config.snapshot().tasks().get("lobby").scaling().staticServices());
