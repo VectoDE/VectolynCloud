@@ -17,6 +17,7 @@ The module does not read `cloud.yml` or `secrets/` itself. The caller (later `cl
 | `ProxyServerList.of(backends, tryOrder, forcedHosts)` | Values for `VECTORA_PROXY_SERVERS`, `VECTORA_PROXY_TRY` and `VECTORA_PROXY_FORCED_HOSTS`. |
 | `ProxyBackend(name, host, port, wanted)` | One backend as the proxy sees it. |
 | `GeneratedFiles` | Writes `forwarding.secret`, Floodgate's `key.pem` and `eula.txt`. |
+| `SpigotRestart` (package-private) | Turns Spigot's own restart off in the runtime `spigot.yml` of Paper and PandaSpigot (see [Restarts are the node's job](#restarts-are-the-nodes-job)). |
 | `ServerPlatform` | `VELOCITY`, `VELOCITY_LEGACY`, `PAPER`, `PANDASPIGOT`, `FABRIC` or `NONE`. Decides which files are generated and where. |
 | `TemplateException` | Every rendering error. The message starts with `file:line`. |
 
@@ -88,10 +89,27 @@ Markdown files (`*.md`, case-insensitive, in any folder of the template) are nei
 | `plugins/floodgate/key.pem` | `VELOCITY`, `PAPER` (not `VELOCITY_LEGACY` and `PANDASPIGOT`, which run no Floodgate yet), only if the template has a `plugins/floodgate/` folder | `VECTORA_FLOODGATE_KEY_B64`, decoded to the raw 16 bytes. Floodgate reads raw bytes despite the file name. |
 | `config/floodgate/key.pem` | `FABRIC`, only if the template has a `config/floodgate/` folder | Same key. |
 | `eula.txt` | `PAPER`, `PANDASPIGOT`, `FABRIC` | Only with `eulaAccepted = true`. Without consent nothing is written, and an existing `eula.txt` stays as it is. |
+| `spigot.yml` | `PAPER`, `PANDASPIGOT` | Only when the node had to create or change it: `settings.restart-script: ''` and `settings.restart-on-crash: true`, see below. |
 
 The paths match the Floodgate configs in the templates (`key-file-name: key.pem` next to each `config.yml`). A template without Floodgate's folder runs no Floodgate (`TemplateInstaller.runsFloodgate`): it gets no key and does not need `VECTORA_FLOODGATE_KEY_B64`, and the node does not offer the key to it as a placeholder either. A `key.pem` an earlier start wrote is deleted once the template no longer has the folder (only a regular file reached without a link; the rest of the folder stays). The secrets are checked before anything is written. Each generated file is written to a new temporary file next to the target (`.vectora-<random>.tmp`), flushed to disk and then moved over the target. A secret file is therefore never truncated in place, never written through a hard link or symbolic link at the target, and never visible half-written. The temporary file of `forwarding.secret` and `key.pem` is created readable by the owner only: with POSIX permissions `rw-------` from the start, on Windows with an access list that allows only the owner. A failed write leaves the old file and no temporary file behind.
 
 `NONE` (the database template) gets no generated files.
+
+### Restarts are the node's job
+
+Spigot, Paper and PandaSpigot can restart themselves. `settings.restart-script` in `spigot.yml` names a script that the server runs from a shutdown hook (`sh <script>`, on Windows `cmd /c start <script>`) on `/restart`, and after the watchdog has ended a hung server if `settings.restart-on-crash` is `true`. The server checks only whether the first word of the script is an existing file. If it is, a second server starts outside the node: without a service token, missing from the proxy's list, and maybe on the same port and world while the node restarts the service as well. If it is not, the server just stops. When the keys are missing, Spigot adds `restart-on-crash: true` and `restart-script: ./start.sh` on its first start.
+
+So every Paper and PandaSpigot template sets `restart-script: ''` and `restart-on-crash: true`, and the node enforces both after rendering, also for an operator's own template. An empty path is never a file: `/restart` and a watchdog crash only stop the server, the node counts the exit as a crash (see [node](node.md#life-cycle)) and starts it again if `process.restart.on-crash` is on and the service is still wanted.
+
+`restart-on-crash` stays `true` on purpose. With the empty script it no longer means "restart", only "stop": the server calls its restart routine, finds no script and shuts down. On PandaSpigot (Spigot 1.8.8) that is the only way the watchdog ends a hung server at all; with `false` it logs a thread dump and leaves the hung process running, and the node would keep it as RUNNING. Paper's watchdog stops a hung server either way.
+
+- Only these two keys directly under the top-level `settings:` block change. Everything else in the file stays as it is, keys with the same name deeper down too. A value spread over several lines is replaced as a whole.
+- A missing key is added at the top of the block, with the block's indent. A file without `settings:` gets the block appended; a runtime folder without `spigot.yml` gets a file with just that block, and the server adds every other setting on its first start.
+- `settings` as a flow mapping (`settings: {...}`), with an anchor or tag, twice in the file, or a file that is a flow mapping is refused with a `TemplateException` and the service does not start. So is a top-level key or a key directly under `settings` that is not plain or quoted without escapes (an explicit key `? restart-script`, `&anchor key:`, `!!str key:`, `"restart-script":`, a list item), because YAML keeps the last of two equal keys and such a spelling could bring the old value back after the fixed line. The message names `spigot.yml` and the line; fix the template (or the runtime file, if the template has none) to plain `key: value` lines. Files that Spigot writes itself never hit this. The node does not guess at a layout it cannot edit safely.
+- The file is only written when something changes; it then appears in `RenderReport.generated()`. The shipped templates are right already, so `RealTemplatesTest` fails when the node would have to change one of them.
+- Enforcement rather than a warning, because a warning would leave the second server possible, and because Spigot itself writes the dangerous defaults into any `spigot.yml` without the keys. The runtime folder belongs to the node in the same way as `eula.txt`; there is no reason under the cloud to let a server restart itself.
+
+Velocity and Fabric have no such setting. Paper's own files (`config/paper-global.yml`, `config/paper-world-defaults.yml`) have none either.
 
 ## Proxy server list
 
@@ -109,7 +127,7 @@ Names must be 1 to 64 letters, digits, `_` or `-`, and unique ignoring case. Hos
 
 ## Tests
 
-- `RealTemplatesTest` renders every real `Server-Network/*/template/` with test values into a temporary folder. Afterwards no file may contain `{{`. Every YAML and JSON file must parse with Jackson, every `.properties` file with `java.util.Properties`, and every TOML file must pass a plausibility check (no TOML library in the build). The test also checks that a proxy without the survival server never mentions it, and compares the part of `velocity.toml` from `[servers]` up to `[advanced]` for 1, 3 and 6 wanted servers with the golden files in `src/test/resources/net/vectora/cloud/template/golden/`. When a template change is intended, the actual output lands in `build/golden-actual/` for review.
+- `RealTemplatesTest` renders every real `Server-Network/*/template/` with test values into a temporary folder. Afterwards no file may contain `{{`. Every YAML and JSON file must parse with Jackson, every `.properties` file with `java.util.Properties`, and every TOML file must pass a plausibility check (no TOML library in the build). The test also checks that a proxy without the survival server never mentions it, checks that the rendered `spigot.yml` of every Paper and PandaSpigot template turns Spigot's restart off without the node having to change it, and compares the part of `velocity.toml` from `[servers]` up to `[advanced]` for 1, 3 and 6 wanted servers with the golden files in `src/test/resources/net/vectora/cloud/template/golden/`. When a template change is intended, the actual output lands in `build/golden-actual/` for review.
 - `PlaceholderRendererFuzzTest` is a Jazzer target: arbitrary bytes may only end in a `TemplateException`, and text without `{{` must come back byte for byte. Seeds are in `PlaceholderRendererFuzzTestInputs/`. A `.gitattributes` next to that folder marks them binary, so git keeps their CRLF and invalid UTF-8. Local run:
 
   ```sh

@@ -8,6 +8,7 @@ The template only holds what Vectora needs. PandaSpigot adds every other setting
 
 - `server.properties`: `online-mode=false`, bound to `VECTORA_SERVER_HOST`. Keep that a loopback or private address.
 - `spigot.yml`: `settings.bungeecord: true`, so the server accepts the forwarding of the legacy proxy.
+- `spigot.yml`: `settings.restart-script: ''`, so neither `/restart` nor a watchdog crash starts a server outside the cloud; they only stop it. `settings.restart-on-crash: true`, because with `false` the 1.8.8 watchdog leaves a hung server running instead of stopping it. Restarts are the node's job; it sets both values itself as well.
 - `pandaspigot.yml`: `proxyOnlineMode: true`, matching `online-mode = true` of the legacy proxy.
 
 PandaSpigot does not check the `bungeeguard-token` itself. Until the Vectora bridge does that (stage 2, PR 13), anyone who can reach a backend port can join with any name. Keep the ports closed to the outside.
