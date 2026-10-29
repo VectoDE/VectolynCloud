@@ -14,6 +14,8 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -72,6 +74,34 @@ final class KickCommandNode {
                         .then(RequiredArgumentBuilder.<S, String>argument(REASON, StringArgumentType.greedyString())
                                 .executes(withReason)))
                 .build();
+    }
+
+    /**
+     * Puts the bridge's node in place of {@code kick} (unless the regular registration already took
+     * that name) and of {@code minecraft:kick} (if the server has it). Any failure of the server's
+     * Brigadier is caught: the caller warns and keeps the command line watch as the fallback.
+     *
+     * @param root           the dispatcher's root
+     * @param kickRegistered whether the regular registration got {@code kick}
+     * @param nodes          builds the node for a literal
+     * @param warn           gets the failure
+     * @param <S>            the command source
+     * @return whether both names now run the bridge's node
+     */
+    static <S> boolean install(CommandNode<S> root, boolean kickRegistered,
+                               Function<String, LiteralCommandNode<S>> nodes, Consumer<RuntimeException> warn) {
+        try {
+            if (!kickRegistered) {
+                replace(root, nodes.apply("kick"));
+            }
+            if (root.getChild("minecraft:kick") != null) {
+                replace(root, nodes.apply("minecraft:kick"));
+            }
+            return true;
+        } catch (RuntimeException e) {
+            warn.accept(e);
+            return false;
+        }
     }
 
     /**

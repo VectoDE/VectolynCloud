@@ -17,7 +17,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.UUID;
 import java.util.function.Predicate;
 import java.util.logging.Level;
 import net.kyori.adventure.text.Component;
@@ -27,6 +26,7 @@ import net.vectora.cloud.bridge.BridgeConnection;
 import net.vectora.cloud.bridge.BridgeSender;
 import net.vectora.cloud.bridge.KickClassifier;
 import net.vectora.cloud.bridge.KickCommandWatch;
+import net.vectora.cloud.bridge.OwnKick;
 import net.vectora.cloud.bridge.StatusSnapshot;
 import net.vectora.cloud.client.CloudClientSettings;
 import net.vectora.protocol.ServiceId;
@@ -76,8 +76,8 @@ public final class PaperBridgePlugin extends JavaPlugin implements Listener {
     private final KickCommandWatch kicks = new KickCommandWatch();
     private BridgeSender sender;
     private ServiceId service;
-    /** The player {@link #networkKick} is kicking right now; its kick event is already reported. */
-    private UUID kicking;
+    /** The kick {@link #networkKick} carries out right now; reported once its event went through. */
+    private final OwnKick own = new OwnKick();
 
     @Override
     public void onEnable() {
@@ -139,16 +139,18 @@ public final class PaperBridgePlugin extends JavaPlugin implements Listener {
     }
 
     /**
-     * Takes a player off the whole network: tells the proxy ({@code NetworkKick}) and kicks the
-     * player here with the moderation marker ({@link KickClassifier#MODERATION_KEY}), so the
-     * proxy never catches the kick even if the report is late. For the moderation of Vectora; only
-     * an entitled issuer may do it ({@link KickCommandWatch#entitled}).
+     * Takes a player off the whole network: kicks the player here with the moderation marker
+     * ({@link KickClassifier#MODERATION_KEY}), so the proxy never catches the kick even if the
+     * report is late, and tells the proxy ({@code NetworkKick}) once the kick event went through
+     * ({@link OwnKick}): a kick another plugin cancels is not reported. For the moderation of
+     * Vectora; only an entitled issuer may do it ({@link KickCommandWatch#entitled}).
      *
      * @param issuer who kicks: the console, RCON or a player with {@value KickCommandWatch#PERMISSION}
      * @param player the player
      * @param reason the plain text the player reads
-     * @return {@code false} if the issuer is not entitled (nothing happens); {@code true} otherwise,
-     *     the kick happened and the report is queued if the bridge is connected
+     * @return {@code false} if the issuer is not entitled or a plugin cancelled the kick (nothing
+     *     happens); {@code true} if the kick happened and its report is queued. Without a cloud
+     *     connection the bridge has no kick listener: then it only kicks and returns {@code true}.
      */
     public boolean networkKick(CommandSender issuer, Player player, String reason) {
         Objects.requireNonNull(player, "player");
@@ -156,18 +158,15 @@ public final class PaperBridgePlugin extends JavaPlugin implements Listener {
         if (!entitled(issuer)) {
             return false;
         }
-        report(player, reason);
         String text = reason.strip();
         Component shown = text.isEmpty() ? Component.translatable(KickClassifier.VANILLA_KICK_KEY) : Component.text(text);
-        UUID before = kicking;
-        kicking = player.getUniqueId();
-        try {
-            player.kick(Component.translatable().key(KickClassifier.MODERATION_KEY + ".kick").fallback("%s")
-                    .arguments(shown).build(), PlayerKickEvent.Cause.PLUGIN);
-        } finally {
-            kicking = before;
+        Runnable kick = () -> player.kick(Component.translatable().key(KickClassifier.MODERATION_KEY + ".kick")
+                .fallback("%s").arguments(shown).build(), PlayerKickEvent.Cause.PLUGIN);
+        if (sender == null) {
+            kick.run();
+            return true;
         }
-        return true;
+        return own.run(player.getUniqueId(), text, kick);
     }
 
     /**
@@ -181,17 +180,10 @@ public final class PaperBridgePlugin extends JavaPlugin implements Listener {
         Set<String> labels = registrar.register(kickNode("kick", requirement),
                 "Kicks players off the whole network (VectoraCloud)");
         CommandNode<CommandSourceStack> root = registrar.getDispatcher().getRoot();
-        try {
-            if (!labels.contains("kick")) {
-                KickCommandNode.replace(root, kickNode("kick", requirement));
-            }
-            if (root.getChild("minecraft:kick") != null) {
-                KickCommandNode.replace(root, kickNode("minecraft:kick", requirement));
-            }
-        } catch (IllegalStateException e) {
-            getLogger().log(Level.WARNING, "The kick command could not be replaced everywhere: only the "
-                    + "command line watch turns a /kick into a network kick", e);
-        }
+        // Any failure of the server's Brigadier: warn and fall back to the command line watch.
+        KickCommandNode.install(root, labels.contains("kick"), literal -> kickNode(literal, requirement),
+                e -> getLogger().log(Level.WARNING, "The kick command could not be replaced everywhere: only the "
+                        + "command line watch turns a /kick into a network kick", e));
     }
 
     private LiteralCommandNode<CommandSourceStack> kickNode(String literal, Predicate<CommandSourceStack> requirement) {
@@ -271,23 +263,41 @@ public final class PaperBridgePlugin extends JavaPlugin implements Listener {
             return;
         }
         KickCommandWatch.Source source = source(issuer);
-        if (kicks.command(line, source, source == KickCommandWatch.Source.PLAYER && entitled(issuer), aliases())) {
+        if (kicks.command(line, source, source == KickCommandWatch.Source.PLAYER && entitled(issuer), aliases(),
+                selector -> select(issuer, selector))) {
             getServer().getScheduler().runTask(this, kicks::clear);
         }
     }
 
+    /** The players a selector matches for the sender; empty if Paper rejects it. */
+    private Optional<List<String>> select(CommandSender issuer, String selector) {
+        try {
+            return Optional.of(getServer().selectEntities(issuer, selector).stream()
+                    .filter(Player.class::isInstance)
+                    .map(entity -> ((Player) entity).getName())
+                    .toList());
+        } catch (RuntimeException invalid) {
+            return Optional.empty();
+        }
+    }
+
     /**
-     * The kick of a target of a watched {@code /kick}. The kick cause is not used: Paper marks
-     * {@code KICK_COMMAND} deprecated since 26.2, and a {@code /kick} that a plugin such as
-     * Essentials provides kicks with the cause {@code PLUGIN}. The command line and its target in
-     * the same tick decide, as on 1.8.8. A kick of {@link #networkKick} is reported already.
+     * A kick event that went through: registered at {@code MONITOR} for events nobody cancelled.
+     * The kick of {@link #networkKick} is reported now, after the event's outcome. Otherwise the
+     * kick of a target of a watched {@code /kick} of another plugin is reported. The kick cause is
+     * not used: Paper marks {@code KICK_COMMAND} deprecated since 26.2, and a {@code /kick} that a
+     * plugin such as Essentials provides kicks with the cause {@code PLUGIN}.
      */
     private void kicked(PlayerKickEvent event) {
-        if (event.getPlayer().getUniqueId().equals(kicking)) {
+        Player player = event.getPlayer();
+        Optional<String> ownReason = own.passed(player.getUniqueId());
+        if (ownReason.isPresent()) {
+            report(player, ownReason.get());
             return;
         }
-        if (kicks.kicked(event.getPlayer().getName())) {
-            report(event.getPlayer(), plain(event.reason()));
+        String reason = plain(event.reason());
+        if (!own.running(player.getUniqueId()) && kicks.kicked(player.getName(), reason)) {
+            report(player, reason);
         }
     }
 

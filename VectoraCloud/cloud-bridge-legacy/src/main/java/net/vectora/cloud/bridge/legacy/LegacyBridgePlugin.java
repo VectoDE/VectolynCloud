@@ -8,11 +8,13 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.logging.Level;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.flattener.ComponentFlattener;
 import net.vectora.cloud.bridge.BridgeConnection;
 import net.vectora.cloud.bridge.BridgeSender;
 import net.vectora.cloud.bridge.KickCommandWatch;
+import net.vectora.cloud.bridge.OwnKick;
 import net.vectora.cloud.bridge.StatusSnapshot;
 import net.vectora.cloud.bridge.TickMeter;
 import net.vectora.cloud.client.CloudClientSettings;
@@ -71,8 +73,8 @@ public final class LegacyBridgePlugin extends JavaPlugin implements Listener {
     private ServiceId service;
     /** The server's kick command, for selectors; {@code null} until replaced. */
     private Command vanillaKick;
-    /** The player {@link #networkKick} is kicking right now; its kick event is already reported. */
-    private UUID kicking;
+    /** The kick {@link #networkKick} carries out right now; reported once its event went through. */
+    private final OwnKick own = new OwnKick();
 
     @Override
     public void onEnable() {
@@ -131,28 +133,39 @@ public final class LegacyBridgePlugin extends JavaPlugin implements Listener {
         command(event.getSender(), event.getCommand());
     }
 
-    /** The kick a watched {@code /kick} causes goes to the proxy as a network kick. */
+    /**
+     * A kick that went through (at {@code MONITOR}, cancelled ones skipped). The kick of
+     * {@link #networkKick} is reported now, after the event's outcome; otherwise the kick of a
+     * target of a watched {@code /kick} goes to the proxy as a network kick. The reason is read
+     * through PandaSpigot's Adventure API ({@code reason()}), not the old string getter.
+     */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onKick(PlayerKickEvent event) {
-        if (event.getPlayer().getUniqueId().equals(kicking)) {
+        Player player = event.getPlayer();
+        Optional<String> ownReason = own.passed(player.getUniqueId());
+        if (ownReason.isPresent()) {
+            report(player, ownReason.get());
             return;
         }
-        if (kicks.kicked(event.getPlayer().getName())) {
-            report(event.getPlayer(), event.getReason());
+        String reason = plain(event.reason());
+        if (!own.running(player.getUniqueId()) && kicks.kicked(player.getName(), reason)) {
+            report(player, reason);
         }
     }
 
     /**
-     * Takes a player off the whole network: tells the proxy ({@code NetworkKick}) and kicks the
-     * player here. For the moderation of Vectora; only an entitled issuer may do it
-     * ({@link KickCommandWatch#entitled}). On 1.8.8 the kick is plain text and cannot carry the
-     * moderation marker, so the proxy relies on the report alone.
+     * Takes a player off the whole network: kicks the player here and tells the proxy
+     * ({@code NetworkKick}) once the kick event went through ({@link OwnKick}): a kick another
+     * plugin cancels is not reported. For the moderation of Vectora; only an entitled issuer may
+     * do it ({@link KickCommandWatch#entitled}). The 1.8.8 client shows only plain text, so the
+     * kick cannot carry the moderation marker and the proxy relies on the report.
      *
      * @param issuer who kicks: the console, RCON or a player with {@value KickCommandWatch#PERMISSION}
      * @param player the player
      * @param reason the plain text the player reads
-     * @return {@code false} if the issuer is not entitled (nothing happens); {@code true} otherwise,
-     *     the kick happened and the report is queued if the bridge is connected
+     * @return {@code false} if the issuer is not entitled or a plugin cancelled the kick (nothing
+     *     happens); {@code true} if the kick happened and its report is queued. Without a cloud
+     *     connection the bridge has no kick listener: then it only kicks and returns {@code true}.
      */
     public boolean networkKick(CommandSender issuer, Player player, String reason) {
         Objects.requireNonNull(player, "player");
@@ -160,17 +173,27 @@ public final class LegacyBridgePlugin extends JavaPlugin implements Listener {
         if (!entitled(issuer)) {
             return false;
         }
-        report(player, reason);
         String text = reason.trim();
-        UUID before = kicking;
-        kicking = player.getUniqueId();
-        try {
-            // The vanilla text without a reason: the proxy waits for the report on it.
-            player.kickPlayer(text.isEmpty() ? NetworkKickCommand.VANILLA_KICK_TEXT : text);
-        } finally {
-            kicking = before;
+        // The vanilla text without a reason: the proxy waits for the report on it.
+        Runnable kick = () -> player.kick(Component.text(text.isEmpty() ? NetworkKickCommand.VANILLA_KICK_TEXT : text));
+        if (sender == null) {
+            kick.run();
+            return true;
         }
-        return true;
+        return own.run(player.getUniqueId(), text, kick);
+    }
+
+    /**
+     * The plain text of a kick reason, colour codes of legacy text removed later by
+     * {@link KickCommandWatch#reason}.
+     *
+     * @param reason the reason component
+     * @return plain text
+     */
+    static String plain(Component reason) {
+        StringBuilder out = new StringBuilder();
+        ComponentFlattener.basic().flatten(reason, out::append);
+        return out.toString();
     }
 
     /** Puts {@link NetworkKickCommand} in place of {@code kick} and {@code minecraft:kick}. */
@@ -200,7 +223,10 @@ public final class LegacyBridgePlugin extends JavaPlugin implements Listener {
             issuer.sendMessage(ChatColor.RED + "Selectors are not available for /kick on this server");
             return true;
         }
-        kicks.expect(args[0]);
+        // Vanilla 1.8.8 kicks with the rest of the line, or its own text without one.
+        String reason = KickCommandWatch.reasonOf(args);
+        kicks.expect(args[0], reason.isEmpty() ? NetworkKickCommand.VANILLA_KICK_TEXT : reason,
+                KickCommandWatch.Selectors.NONE);
         getServer().getScheduler().runTask(this, kicks::clear);
         return vanilla.execute(issuer, label, args);
     }
@@ -248,7 +274,9 @@ public final class LegacyBridgePlugin extends JavaPlugin implements Listener {
             return;
         }
         KickCommandWatch.Source source = source(issuer);
-        if (kicks.command(line, source, source == KickCommandWatch.Source.PLAYER && entitled(issuer), aliases())) {
+        // 1.8.8 has no selector API: an unresolved selector only matches kicks with the line's reason.
+        if (kicks.command(line, source, source == KickCommandWatch.Source.PLAYER && entitled(issuer), aliases(),
+                KickCommandWatch.Selectors.NONE)) {
             getServer().getScheduler().runTask(this, kicks::clear);
         }
     }

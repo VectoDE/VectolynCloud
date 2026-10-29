@@ -1,6 +1,7 @@
 package net.vectora.cloud.bridge.paper;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -10,6 +11,7 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.tree.LiteralCommandNode;
+import com.mojang.brigadier.tree.RootCommandNode;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -101,6 +103,41 @@ class KickCommandNodeTest {
         dispatcher.execute("kick Bob", PLAYER);
 
         assertEquals(List.of("network Bob|"), calls, "the old requirement stayed: a normal player got through");
+    }
+
+    @Test
+    void installTakesBothLabelsAndLeavesAKickTheRegistrationGot() throws CommandSyntaxException {
+        List<RuntimeException> warnings = new ArrayList<>();
+        assertTrue(KickCommandNode.install(dispatcher.getRoot(), false, this::node, warnings::add));
+        dispatcher.execute("kick Bob", ENTITLED);
+        dispatcher.execute("minecraft:kick Bob", ENTITLED);
+        assertEquals(List.of("network Bob|", "network Bob|"), calls);
+        assertTrue(warnings.isEmpty());
+
+        // The regular registration took kick: only minecraft:kick is replaced.
+        vanillaCommands();
+        calls.clear();
+        assertTrue(KickCommandNode.install(dispatcher.getRoot(), true, this::node, warnings::add));
+        dispatcher.execute("kick Bob", ENTITLED);
+        dispatcher.execute("minecraft:kick Bob", ENTITLED);
+        assertEquals(List.of("vanilla Bob", "network Bob|"), calls);
+    }
+
+    @Test
+    void anyFailureOfTheServersBrigadierIsCaughtWithAWarning() {
+        // Not an IllegalStateException: a server's Brigadier may fail in any way.
+        RootCommandNode<Source> broken = new RootCommandNode<>() {
+            @Override
+            public void addChild(com.mojang.brigadier.tree.CommandNode<Source> node) {
+                throw new UnsupportedOperationException("read-only tree");
+            }
+        };
+        List<RuntimeException> warnings = new ArrayList<>();
+
+        assertFalse(KickCommandNode.install(broken, false, this::node, warnings::add));
+
+        assertEquals(1, warnings.size());
+        assertTrue(warnings.get(0) instanceof UnsupportedOperationException);
     }
 
     @Test

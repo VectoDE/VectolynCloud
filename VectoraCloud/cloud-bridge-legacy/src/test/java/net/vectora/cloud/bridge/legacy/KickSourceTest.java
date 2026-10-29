@@ -54,6 +54,14 @@ class KickSourceTest {
     }
 
     @Test
+    void theKickReasonIsReadAsPlainTextThroughAdventure() {
+        assertEquals("Spam im Chat", LegacyBridgePlugin.plain(
+                net.kyori.adventure.text.Component.text("Spam ").append(net.kyori.adventure.text.Component.text("im Chat"))));
+        assertEquals("", KickCommandWatch.reason(LegacyBridgePlugin.plain(
+                net.kyori.adventure.text.Component.text("Kicked by an operator."))), "the vanilla text reports empty");
+    }
+
+    @Test
     void thePermissionGoesToOperatorsByDefault() throws IOException {
         try (InputStream in = getClass().getClassLoader().getResourceAsStream("plugin.yml")) {
             Map<String, Object> yml = new Yaml().load(in);

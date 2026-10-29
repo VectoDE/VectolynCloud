@@ -1,7 +1,6 @@
 package net.vectora.cloud.bridge.legacy;
 
 import java.lang.reflect.Field;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
@@ -117,7 +116,7 @@ final class NetworkKickCommand extends Command {
      * @return the reason, empty without one
      */
     static String reason(String[] args) {
-        return args.length < 2 ? "" : String.join(" ", Arrays.asList(args).subList(1, args.length)).trim();
+        return KickCommandWatch.reasonOf(args);
     }
 
     /**
