@@ -101,20 +101,38 @@ process:                     # optional, see docs/cloud/node.md; every key has a
 ### `tasks/<name>.yml`
 
 ```yaml
-schema-version: 1
+schema-version: 2
 group: lobby                 # must exist in groups/
-mode: dynamic                # static keeps min-services running; dynamic scales
 scaling:
+  static-services: 1         # 0 to 1000, at most min-services; required
   min-services: 1            # 0 to 1000
   max-services: 4            # 1 to 1000, at least min-services
   players-per-service: 50
-  scale-up-at: 80            # percent of players-per-service
+  scale-up-at: 75            # percent of players-per-service, 1 to 100
+  scale-down-below: 50       # percent, 0 to 99, lower than scale-up-at; default 50
   scale-down-after: 5m       # s, m or h; at most 7 days
   cooldown: 60s
 nodes: [node-1]              # empty: any node
 ```
 
+A task mixes static and dynamic services. The first `static-services` services are static: they keep their folder (`<template>/runtime`, `runtime-2`, …) and are never stopped by the scaler. Every service above that is dynamic: it runs in `temp/services/<id>` and its folder is deleted when it stops. `static-services = max-services` is a purely static task, `static-services = 0` a purely dynamic one.
+
+`scale-down-below` is stored and validated now; the scaling rule that uses it follows in a later change.
+
 What the node does with these values (when a service starts or stops, the memory budget, what is never stopped) is in [scaling.md](scaling.md).
+
+#### From schema-version 1
+
+Version 1 had a task-wide `mode` instead of `static-services`. The migration replaces it:
+
+| Version 1 | Version 2 |
+|---|---|
+| `mode: static` | `static-services` = `min-services`, `max-services` = `min-services` (a static task never scaled) |
+| `mode: dynamic` | `static-services: 0` |
+| `mode` missing | error `required` at `mode` |
+| any other value | error `invalid-value` at `mode` (`static or dynamic`) |
+
+`scale-down-below` is missing in version 1 and gets its default 50. A version-1 task with `mode: static` and `min-services: 0` becomes `max-services: 0` and is then refused by the validator; set `min-services` to at least 1 before the update or fix the file afterwards.
 
 ### `nodes.yml`
 
@@ -127,7 +145,10 @@ nodes:
     service-ports:           # ports this node hands out to services
       first: 30000
       last: 30999
+    max-memory: 8G           # optional, at least 512M; missing: worked out by the node
 ```
+
+`max-memory` caps the memory the node gives its services. It is stored and validated now; the node uses it from a later change on.
 
 ### Names
 
@@ -166,7 +187,7 @@ cloud.yml: proxy.port (line 13): Must be between 1 and 65535. [out-of-range]
 cloud.yml: proxy.port (Zeile 13): Muss zwischen 1 und 65535 liegen.
 ```
 
-Codes (`ErrorCode.code()`): `syntax`, `not-a-mapping`, `file-too-large`, `file-missing`, `file-access`, `invalid-file-name`, `schema-version-missing`, `schema-version-unsupported`, `unknown-field`, `duplicate-field`, `invalid-value`, `required`, `out-of-range`, `pattern-mismatch`, `min-greater-than-max`, `port-conflict`, `port-in-service-range`, `duplicate-entry`, `unknown-group`, `unknown-task`, `unknown-node`, `already-exists`, `not-allowed`, `catalog-kind-mismatch`, `software-version-mismatch`, `api-tls-required`, `eula-required`, `empty`, `not-regular`, `jvm-flag-forbidden`, `jvm-flag-not-listed`, `invalid-origin`.
+Codes (`ErrorCode.code()`): `syntax`, `not-a-mapping`, `file-too-large`, `file-missing`, `file-access`, `invalid-file-name`, `schema-version-missing`, `schema-version-unsupported`, `unknown-field`, `duplicate-field`, `invalid-value`, `required`, `out-of-range`, `pattern-mismatch`, `min-greater-than-max`, `port-conflict`, `port-in-service-range`, `duplicate-entry`, `unknown-group`, `unknown-task`, `unknown-node`, `already-exists`, `not-allowed`, `catalog-kind-mismatch`, `software-version-mismatch`, `static-above-min`, `scale-down-not-below-up`, `api-tls-required`, `eula-required`, `empty`, `not-regular`, `jvm-flag-forbidden`, `jvm-flag-not-listed`, `invalid-origin`.
 
 An error never contains the value that was wrong, only the limit, pattern or name involved. A secret pasted into the wrong field therefore cannot reach a log through its error message. Names taken from the input (an unknown field, group, task or node) are passed on unchanged only when they are valid names; otherwise control and non-ASCII characters become `?` and the text is cut to 64 characters, so it cannot break or forge a log line.
 
@@ -177,7 +198,8 @@ Besides types and patterns, `ConfigValidator` checks the configuration as a whol
 - Ports are between 1 and 65535.
 - The fixed ports of this node do not collide: proxy, Bedrock, legacy proxy (if enabled), API (if enabled), database (in `managed` and `docker` mode) and the node's channel port. The Bedrock port counts although it is UDP, because Geyser also opens TCP.
 - None of these lie inside the node's `service-ports`.
-- `heap.min` ≤ `heap.max`, `min-services` ≤ `max-services`, `service-ports.first` ≤ `last`.
+- `heap.min` ≤ `heap.max`, `static-services` ≤ `min-services` ≤ `max-services` (`static-above-min`), `scale-down-below` < `scale-up-at` (`scale-down-not-below-up`), `service-ports.first` ≤ `last`.
+- A node's `max-memory`, if set, lies between 512M and the largest size the cloud accepts.
 - Tasks refer to existing groups and nodes; `node-id` refers to an existing node; node ids are unique.
 - Catalog ids are unique per group and fit the software.
 - `docker-image` only and always with `mode: docker`.
@@ -223,7 +245,7 @@ A change that touches several files is written file by file. If writing fails ha
 
 ## Schema versions and migrations
 
-Every file has `schema-version`. The current version of all four formats is 1.
+Every file has `schema-version`. The current version is 2 for task files and 1 for the other three formats.
 
 - A file without `schema-version`, or with a version newer than the cloud knows, is an error.
 - A file with an older version runs through one `ConfigMigration` per version step (on the raw YAML tree, so renamed or removed fields can be handled), is then read normally, and is rewritten in the current format when the service opens or reloads it. The old file is kept as `<file>.v<version>.bak`.

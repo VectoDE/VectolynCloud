@@ -105,10 +105,10 @@ Runs the setup assistant again. The current values are the defaults, and only wh
 
 | Subcommand | Effect |
 |---|---|
-| `task list` | Every task with group, mode and service range. |
+| `task list` | Every task with group, mode (`static`, `dynamic` or `static N + dynamic`) and service range. |
 | `task info <name>` | All fields of one task. |
-| `task create <name> <group> [static\|dynamic]` | New `tasks/<name>.yml` with one service on any node. The group must exist. |
-| `task set <name> <field> <value>` | Fields: `group`, `mode`, `min-services`, `max-services`, `players-per-service`, `scale-up-at`, `scale-down-after`, `cooldown`, `nodes` (comma list, `""` for any node). The [autoscaler](scaling.md) applies a change within one round. |
+| `task create <name> <group> [static\|dynamic]` | New `tasks/<name>.yml` on any node: `static` (default) one static service (1/1/1), `dynamic` one dynamic service (0/1/1). The group must exist. |
+| `task set <name> <field> <value>` | Fields: `group`, `static-services`, `min-services`, `max-services`, `players-per-service`, `scale-up-at`, `scale-down-below`, `scale-down-after`, `cooldown`, `nodes` (comma list, `""` for any node), and `mode` as a shortcut: `mode static` sets static, min and max to `max-services`, `mode dynamic` sets `static-services` to 0. Checked like the file (`static ≤ min ≤ max`, `scale-down-below` < `scale-up-at`). The [autoscaler](scaling.md) applies a change within one round. |
 | `task delete <name> [--yes]`, `task remove <name> [--yes]` | Deletes the file after asking. |
 | `task wanted <name> <on\|off>` | Switches the server kind of the task's group. |
 

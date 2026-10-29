@@ -7,25 +7,41 @@ Package `net.vectora.cloud.node.scaling` in `VectoraCloud/cloud-node`. The node 
 Scaling is set per task in `tasks/<name>.yml` (see [config.md](config.md#tasksnameyml)):
 
 ```yaml
-schema-version: 1
-group: minigame
-mode: dynamic                # static: keep min-services; dynamic: scale between min and max
+schema-version: 2
+group: lobby
 scaling:
-  min-services: 1            # always running
+  static-services: 1         # always run, keep their folder, never stopped by the scaler
+  min-services: 1            # always running, static ones included
   max-services: 4            # never more, also not by hand
   players-per-service: 50
-  scale-up-at: 80            # percent of players-per-service
+  scale-up-at: 75            # percent of players-per-service
+  scale-down-below: 50       # percent; stored and checked, used by a later change
   scale-down-after: 5m       # empty this long before a surplus service stops
   cooldown: 60s              # at least this long between two decisions of the task
 nodes: []
 ```
+
+### Static and dynamic in one task
+
+`static ≤ min ≤ max` must hold, and `scale-down-below` must be lower than `scale-up-at`.
+
+- **Static services** (`static-services`): the first ones of the task. Each has its own folder under the group's template (`runtime`, `runtime-2`, …) that survives every stop, and the scaler never stops one.
+- **Dynamic services**: everything above `static-services`, up to `max-services`. Each runs in `temp/services/<id>`, and that folder is deleted when the service stops.
+
+A new service is static as long as the task has fewer static services than `static-services`, otherwise dynamic. The lobby above therefore has one static lobby and up to three dynamic ones. `static-services = max-services` is a purely static task (it never scales), `static-services = 0` a purely dynamic one.
+
+Lowering `static-services` later does not turn existing static services into dynamic ones: they keep their folder and still count. Raising it makes the next new service static.
+
+Suggested values from the setup (static/min/max): proxy and legacy proxy 1/1/1, survival, creative, mod and end 1/1/1, lobby 1/1/4, legacy 1.8.8 server 1/1/3, minigame 0/1/8; `scale-up-at` 75, `scale-down-below` 50.
+
+The load rules for `scale-down-below`, the distribution across nodes and moving players follow in a second change; until then the rules below apply unchanged.
 
 The file, the console and the API all change it through `ConfigService.apply` and the same validator:
 
 | Way | Example |
 |---|---|
 | File | edit `tasks/minigame.yml`; the node reloads it after 200 ms |
-| Console | `task set minigame max-services 6`, `task set minigame scale-up-at 70` |
+| Console | `task set minigame max-services 6`, `task set lobby static-services 2`, `task set minigame scale-down-below 40` |
 | API | `PUT /api/v1/tasks/minigame` with the whole task as JSON (scope `config:write`) |
 
 The scaler reads the configuration again in every round, so all three take effect the same way, at the latest after one round (5 seconds). An invalid change is refused with the same errors everywhere and changes nothing.
@@ -43,19 +59,19 @@ Every 5 seconds the scaler looks at each task once and makes at most one decisio
 1. **min-services.** If fewer services count than `min-services`, one more starts.
    - A dynamic service counts while it is prepared, starting, running, or crashed and waiting for its restart.
    - A static service always counts, also when it is stopped or gave up after its crashes. A server stopped with `service stop` therefore stays down. Only a static service that stopped because its group was switched off (or because `eula-accepted` or `setup-complete` was taken back) comes back once the switch is on again, at its own index and in its own folder.
-   - A new static slot (a new task, a higher `min-services`) gets the lowest index of the group that no service has used in this run, so a folder of a server stopped by hand is not touched.
-2. **Above max-services.** If a dynamic task has more services than `max-services` (the limit was lowered), an empty dynamic service stops, without waiting for `scale-down-after`. A service with players is never stopped.
+   - A new static slot (a new task, a higher `static-services`) gets the lowest index of the group that no service has used in this run, so a folder of a server stopped by hand is not touched.
+2. **Above max-services.** If a task has more services than `max-services` (the limit was lowered), an empty dynamic service stops, without waiting for `scale-down-after`. A service with players is never stopped.
 3. **Scale up.** One more dynamic service starts when every running service of the task has reached `scale-up-at` percent of `players-per-service`, no service of the task is still starting, `max-services` leaves room, and the memory budget allows it (below). With 50 players per service and 80 %, that is 40 players on each.
 4. **Scale down.** A dynamic service stops when it has had no players for `scale-down-after`, the task has more than `min-services`, and another service of the task still has room below the threshold or is starting. Without that last condition, stopping it would start a new one at once (hysteresis). Of several candidates the one with the highest index goes.
 
 What never happens:
 
-- A static service is never stopped by the scaler, also not in a task that was switched to `dynamic` later.
+- A static service is never stopped by the scaler, also not after `static-services` was lowered.
 - A proxy (`software: velocity`) is never scaled up or down; there is one proxy per node.
 - A service with players is never stopped. Players are not moved to another server first; the scaler waits until the server is empty. Moving players needs a message the cloud channel does not have yet.
 - `min-services: 0` starts nothing. The first service of such a task comes from `service start`; from then on it is scaled.
 
-A dynamic service stopped with `service stop` is replaced if the task falls below `min-services`, because dynamic services are a pool. To take a dynamic task down, set `min-services: 0`, switch its group off, or remove the task.
+A dynamic service stopped with `service stop` is replaced if the task falls below `min-services`, because dynamic services are a pool. To take the dynamic part of a task down, set `min-services` to `static-services`, switch its group off, or remove the task.
 
 ## Signals
 

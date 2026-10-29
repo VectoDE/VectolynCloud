@@ -629,7 +629,41 @@ components:
       description: "groups/<name>.yml, see docs/cloud/config.md. Unknown fields are refused."
     Task:
       type: object
-      description: "tasks/<name>.yml, see docs/cloud/config.md. Unknown fields are refused."
+      description: >-
+        tasks/<name>.yml (schema-version 2), see docs/cloud/config.md. Unknown fields are refused,
+        including the field mode of schema-version 1; send static-services instead.
+      required: [schema-version, group, scaling]
+      properties:
+        schema-version: {type: integer, enum: [2]}
+        group: {$ref: "#/components/schemas/Name"}
+        scaling: {$ref: "#/components/schemas/Scaling"}
+        nodes:
+          type: array
+          items: {$ref: "#/components/schemas/Name"}
+          description: "Node ids the services may run on; empty or missing means any node."
+    Scaling:
+      type: object
+      description: >-
+        Service counts of a task. The first static-services services are static (own folder, always
+        run, never stopped by the scaler), the ones above them up to max-services are dynamic.
+        Rules: 0 <= static-services <= min-services <= max-services, 1 <= max-services <= 1000,
+        scale-down-below < scale-up-at.
+      required: [static-services, min-services, max-services, players-per-service, scale-up-at,
+                 scale-down-after, cooldown]
+      properties:
+        static-services: {type: integer, minimum: 0, maximum: 1000}
+        min-services: {type: integer, minimum: 0, maximum: 1000}
+        max-services: {type: integer, minimum: 1, maximum: 1000}
+        players-per-service: {type: integer, minimum: 1, maximum: 10000}
+        scale-up-at: {type: integer, minimum: 1, maximum: 100, description: "Percent; new tasks get 75."}
+        scale-down-below:
+          type: integer
+          minimum: 0
+          maximum: 99
+          default: 50
+          description: "Percent, below scale-up-at. Stored and checked; the scaling rule that uses it follows in a later change."
+        scale-down-after: {type: string, example: "5m"}
+        cooldown: {type: string, example: "60s"}
     CloudConfig:
       type: object
       description: "cloud.yml, see docs/cloud/config.md. Unknown fields are refused."

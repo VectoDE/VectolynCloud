@@ -82,10 +82,10 @@ Startet den Einrichtungsassistenten erneut. Die aktuellen Werte sind die Vorschl
 
 | Unterbefehl | Wirkung |
 |---|---|
-| `task list` | Alle Tasks mit Gruppe, Modus und Dienst-Bereich. |
+| `task list` | Alle Tasks mit Gruppe, Modus (`static`, `dynamic` oder `static N + dynamic`) und Dienst-Bereich. |
 | `task info <Name>` | Alle Felder eines Tasks. |
-| `task create <Name> <Gruppe> [static\|dynamic]` | Neue `tasks/<Name>.yml` mit einem Dienst auf beliebigem Node. Die Gruppe muss existieren. |
-| `task set <Name> <Feld> <Wert>` | Felder: `group`, `mode`, `min-services`, `max-services`, `players-per-service`, `scale-up-at`, `scale-down-after`, `cooldown`, `nodes` (Liste mit Kommas, `""` für beliebigen Node). Der [Autoscaler](scaling.de.md) übernimmt eine Änderung innerhalb einer Runde. |
+| `task create <Name> <Gruppe> [static\|dynamic]` | Neue `tasks/<Name>.yml` auf beliebigem Node: `static` (Standard) mit einem statischen Dienst (1/1/1), `dynamic` mit einem dynamischen (0/1/1). Die Gruppe muss existieren. |
+| `task set <Name> <Feld> <Wert>` | Felder: `group`, `static-services`, `min-services`, `max-services`, `players-per-service`, `scale-up-at`, `scale-down-below`, `scale-down-after`, `cooldown`, `nodes` (Liste mit Kommas, `""` für beliebigen Node) und `mode` als Abkürzung: `mode static` setzt statisch, min und max auf `max-services`, `mode dynamic` setzt `static-services` auf 0. Geprüft wird wie in der Datei (`static ≤ min ≤ max`, `scale-down-below` < `scale-up-at`). Der [Autoscaler](scaling.de.md) übernimmt eine Änderung innerhalb einer Runde. |
 | `task delete <Name> [--yes]`, `task remove <Name> [--yes]` | Löscht die Datei nach Rückfrage. |
 | `task wanted <Name> <on\|off>` | Schaltet die Serverart der Gruppe des Tasks ein oder aus. |
 

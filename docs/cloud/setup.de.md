@@ -32,7 +32,17 @@ Reihenfolge wie unten. Jede Frage zeigt ihren Vorschlag in eckigen Klammern, Ent
    | survival, mod | 3G |
 
    Ab 256M, in `M` oder `G`. Der Mindest-Heap wird 512M oder das Maximum, je nachdem, was kleiner ist. Der Assistent zählt alles zusammen und warnt, wenn die Summe den Speicher der Maschine oder des Pterodactyl-Servers (`SERVER_MEMORY`) übersteigt.
-7. **Datenbank.** `managed` (die Cloud betreibt ein eigenes MariaDB), `docker`, `external` oder `h2`. Auf Pterodactyl fehlt `docker`, weil der Server dort schon in einem Container ohne Zugriff auf Docker läuft. Wo es kein MariaDB-Server-Build gibt (alles außer Windows x64 und Linux x86_64 mit glibc), steht bei `managed`, dass dort H2 genutzt wird, und H2 ist der Vorschlag. Nach `managed` erklärt der Assistent den Schalter dahinter: `servers.database: true` in `cloud.yml` betreibt MariaDB, `false` nutzt H2-Dateien pro Server. Bei `external` fragt er Host, Port (3306), Datenbankname, Benutzer und Passwort ab.
+7. **Dienste.** Für jeden gewollten Server außer den Proxys die Zahl der Dienste als `statisch/min/max`, mit diesen Vorschlägen:
+
+   | Server | Vorschlag |
+   |---|---|
+   | lobby | 1/1/4 |
+   | legacy-server (1.8.8) | 1/1/3 |
+   | minigame | 0/1/8 |
+   | survival, creative, mod, end | 1/1/1 |
+
+   Statische Dienste behalten ihre Welten und laufen immer. Darüber startet die Cloud nach Spielerzahl dynamische Dienste, frisch aus dem Template, bis max (siehe [Skalierung](scaling.de.md#statisch-und-dynamisch-in-einem-task)). `statisch ≤ min ≤ max` und max von 1 bis 1000 werden direkt bei der Eingabe geprüft. Die Proxys bekommen immer 1/1/1. Neue Tasks bekommen `scale-up-at` 75 und `scale-down-below` 50. Bei einem vorhandenen Task werden nur die drei Zahlen geschrieben, und nur wenn sie sich ändern.
+8. **Datenbank.** `managed` (die Cloud betreibt ein eigenes MariaDB), `docker`, `external` oder `h2`. Auf Pterodactyl fehlt `docker`, weil der Server dort schon in einem Container ohne Zugriff auf Docker läuft. Wo es kein MariaDB-Server-Build gibt (alles außer Windows x64 und Linux x86_64 mit glibc), steht bei `managed`, dass dort H2 genutzt wird, und H2 ist der Vorschlag. Nach `managed` erklärt der Assistent den Schalter dahinter: `servers.database: true` in `cloud.yml` betreibt MariaDB, `false` nutzt H2-Dateien pro Server. Bei `external` fragt er Host, Port (3306), Datenbankname, Benutzer und Passwort ab.
 
 Danach kommt eine Zusammenfassung: alle Antworten, die erzeugten Secrets (als „verborgen“) und die Dateien, die geschrieben würden. Zur Wahl stehen `save`, `change` (alle Fragen noch einmal, mit deinen Antworten als Vorschlag) und `cancel`. Geschrieben wird nur bei `save`. Findet die Prüfung ein Problem, gibt es `save` erst, wenn die Antwort geändert ist.
 
@@ -66,7 +76,7 @@ Das Format und ein vollständiges Beispiel stehen in der [englischen Fassung](se
 
 - Außer `schema-version` und `eula: true` ist alles optional und behält sonst den Vorschlag des Assistenten.
 - Die Datei wird so streng gelesen wie `cloud.yml`: Unbekannte Felder, doppelte Schlüssel, falsche Typen oder ein fehlendes `eula: true` sind Fehler. Geprüft wird genau wie bei getippten Antworten (Ports, Heap, Legacy-Server nur mit Legacy-Proxy, kein Docker auf Pterodactyl, Prüfung der ganzen Konfiguration). Bei einem Fehler wird nichts geschrieben, und alle Probleme werden aufgelistet.
-- `memory` und `minigames` dürfen nur Gruppen nennen, die es gibt oder die die Einrichtung anlegt.
+- `memory` und `minigames` dürfen nur Gruppen nennen, die es gibt oder die die Einrichtung anlegt. `services` darf nur Tasks nennen, die es gibt oder die die Einrichtung anlegt. Die Proxys gehören nicht dazu, sie laufen immer mit einem Dienst. Jeder Eintrag wird wie eine getippte Antwort geprüft (`statisch ≤ min ≤ max`, max von 1 bis 1000), fehlende Zahlen behalten ihren Vorschlag.
 - Die Datei zählt nur, solange `setup-complete` false ist. Danach wird eine weiterhin gemountete Datei übergangen, damit sie spätere Änderungen über `config set` oder das Dashboard nicht zurückdreht.
 - Die Datei enthält kein Secret. Das Passwort einer externen Datenbank kommt aus `secrets/vectora.env` (`VECTORA_DB_PASSWORD`) oder aus `database.password-file`: eine normale Datei (eine Verknüpfung darauf geht, ein FIFO oder Gerät nicht) mit dem Passwort in einer Zeile (ein Zeilenumbruch am Ende wird entfernt), höchstens 4 KiB, UTF-8, relativ zum Home oder absolut. Das passt zu Docker- und Kubernetes-Secrets.
 
@@ -101,4 +111,4 @@ In drei Schritten, damit nichts halb fertig als abgeschlossen gilt:
 2. erst dann die Secrets: jedes fehlende erzeugte Secret, danach das Passwort einer externen Datenbank. So landet nie ein Passwort ohne den gespeicherten Host und Benutzer dazu;
 3. zuletzt `eula-accepted: true` und `setup-complete: true`.
 
-Scheitert Schritt 2 oder 3, kehrt die Konfiguration zum Stand davor zurück (vom Setup angelegte Gruppen und Tasks verschwinden wieder), und ein vom Setup geschriebenes Passwort bekommt seinen alten Wert. Fehlende erzeugte Secrets bleiben, sie ersetzen nie einen Wert. `setup-complete` bleibt false, und der nächste Start fragt erneut. Für jeden gewollten Server ohne Gruppe legt der Assistent Gruppe und Task an. Einzeln abgeschaltete Minigame-Gruppen bekommen `wanted: false` in ihrer Gruppendatei.
+Scheitert Schritt 2 oder 3, kehrt die Konfiguration zum Stand davor zurück (vom Setup angelegte Gruppen und Tasks verschwinden wieder), und ein vom Setup geschriebenes Passwort bekommt seinen alten Wert. Fehlende erzeugte Secrets bleiben, sie ersetzen nie einen Wert. `setup-complete` bleibt false, und der nächste Start fragt erneut. Für jeden gewollten Server ohne Gruppe legt der Assistent Gruppe und Task an, den Task mit den Dienstzahlen aus Schritt 7 (Proxys 1/1/1). Einzeln abgeschaltete Minigame-Gruppen bekommen `wanted: false` in ihrer Gruppendatei.
