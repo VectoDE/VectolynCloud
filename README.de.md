@@ -140,6 +140,8 @@ Unter Windows `gradlew.bat build`. Der Gradle-Wrapper lädt Gradle selbst herunt
 
 Das baut `VectoraCloud.jar` und startet es mit `run/` im Wurzelverzeichnis des Repositorys als Cloud-Home. Beim ersten Start wird der Ordner angelegt. Der Einrichtungsassistent stellt seine Fragen im selben Terminal, danach lädt die Cloud die Server-Software herunter und startet das Netzwerk. Konfiguration, Secrets, Welten, Logs und Downloads bleiben alle in `run/`, und Git ignoriert den Ordner vollständig. Wer neu anfangen will, löscht ihn einfach.
 
+Unter Gradle hat die Cloud kein echtes Terminal. Die Konsole liest deshalb einfache Zeilen ohne Bearbeitung und Vervollständigung, und Secrets, die du im Einrichtungsassistenten eintippst, bleiben sichtbar. Mit `--console=plain` kommt dir die Fortschrittszeile von Gradle nicht in die Quere. Beende das Netzwerk mit `shutdown` in der Konsole: Strg+C bricht Gradle ab, und unter Windows endet die Cloud dann ohne sauberes Herunterfahren. Details in [docs/cloud/launcher.md](docs/cloud/launcher.md#local-start-from-the-repository).
+
 Als root oder Administrator verweigert der Launcher den Start. Läuft deine Entwicklungs-Shell trotzdem mit erhöhten Rechten, hängst du `-PallowRoot=true` an (gibt `--allow-root` weiter).
 
 `run/` ist nur zum Entwickeln und Testen da. Produktivserver bekommen ein eigenes Cloud-Home außerhalb jedes Checkouts, siehe [docs/cloud/operations.de.md](docs/cloud/operations.de.md).

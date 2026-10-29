@@ -41,6 +41,8 @@ Jeder Server besteht aus zwei Teilen:
 - seiner Vorlage: Configs mit Platzhaltern, in Git unter `templates/<Server>/`
 - `runtime/`: Jars, Welten, Logs und erzeugte Dateien, im Netzwerk-Ordner (dem Cloud-Home) außerhalb des Repositorys, `<Home>/<Server>/runtime/`
 
+Das Cloud-Home ist der Ordner, in dem VectoraCloud läuft. Im Produktivbetrieb liegt es außerhalb jedes Checkouts des Repositorys. Zum Entwickeln baut `./gradlew :cloud:node:runLocal` die `VectoraCloud.jar` und startet sie mit `run/` im Wurzelverzeichnis des Repositorys als Cloud-Home. Git ignoriert `run/` komplett, Secrets und Welten eingeschlossen.
+
 Bis Etappe 2 laufen die vorhandenen Server lokal aus `runtime/` über die Windows-Startskripte.
 
 ## VectoraCloud (geplant, Etappe 2)

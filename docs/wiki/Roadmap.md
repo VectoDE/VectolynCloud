@@ -10,7 +10,7 @@ Vectora is built in eight stages. Each stage gets its own plan and ends in a run
 
 **Status: done.** Released as the signed pre-release [v0.1.0](https://github.com/VectoDE/VectoraCloud/releases/tag/v0.1.0).
 
-Stop the servers and back up worlds and state locally; move the server folders to `Server-Network/` with a template/runtime split; adjust start scripts and ini paths; `.gitignore`; move secrets out and regenerate them; fix known problems (Floodgate on Fabric, ViaBackwards/ViaRewind, DB pools, ini paths); Gradle build for the existing plugins; repository basics; GitHub setup; first push after a gitleaks check.
+Stop the servers and back up worlds and state locally; move the server folders to `Server-Network/` with a template/runtime split (since replaced by `templates/<Server>/` in the repository and the cloud home outside it); adjust start scripts and ini paths; `.gitignore`; move secrets out and regenerate them; fix known problems (Floodgate on Fabric, ViaBackwards/ViaRewind, DB pools, ini paths); Gradle build for the existing plugins; repository basics; GitHub setup; first push after a gitleaks check.
 
 ## 2. VectoraCloud core ([#11](https://github.com/VectoDE/VectoraCloud/issues/11))
 

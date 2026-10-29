@@ -7,7 +7,7 @@ Die vollständigen Regeln stehen in [CONTRIBUTING.de.md](https://github.com/Vect
 1. In die [Roadmap](https://github.com/users/VectoDE/projects/11) schauen und ein Issue aussuchen oder anlegen. Issues mit dem Label `good first issue` sind für den Einstieg gedacht.
 2. Bei allem, was größer ist als ein kleiner Fix, erst auf eine Antwort im Issue warten.
 3. Von `main` abzweigen, kleine Commits machen, [Conventional Commits](https://www.conventionalcommits.org/de/) schreiben und jeden Commit mit `git commit -s` abzeichnen.
-4. `./gradlew build` ausführen, dann einen Pull Request mit `Fixes #123` öffnen.
+4. `./gradlew build` ausführen, dann einen Pull Request mit `Fixes #123` öffnen. Eine Änderung im laufenden Netzwerk probierst du mit `./gradlew :cloud:node:runLocal` aus; es läuft in `run/`, das Git ignoriert.
 
 Worauf es in diesem Projekt ankommt:
 
