@@ -5,7 +5,6 @@ import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
 import com.velocitypowered.api.event.player.ServerConnectedEvent;
 import com.velocitypowered.api.event.proxy.ListenerBoundEvent;
-import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.network.ListenerType;
 import com.velocitypowered.api.proxy.ProxyServer;
@@ -26,7 +25,8 @@ import net.vectora.cloud.client.CloudClientSettings;
  * <ul>
  *   <li>Role: {@value ProxyRole#ENV_PLATFORM} {@code = VELOCITY_LEGACY} makes it the legacy
  *       proxy, which only takes 1.8.8 servers; anything else is the main proxy.</li>
- *   <li>Ready: when the Minecraft listener is bound, that is when players can connect.</li>
+ *   <li>Connect and ready: when the Minecraft listener is bound, that is when players can
+ *       connect.</li>
  *   <li>Status: every {@link #STATUS_PERIOD} with players and the shown player limit.</li>
  *   <li>Player events: join on the first backend, switch, quit, checked against the reported
  *       state ({@code PlayerTracker}).</li>
@@ -41,7 +41,6 @@ public final class VelocityBridgePlugin {
     private volatile BridgeSender sender;
     private volatile ProxyBridge bridge;
     private volatile ScheduledTask statusTask;
-    private volatile boolean listening;
 
     /** Created by Velocity. */
     @Inject
@@ -49,36 +48,20 @@ public final class VelocityBridgePlugin {
         this.proxy = proxy;
     }
 
-    /** Connects to the cloud if the proxy was started by it. */
-    @Subscribe
-    public void onInitialize(ProxyInitializeEvent event) {
-        Optional<CloudClientSettings> settings = BridgeConnection.settings();
-        if (settings.isEmpty()) {
-            return;
-        }
-        ProxyRole role = ProxyRole.fromPlatform(System.getenv(ProxyRole.ENV_PLATFORM));
-        VelocityServers servers = new VelocityServers(proxy);
-        sender = BridgeConnection.open(settings.get(), created -> {
-            ProxyBridge proxyBridge = new ProxyBridge(created, servers, role);
-            bridge = proxyBridge;
-            return proxyBridge;
-        });
-        statusTask = proxy.getScheduler().buildTask(this, this::reportStatus).delay(STATUS_PERIOD)
-                .repeat(STATUS_PERIOD).schedule();
-        if (listening) {
-            // The listener was bound before this handler ran; markReady twice does no harm.
-            bridge.ready();
-        }
-    }
-
-    /** The proxy accepts players once its Minecraft listener is bound. */
+    /**
+     * The proxy accepts players once its Minecraft listener is bound. The first time, the bridge
+     * connects to the cloud (if the proxy was started by it) and signals ready; later binds (after
+     * a config reload) only repeat the ready signal.
+     */
     @Subscribe
     public void onListenerBound(ListenerBoundEvent event) {
         if (event.getListenerType() != ListenerType.MINECRAFT) {
             return;
         }
-        listening = true;
         ProxyBridge target = bridge;
+        if (target == null) {
+            target = connect();
+        }
         if (target != null) {
             target.ready();
         }
@@ -103,9 +86,30 @@ public final class VelocityBridgePlugin {
         }
     }
 
+    private synchronized ProxyBridge connect() {
+        if (bridge != null) {
+            return bridge;
+        }
+        Optional<CloudClientSettings> settings = BridgeConnection.settings();
+        if (settings.isEmpty()) {
+            return null;
+        }
+        ProxyRole role = ProxyRole.fromPlatform(System.getenv(ProxyRole.ENV_PLATFORM));
+        VelocityServers servers = new VelocityServers(proxy);
+        sender = BridgeConnection.open(settings.get(), created -> {
+            ProxyBridge proxyBridge = new ProxyBridge(created, servers, role);
+            bridge = proxyBridge;
+            return proxyBridge;
+        });
+        statusTask = proxy.getScheduler().buildTask(this, this::reportStatus).delay(STATUS_PERIOD)
+                .repeat(STATUS_PERIOD).schedule();
+        // Explicit registration: the handler needs nothing from the event.
+        proxy.getEventManager().register(this, ProxyShutdownEvent.class, shutdown -> disconnect());
+        return bridge;
+    }
+
     /** Says goodbye to the cloud. */
-    @Subscribe
-    public void onShutdown(ProxyShutdownEvent event) {
+    private void disconnect() {
         ScheduledTask task = statusTask;
         if (task != null) {
             task.cancel();

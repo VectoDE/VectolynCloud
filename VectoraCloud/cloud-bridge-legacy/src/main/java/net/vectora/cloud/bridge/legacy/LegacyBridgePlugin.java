@@ -47,6 +47,12 @@ public final class LegacyBridgePlugin extends JavaPlugin implements Listener {
         }
         sender = BridgeConnection.open(settings.get(), created -> null);
         getServer().getPluginManager().registerEvents(this, this);
+        // The player count changes: report at once. The leaving player is still counted during the
+        // quit event. Registered as executors, the handlers need nothing from the event.
+        getServer().getPluginManager().registerEvent(PlayerJoinEvent.class, this, EventPriority.MONITOR,
+                (listener, event) -> report(0), this, false);
+        getServer().getPluginManager().registerEvent(PlayerQuitEvent.class, this, EventPriority.MONITOR,
+                (listener, event) -> report(-1), this, false);
         BridgeSender ready = sender;
         getServer().getScheduler().runTask(this, ready::markReady);
         getServer().getScheduler().runTaskTimer(this, () -> report(0), STATUS_PERIOD_TICKS, STATUS_PERIOD_TICKS);
@@ -64,18 +70,6 @@ public final class LegacyBridgePlugin extends JavaPlugin implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onTickEnd(ServerTickEndEvent event) {
         ticks.tick(System.nanoTime(), event.getTickDuration());
-    }
-
-    /** Reports the new player count at once. */
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void onJoin(PlayerJoinEvent event) {
-        report(0);
-    }
-
-    /** Reports the new player count at once; the leaving player is still counted during the event. */
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void onQuit(PlayerQuitEvent event) {
-        report(-1);
     }
 
     private void report(int adjust) {

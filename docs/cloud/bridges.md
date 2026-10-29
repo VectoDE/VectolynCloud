@@ -35,11 +35,10 @@ Each jar contains the bridge core, `Vectora-CloudClient` and `Vectora-Protocol`,
 
 | Proxy event | Bridge |
 |---|---|
-| `ProxyInitializeEvent` | Reads the environment, opens the connection, schedules the status every 5 seconds. |
-| `ListenerBoundEvent` (Minecraft listener) | `markReady`: players can connect now. |
+| `ListenerBoundEvent` (Minecraft listener) | The first time: reads the environment, opens the connection, schedules the status every 5 seconds. Every time: `markReady`, players can connect now. |
 | `ServerConnectedEvent` | `PlayerJoin` on the first backend, `PlayerSwitch` afterwards. |
 | `DisconnectEvent` | `PlayerQuit`, if a join was reported. |
-| `ProxyShutdownEvent` | Stops the status task, closes the sender. |
+| `ProxyShutdownEvent` (registered once connected) | Stops the status task, closes the sender. |
 
 ### Dynamic servers
 

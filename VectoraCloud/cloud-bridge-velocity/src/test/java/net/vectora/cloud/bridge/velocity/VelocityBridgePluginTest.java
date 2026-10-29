@@ -48,7 +48,7 @@ class VelocityBridgePluginTest {
         assertTrue(main.getConstructor(ProxyServer.class).isAnnotationPresent(Inject.class),
                 "Velocity creates the main class through Guice");
         long handlers = Arrays.stream(main.getMethods()).filter(m -> m.isAnnotationPresent(Subscribe.class)).count();
-        assertEquals(5, handlers, "initialize, listener bound, server connected, disconnect, shutdown");
+        assertEquals(3, handlers, "listener bound (connect and ready), server connected, disconnect");
         for (Method method : main.getMethods()) {
             if (method.isAnnotationPresent(Subscribe.class)) {
                 assertEquals(1, method.getParameterCount(), method.getName());
