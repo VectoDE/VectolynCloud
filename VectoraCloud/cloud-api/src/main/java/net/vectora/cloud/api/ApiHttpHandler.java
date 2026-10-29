@@ -170,7 +170,7 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
         Router.Resolution.Found<ApiRoutes.Handler> found;
         switch (resolution) {
             case Router.Resolution.Found<ApiRoutes.Handler> f -> found = f;
-            case Router.Resolution.NotFound<ApiRoutes.Handler> n -> {
+            case Router.Resolution.NotFound<ApiRoutes.Handler>() -> {
                 reject(ctx, responseOrigin, new ApiException(404, "not-found", "No such endpoint."), true);
                 return;
             }
@@ -415,6 +415,10 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
     }
 
     private ApiException map(Exception e) {
+        if (e instanceof InterruptedException) {
+            Thread.currentThread().interrupt();
+            return new ApiException(503, "interrupted", "The request was interrupted.");
+        }
         return switch (e) {
             case ApiException api -> api;
             case ApiBackendException backend -> new ApiException(switch (backend.reason()) {
@@ -424,10 +428,6 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
                 case INVALID -> 422;
             }, backend.reason().name().toLowerCase(Locale.ROOT).replace('_', '-'), clean(backend.getMessage()));
             case ConfigException config -> ApiException.invalidConfig(config.errors());
-            case InterruptedException interrupted -> {
-                Thread.currentThread().interrupt();
-                yield new ApiException(503, "interrupted", "The request was interrupted.");
-            }
             case IOException io -> {
                 LOG.log(System.Logger.Level.WARNING, "API request failed: {0}", io.getClass().getSimpleName());
                 yield new ApiException(500, "io-error", "The node could not read or write a file.");
