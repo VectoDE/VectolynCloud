@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 import net.vectora.cloud.node.channel.ChannelBridge;
+import net.vectora.cloud.node.channel.ChannelBridge.DrainResult;
 import net.vectora.cloud.node.service.ServiceException;
 import net.vectora.cloud.node.service.ServiceInfo;
 import net.vectora.cloud.node.service.ServiceManager;
@@ -54,10 +55,10 @@ public interface ScalingTarget {
      *
      * @param service the service
      * @param timeout how long to wait
-     * @return whether no player is left
+     * @return {@link DrainResult#EMPTY} if no player is left, otherwise why not
      * @throws InterruptedException if the wait is interrupted
      */
-    boolean drain(ServiceId service, Duration timeout) throws InterruptedException;
+    DrainResult drain(ServiceId service, Duration timeout) throws InterruptedException;
 
     /**
      * Opens a service on the proxies again that a successful {@link #drain} left closed, when its
@@ -79,7 +80,7 @@ public interface ScalingTarget {
         Objects.requireNonNull(channel, "channel");
         return new ScalingTarget() {
             @Override
-            public boolean drain(ServiceId service, Duration timeout) throws InterruptedException {
+            public DrainResult drain(ServiceId service, Duration timeout) throws InterruptedException {
                 return channel.drain(service, timeout);
             }
 

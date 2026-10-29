@@ -32,6 +32,7 @@ import net.vectora.cloud.config.model.TaskConfig;
 import net.vectora.cloud.config.model.TaskMode;
 import net.vectora.cloud.config.model.TimeSpan;
 import net.vectora.cloud.config.model.WantedServers;
+import net.vectora.cloud.node.channel.ChannelBridge.DrainResult;
 import net.vectora.cloud.node.scaling.ScalingPlanner.Decision;
 import net.vectora.cloud.node.scaling.ScalingPlanner.Drain;
 import net.vectora.cloud.node.scaling.ScalingPlanner.Hold;
@@ -236,7 +237,7 @@ class AutoscalerTest {
         f.target.add("minigame", 2, TaskMode.DYNAMIC, ServiceState.RUNNING);
         f.players.put(new ServiceId("minigame-1"), 10);
         f.players.put(new ServiceId("minigame-2"), 2);
-        f.target.drainEmpties = false;
+        f.target.drainResult = DrainResult.TIMEOUT;
         assertEquals(List.of(), f.scaler.tick());
         f.advance(Duration.ofMinutes(5));
         assertEquals(List.of(new Drain("minigame", new ServiceId("minigame-2"), Reason.LOW_LOAD)), f.scaler.tick());
@@ -246,11 +247,67 @@ class AutoscalerTest {
         f.advance(Duration.ofMinutes(5).minusSeconds(1));
         assertEquals(List.of(), f.scaler.tick(), "the low-load time starts again after the attempt");
         // Counter-check: once scale-down-after has passed again, the next attempt comes.
-        f.target.drainEmpties = true;
+        f.target.drainResult = DrainResult.EMPTY;
         f.scaler.tick();
         f.advance(Duration.ofMinutes(5));
         assertEquals(List.of(new Drain("minigame", new ServiceId("minigame-2"), Reason.LOW_LOAD)), f.scaler.tick());
         assertEquals(List.of("drain minigame-2", "drain minigame-2", "stop minigame-2"), f.target.calls);
+    }
+
+    @Test
+    void theLogSaysWhyAServiceCouldNotBeEmptied() {
+        assertEquals("Scaling: minigame-2 keeps running: players are still on it after 30 s, a move did not work",
+                failedDrain(DrainResult.TIMEOUT, false));
+        assertEquals("Scaling: minigame-2 keeps running: no other open server of its group can take its players",
+                failedDrain(DrainResult.NO_TARGET, false));
+        assertEquals("Scaling: minigame-2 keeps running: moving its players was interrupted",
+                failedDrain(DrainResult.EMPTY, true));
+    }
+
+    /** One drain that does not empty minigame-2; returns the warning, checks there was no stop. */
+    private static String failedDrain(DrainResult result, boolean interrupted) {
+        Fixture f = new Fixture().task("minigame", TaskMode.DYNAMIC, 1, 3);
+        f.target.add("minigame", 1, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.target.add("minigame", 2, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.players.put(new ServiceId("minigame-1"), 10);
+        f.players.put(new ServiceId("minigame-2"), 2);
+        f.target.drainResult = result;
+        f.target.drainInterrupted = interrupted;
+        f.scaler.tick();
+        f.advance(Duration.ofMinutes(5));
+        List<String> warnings = new ArrayList<>();
+        java.util.logging.Logger logger = java.util.logging.Logger.getLogger(Autoscaler.class.getName());
+        java.util.logging.Handler handler = warningsInto(warnings);
+        logger.addHandler(handler);
+        try {
+            // The direct executor carries the drain out on this thread.
+            assertEquals(List.of(new Drain("minigame", new ServiceId("minigame-2"), Reason.LOW_LOAD)), f.scaler.tick());
+        } finally {
+            logger.removeHandler(handler);
+        }
+        assertEquals(interrupted, Thread.interrupted(), "the interrupt is passed on, and only then");
+        assertEquals(List.of("drain minigame-2"), f.target.calls, "no stop, no kick");
+        assertEquals(1, warnings.size(), warnings.toString());
+        return warnings.getFirst();
+    }
+
+    private static java.util.logging.Handler warningsInto(List<String> warnings) {
+        return new java.util.logging.Handler() {
+            @Override
+            public void publish(java.util.logging.LogRecord r) {
+                if (r.getLevel() == java.util.logging.Level.WARNING) {
+                    warnings.add(java.text.MessageFormat.format(r.getMessage(), r.getParameters()));
+                }
+            }
+
+            @Override
+            public void flush() {
+            }
+
+            @Override
+            public void close() {
+            }
+        };
     }
 
     @Test
@@ -511,8 +568,10 @@ class AutoscalerTest {
         boolean failStarts;
         boolean crashEvent;
         boolean failStops;
-        /** Whether a drain empties the service; otherwise its players stay. */
-        boolean drainEmpties = true;
+        /** How a drain ends; only {@code EMPTY} takes the players off the service. */
+        DrainResult drainResult = DrainResult.EMPTY;
+        /** Whether a drain is interrupted, as on a node that is stopping. */
+        boolean drainInterrupted;
         /** Runs once inside the next drain, while the service is being emptied. */
         Runnable duringDrain;
         Fixture fixture;
@@ -581,7 +640,7 @@ class AutoscalerTest {
         }
 
         @Override
-        public boolean drain(ServiceId service, Duration timeout) {
+        public DrainResult drain(ServiceId service, Duration timeout) throws InterruptedException {
             calls.add("drain " + service.value());
             drainTimeouts.add(timeout);
             if (duringDrain != null) {
@@ -589,10 +648,13 @@ class AutoscalerTest {
                 duringDrain = null;
                 during.run();
             }
-            if (drainEmpties) {
+            if (drainInterrupted) {
+                throw new InterruptedException("test");
+            }
+            if (drainResult == DrainResult.EMPTY) {
                 fixture.players.put(service, 0);
             }
-            return drainEmpties;
+            return drainResult;
         }
     }
 }

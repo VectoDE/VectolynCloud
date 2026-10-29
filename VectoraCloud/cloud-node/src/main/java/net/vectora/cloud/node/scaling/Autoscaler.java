@@ -29,6 +29,7 @@ import net.vectora.cloud.config.model.ScalingConfig;
 import net.vectora.cloud.config.model.ServerSoftware;
 import net.vectora.cloud.config.model.TaskConfig;
 import net.vectora.cloud.config.model.TaskMode;
+import net.vectora.cloud.node.channel.ChannelBridge.DrainResult;
 import net.vectora.cloud.node.scaling.ScalingPlanner.Decision;
 import net.vectora.cloud.node.scaling.ScalingPlanner.Drain;
 import net.vectora.cloud.node.scaling.ScalingPlanner.Held;
@@ -365,10 +366,11 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
 
     /**
      * Closes a service on the proxies, empties it, then stops it; also one that looks empty, since a
-     * player may have been routed there just now. If players are left after the group's
-     * {@code drain-timeout} ({@link #drainTimeout}), the stop is called off and the service keeps running; nobody is kicked. If the stop fails,
-     * the service is opened again. Either way the task waits {@code scale-down-after} again before
-     * the next attempt.
+     * player may have been routed there just now. If it cannot be emptied (no other server of the
+     * group, players left after the group's {@code drain-timeout} ({@link #drainTimeout}), or the
+     * wait was interrupted), the stop is called off and the service keeps running; nobody is
+     * kicked. If the stop fails, the service is opened again. Either way the task waits
+     * {@code scale-down-after} again before the next attempt.
      */
     private void drainAndStop(Drain drain, ConfigSnapshot snapshot) throws ServiceException {
         // tick() has put the service into draining already.
@@ -376,17 +378,29 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
             LOG.log(System.Logger.Level.INFO, "Scaling: the players of {0} of task {1} are moved to other servers ({2})",
                     drain.service(), drain.task(), describe(drain.reason(), snapshot.tasks().get(drain.task())));
             Duration timeout = drainTimeout(snapshot, drain.task());
-            boolean empty;
+            DrainResult result;
             try {
-                empty = target.drain(drain.service(), timeout);
+                result = target.drain(drain.service(), timeout);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                LOG.log(System.Logger.Level.WARNING, "Scaling: {0} keeps running: moving its players was"
+                        + " interrupted", drain.service());
                 return;
             }
-            if (!empty) {
-                LOG.log(System.Logger.Level.WARNING, "Scaling: {0} keeps running: players are still on it after {1} s,"
-                        + " a move did not work", drain.service(), timeout.toSeconds());
-                return;
+            switch (result) {
+                case NO_TARGET -> {
+                    LOG.log(System.Logger.Level.WARNING, "Scaling: {0} keeps running: no other open server of its"
+                            + " group can take its players", drain.service());
+                    return;
+                }
+                case TIMEOUT -> {
+                    LOG.log(System.Logger.Level.WARNING, "Scaling: {0} keeps running: players are still on it"
+                            + " after {1} s, a move did not work", drain.service(), timeout.toSeconds());
+                    return;
+                }
+                case EMPTY -> {
+                    // Stopped below.
+                }
             }
             LOG.log(System.Logger.Level.INFO, "Scaling: {0} of task {1} is empty and is stopped", drain.service(),
                     drain.task());

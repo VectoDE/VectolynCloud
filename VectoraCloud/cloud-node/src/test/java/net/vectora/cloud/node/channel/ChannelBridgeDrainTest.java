@@ -1,9 +1,7 @@
 package net.vectora.cloud.node.channel;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
 import java.time.Duration;
@@ -18,6 +16,7 @@ import java.util.UUID;
 import java.util.function.IntConsumer;
 import net.vectora.cloud.config.model.TaskMode;
 import net.vectora.cloud.network.ServiceEvent;
+import net.vectora.cloud.node.channel.ChannelBridge.DrainResult;
 import net.vectora.cloud.node.service.ServiceInfo;
 import net.vectora.cloud.node.service.ServiceState;
 import net.vectora.protocol.GroupName;
@@ -58,7 +57,7 @@ class ChannelBridgeDrainTest {
                 f.status(ONE, 0);
             }
         };
-        assertTrue(f.bridge.drain(ONE, TIMEOUT));
+        assertEquals(DrainResult.EMPTY, f.bridge.drain(ONE, TIMEOUT));
         assertEquals(List.of(new TransferPlayer(ALEX, TWO, TransferPlayer.Reason.SCALE_DOWN),
                 new TransferPlayer(STEVE, TWO, TransferPlayer.Reason.SCALE_DOWN)), f.channel.transfers());
         assertEquals(List.of(false), f.channel.capacities(ONE), "closed, and it stays closed until it stops");
@@ -77,7 +76,7 @@ class ChannelBridgeDrainTest {
                 f.status(ONE, 1);
             }
         };
-        assertFalse(f.bridge.drain(ONE, Duration.ofSeconds(20)));
+        assertEquals(DrainResult.TIMEOUT, f.bridge.drain(ONE, Duration.ofSeconds(20)));
         // Waits of 2, 4, 8 and 8 seconds: sent at 0, 2, 6 and 14 s; the next would be at 22 s.
         assertEquals(List.of(Duration.ZERO, Duration.ofSeconds(2), Duration.ofSeconds(6), Duration.ofSeconds(14)),
                 f.channel.sentAt(ALEX));
@@ -103,7 +102,7 @@ class ChannelBridgeDrainTest {
             }
         };
         // Back on it at 0.5 s: a new move at once, not after the wait of his first one.
-        assertTrue(f.bridge.drain(ONE, TIMEOUT));
+        assertEquals(DrainResult.EMPTY, f.bridge.drain(ONE, TIMEOUT));
         assertEquals(List.of(Duration.ZERO, Duration.ofMillis(500)), f.channel.sentAt(ALEX));
     }
 
@@ -112,7 +111,7 @@ class ChannelBridgeDrainTest {
         Fixture f = new Fixture().backend(ONE).backend(TWO);
         f.join(ALEX, ONE);
         f.status(ONE, 1);
-        assertFalse(f.bridge.drain(ONE, Duration.ofSeconds(1)));
+        assertEquals(DrainResult.TIMEOUT, f.bridge.drain(ONE, Duration.ofSeconds(1)));
         assertEquals(List.of(false, true), f.channel.capacities(ONE));
         assertEquals(Duration.ofSeconds(1), f.ticker.slept(), "it waited the whole timeout");
     }
@@ -122,7 +121,7 @@ class ChannelBridgeDrainTest {
         Fixture f = new Fixture().backend(ONE).backendOfGroup(TWO, "lobby");
         f.join(ALEX, ONE);
         f.status(ONE, 1);
-        assertFalse(f.bridge.drain(ONE, TIMEOUT));
+        assertEquals(DrainResult.NO_TARGET, f.bridge.drain(ONE, TIMEOUT));
         assertEquals(Duration.ZERO, f.ticker.slept(), "no wait for moves that are never sent");
         assertEquals(List.of(), f.channel.transfers(), "a backend of another group is no target");
         assertEquals(List.of(false, true), f.channel.capacities(ONE));
@@ -141,16 +140,28 @@ class ChannelBridgeDrainTest {
     @Test
     void emptyMeansNobodyForTheProxiesAndNoneInTheBackendsOwnReport() throws InterruptedException {
         Fixture f = new Fixture().backend(ONE).backend(TWO);
-        assertFalse(f.bridge.drain(ONE, Duration.ofSeconds(1)), "no report of its own yet");
+        assertEquals(DrainResult.TIMEOUT, f.bridge.drain(ONE, Duration.ofSeconds(1)), "no report of its own yet");
 
         f.status(ONE, 1);
-        assertFalse(f.bridge.drain(ONE, Duration.ofSeconds(1)), "a player the proxies do not list yet");
+        assertEquals(DrainResult.TIMEOUT, f.bridge.drain(ONE, Duration.ofSeconds(1)),
+                "a player the proxies do not list yet");
 
         // Counter-check: both lists empty, at once and without a wait.
         f.status(ONE, 0);
         Duration before = f.ticker.slept();
-        assertTrue(f.bridge.drain(ONE, Duration.ofSeconds(1)));
+        assertEquals(DrainResult.EMPTY, f.bridge.drain(ONE, Duration.ofSeconds(1)));
         assertEquals(before, f.ticker.slept());
+    }
+
+    @Test
+    void aBackendThatIsNotListedIsOnlyChecked() throws InterruptedException {
+        Fixture f = new Fixture();
+        f.status(ONE, 0);
+        assertEquals(DrainResult.EMPTY, f.bridge.drain(ONE, TIMEOUT));
+        f.status(ONE, 1);
+        assertEquals(DrainResult.NO_TARGET, f.bridge.drain(ONE, TIMEOUT), "nobody can move its players");
+        assertEquals(List.of(), f.channel.sent);
+        assertEquals(Duration.ZERO, f.ticker.slept());
     }
 
     // ---------------------------------------------------------------- fixture

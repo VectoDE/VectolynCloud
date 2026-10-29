@@ -457,13 +457,14 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
      *
      * @param backend the backend
      * @param timeout how long to wait for the moves
-     * @return whether no player is left on it
+     * @return {@link DrainResult#EMPTY} if no player is left on it, otherwise why not
      * @throws InterruptedException if the wait is interrupted; the backend is opened again
      */
-    public boolean drain(ServiceId backend, Duration timeout) throws InterruptedException {
+    public DrainResult drain(ServiceId backend, Duration timeout) throws InterruptedException {
         Optional<RegisterServer> listed = services.registration(backend);
         if (listed.isEmpty()) {
-            return isEmpty(backend);
+            // Not on the proxies' lists: nobody can be moved away from it.
+            return isEmpty(backend) ? DrainResult.EMPTY : DrainResult.NO_TARGET;
         }
         closed.add(backend);
         announceCapacity(backend);
@@ -476,11 +477,14 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
                 // closed is moved as well, and one whose move did not happen is sent again.
                 if (!moveAway(backend, listed.get(), sent, ticker.nanoTime())) {
                     // Players on it and nowhere to go: no need to wait for moves that are never sent.
-                    return false;
+                    return DrainResult.NO_TARGET;
                 }
                 empty = isEmpty(backend);
-                if (empty || ticker.nanoTime() - deadline >= 0) {
-                    return empty;
+                if (empty) {
+                    return DrainResult.EMPTY;
+                }
+                if (ticker.nanoTime() - deadline >= 0) {
+                    return DrainResult.TIMEOUT;
                 }
                 ticker.sleep(DRAIN_POLL);
             }
@@ -489,6 +493,19 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
                 reopen(backend);
             }
         }
+    }
+
+    /** How {@link #drain} ended. */
+    public enum DrainResult {
+        /** No player is left on the backend; it stays closed until it stops or is opened again. */
+        EMPTY,
+        /**
+         * Players are on it and no other open backend of its group can take them, or it is not on
+         * the proxies' lists; it is open again.
+         */
+        NO_TARGET,
+        /** Players were still on it when the time was up; it is open again. */
+        TIMEOUT
     }
 
     /**
