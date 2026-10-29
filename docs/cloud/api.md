@@ -140,7 +140,7 @@ Messages name fields and rules, never values. Messages of the node (for example 
 ### Strict input
 
 - JSON is read with the same rules as the YAML files: unknown fields, duplicate fields and wrong types are refused (`400`), and the parser limits of the YAML files apply.
-- A body is at most 256 KiB (`413`), also with chunked encoding: the server counts while it reads.
+- A body is at most 256 KiB (`413`), also with chunked encoding: the server counts while it reads. A response that closes the connection shuts down the server's side first and drops what the client still sends for up to 2 seconds, so the client gets the `413` instead of a connection reset.
 - Bodies need `Content-Type: application/json` (`415`).
 - Paths and query strings are checked before routing: printable ASCII, no `%` in the path, no `.` or `..` segments, ids `[a-z0-9][a-z0-9_-]{0,63}`, names `[a-z0-9][a-z0-9_-]{0,31}`, lower-case query keys, each at most once.
 - Console commands sent to a service are 1 to 1024 characters without control characters.

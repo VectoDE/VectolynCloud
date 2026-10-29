@@ -87,7 +87,7 @@ Jeder Fehler hat denselben Body: `code`, `message` und bei Konfigurationsfehlern
 ### Strenge Eingaben
 
 - JSON wird nach denselben Regeln gelesen wie die YAML-Dateien. Unbekannte Felder, doppelte Felder und falsche Typen werden abgelehnt (`400`).
-- Ein Body hat höchstens 256 KiB (`413`), auch bei Chunked-Encoding. Der Server zählt beim Lesen mit.
+- Ein Body hat höchstens 256 KiB (`413`), auch bei Chunked-Encoding. Der Server zählt beim Lesen mit. Schließt eine Antwort die Verbindung, beendet der Server zuerst seine Senderichtung und verwirft bis zu 2 Sekunden lang, was der Client noch schickt. So kommt beim Client die `413` an statt eines Verbindungsabbruchs.
 - Bodys brauchen `Content-Type: application/json` (`415`).
 - Pfad und Query werden vor dem Routing geprüft: druckbares ASCII, kein `%` im Pfad, keine Segmente `.` oder `..`, IDs `[a-z0-9][a-z0-9_-]{0,63}`, Namen `[a-z0-9][a-z0-9_-]{0,31}`, Query-Schlüssel klein geschrieben und jeder nur einmal.
 - HTTP-Pipelining wird nicht unterstützt. Pro Verbindung läuft eine Anfrage nach der anderen.
