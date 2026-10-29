@@ -50,17 +50,17 @@ public final class ArchiveWriter implements Closeable {
         }
         FileChannel opened = FileChannel.open(file, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING,
                 LinkOption.NOFOLLOW_LINKS);
+        // One chain: closing the zip stream closes the buffer and the channel.
+        ZipOutputStream stream = new ZipOutputStream(
+                new BufferedOutputStream(Channels.newOutputStream(opened), 256 * 1024));
         try {
-            // One chain: closing the zip stream closes the buffer and the channel.
-            ZipOutputStream stream = new ZipOutputStream(
-                    new BufferedOutputStream(Channels.newOutputStream(opened), 256 * 1024));
             stream.setLevel(level);
-            this.channel = opened;
-            this.zip = stream;
-        } catch (RuntimeException | Error e) {
-            opened.close();
+        } catch (RuntimeException e) {
+            stream.close();
             throw e;
         }
+        this.channel = opened;
+        this.zip = stream;
     }
 
     /**
