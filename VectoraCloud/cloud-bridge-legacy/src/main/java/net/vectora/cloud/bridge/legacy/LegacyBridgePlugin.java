@@ -8,6 +8,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
+import java.util.logging.Level;
 import net.vectora.cloud.bridge.BridgeConnection;
 import net.vectora.cloud.bridge.BridgeSender;
 import net.vectora.cloud.bridge.KickCommandWatch;
@@ -16,9 +18,14 @@ import net.vectora.cloud.bridge.TickMeter;
 import net.vectora.cloud.client.CloudClientSettings;
 import net.vectora.protocol.ServiceId;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandMap;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.ConsoleCommandSender;
+import org.bukkit.command.ProxiedCommandSender;
 import org.bukkit.command.RemoteConsoleCommandSender;
+import org.bukkit.command.SimpleCommandMap;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -41,12 +48,13 @@ import org.bukkit.plugin.java.JavaPlugin;
  *   <li>Ready: the first server tick, which comes after "Done".</li>
  *   <li>Status: every {@value #STATUS_PERIOD_TICKS} ticks, and at once when a player joins or
  *       leaves. TPS and MSPT come from {@code ServerTickEndEvent}, as 1.8.8 has no TPS API.</li>
- *   <li>Network kicks: 1.8.8 has no kick cause, so the bridge reads the command line. A
- *       {@code /kick <player>} of the console, of RCON or of a player with
- *       {@value KickCommandWatch#PERMISSION} ({@link KickCommandWatch}, aliases of
- *       {@code commands.yml} included) followed by the kick of that player in the same tick is
- *       sent to the proxy as {@code NetworkKick}, which takes the player off the network. Command
- *       blocks are no source. The moderation uses {@link #networkKick}.</li>
+ *   <li>Network kicks: at the first tick, after the server registered its vanilla commands, the
+ *       bridge puts {@link NetworkKickCommand} in place of {@code kick} and {@code minecraft:kick}
+ *       in the command map. It kicks through {@link #networkKick}, which tells the proxy
+ *       ({@code NetworkKick}) to take the player off the network; only the console, RCON and a
+ *       player with {@value KickCommandWatch#PERMISSION} can use it, command blocks are no source.
+ *       The command line watch ({@link KickCommandWatch}) stays for selectors, which the vanilla
+ *       command resolves, for the {@code kick} commands of other plugins and as a fallback.</li>
  * </ul>
  *
  * <p>Network-wide player events ({@code PlayerJoin} and so on) are reported by the proxy only, so
@@ -61,6 +69,10 @@ public final class LegacyBridgePlugin extends JavaPlugin implements Listener {
     private final KickCommandWatch kicks = new KickCommandWatch();
     private BridgeSender sender;
     private ServiceId service;
+    /** The server's kick command, for selectors; {@code null} until replaced. */
+    private Command vanillaKick;
+    /** The player {@link #networkKick} is kicking right now; its kick event is already reported. */
+    private UUID kicking;
 
     @Override
     public void onEnable() {
@@ -82,6 +94,8 @@ public final class LegacyBridgePlugin extends JavaPlugin implements Listener {
                 (listener, event) -> report(-1), this, false);
         BridgeSender ready = sender;
         getServer().getScheduler().runTask(this, ready::markReady);
+        // The vanilla commands are registered after the plugins are enabled: replace kick at the first tick.
+        getServer().getScheduler().runTask(this, this::replaceKick);
         getServer().getScheduler().runTaskTimer(this, () -> report(0), STATUS_PERIOD_TICKS, STATUS_PERIOD_TICKS);
     }
 
@@ -120,6 +134,9 @@ public final class LegacyBridgePlugin extends JavaPlugin implements Listener {
     /** The kick a watched {@code /kick} causes goes to the proxy as a network kick. */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onKick(PlayerKickEvent event) {
+        if (event.getPlayer().getUniqueId().equals(kicking)) {
+            return;
+        }
         if (kicks.kicked(event.getPlayer().getName())) {
             report(event.getPlayer(), event.getReason());
         }
@@ -144,17 +161,61 @@ public final class LegacyBridgePlugin extends JavaPlugin implements Listener {
             return false;
         }
         report(player, reason);
-        player.kickPlayer(reason);
+        String text = reason.trim();
+        UUID before = kicking;
+        kicking = player.getUniqueId();
+        try {
+            // The vanilla text without a reason: the proxy waits for the report on it.
+            player.kickPlayer(text.isEmpty() ? NetworkKickCommand.VANILLA_KICK_TEXT : text);
+        } finally {
+            kicking = before;
+        }
         return true;
     }
 
+    /** Puts {@link NetworkKickCommand} in place of {@code kick} and {@code minecraft:kick}. */
+    private void replaceKick() {
+        try {
+            CommandMap map = getServer().getCommandMap();
+            if (!(map instanceof SimpleCommandMap)) {
+                throw new IllegalStateException("Unknown command map " + map.getClass().getName());
+            }
+            SimpleCommandMap simple = (SimpleCommandMap) map;
+            Map<String, Command> known = NetworkKickCommand.knownCommands(simple);
+            NetworkKickCommand command = new NetworkKickCommand(getServer()::getPlayerExact, this::networkKick,
+                    this::selectorKick);
+            // Gives the command its timings, which the map's dispatch needs, and vectoracloud:kick.
+            simple.register("vectoracloud", command);
+            vanillaKick = NetworkKickCommand.install(known, command);
+        } catch (RuntimeException e) {
+            getLogger().log(Level.WARNING, "The kick command could not be replaced: only the command line "
+                    + "watch turns a /kick into a network kick", e);
+        }
+    }
+
+    /** A selector goes to the server's kick command; the kicks it causes in this tick are network kicks. */
+    private boolean selectorKick(CommandSender issuer, String label, String[] args) {
+        Command vanilla = vanillaKick;
+        if (vanilla == null) {
+            issuer.sendMessage(ChatColor.RED + "Selectors are not available for /kick on this server");
+            return true;
+        }
+        kicks.expect(args[0]);
+        getServer().getScheduler().runTask(this, kicks::clear);
+        return vanilla.execute(issuer, label, args);
+    }
+
     /**
-     * Who issued a command, for {@link KickCommandWatch}.
+     * Who issued a command, for {@link KickCommandWatch}. A proxied sender ({@code /execute})
+     * counts as its caller.
      *
      * @param sender the sender of the command
      * @return the console, RCON, a player, or {@code OTHER} for command blocks and the rest
      */
     static KickCommandWatch.Source source(CommandSender sender) {
+        if (sender instanceof ProxiedCommandSender) {
+            return source(((ProxiedCommandSender) sender).getCaller());
+        }
         if (sender instanceof RemoteConsoleCommandSender) {
             return KickCommandWatch.Source.REMOTE_CONSOLE;
         }
@@ -174,6 +235,9 @@ public final class LegacyBridgePlugin extends JavaPlugin implements Listener {
      * @return see {@link KickCommandWatch#entitled}
      */
     static boolean entitled(CommandSender sender) {
+        if (sender instanceof ProxiedCommandSender) {
+            return entitled(((ProxiedCommandSender) sender).getCaller());
+        }
         KickCommandWatch.Source source = source(sender);
         return KickCommandWatch.entitled(source,
                 source == KickCommandWatch.Source.PLAYER && sender.hasPermission(KickCommandWatch.PERMISSION));
@@ -183,8 +247,8 @@ public final class LegacyBridgePlugin extends JavaPlugin implements Listener {
         if (sender == null) {
             return;
         }
-        boolean permitted = issuer instanceof Player && issuer.hasPermission(KickCommandWatch.PERMISSION);
-        if (kicks.command(line, source(issuer), permitted, aliases())) {
+        KickCommandWatch.Source source = source(issuer);
+        if (kicks.command(line, source, source == KickCommandWatch.Source.PLAYER && entitled(issuer), aliases())) {
             getServer().getScheduler().runTask(this, kicks::clear);
         }
     }
