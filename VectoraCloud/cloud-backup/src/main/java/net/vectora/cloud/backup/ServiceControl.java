@@ -53,7 +53,8 @@ public interface ServiceControl {
             throws IOException, InterruptedException;
 
     /**
-     * Blocks starts of a stopped service, for a restore. Must fail if the service is not
+     * Blocks starts of a stopped service, while a backup copies it and during a restore. Must fail
+     * if the service is not
      * {@link State#STOPPED}, checked under the same lock that guards starts.
      *
      * @param serviceId the id

@@ -54,8 +54,8 @@ Symbolic links are never followed and never stored. Files whose names would not 
 
 | Service state | What happens | `consistency` in the manifest |
 |---|---|---|
-| stopped | files are copied directly; while the copy runs, the node must not start it | `offline` |
-| running, a Minecraft server | `save-off`, then `save-all flush`, copy, then always `save-on` (also after errors) | `saved` |
+| stopped | files are copied directly, held stopped (`ServiceControl.holdStopped`) so it cannot start during the copy; one that starts in between is left out like a starting one | `offline` |
+| running, a Minecraft server | `save-off`, then `save-all flush`, copy, then always `save-on` (also after errors and when the backup is interrupted) | `saved` |
 | running, a proxy (no worlds) | copied as it is | `live` |
 | starting or stopping | left out with a warning; a strict backup fails | `skipped` |
 | no runtime folder yet | nothing to copy | `missing` |
@@ -197,7 +197,7 @@ Alias `backups`. Backup ids and service names complete with Tab. Texts exist in 
 | `BackupTargets` | `List<BackupTarget> staticServices()` | the static services: id, group, Minecraft version, runtime folder, and whether it saves worlds (Paper and 1.8.8: yes, proxies: no) |
 | `ServiceControl` | `State state(id)` | `STOPPED`, `RUNNING` or `BUSY` (starting, stopping) |
 | | `boolean execute(id, command, confirmation, timeout)` | sends a console command and waits for a log line that matches `confirmation`. It must listen before it sends. |
-| | `Hold holdStopped(id)` | blocks starts of a stopped service until `close()`, fails with `BackupException` if it is not stopped |
+| | `Hold holdStopped(id)` | blocks starts of a stopped service until `close()`, fails with `BackupException` if it is not stopped. Used for the copy of a stopped service and for a restore (whose safety backup does not ask a second time) |
 | `DatabaseSource` | `Optional<DatabaseAccess> access()` | usually `DatabaseAccess.of(cloud.yml database section, secrets/vectora.env, installed MariaDB folder)` |
 
 The node then builds one `BackupService`, starts a `BackupScheduler`, registers `BackupCommands` and may call `BackupConfigFile.writeIfMissing()` during setup.

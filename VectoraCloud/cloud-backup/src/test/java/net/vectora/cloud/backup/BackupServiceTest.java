@@ -141,6 +141,93 @@ class BackupServiceTest {
     }
 
     @Test
+    void interruptedSaveStillTurnsSavingBackOn() throws Exception {
+        test.control.state("lobby-1", State.RUNNING);
+        List<String> sent = new java.util.ArrayList<>();
+        ServiceControl interrupting = new Delegating(test.control) {
+            @Override
+            public boolean execute(String serviceId, String command, java.util.function.Predicate<String> confirmation,
+                                   Duration timeout) throws java.io.IOException, InterruptedException {
+                sent.add(command);
+                if (command.equals("save-all flush")) {
+                    throw new InterruptedException("cancelled");
+                }
+                // A real wait for an answer fails at once while the thread is interrupted.
+                if (Thread.currentThread().isInterrupted()) {
+                    throw new InterruptedException("still interrupted");
+                }
+                return super.execute(serviceId, command, confirmation, timeout);
+            }
+        };
+        BackupService cancelled = test.builder().control(interrupting).build();
+
+        assertThrows(InterruptedException.class,
+                () -> cancelled.create(BackupRequest.of(BackupReason.MANUAL, Set.of("lobby-1"))));
+        assertEquals(List.of("save-off", "save-all flush", "save-on"), sent);
+        assertEquals("lobby-1: save-on", test.control.commands().getLast());
+        assertNoArchives();
+    }
+
+    @Test
+    void stoppedServicesAreHeldStoppedWhileTheyAreCopied() throws Exception {
+        List<String> holds = new java.util.ArrayList<>();
+        ServiceControl recording = new Delegating(test.control) {
+            @Override
+            public Hold holdStopped(String serviceId) throws BackupException {
+                holds.add(serviceId);
+                if (serviceId.equals("survival-1")) {
+                    // It was started between the state query and the hold.
+                    throw new BackupException(BackupException.Reason.SERVICE_RUNNING, "started");
+                }
+                return super.holdStopped(serviceId);
+            }
+        };
+        BackupService held = test.builder().control(recording).build();
+
+        BackupInfo info = held.create(BackupRequest.all(BackupReason.SCHEDULED));
+        assertEquals(List.of("lobby-1", "survival-1"), holds);
+        assertEquals("offline", info.manifest().orElseThrow().service("lobby-1").orElseThrow().consistency());
+        assertEquals("skipped", info.manifest().orElseThrow().service("survival-1").orElseThrow().consistency());
+        assertTrue(info.warnings().getFirst().contains("survival-1 started"), info.warnings().toString());
+        assertTrue(test.control.held().isEmpty(), "every hold is released");
+        // A strict backup fails instead.
+        assertEquals(BackupException.Reason.SERVICE_BUSY, assertThrows(BackupException.class,
+                () -> held.create(BackupRequest.of(BackupReason.MANUAL, Set.of("survival-1")))).reason());
+
+        // A restore holds its service once; the safety backup does not ask again.
+        holds.clear();
+        held.restore(info.id(), "lobby-1");
+        assertEquals(List.of("lobby-1"), holds);
+        assertTrue(test.control.held().isEmpty());
+    }
+
+    /** Passes everything to another control; tests override single methods. */
+    private static class Delegating implements ServiceControl {
+
+        private final ServiceControl inner;
+
+        Delegating(ServiceControl inner) {
+            this.inner = inner;
+        }
+
+        @Override
+        public State state(String serviceId) {
+            return inner.state(serviceId);
+        }
+
+        @Override
+        public boolean execute(String serviceId, String command, java.util.function.Predicate<String> confirmation,
+                               Duration timeout) throws java.io.IOException, InterruptedException {
+            return inner.execute(serviceId, command, confirmation, timeout);
+        }
+
+        @Override
+        public Hold holdStopped(String serviceId) throws BackupException {
+            return inner.holdStopped(serviceId);
+        }
+    }
+
+    @Test
     void namedServicesMakeTheBackupStrict() throws Exception {
         test.control.state("lobby-1", State.RUNNING).server((id, command) -> null);
         BackupException e = assertThrows(BackupException.class,

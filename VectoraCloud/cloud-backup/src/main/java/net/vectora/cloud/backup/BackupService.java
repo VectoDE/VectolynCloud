@@ -126,6 +126,8 @@ public final class BackupService {
     private final boolean windows;
     private final ReentrantLock lock = new ReentrantLock();
     private final SecureRandom random = new SecureRandom();
+    /** The service a restore holds stopped right now; only touched under {@link #lock}. */
+    private String restoring;
 
     private BackupService(Builder builder) {
         this.home = builder.home;
@@ -332,9 +334,18 @@ public final class BackupService {
             return leaveOut(target, run, BackupException.Reason.SERVICE_BUSY, id + " is starting or stopping");
         }
         if (state == ServiceControl.State.STOPPED) {
-            copyService(writer, target, run);
-            if (run.h2) {
-                dumpH2(writer, target, run);
+            ServiceControl.Hold hold;
+            try {
+                // The service must not start while its files are copied. A restore holds it already.
+                hold = id.equals(restoring) ? () -> { } : control.holdStopped(id);
+            } catch (BackupException e) {
+                return leaveOut(target, run, BackupException.Reason.SERVICE_BUSY, id + " started during the backup");
+            }
+            try (hold) {
+                copyService(writer, target, run);
+                if (run.h2) {
+                    dumpH2(writer, target, run);
+                }
             }
             return entry(target, Consistency.OFFLINE);
         }
@@ -347,16 +358,18 @@ public final class BackupService {
         }
         Duration timeout = run.settings.saveTimeout().duration();
         String failure = null;
+        // save-on follows in every case once save-off may have reached the server, also when
+        // waiting for a confirmation is interrupted.
         try {
-            if (!control.execute(id, SaveCommands.SAVE_OFF, SaveCommands.SAVE_OFF_DONE, timeout)) {
-                failure = id + " did not confirm save-off within " + timeout.toSeconds() + " s";
-            } else if (!control.execute(id, SaveCommands.SAVE_ALL_FLUSH, SaveCommands.SAVE_ALL_DONE, timeout)) {
-                failure = id + " did not confirm save-all flush within " + timeout.toSeconds() + " s";
+            try {
+                if (!control.execute(id, SaveCommands.SAVE_OFF, SaveCommands.SAVE_OFF_DONE, timeout)) {
+                    failure = id + " did not confirm save-off within " + timeout.toSeconds() + " s";
+                } else if (!control.execute(id, SaveCommands.SAVE_ALL_FLUSH, SaveCommands.SAVE_ALL_DONE, timeout)) {
+                    failure = id + " did not confirm save-all flush within " + timeout.toSeconds() + " s";
+                }
+            } catch (IOException e) {
+                failure = id + " did not take the save commands: " + e.getMessage();
             }
-        } catch (IOException e) {
-            failure = id + " did not take the save commands: " + e.getMessage();
-        }
-        try {
             if (failure != null) {
                 return leaveOut(target, run, BackupException.Reason.SAVE_FAILED, failure);
             }
@@ -370,13 +383,28 @@ public final class BackupService {
         }
     }
 
-    private void saveOn(BackupTarget target, Run run, Duration timeout) throws InterruptedException {
+    /**
+     * Sends {@code save-on}. A pending interrupt is put aside for this one command, so the server
+     * never stays without automatic saving because a backup was cancelled; it is restored after.
+     */
+    private void saveOn(BackupTarget target, Run run, Duration timeout) {
+        boolean interrupted = Thread.interrupted();
         try {
             if (!control.execute(target.serviceId(), SaveCommands.SAVE_ON, SaveCommands.SAVE_ON_DONE, timeout)) {
                 run.warnings.add(target.serviceId() + " did not confirm save-on; check it with the console");
             }
         } catch (IOException e) {
             run.warnings.add(target.serviceId() + " did not take save-on: " + e.getMessage());
+        } catch (InterruptedException e) {
+            interrupted = true;
+            run.warnings.add("the wait for save-on of " + target.serviceId() + " was interrupted; check it with the "
+                    + "console");
+            LOG.log(System.Logger.Level.WARNING, "Interrupted while {0} turned saving back on; check it",
+                    target.serviceId());
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 
@@ -660,8 +688,10 @@ public final class BackupService {
                     throw new BackupException(BackupException.Reason.SERVICE_RUNNING,
                             serviceId + " must be stopped before a restore");
                 }
+                restoring = serviceId;
                 return restoreHeld(backupId, file, target);
             } finally {
+                restoring = null;
                 hold.close();
             }
         } finally {
