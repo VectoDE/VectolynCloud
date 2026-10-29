@@ -13,6 +13,7 @@ import net.vectora.cloud.template.PlaceholderValues;
 import net.vectora.cloud.template.ProxyBackend;
 import net.vectora.cloud.template.ProxyServerList;
 import net.vectora.cloud.template.ServerPlatform;
+import net.vectora.cloud.template.TemplateInstaller;
 
 /**
  * Builds the {@code {{VECTORA_*}}} values for one service, as listed in
@@ -51,7 +52,8 @@ final class ServicePlaceholders {
     static PlaceholderValues build(ServiceSpec spec, ServerPlatform platform, ConfigSnapshot snapshot, NodeConfig node,
                                    EnvFile secrets, Collection<ProxyBackend> backends, List<String> tryOrder,
                                    List<PlaceholderContributor> contributors) throws ServiceException {
-        Map<String, String> values = new HashMap<>(ServiceSecrets.placeholders(platform, secrets));
+        Map<String, String> values = new HashMap<>(ServiceSecrets.placeholders(platform, secrets,
+                TemplateInstaller.runsFloodgate(spec.templateDir(), platform)));
         DatabaseConfig db = snapshot.cloud().database();
         values.put("VECTORA_DB_HOST", db.host());
         values.put("VECTORA_DB_PORT", Integer.toString(db.port()));

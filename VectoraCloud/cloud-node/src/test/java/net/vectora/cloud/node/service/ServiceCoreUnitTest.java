@@ -303,6 +303,9 @@ class ServiceCoreUnitTest {
         // Counter-check: a platform that does not need the key is fine without it.
         assertEquals(Set.of(ServiceSecrets.DB_PASSWORD),
                 ServiceSecrets.placeholders(ServerPlatform.NONE, noFloodgate).keySet());
+        // A Paper template without Floodgate's folder neither sees nor needs the key.
+        assertEquals(Set.of(ServiceSecrets.FORWARDING, ServiceSecrets.MANAGEMENT, ServiceSecrets.DB_PASSWORD),
+                ServiceSecrets.placeholders(ServerPlatform.PAPER, noFloodgate, false).keySet());
         assertThrows(ServiceException.class, () -> ServiceSecrets.placeholders(ServerPlatform.VELOCITY_LEGACY,
                 noFloodgate), "no legacy secret at all");
         assertThrows(ServiceException.class, () -> ServiceSecrets.legacyForwardingFor(ServerPlatform.PANDASPIGOT,

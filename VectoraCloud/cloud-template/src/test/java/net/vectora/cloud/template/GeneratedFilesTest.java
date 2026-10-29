@@ -196,6 +196,8 @@ class GeneratedFilesTest {
     void installRendersAndGeneratesPerPlatform() throws Exception {
         Path template = Files.createTempDirectory(runtime, "template");
         Files.writeString(template.resolve("server.properties"), "server-port={{VECTORA_SERVER_PORT}}\n");
+        Files.createDirectories(template.resolve("plugins/floodgate"));
+        Files.writeString(template.resolve("plugins/floodgate/config.yml"), "key-file-name: key.pem\n");
         Path out = runtime.resolve("out");
         PlaceholderValues values = PlaceholderValues.of(Map.of(
                 "VECTORA_SERVER_PORT", "25566",
@@ -212,8 +214,31 @@ class GeneratedFilesTest {
     }
 
     @Test
+    void aTemplateWithoutFloodgateGetsNoKeyAndNeedsNone() throws Exception {
+        // A custom Paper template that does not ship Floodgate's folder runs no Floodgate.
+        Path template = Files.createTempDirectory(runtime, "template");
+        Files.writeString(template.resolve("server.properties"), "server-port={{VECTORA_SERVER_PORT}}\n");
+        Path out = runtime.resolve("out");
+        PlaceholderValues values = PlaceholderValues.of(Map.of("VECTORA_SERVER_PORT", "25566"));
+
+        RenderReport report = TemplateInstaller.install(template, out, ServerPlatform.PAPER, values, true);
+
+        assertFalse(Files.exists(out.resolve("plugins/floodgate/key.pem")));
+        assertFalse(Files.exists(out.resolve("plugins/floodgate")), "not even the folder");
+        assertEquals(java.util.List.of("eula.txt"), report.generated());
+
+        // Counter-check: a file named like the folder is no Floodgate folder either.
+        Files.createDirectories(template.resolve("plugins"));
+        Files.writeString(template.resolve("plugins/floodgate"), "not a folder");
+        TemplateInstaller.install(template, runtime.resolve("out2"), ServerPlatform.PAPER,
+                PlaceholderValues.of(Map.of("VECTORA_SERVER_PORT", "25566")), true);
+        assertFalse(Files.exists(runtime.resolve("out2/plugins/floodgate/key.pem")));
+    }
+
+    @Test
     void installOfTheProxyWritesTheForwardingSecretAndNoEula() throws Exception {
         Path template = Files.createTempDirectory(runtime, "template");
+        Files.createDirectories(template.resolve("plugins/floodgate"));
         Path out = runtime.resolve("out");
         PlaceholderValues values = PlaceholderValues.of(Map.of(
                 "VECTORA_FORWARDING_SECRET", FWD,
@@ -261,6 +286,7 @@ class GeneratedFilesTest {
     @Test
     void installWithoutARequiredSecretFails() throws Exception {
         Path template = Files.createTempDirectory(runtime, "template");
+        Files.createDirectories(template.resolve("config/floodgate"));
         TemplateException e = assertThrows(TemplateException.class, () -> TemplateInstaller.install(
                 template, runtime.resolve("out"), ServerPlatform.FABRIC, PlaceholderValues.none(), false));
         assertTrue(e.getMessage().contains("VECTORA_FLOODGATE_KEY_B64"), e.getMessage());

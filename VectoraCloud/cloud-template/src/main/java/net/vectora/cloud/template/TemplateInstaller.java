@@ -1,10 +1,13 @@
 package net.vectora.cloud.template;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Creates or refreshes the runtime folder of one server: renders its template and writes the
@@ -24,7 +27,8 @@ import java.util.Objects;
  *   <li>{@link ServerPlatform#NONE}: nothing.</li>
  * </ul>
  *
- * <p>The Floodgate key comes from {@value GeneratedFiles#FLOODGATE_PLACEHOLDER}. Secrets are checked before
+ * <p>The Floodgate key comes from {@value GeneratedFiles#FLOODGATE_PLACEHOLDER} and is only written
+ * for a template that ships Floodgate's folder ({@link #runsFloodgate}). Secrets are checked before
  * anything is written.
  */
 public final class TemplateInstaller {
@@ -62,7 +66,7 @@ public final class TemplateInstaller {
             }
         }
         String floodgateKey = null;
-        if (platform.floodgateKeyPath().isPresent()) {
+        if (runsFloodgate(template, platform)) {
             String path = platform.floodgateKeyPath().get();
             floodgateKey = required(values, GeneratedFiles.FLOODGATE_PLACEHOLDER, path);
             GeneratedFiles.decodeFloodgateKey(path, floodgateKey);
@@ -82,6 +86,25 @@ public final class TemplateInstaller {
         }
         generated.sort(null);
         return report.withGenerated(generated);
+    }
+
+    /**
+     * Whether a template runs Floodgate: its platform can (it has a key path) and the template ships
+     * Floodgate's folder there ({@code plugins/floodgate/} or {@code config/floodgate/}, a real folder,
+     * not a link). Only then does the runtime folder get the key; a custom template without
+     * Floodgate never holds it.
+     *
+     * @param template the template folder
+     * @param platform its platform
+     * @return whether {@code key.pem} is written
+     */
+    public static boolean runsFloodgate(Path template, ServerPlatform platform) {
+        Optional<String> key = platform.floodgateKeyPath();
+        if (key.isEmpty()) {
+            return false;
+        }
+        Path folder = template.resolve(key.get()).getParent();
+        return folder != null && Files.isDirectory(folder, LinkOption.NOFOLLOW_LINKS);
     }
 
     private static String required(PlaceholderValues values, String name, String file) throws TemplateException {
