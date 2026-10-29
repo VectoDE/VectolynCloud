@@ -40,12 +40,12 @@ class DownloadClientTest {
         assertArrayEquals("hello".getBytes(StandardCharsets.UTF_8), client(transport).fetchBytes(URI.create(API), HOSTS, 100));
         String agent = transport.requestHeaders().get(0).get("User-Agent");
         assertTrue(agent.startsWith("VectoraCloud/"), agent);
-        assertTrue(agent.endsWith(" (+https://github.com/VectoDE/Vectora-Network)"), agent);
+        assertTrue(agent.endsWith(" (+https://github.com/VectoDE/VectoraCloud)"), agent);
     }
 
     @Test
     void userAgentHasTheDocumentedShape() {
-        assertEquals("VectoraCloud/1.2.3 (+https://github.com/VectoDE/Vectora-Network)", DownloadSettings.userAgent("1.2.3"));
+        assertEquals("VectoraCloud/1.2.3 (+https://github.com/VectoDE/VectoraCloud)", DownloadSettings.userAgent("1.2.3"));
     }
 
     @Test

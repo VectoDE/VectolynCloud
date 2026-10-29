@@ -36,8 +36,8 @@ FROM eclipse-temurin:25-jre-noble@sha256:ce8543ddd3070ccbeaac2106a74c9387ddeb8d4
 ARG VERSION=dev
 LABEL org.opencontainers.image.title="VectoraCloud" \
       org.opencontainers.image.description="Cloud for a self-hosted Minecraft network (Java and Bedrock)" \
-      org.opencontainers.image.source="https://github.com/VectoDE/Vectora-Network" \
-      org.opencontainers.image.documentation="https://github.com/VectoDE/Vectora-Network/blob/main/docs/cloud/operations.md" \
+      org.opencontainers.image.source="https://github.com/VectoDE/VectoraCloud" \
+      org.opencontainers.image.documentation="https://github.com/VectoDE/VectoraCloud/blob/main/docs/cloud/operations.md" \
       org.opencontainers.image.licenses="GPL-3.0-only" \
       org.opencontainers.image.version="${VERSION}"
 

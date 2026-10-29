@@ -3,7 +3,7 @@
 [Deutsch](FAQ-DE)
 
 **Is there an official Vectora server I can join?**
-No, and there won't be one. Vectora is a kit: we publish the code and releases, and every operator runs their own network. The project is in stage 2 of 8 (see [Roadmap](Roadmap)); releases are announced in [Discussions → Announcements](https://github.com/VectoDE/Vectora-Network/discussions/categories/announcements).
+No, and there won't be one. Vectora is a kit: we publish the code and releases, and every operator runs their own network. The project is in stage 2 of 8 (see [Roadmap](Roadmap)); releases are announced in [Discussions → Announcements](https://github.com/VectoDE/VectoraCloud/discussions/categories/announcements).
 
 **Which Minecraft versions can play?**
 The goal is Java 1.8 to 26.3 plus Bedrock. See [Crossplay](Crossplay) for what works today.
@@ -30,6 +30,6 @@ Yes, that is what it is for, within the terms of GPL-3.0. If you distribute a mo
 No. The planned store sells cosmetics only and follows the Minecraft EULA. We develop it against Stripe test mode. Each operator connects their own Stripe account and is responsible for the legal side of taking real payments.
 
 **Where do I report a security problem?**
-Privately, see [SECURITY.md](https://github.com/VectoDE/Vectora-Network/blob/main/SECURITY.md).
+Privately, see [SECURITY.md](https://github.com/VectoDE/VectoraCloud/blob/main/SECURITY.md).
 
-More questions: [Q&A in Discussions](https://github.com/VectoDE/Vectora-Network/discussions/categories/q-a).
+More questions: [Q&A in Discussions](https://github.com/VectoDE/VectoraCloud/discussions/categories/q-a).

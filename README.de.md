@@ -1,10 +1,10 @@
-# Vectora Network
+# VectoraCloud
 
-[![CI](https://github.com/VectoDE/Vectora-Network/actions/workflows/ci.yml/badge.svg)](https://github.com/VectoDE/Vectora-Network/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/VectoDE/Vectora-Network/actions/workflows/codeql.yml/badge.svg)](https://github.com/VectoDE/Vectora-Network/actions/workflows/codeql.yml)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/VectoDE/Vectora-Network/badge)](https://scorecard.dev/viewer/?uri=github.com/VectoDE/Vectora-Network)
+[![CI](https://github.com/VectoDE/VectoraCloud/actions/workflows/ci.yml/badge.svg)](https://github.com/VectoDE/VectoraCloud/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/VectoDE/VectoraCloud/actions/workflows/codeql.yml/badge.svg)](https://github.com/VectoDE/VectoraCloud/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/VectoDE/VectoraCloud/badge)](https://scorecard.dev/viewer/?uri=github.com/VectoDE/VectoraCloud)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/16026/badge)](https://www.bestpractices.dev/projects/16026)
-[![Lizenz: GPL-3.0](https://img.shields.io/github/license/VectoDE/Vectora-Network)](LICENSE)
+[![Lizenz: GPL-3.0](https://img.shields.io/github/license/VectoDE/VectoraCloud)](LICENSE)
 
 [English](README.md) · **Deutsch**
 
@@ -16,10 +16,10 @@ Das langfristige Ziel: Du startest `java -jar VectoraCloud.jar` unter Windows, L
 
 ## Stand
 
-**Etappe 2 von 8: VectoraCloud-Kern.** Etappe 1, das Fundament, ist fertig und als signiertes Pre-Release [v0.1.0](https://github.com/VectoDE/Vectora-Network/releases/tag/v0.1.0) erschienen. In Etappe 2 entsteht die Cloud Modul für Modul; die Aufgabenliste steht in [#11](https://github.com/VectoDE/Vectora-Network/issues/11), der Gesamtplan auf der Roadmap. Ein nutzbares Cloud-Release gibt es noch nicht, v0.1.0 enthält nur das Fundament. Vieles unter *Architektur* ist noch Plan, kein fertiger Code.
+**Etappe 2 von 8: VectoraCloud-Kern.** Etappe 1, das Fundament, ist fertig und als signiertes Pre-Release [v0.1.0](https://github.com/VectoDE/VectoraCloud/releases/tag/v0.1.0) erschienen. In Etappe 2 entsteht die Cloud Modul für Modul; die Aufgabenliste steht in [#11](https://github.com/VectoDE/VectoraCloud/issues/11), der Gesamtplan auf der Roadmap. Ein nutzbares Cloud-Release gibt es noch nicht, v0.1.0 enthält nur das Fundament. Vieles unter *Architektur* ist noch Plan, kein fertiger Code.
 
 - Roadmap und Fortschritt: [Vectora Roadmap](https://github.com/users/VectoDE/projects/11)
-- Aktuelle Etappe: [#11 Stage 2: VectoraCloud core](https://github.com/VectoDE/Vectora-Network/issues/11)
+- Aktuelle Etappe: [#11 Stage 2: VectoraCloud core](https://github.com/VectoDE/VectoraCloud/issues/11)
 
 | Etappe | Inhalt |
 |---|---|
@@ -61,12 +61,12 @@ Das langfristige Ziel: Du startest `java -jar VectoraCloud.jar` unter Windows, L
 
 Fremdsoftware beschränkt sich auf das Nötigste: Paper, Velocity, Fabric und Fabric API, Geyser, Floodgate, ViaVersion, ViaBackwards, ViaRewind, die Performance-Mods Lithium, FerriteCore, ServerCore und FabricProxy-Lite sowie MariaDB/MySQL.
 
-Mehr dazu: [Architektur im Wiki](https://github.com/VectoDE/Vectora-Network/wiki/Architecture-DE).
+Mehr dazu: [Architektur im Wiki](https://github.com/VectoDE/VectoraCloud/wiki/Architecture-DE).
 
 ## Aufbau des Repositorys
 
 ```
-Vectora-Network/
+VectoraCloud/
   cloud/                  VectoraCloud, je Teil ein Gradle-Modul: launcher, node, config, api,
                           console, setup, database, download, template, network, backup, monitor
     dist/                 Startskripte, Docker, Pterodactyl-Egg, systemd-Unit, vectora.env.example
@@ -134,8 +134,8 @@ Unter Windows `gradlew.bat build`. Der Gradle-Wrapper lädt Gradle selbst herunt
 
 ## Doku und Community
 
-- [Wiki](https://github.com/VectoDE/Vectora-Network/wiki) (Deutsch und Englisch, Quellen in `docs/wiki/`)
-- [Discussions](https://github.com/VectoDE/Vectora-Network/discussions) für Fragen, Ideen und Ankündigungen
+- [Wiki](https://github.com/VectoDE/VectoraCloud/wiki) (Deutsch und Englisch, Quellen in `docs/wiki/`)
+- [Discussions](https://github.com/VectoDE/VectoraCloud/discussions) für Fragen, Ideen und Ankündigungen
 - [Mitmachen](CONTRIBUTING.de.md) · [Verhaltenskodex](CODE_OF_CONDUCT.md) · [Sicherheit](SECURITY.md)
 
 ## Lizenz

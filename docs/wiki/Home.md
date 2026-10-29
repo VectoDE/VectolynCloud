@@ -1,4 +1,4 @@
-# Vectora Network Wiki
+# VectoraCloud Wiki
 
 **Choose your language / Sprache wählen:** [English](Overview) · [Deutsch](Overview-DE)
 
@@ -18,5 +18,5 @@ Vectora ist ein Open-Source-Baukasten unter GPL-3.0, mit dem du dein eigenes Min
 | [FAQ](FAQ) | [FAQ](FAQ-DE) |
 | [Contributing](Contributing) | [Mitmachen](Contributing-DE) |
 
-This wiki is generated from [`docs/wiki/`](https://github.com/VectoDE/Vectora-Network/tree/main/docs/wiki). Edits made here get overwritten; please open a pull request instead.
+This wiki is generated from [`docs/wiki/`](https://github.com/VectoDE/VectoraCloud/tree/main/docs/wiki). Edits made here get overwritten; please open a pull request instead.
 Dieses Wiki entsteht aus `docs/wiki/`. Änderungen direkt im Wiki werden überschrieben, bitte stattdessen einen Pull Request öffnen.

@@ -2,11 +2,11 @@
 
 [Deutsch](Operations-DE)
 
-How to run VectoraCloud on your own machine. We do not host anything; every release only contains files you run yourself. The full page with every detail is [docs/cloud/operations.md](https://github.com/VectoDE/Vectora-Network/blob/main/docs/cloud/operations.md).
+How to run VectoraCloud on your own machine. We do not host anything; every release only contains files you run yourself. The full page with every detail is [docs/cloud/operations.md](https://github.com/VectoDE/VectoraCloud/blob/main/docs/cloud/operations.md).
 
 ## Downloads
 
-Each [release](https://github.com/VectoDE/Vectora-Network/releases) contains:
+Each [release](https://github.com/VectoDE/VectoraCloud/releases) contains:
 
 - `VectoraCloud.jar`
 - `VectoraCloud-<version>-windows.zip` with `start.bat` and `start.ps1`
@@ -15,7 +15,7 @@ Each [release](https://github.com/VectoDE/Vectora-Network/releases) contains:
 
 Nothing else: the plugin jars are not part of a release.
 
-The container image is `ghcr.io/vectode/vectora-cloud:<version>`; `latest` points to the newest stable release only. Dockerfile, `compose.yml`, the systemd unit and the Pterodactyl egg are in [`cloud/dist/`](https://github.com/VectoDE/Vectora-Network/tree/main/cloud/dist).
+The container image is `ghcr.io/vectode/vectora-cloud:<version>`; `latest` points to the newest stable release only. Dockerfile, `compose.yml`, the systemd unit and the Pterodactyl egg are in [`cloud/dist/`](https://github.com/VectoDE/VectoraCloud/tree/main/cloud/dist).
 
 ## Where it runs
 
@@ -38,8 +38,10 @@ Without a terminal (systemd, Docker, Pterodactyl) the cloud needs a setup file: 
 ```sh
 sha256sum --check --ignore-missing SHA256SUMS
 cosign verify-blob VectoraCloud.jar --bundle VectoraCloud.jar.sigstore.json \
-  --certificate-identity "https://github.com/VectoDE/Vectora-Network/.github/workflows/release.yml@refs/tags/<tag>" \
+  --certificate-identity "https://github.com/VectoDE/VectoraCloud/.github/workflows/release.yml@refs/tags/<tag>" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
-gh attestation verify VectoraCloud.jar --repo VectoDE/Vectora-Network
-gh attestation verify oci://ghcr.io/vectode/vectora-cloud:<version> --repo VectoDE/Vectora-Network
+gh attestation verify VectoraCloud.jar --repo VectoDE/VectoraCloud
+gh attestation verify oci://ghcr.io/vectode/vectora-cloud:<version> --repo VectoDE/VectoraCloud
 ```
+
+This applies to every release after v0.1.0. v0.1.0 was signed before the repository was renamed from `VectoDE/Vectora-Network`; for it, use `VectoDE/Vectora-Network` in the certificate identity and in `--repo`. Details: [docs/cloud/operations.md](https://github.com/VectoDE/VectoraCloud/blob/main/docs/cloud/operations.md#verifying-a-release).

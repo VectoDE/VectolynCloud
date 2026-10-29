@@ -1,6 +1,6 @@
 name: Wiki sync
 
-# Mirrors docs/wiki/** into the GitHub wiki (VectoDE/Vectora-Network.wiki.git).
+# Mirrors docs/wiki/** into the GitHub wiki (VectoDE/VectoraCloud.wiki.git).
 # The wiki git repository only exists after the first page has been created
 # in the web UI once. Until then this workflow fails at the clone step.
 

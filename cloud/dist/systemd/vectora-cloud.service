@@ -17,7 +17,7 @@
 
 [Unit]
 Description=VectoraCloud (Minecraft network cloud)
-Documentation=https://github.com/VectoDE/Vectora-Network/blob/main/docs/cloud/operations.md
+Documentation=https://github.com/VectoDE/VectoraCloud/blob/main/docs/cloud/operations.md
 Wants=network-online.target
 After=network-online.target
 # An external MariaDB on the same host should be up first; harmless if there is none.

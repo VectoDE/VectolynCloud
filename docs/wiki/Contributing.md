@@ -2,7 +2,7 @@
 
 [Deutsch](Contributing-DE)
 
-The full rules are in [CONTRIBUTING.md](https://github.com/VectoDE/Vectora-Network/blob/main/CONTRIBUTING.md). The short version:
+The full rules are in [CONTRIBUTING.md](https://github.com/VectoDE/VectoraCloud/blob/main/CONTRIBUTING.md). The short version:
 
 1. Look at the [roadmap](https://github.com/users/VectoDE/projects/11) and pick or open an issue. Issues labelled `good first issue` are meant for newcomers.
 2. For anything bigger than a small fix, wait for a reply on the issue before you start.
@@ -18,6 +18,6 @@ Things that matter in this project:
 
 ## Editing this wiki
 
-The wiki is generated from [`docs/wiki/`](https://github.com/VectoDE/Vectora-Network/tree/main/docs/wiki) in the repository. Edit the files there through a pull request. English pages have no suffix, German pages end in `-DE`. A workflow copies them into the wiki after a merge to `main`; direct edits in the wiki get overwritten.
+The wiki is generated from [`docs/wiki/`](https://github.com/VectoDE/VectoraCloud/tree/main/docs/wiki) in the repository. Edit the files there through a pull request. English pages have no suffix, German pages end in `-DE`. A workflow copies them into the wiki after a merge to `main`; direct edits in the wiki get overwritten.
 
-Questions: [Discussions](https://github.com/VectoDE/Vectora-Network/discussions).
+Questions: [Discussions](https://github.com/VectoDE/VectoraCloud/discussions).

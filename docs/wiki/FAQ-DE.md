@@ -3,7 +3,7 @@
 [English](FAQ)
 
 **Gibt es einen offiziellen Vectora-Server?**
-Nein, und es wird auch keinen geben. Vectora ist ein Baukasten: Wir veröffentlichen Code und Releases, jeder Betreiber betreibt sein eigenes Netzwerk. Das Projekt steht bei Etappe 2 von 8 (siehe [Roadmap](Roadmap-DE)); Releases kündigen wir unter [Discussions → Announcements](https://github.com/VectoDE/Vectora-Network/discussions/categories/announcements) an.
+Nein, und es wird auch keinen geben. Vectora ist ein Baukasten: Wir veröffentlichen Code und Releases, jeder Betreiber betreibt sein eigenes Netzwerk. Das Projekt steht bei Etappe 2 von 8 (siehe [Roadmap](Roadmap-DE)); Releases kündigen wir unter [Discussions → Announcements](https://github.com/VectoDE/VectoraCloud/discussions/categories/announcements) an.
 
 **Welche Minecraft-Versionen können spielen?**
 Ziel sind Java 1.8 bis 26.3 und Bedrock. Was heute schon geht, steht unter [Crossplay](Crossplay-DE).
@@ -30,6 +30,6 @@ Ja, genau dafür ist er da, im Rahmen der GPL-3.0. Gibst du eine geänderte Vers
 Nein. Der geplante Store verkauft nur Kosmetik und hält sich an die Minecraft-EULA. Wir entwickeln ihn gegen den Stripe-Testmodus. Jeder Betreiber bindet sein eigenes Stripe-Konto an und ist selbst dafür verantwortlich, echte Zahlungen rechtlich sauber abzuwickeln.
 
 **Wo melde ich eine Sicherheitslücke?**
-Privat, siehe [SECURITY.md](https://github.com/VectoDE/Vectora-Network/blob/main/SECURITY.md).
+Privat, siehe [SECURITY.md](https://github.com/VectoDE/VectoraCloud/blob/main/SECURITY.md).
 
-Weitere Fragen: [Q&A in den Discussions](https://github.com/VectoDE/Vectora-Network/discussions/categories/q-a).
+Weitere Fragen: [Q&A in den Discussions](https://github.com/VectoDE/VectoraCloud/discussions/categories/q-a).
