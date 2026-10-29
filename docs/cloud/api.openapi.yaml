@@ -30,6 +30,7 @@ tags:
   - name: tasks
   - name: config
   - name: node
+  - name: nodes
   - name: backups
   - name: tokens
   - name: events
@@ -307,6 +308,64 @@ paths:
         "200": {$ref: "#/components/responses/GroupWanted"}
         default: {$ref: "#/components/responses/Error"}
 
+  /nodes:
+    get:
+      tags: [nodes]
+      summary: Every node of nodes.yml
+      description: "Scope: config:read"
+      operationId: listNodes
+      responses:
+        "200":
+          description: The nodes in file order
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/Node"}
+        default: {$ref: "#/components/responses/Error"}
+  /nodes/{name}:
+    parameters: [{$ref: "#/components/parameters/Name"}]
+    get:
+      tags: [nodes]
+      summary: One node
+      description: "Scope: config:read"
+      operationId: getNode
+      responses:
+        "200":
+          description: The node
+          headers: {ETag: {$ref: "#/components/headers/ETag"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Node"}
+        default: {$ref: "#/components/responses/Error"}
+    put:
+      tags: [nodes]
+      summary: Create or replace a node
+      description: >-
+        Scope: config:write. The body is the whole node; id may be left out and must otherwise match
+        the path (else 400 invalid-value). Validated and written through ConfigService.apply. There is
+        no DELETE; nodes are removed in the file.
+      operationId: putNode
+      parameters: [{$ref: "#/components/parameters/IfMatch"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Node"}
+      responses:
+        "200":
+          description: Replaced
+          headers: {ETag: {$ref: "#/components/headers/ETag"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Node"}
+        "201":
+          description: Created
+          headers: {ETag: {$ref: "#/components/headers/ETag"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Node"}
+        default: {$ref: "#/components/responses/Error"}
   /servers:
     get:
       tags: [config]
@@ -677,6 +736,35 @@ components:
           description: "Percent, below scale-up-at. Stored and checked; the scaling rule that uses it follows in a later change."
         scale-down-after: {type: string, example: "5m"}
         cooldown: {type: string, example: "60s"}
+    Node:
+      type: object
+      description: "One entry of nodes.yml, see docs/cloud/config.md. Unknown fields are refused."
+      required: [host, port, service-ports]
+      properties:
+        id: {$ref: "#/components/schemas/Name"}
+        host: {type: string, example: "127.0.0.1"}
+        port: {type: integer, minimum: 1, maximum: 65535, description: "Cloud channel port"}
+        service-ports:
+          type: object
+          required: [first, last]
+          properties:
+            first: {type: integer, minimum: 1, maximum: 65535}
+            last: {type: integer, minimum: 1, maximum: 65535}
+        max-memory:
+          type: string
+          example: "8G"
+          description: "Optional, at least 512M; missing means the node works it out and is not returned."
+        memory-reserve: {$ref: "#/components/schemas/MemoryReserve"}
+    MemoryReserve:
+      type: object
+      description: >-
+        Memory the node keeps for itself and never hands to services. Optional; every field is 1M to
+        64G, and a missing field means its default and is not returned. database counts only when
+        this cloud runs the database (managed or docker mode).
+      properties:
+        system: {type: string, example: "1G", description: "Default 1G"}
+        node-overhead: {type: string, example: "256M", description: "Default 256M"}
+        database: {type: string, example: "512M", description: "Default 512M"}
     CloudConfig:
       type: object
       description: "cloud.yml, see docs/cloud/config.md. Unknown fields are refused."

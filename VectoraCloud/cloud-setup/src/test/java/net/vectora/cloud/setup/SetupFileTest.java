@@ -19,6 +19,7 @@ import net.vectora.cloud.config.error.ConfigException;
 import net.vectora.cloud.config.ConfigService;
 import net.vectora.cloud.config.model.DatabaseMode;
 import net.vectora.cloud.config.model.Language;
+import net.vectora.cloud.config.model.MemoryReserve;
 import net.vectora.cloud.config.model.MemorySize;
 import net.vectora.cloud.config.model.ServerKind;
 import net.vectora.cloud.config.model.TimeSpan;
@@ -217,6 +218,39 @@ class SetupFileTest {
         String change = "schema-version: 1\neula: true\ndrain-timeout:\n  survival: 2m\n";
         assertEquals(SetupResult.Status.COMPLETED, SetupWizard.nonInteractive(config, env(change, false), null).status());
         assertEquals(TimeSpan.parse("2m"), config.snapshot().groups().get("survival").drainTimeout());
+    }
+
+    @Test
+    void nodeMemoryIsOptionalAndCheckedLikeNodesYml() throws Exception {
+        String low = refused("schema-version: 1\neula: true\nnode:\n  max-memory: 256M\n", false).describe(Language.EN);
+        assertTrue(low.contains("max-memory"), low);
+        String high = refused("schema-version: 1\neula: true\nnode:\n  memory-reserve:\n    database: 65G\n", false)
+                .describe(Language.EN);
+        assertTrue(high.contains("memory-reserve.database") && high.contains("between 1M and 64G"), high);
+        refused("schema-version: 1\neula: true\nnode:\n  memory-reserve:\n    sytem: 2G\n", false);
+        refused("schema-version: 1\neula: true\nnode:\n  max-memory: 8 GB\n", false);
+
+        String file = """
+                schema-version: 1
+                eula: true
+                node:
+                  max-memory: 8G
+                  memory-reserve:
+                    system: 2G
+                """;
+        assertEquals(SetupResult.Status.COMPLETED, SetupWizard.nonInteractive(config, env(file, false), null).status());
+        var node = config.snapshot().nodes().find(config.snapshot().cloud().nodeId()).orElseThrow();
+        assertEquals(MemorySize.parse("8G"), node.maxMemory());
+        assertEquals(new MemoryReserve(MemorySize.parse("2G"), null, null), node.reserve(), "only the given field is written");
+        assertEquals(MemorySize.parse("512M"), node.memoryReserve().database());
+    }
+
+    @Test
+    void withoutNodeSectionNodesYmlStaysAsItIs() throws Exception {
+        byte[] before = Files.readAllBytes(root.resolve("nodes.yml"));
+        SetupWizard.nonInteractive(config, env("schema-version: 1\neula: true\n", false), null);
+        assertArrayEquals(before, Files.readAllBytes(root.resolve("nodes.yml")));
+        assertEquals(null, config.snapshot().nodes().nodes().getFirst().maxMemory());
     }
 
     @Test

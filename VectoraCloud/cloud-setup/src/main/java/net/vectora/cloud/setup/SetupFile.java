@@ -19,6 +19,7 @@ import net.vectora.cloud.config.io.ConfigYaml;
 import net.vectora.cloud.config.model.DatabaseConfig;
 import net.vectora.cloud.config.model.DatabaseMode;
 import net.vectora.cloud.config.model.Language;
+import net.vectora.cloud.config.model.MemoryReserve;
 import net.vectora.cloud.config.model.MemorySize;
 import net.vectora.cloud.config.model.TimeSpan;
 import net.vectora.cloud.config.secret.Secret;
@@ -50,11 +51,14 @@ import net.vectora.cloud.console.Text;
  * @param drainTimeout  optional {@code drain-timeout} per group name (5s to 10m); a group without
  *                      an entry keeps what its file says, a new group gets the default 30s. The
  *                      console assistant does not ask for it.
+ * @param node          optional memory settings of this node in {@code nodes.yml}; the console
+ *                      assistant does not ask for them
  * @param database      database settings
  */
 public record SetupFile(int schemaVersion, Language language, Boolean eula, String networkName, Servers servers,
                         Map<String, Boolean> minigames, Network network, Map<String, MemorySize> memory,
-                        Map<String, Services> services, Map<String, TimeSpan> drainTimeout, Database database) {
+                        Map<String, Services> services, Map<String, TimeSpan> drainTimeout, Node node,
+                        Database database) {
 
     /** Current version of the format. */
     public static final int SCHEMA_VERSION = 1;
@@ -119,6 +123,18 @@ public record SetupFile(int schemaVersion, Language language, Boolean eula, Stri
                     minServices != null ? minServices : defaults.minServices(),
                     maxServices != null ? maxServices : defaults.maxServices());
         }
+    }
+
+    /**
+     * Memory settings of the node the setup runs on ({@code node-id} in {@code cloud.yml}). A missing
+     * key keeps what {@code nodes.yml} says; a field of {@code memory-reserve} replaces only that
+     * field.
+     *
+     * @param maxMemory     {@code max-memory}, at least 512M
+     * @param memoryReserve {@code memory-reserve}: {@code system}, {@code node-overhead},
+     *                      {@code database}, each up to 64G
+     */
+    public record Node(MemorySize maxMemory, MemoryReserve memoryReserve) {
     }
 
     /**
@@ -252,6 +268,12 @@ public record SetupFile(int schemaVersion, Language language, Boolean eula, Stri
                 }
                 answers = answers.withDrainTimeout(group, entry.getValue());
             }
+        }
+        if (node != null) {
+            MemorySize max = node.maxMemory() != null ? node.maxMemory() : answers.maxMemory();
+            MemoryReserve reserve = node.memoryReserve() != null ? node.memoryReserve().over(answers.memoryReserve())
+                    : answers.memoryReserve();
+            answers = answers.withNodeMemory(max, reserve);
         }
         if (database != null) {
             DatabaseConfig db = answers.database();

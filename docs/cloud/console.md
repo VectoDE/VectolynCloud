@@ -120,6 +120,16 @@ The catalog of a group (plugins and mods) is edited in the file for now.
 
 Service commands (`start`, `stop`, `screen`, ...) come from cloud-node, which registers them in the same registry.
 
+### `node`
+
+| Subcommand | Effect |
+|---|---|
+| `node list` | Every node of `nodes.yml` with host, channel port, `max-memory` and which one is this node. |
+| `node info <id>` | All fields of one node, with the memory reserve; a field that is not set shows its default and `(default)`. |
+| `node set <id> <field> <value>` | Fields: `max-memory` (at least 512M, `auto` removes it and the node works it out), `memory-reserve.system`, `memory-reserve.node-overhead`, `memory-reserve.database` (each 1M to 64G, `default` removes it and the default applies: 1G, 256M, 512M). For example `node set node-1 memory-reserve.system 2G`. |
+
+Host, ports and adding or removing nodes stay in `nodes.yml`. See [config.md](config.md#nodesyml).
+
 ### `api`
 
 Comes from `cloud-api` ([api.md](api.md)). The whole command is sensitive: no line of it is written to the history.

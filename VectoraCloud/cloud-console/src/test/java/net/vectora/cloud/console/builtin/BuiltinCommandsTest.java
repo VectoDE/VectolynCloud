@@ -12,6 +12,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import net.vectora.cloud.config.CloudHome;
 import net.vectora.cloud.config.ConfigService;
 import net.vectora.cloud.config.model.Language;
+import net.vectora.cloud.config.model.MemoryReserve;
+import net.vectora.cloud.config.model.MemorySize;
 import net.vectora.cloud.config.model.ServerKind;
 import net.vectora.cloud.config.model.ServerSoftware;
 import net.vectora.cloud.console.Console;
@@ -191,6 +193,46 @@ class BuiltinCommandsTest {
         assertEquals(Outcome.DONE, run("group set lobby drain-timeout default"));
         assertEquals(null, config.snapshot().groups().get("lobby").drainTimeout());
         assertFalse(Files.readString(home.resolve("groups/lobby.yml")).contains("drain-timeout"));
+    }
+
+    @Test
+    void nodeListInfoAndMemorySettings() throws Exception {
+        assertEquals(Outcome.DONE, run("node list"));
+        assertTrue(terminal.output().contains("node-1  127.0.0.1:7010  max-memory auto  (this node)"), terminal.output());
+        assertEquals(Outcome.DONE, run("node info node-1"));
+        assertTrue(terminal.output().contains("memory-reserve.system        = 1G (default)"), terminal.output());
+        assertTrue(terminal.output().contains("memory-reserve.node-overhead = 256M (default)"), terminal.output());
+        assertTrue(terminal.output().contains("memory-reserve.database      = 512M (default)"), terminal.output());
+
+        assertEquals(Outcome.DONE, run("node set node-1 max-memory 8G"));
+        assertEquals(MemorySize.parse("8G"), node().maxMemory());
+        assertEquals(Outcome.DONE, run("node set node-1 memory-reserve.system 2G"));
+        assertEquals(Outcome.DONE, run("node set node-1 memory-reserve.database 1G"));
+        assertEquals(new MemoryReserve(MemorySize.parse("2G"), null, MemorySize.parse("1G")), node().reserve());
+        assertEquals(MemorySize.parse("256M"), node().memoryReserve().nodeOverhead());
+        String file = Files.readString(home.resolve("nodes.yml"));
+        assertTrue(file.contains("memory-reserve:") && file.contains("max-memory: \"8G\""), file);
+
+        // Refused like a hand edit: below 512M, above 64G, wrong form, unknown node or field.
+        assertEquals(Outcome.FAILED, run("node set node-1 max-memory 256M"));
+        assertEquals(Outcome.FAILED, run("node set node-1 memory-reserve.node-overhead 65G"));
+        assertTrue(terminal.output().contains("Must be between 1M and 64G."), terminal.output());
+        assertEquals(Outcome.FAILED, run("node set node-1 memory-reserve.system lots"));
+        assertEquals(Outcome.FAILED, run("node set node-9 max-memory 8G"));
+        assertTrue(terminal.output().contains("Node \"node-9\" does not exist."), terminal.output());
+        assertEquals(Outcome.FAILED, run("node set node-1 port 7011"), "only memory fields");
+        assertEquals(MemorySize.parse("8G"), node().maxMemory(), "unchanged after the errors");
+
+        // Counter-check: auto and default remove the values again, the file is as before.
+        assertEquals(Outcome.DONE, run("node set node-1 max-memory auto"));
+        assertEquals(Outcome.DONE, run("node set node-1 memory-reserve.system default"));
+        assertEquals(Outcome.DONE, run("node set node-1 memory-reserve.database default"));
+        assertEquals(net.vectora.cloud.config.model.NodeConfig.defaults(), node());
+        assertFalse(Files.readString(home.resolve("nodes.yml")).contains("memory"));
+    }
+
+    private net.vectora.cloud.config.model.NodeConfig node() {
+        return config.snapshot().nodes().nodes().getFirst();
     }
 
     @Test

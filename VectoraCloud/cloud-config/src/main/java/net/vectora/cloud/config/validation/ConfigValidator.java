@@ -21,6 +21,7 @@ import net.vectora.cloud.config.model.DatabaseConfig;
 import net.vectora.cloud.config.model.DatabaseMode;
 import net.vectora.cloud.config.model.GroupConfig;
 import net.vectora.cloud.config.model.HeapConfig;
+import net.vectora.cloud.config.model.MemoryReserve;
 import net.vectora.cloud.config.model.MemorySize;
 import net.vectora.cloud.config.model.NodeConfig;
 import net.vectora.cloud.config.model.NodesConfig;
@@ -157,6 +158,12 @@ public final class ConfigValidator {
             if (node.maxMemory() != null) {
                 c.range(f, p + ".max-memory", node.maxMemory().megabytes(), MIN_NODE_MEMORY_MEGABYTES, MemorySize.MAX_MEGABYTES);
             }
+            MemoryReserve reserve = node.reserve();
+            if (reserve != null) {
+                reserveField(c, f, p + ".memory-reserve.system", reserve.system());
+                reserveField(c, f, p + ".memory-reserve.node-overhead", reserve.nodeOverhead());
+                reserveField(c, f, p + ".memory-reserve.database", reserve.database());
+            }
             if (c.required(f, p + ".service-ports", node.servicePorts())) {
                 boolean first = c.port(f, p + ".service-ports.first", node.servicePorts().first());
                 boolean last = c.port(f, p + ".service-ports.last", node.servicePorts().last());
@@ -165,6 +172,14 @@ public final class ConfigValidator {
                             "service-ports.last"));
                 }
             }
+        }
+    }
+
+    /** One field of {@code memory-reserve}: missing is fine (default), otherwise at most 64G. */
+    private static void reserveField(Checks c, String f, String path, MemorySize value) {
+        if (value != null && value.megabytes() > MemoryReserve.MAX_MEGABYTES) {
+            c.add(ConfigError.of(f, path, ErrorCode.OUT_OF_RANGE, MemorySize.ofMegabytes(1),
+                    MemorySize.ofMegabytes(MemoryReserve.MAX_MEGABYTES)));
         }
     }
 

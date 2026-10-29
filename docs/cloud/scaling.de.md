@@ -50,6 +50,10 @@ Der Scaler liest die Konfiguration in jeder Runde neu. Alle drei Wege wirken des
 
 `drain-timeout` in `groups/<name>.yml` (5s bis 10m, Standard 30s) gibt an, wie lange ein Dienst der Gruppe Zeit hat, seine Spieler anderswohin zu schicken, bevor der Scaler ihn stoppt. Gespeichert und geprüft wird der Wert schon jetzt, genutzt ab einer späteren Änderung. Ändern lässt er sich in der Datei, mit `group set <Name> drain-timeout 45s`, über `PUT /api/v1/groups/{name}` oder mit `drain-timeout:` in der Setup-Datei.
 
+### Node-Einstellungen für den Scaler
+
+In `nodes.yml` kann jeder Node `max-memory` setzen (mindestens 512M, fehlt der Wert, rechnet der Node selbst) und `memory-reserve` mit `system` (Standard 1G), `node-overhead` (Standard 256M) und `database` (Standard 512M, zählt nur, wenn die Cloud die Datenbank im Modus `managed` oder `docker` selbst betreibt), je 1M bis 64G. Die Reserve behält der Node für sich. Gespeichert und geprüft wird das schon jetzt, das Speicherbudget weiter unten nutzt es ab einer späteren Änderung. Ändern lässt es sich in der Datei, mit `node set <ID> <Feld> <Wert>`, über `PUT /api/v1/nodes/{name}` oder mit `node:` in der Setup-Datei. Siehe [config.md](config.md#nodesyml).
+
 ## Welche Tasks skaliert werden
 
 Nur Tasks dieses Nodes (`nodes` leer oder mit diesem Node), deren Gruppe gewollt ist. „Gewollt“ entscheidet die eine Regel `GroupRules.isWanted` aus cloud-config, die auch Planung, Starts, die Proxy-Listen und `runs` in der API bestimmt: das eigene `wanted` der Gruppe, ihr Schalter unter `servers:` in `cloud.yml` und für die 1.8.8-Gruppen `legacy-proxy.enabled` (siehe [node.md](node.md#which-services-run)). Eine abgeschaltete Gruppe wird nie skaliert, ihre Dienste stoppen wie bisher beim Neuladen.

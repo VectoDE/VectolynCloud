@@ -267,6 +267,30 @@ class TaskSchemaMigrationTest {
         assertEquals(List.of(MemorySize.FORMAT), bad.errors().getFirst().args());
     }
 
+    @Test
+    void nodeMemoryReserveIsOptionalInNodesYml() throws ConfigException {
+        String plain = new String(ConfigYaml.write(NodesConfig.defaults()), StandardCharsets.UTF_8);
+        assertFalse(plain.contains("memory-reserve"), plain);
+        String yaml = plain.replace("    service-ports:", "    memory-reserve:\n      system: 2G\n      database: 1G\n    service-ports:");
+        NodeConfig node = ConfigYaml.read("nodes.yml", yaml.getBytes(StandardCharsets.UTF_8), ConfigFormat.NODES)
+                .value().nodes().getFirst();
+        assertEquals(new net.vectora.cloud.config.model.MemoryReserve(MemorySize.parse("2G"), null, MemorySize.parse("1G")),
+                node.reserve(), "as in the file");
+        assertEquals(MemorySize.parse("256M"), node.memoryReserve().nodeOverhead(), "missing field: default");
+        String written = new String(ConfigYaml.write(new NodesConfig(1, List.of(node))), StandardCharsets.UTF_8);
+        assertTrue(written.contains("memory-reserve:") && !written.contains("node-overhead"), written);
+        assertFalse(written.contains("none-set") || written.contains("empty"), written);
+        assertEquals(node, ConfigYaml.read("nodes.yml", written.getBytes(StandardCharsets.UTF_8), ConfigFormat.NODES)
+                .value().nodes().getFirst());
+        // Counter-check: an unknown key and a wrong form are errors at their path.
+        ConfigException typo = assertThrows(ConfigException.class, () -> ConfigYaml.read("nodes.yml",
+                yaml.replace("system:", "sytem:").getBytes(StandardCharsets.UTF_8), ConfigFormat.NODES));
+        assertEquals(ErrorCode.UNKNOWN_FIELD, typo.errors().getFirst().code());
+        ConfigException form = assertThrows(ConfigException.class, () -> ConfigYaml.read("nodes.yml",
+                yaml.replace("system: 2G", "system: 0").getBytes(StandardCharsets.UTF_8), ConfigFormat.NODES));
+        assertEquals("nodes[0].memory-reserve.system", form.errors().getFirst().path());
+    }
+
     private static ConfigSnapshot withTask(TaskConfig task) {
         return ConfigSnapshot.of(CloudConfig.defaults(), NodesConfig.defaults(),
                 Map.of(task.group(), Samples.lobbyGroup()), Map.of("survival", task));

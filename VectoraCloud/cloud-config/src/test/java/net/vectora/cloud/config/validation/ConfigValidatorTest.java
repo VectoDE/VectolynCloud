@@ -21,6 +21,7 @@ import net.vectora.cloud.config.model.GroupConfig;
 import net.vectora.cloud.config.model.HeapConfig;
 import net.vectora.cloud.config.model.Language;
 import net.vectora.cloud.config.model.LegacyProxyConfig;
+import net.vectora.cloud.config.model.MemoryReserve;
 import net.vectora.cloud.config.model.MemorySize;
 import net.vectora.cloud.config.model.NodeConfig;
 import net.vectora.cloud.config.model.NodesConfig;
@@ -236,6 +237,45 @@ class ConfigValidatorTest {
         assertEquals(Set.of("nodes.yml nodes[0].max-memory OUT_OF_RANGE"),
                 codes(valid.withNodes(new NodesConfig(1, List.of(node.withMaxMemory(MemorySize.parse("256M")))))));
         assertEquals(Set.of(), codes(valid.withNodes(new NodesConfig(1, List.of(node.withMaxMemory(MemorySize.parse("512M")))))));
+    }
+
+    @Test
+    void memoryReserveIsOptionalAndLimitedPerField() {
+        NodeConfig node = NodeConfig.defaults();
+        assertEquals(MemoryReserve.defaults(), node.memoryReserve(), "missing: every default");
+        assertEquals(List.of(1024L, 256L, 512L), List.of(node.memoryReserve().system().megabytes(),
+                node.memoryReserve().nodeOverhead().megabytes(), node.memoryReserve().database().megabytes()));
+        MemoryReserve partial = new MemoryReserve(MemorySize.parse("2G"), null, null);
+        NodeConfig some = node.withMemoryReserve(partial);
+        assertEquals(new MemoryReserve(MemorySize.parse("2G"), MemorySize.parse("256M"), MemorySize.parse("512M")),
+                some.memoryReserve(), "missing fields keep their default");
+        assertEquals(Set.of(), codes(valid.withNodes(new NodesConfig(1, List.of(some)))));
+        MemoryReserve max = new MemoryReserve(MemorySize.parse("64G"), MemorySize.parse("64G"), MemorySize.parse("64G"));
+        assertEquals(Set.of(), codes(valid.withNodes(new NodesConfig(1, List.of(node.withMemoryReserve(max))))),
+                "counter-check: 64G is allowed");
+        MemoryReserve tooMuch = new MemoryReserve(MemorySize.parse("65G"), MemorySize.parse("1024G"), MemorySize.parse("1M"));
+        assertEquals(Set.of("nodes.yml nodes[0].memory-reserve.system OUT_OF_RANGE",
+                        "nodes.yml nodes[0].memory-reserve.node-overhead OUT_OF_RANGE"),
+                codes(valid.withNodes(new NodesConfig(1, List.of(node.withMemoryReserve(tooMuch))))));
+        ConfigError error = ConfigValidator.validate(valid.withNodes(new NodesConfig(1, List.of(node.withMemoryReserve(tooMuch)))))
+                .getFirst();
+        assertEquals("Must be between 1M and 64G.", error.message(Language.EN));
+        assertEquals(null, node.withMemoryReserve(new MemoryReserve(null, null, null)).reserve(), "an empty section is dropped");
+    }
+
+    @Test
+    void reserveCountsTheDatabaseOnlyWhenTheCloudRunsIt() {
+        var kind = net.vectora.cloud.config.model.ServerKind.DATABASE;
+        CloudConfig cloud = valid.cloud().withServers(valid.cloud().servers().with(kind, true));
+        MemoryReserve reserve = MemoryReserve.defaults();
+        assertEquals(1024 + 256 + 512, reserve.megabytes(true));
+        assertEquals(1024 + 256, reserve.megabytes(false));
+        assertEquals(true, MemoryReserve.countsDatabase(cloud.withDatabase(cloud.database().withMode(DatabaseMode.MANAGED))));
+        assertEquals(true, MemoryReserve.countsDatabase(cloud.withDatabase(cloud.database().withMode(DatabaseMode.DOCKER))));
+        assertEquals(false, MemoryReserve.countsDatabase(cloud.withServers(cloud.servers().with(kind, false))
+                .withDatabase(cloud.database().withMode(DatabaseMode.MANAGED))), "switched off");
+        assertEquals(false, MemoryReserve.countsDatabase(cloud.withDatabase(cloud.database().withMode(DatabaseMode.H2))));
+        assertEquals(false, MemoryReserve.countsDatabase(cloud.withDatabase(cloud.database().withMode(DatabaseMode.EXTERNAL))));
     }
 
     @Test

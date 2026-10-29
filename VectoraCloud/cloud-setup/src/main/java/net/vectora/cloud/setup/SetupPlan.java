@@ -21,6 +21,7 @@ import net.vectora.cloud.config.model.JavaSelection;
 import net.vectora.cloud.config.model.Language;
 import net.vectora.cloud.config.model.LegacyProxyConfig;
 import net.vectora.cloud.config.model.MemorySize;
+import net.vectora.cloud.config.model.NodeConfig;
 import net.vectora.cloud.config.model.ProxyConfig;
 import net.vectora.cloud.config.model.ScalingConfig;
 import net.vectora.cloud.config.model.ServerKind;
@@ -30,6 +31,7 @@ import net.vectora.cloud.config.operation.AcceptEula;
 import net.vectora.cloud.config.operation.CompleteSetup;
 import net.vectora.cloud.config.operation.ConfigOperation;
 import net.vectora.cloud.config.operation.PutGroup;
+import net.vectora.cloud.config.operation.PutNode;
 import net.vectora.cloud.config.operation.PutTask;
 import net.vectora.cloud.config.operation.SetDatabase;
 import net.vectora.cloud.config.operation.SetGroupDrainTimeout;
@@ -120,6 +122,7 @@ public final class SetupPlan {
                 drainTimeouts.put(name, group.drainTimeout());
             }
         });
+        Optional<NodeConfig> local = snapshot.nodes().find(cloud.nodeId());
         DatabaseConfig database = cloud.database() == null ? DatabaseConfig.defaults() : cloud.database();
         if (first && database.mode() == DatabaseMode.MANAGED && !env.managedDatabase()) {
             database = switchMode(database, DatabaseMode.H2);
@@ -131,7 +134,8 @@ public final class SetupPlan {
         return new SetupAnswers(language == null ? env.language() : language, cloud.eulaAccepted(),
                 cloud.networkName() == null ? CloudConfig.defaults().networkName() : cloud.networkName(), servers, switches,
                 proxy.bind() == null ? ProxyConfig.defaults().bind() : proxy.bind(), javaPort, proxy.bedrockPort(),
-                legacy.port(), heap, services, drainTimeouts, database, Optional.empty());
+                legacy.port(), heap, services, drainTimeouts, local.map(NodeConfig::maxMemory).orElse(null),
+                local.map(NodeConfig::reserve).orElse(null), database, Optional.empty());
     }
 
     /**
@@ -209,6 +213,13 @@ public final class SetupPlan {
         }
         if (!answers.database().equals(cloud.database())) {
             ops.add(new SetDatabase(answers.database()));
+        }
+        Optional<NodeConfig> local = current.nodes().find(cloud.nodeId());
+        if (local.isPresent()) {
+            NodeConfig node = local.get().withMaxMemory(answers.maxMemory()).withMemoryReserve(answers.memoryReserve());
+            if (!node.equals(local.get())) {
+                ops.add(new PutNode(node));
+            }
         }
         Set<String> taken = new TreeSet<>(current.groups().keySet());
         taken.addAll(current.tasks().keySet());

@@ -62,6 +62,7 @@ Alle Pfade beginnen mit `/api/v1`. Bodys sind `application/json` in UTF-8, mit d
 
 - **Dienste:** `GET /services`, `POST /services` mit `{"task": "lobby"}` (Antwort `201`), `GET /services/{id}`, `POST /services/{id}/stop`, `POST /services/{id}/restart`, `POST /services/{id}/command` mit `{"command": "say hi"}` (Antwort `202`, 1 bis 1024 Zeichen ohne Steuerzeichen).
 - **Gruppen und Tasks:** `GET /groups`, `GET|PUT /groups/{name}`, `DELETE /groups/{name}?confirm={name}`, `PUT /groups/{name}/wanted` mit `{"wanted": false}`. Für `/tasks` gilt dasselbe.
+- **Nodes:** `GET /nodes`, `GET|PUT /nodes/{name}` (Einträge aus `nodes.yml`, mit `ETag`).
 - **Server-Schalter:** `GET /servers`, `PUT /servers/{kind}` mit `{"wanted": true}`.
 - **Konfiguration:** `GET|PUT /config` (`cloud.yml`), `POST /config/reload`, `GET /config/warnings`.
 - **Node und Setup:** `GET /node`, `GET /setup`.
@@ -77,6 +78,10 @@ Jeder Schreibzugriff läuft über `ConfigService.apply`. Geprüft wird die ganze
 **Gleichzeitige Änderungen.** `GET` auf eine Gruppe, einen Task oder `cloud.yml` liefert ein `ETag`. Wer es bei `PUT` oder `DELETE` als `If-Match` mitschickt, bekommt `412 precondition-failed`, falls sich das Dokument inzwischen geändert hat. Geschrieben wird dann nichts. Die Prüfung läuft zusammen mit dem Schreiben: Von mehreren Schreibern mit demselben `ETag` kommt genau einer durch.
 
 **Tasks.** `PUT /tasks/{name}` erwartet den ganzen Task im aktuellen Format (`schema-version: 2`) mit `scaling.static-services` (Pflicht) und `scaling.scale-down-below` (Standard 50); das Beispiel steht in [api.md](api.md). Derselbe Validator wie für die Datei antwortet mit `422` und `static-above-min` (statisch über min) oder `scale-down-not-below-up` (`scale-down-below` nicht kleiner als `scale-up-at`). Ein Body mit `schema-version: 1` (mit `mode`) wird genau wie eine Datei migriert (siehe [Konfiguration](config.md#from-schema-version-1)) und als Version 2 gespeichert; die Antwort zeigt den migrierten Task. Einen Body, den der Leser ablehnt (unbekanntes Feld, falscher Typ, fehlendes Pflichtfeld, ungültiges `mode`), beantwortet die API mit `400` und `errors` mit Feld und Code, etwa `required` oder `invalid-value`. `POST /services` mit einem Task startet den niedrigsten gestoppten statischen Dienst des Tasks, sonst einen neuen statischen, solange der Task weniger als `static-services` hat, sonst einen dynamischen. Siehe [Skalierung](scaling.de.md#statisch-und-dynamisch-in-einem-task).
+
+**Nodes.** `PUT /nodes/{name}` erwartet den ganzen Node wie in `nodes.yml`, zum Beispiel `{"host": "127.0.0.1", "port": 7010, "service-ports": {"first": 30000, "last": 30999}, "max-memory": "8G", "memory-reserve": {"system": "2G"}}`. `id` kann fehlen; ist sie gesetzt, muss sie zum Pfad passen, sonst `400 invalid-value`. `max-memory` (mindestens 512M) und jedes Feld von `memory-reserve` (1M bis 64G; Defaults `system` 1G, `node-overhead` 256M, `database` 512M) sind optional. Ein weggelassenes Feld wird aus der Datei entfernt, dann gilt der Default. Derselbe Validator wie für die Datei antwortet mit `422` (etwa `out-of-range` bei `nodes[0].memory-reserve.system`). `ETag` und `If-Match` funktionieren wie bei Gruppen. Ein `DELETE` gibt es nicht; Nodes entfernt man in der Datei.
+
+**Gruppen.** `drain-timeout` ist optional (5s bis 10m, Default 30s), zum Beispiel `"drain-timeout": "45s"`; außerhalb der Grenzen antwortet die API mit `422 out-of-range`.
 
 **Herunterfahren.** Während der Node herunterfährt, beantworten Start, Neustart, Reload und das Erstellen eines Backups die Anfrage mit `503 shutting-down`. Lesen und Stoppen gehen weiter.
 

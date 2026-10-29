@@ -224,6 +224,62 @@ class ApiServerTest {
     }
 
     @Test
+    void nodesAreReadAndTheirMemorySettingsWritten() throws Exception {
+        try (TestApi api = new TestApi(home)) {
+            HttpResponse<String> list = api.get("/api/v1/nodes", api.admin);
+            assertEquals(200, list.statusCode(), list.body());
+            assertTrue(list.body().startsWith("[") && list.body().contains("\"id\":\"node-1\""), list.body());
+            HttpResponse<String> one = api.get("/api/v1/nodes/node-1", api.admin);
+            assertEquals(200, one.statusCode());
+            String etag = one.headers().firstValue("ETag").orElseThrow();
+            assertEquals(404, api.get("/api/v1/nodes/node-9", api.admin).statusCode());
+
+            String limited = one.body().replace("\"service-ports\"",
+                    "\"max-memory\":\"8G\",\"memory-reserve\":{\"system\":\"2G\"},\"service-ports\"");
+            HttpResponse<String> put = api.send(HttpRequest.newBuilder(api.uri("/api/v1/nodes/node-1"))
+                    .header("Authorization", "Bearer " + api.admin).header("Content-Type", "application/json")
+                    .header("If-Match", etag).PUT(HttpRequest.BodyPublishers.ofString(limited)).build());
+            assertEquals(200, put.statusCode(), put.body());
+            var node = api.config.snapshot().nodes().find("node-1").orElseThrow();
+            assertEquals("8G", node.maxMemory().toString());
+            assertEquals("2G", node.memoryReserve().system().toString());
+            assertEquals("256M", node.memoryReserve().nodeOverhead().toString(), "missing field: default");
+            assertTrue(Files.readString(home.resolve("nodes.yml")).contains("memory-reserve:"));
+            // The old ETag no longer fits.
+            assertEquals(412, api.send(HttpRequest.newBuilder(api.uri("/api/v1/nodes/node-1"))
+                    .header("Authorization", "Bearer " + api.admin).header("Content-Type", "application/json")
+                    .header("If-Match", etag).PUT(HttpRequest.BodyPublishers.ofString(one.body())).build()).statusCode());
+
+            // Refused: below 512M, a reserve field above 64G, another id, a wrong form, an unknown field.
+            HttpResponse<String> small = api.send("PUT", "/api/v1/nodes/node-1", api.admin, limited.replace("8G", "256M"));
+            assertEquals(422, small.statusCode(), small.body());
+            assertTrue(small.body().contains("nodes[0].max-memory"), small.body());
+            HttpResponse<String> big = api.send("PUT", "/api/v1/nodes/node-1", api.admin,
+                    limited.replace("\"system\":\"2G\"", "\"database\":\"65G\""));
+            assertEquals(422, big.statusCode(), big.body());
+            assertTrue(big.body().contains("nodes[0].memory-reserve.database"), big.body());
+            assertEquals(400, api.send("PUT", "/api/v1/nodes/node-1", api.admin, limited.replace("\"node-1\"", "\"node-2\""))
+                    .statusCode());
+            assertEquals(400, api.send("PUT", "/api/v1/nodes/node-1", api.admin, limited.replace("\"2G\"", "\"2 GB\""))
+                    .statusCode());
+            assertEquals(400, api.send("PUT", "/api/v1/nodes/node-1", api.admin, limited.replace("\"system\"", "\"sytem\""))
+                    .statusCode());
+            assertEquals("8G", api.config.snapshot().nodes().find("node-1").orElseThrow().maxMemory().toString(), "unchanged");
+
+            // A reader may look but not write.
+            String reader = api.token("reader", Scope.CONFIG_READ);
+            assertEquals(200, api.get("/api/v1/nodes", reader).statusCode());
+            assertEquals(403, api.send("PUT", "/api/v1/nodes/node-1", reader, one.body()).statusCode());
+
+            // Counter-check: the original body puts the node back as it was.
+            HttpResponse<String> back = api.send("PUT", "/api/v1/nodes/node-1", api.admin, one.body());
+            assertEquals(200, back.statusCode(), back.body());
+            assertEquals(net.vectora.cloud.config.model.NodeConfig.defaults(), api.config.snapshot().nodes().find("node-1")
+                    .orElseThrow());
+        }
+    }
+
+    @Test
     void groupDrainTimeoutIsTakenAndChecked() throws Exception {
         try (TestApi api = new TestApi(home)) {
             String drain = GROUP.replace("\"catalog\":[]", "\"catalog\":[],\"drain-timeout\":\"45s\"");

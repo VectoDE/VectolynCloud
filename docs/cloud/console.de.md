@@ -95,6 +95,16 @@ Vor dem Löschen prüft die Konsole, ob es nach denselben Regeln wie `ConfigServ
 
 Den Katalog einer Gruppe (Plugins und Mods) ändert man vorerst in der Datei. Befehle für Dienste (`start`, `stop`, `screen` usw.) bringt cloud-node mit.
 
+### `node`
+
+| Unterbefehl | Wirkung |
+|---|---|
+| `node list` | Alle Nodes aus `nodes.yml` mit Host, Kanal-Port, `max-memory` und dem Hinweis, welcher Node dieser ist. |
+| `node info <ID>` | Alle Felder eines Nodes samt Speicherreserve. Ein nicht gesetztes Feld zeigt seinen Default und `(default)`. |
+| `node set <ID> <Feld> <Wert>` | Felder: `max-memory` (mindestens 512M, `auto` entfernt den Wert, dann rechnet der Node selbst), `memory-reserve.system`, `memory-reserve.node-overhead`, `memory-reserve.database` (je 1M bis 64G, `default` entfernt den Wert, dann gilt der Default: 1G, 256M, 512M). Zum Beispiel `node set node-1 memory-reserve.system 2G`. |
+
+Host, Ports sowie neue oder entfernte Nodes ändert man weiter in `nodes.yml`. Siehe [config.md](config.md#nodesyml).
+
 ### `api`
 
 Kommt aus `cloud-api` ([api.de.md](api.de.md)). Der ganze Befehl gilt als sensibel, keine seiner Zeilen landet in der History.
