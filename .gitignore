@@ -9,6 +9,8 @@ Server-Network/*/runtime-*/
 Server-Network/temp/
 Server-Network/state/
 Server-Network/cache/
+# Backup archives of cloud-backup (worlds, configs, database dumps).
+Server-Network/backups/
 
 # --- Secrets -------------------------------------------------------------------
 Server-Network/secrets/*
