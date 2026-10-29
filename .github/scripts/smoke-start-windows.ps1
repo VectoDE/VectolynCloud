@@ -24,8 +24,8 @@ $work = Join-Path ([System.IO.Path]::GetTempPath()) ("vectora-smoke-" + [guid]::
 $dir = Join-Path $work 'vectora home (a&b!)'
 New-Item -ItemType Directory -Path $dir -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $Dist 'VectoraCloud.jar') -Destination $dir
-Copy-Item -LiteralPath (Join-Path $repo 'VectoraCloud\dist\start.bat') -Destination $dir
-Copy-Item -LiteralPath (Join-Path $repo 'VectoraCloud\dist\start.ps1') -Destination $dir
+Copy-Item -LiteralPath (Join-Path $repo 'cloud\dist\start.bat') -Destination $dir
+Copy-Item -LiteralPath (Join-Path $repo 'cloud\dist\start.ps1') -Destination $dir
 $bat = Join-Path $dir 'start.bat'
 $ps1 = Join-Path $dir 'start.ps1'
 
