@@ -123,17 +123,39 @@ public final class ProxyBridge implements CloudClientListener {
     }
 
     /**
-     * The backend a kicked player is sent to when the proxy redirects them into a group (lobby
-     * fallback): the backend of the same group as the proxy's target with the lowest load, never
-     * the one the player was kicked from.
+     * A kick the bridge does not catch, which the proxy turns into a redirect (Velocity's own
+     * fallback through its try list). The redirect goes to the backend of the target's group with
+     * the lowest load. It counts for the {@link KickGuard} like a caught kick, so redirects cannot
+     * bounce a player between two servers: the servers already tried in the incident and the one
+     * that kicked are skipped, and after {@link KickGuard#MAX_RESCUES} within
+     * {@link KickGuard#WINDOW} the player is disconnected.
      *
      * @param player     the player
      * @param kickedFrom the backend that kicked the player
      * @param target     the server the proxy would redirect to
-     * @return another backend, or empty to keep the proxy's target
+     * @return move to another backend (with an empty message: the proxy's own one stays); keep
+     *     the proxy's target if no backend of its group is free but the target itself was not tried
+     *     yet; otherwise disconnect with the original reason
      */
-    public Optional<String> redirect(UUID player, String kickedFrom, String target) {
-        return enter(player, target, Set.of(kickedFrom));
+    public KickOutcome redirect(UUID player, String kickedFrom, String target) {
+        KickOutcome giveUp = KickOutcome.disconnect(TransferMessages.lost(players.locale(player)));
+        if (!guard.mayRescue(player)) {
+            LOG.log(Level.INFO, "Redirect after a kick from {0} refused: the player was moved too often in a short time",
+                    kickedFrom);
+            return giveUp;
+        }
+        Set<String> exclude = new HashSet<>(guard.tried(player));
+        exclude.add(kickedFrom);
+        Optional<String> chosen = enter(player, target, exclude);
+        if (chosen.isPresent()) {
+            guard.rescued(player, kickedFrom, chosen.get());
+            return KickOutcome.move(chosen.get(), "");
+        }
+        if (exclude.contains(target)) {
+            return giveUp;
+        }
+        guard.rescued(player, kickedFrom, target);
+        return KickOutcome.keep();
     }
 
     /**

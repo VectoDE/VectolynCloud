@@ -75,11 +75,48 @@ class ProxyBridgeTest {
         servers.players.put("lobby", 30);
         servers.players.put("lobby-2", 5);
         assertEquals(Optional.of("lobby-2"), bridge.initialServer(UUID.randomUUID(), "lobby"));
-        assertEquals(Optional.of("lobby"), bridge.redirect(UUID.randomUUID(), "lobby-2", "lobby"),
+        assertEquals(KickOutcome.move("lobby", ""), bridge.redirect(UUID.randomUUID(), "lobby-2", "lobby"),
                 "never back to the server that kicked the player");
         assertEquals(Optional.empty(), bridge.initialServer(UUID.randomUUID(), "survival"), "unknown group: proxy's choice");
         receive(new UnregisterServer(new ServiceId("lobby-2")));
         assertEquals(Optional.of("lobby"), bridge.initialServer(UUID.randomUUID(), "lobby"));
+        sender.close(Duration.ofSeconds(5));
+    }
+
+    @Test
+    void redirectsOfTheProxyGoThroughTheKickGuardSoTheyCannotPingPong() {
+        lobbies();
+        receive(ServerRegistryTest.server("lobby-3", 30005, false));
+        receive(new ServerCapacity(new ServiceId("lobby-3"), 50, true));
+        servers.players.put("lobby", 30);
+        servers.players.put("lobby-2", 5);
+        servers.players.put("lobby-3", 40);
+        UUID alex = UUID.randomUUID();
+        assertEquals(KickOutcome.move("lobby-2", ""), bridge.redirect(alex, "lobby", "lobby"));
+        assertEquals(KickOutcome.move("lobby-3", ""), bridge.redirect(alex, "lobby-2", "lobby"),
+                "lobby was tried in this incident: not back there although it is emptier");
+        assertEquals(KickOutcome.disconnect(TransferMessages.lost(null)), bridge.redirect(alex, "lobby-3", "lobby"),
+                "every lobby tried and Velocity's target among them: no ping-pong, disconnect");
+        // Counter-check: another player is not affected, and leaving the proxy ends the incident.
+        assertEquals(KickOutcome.move("lobby-2", ""), bridge.redirect(UUID.randomUUID(), "lobby", "lobby"));
+        bridge.playerDisconnected(new Object(), alex);
+        assertEquals(KickOutcome.move("lobby-2", ""), bridge.redirect(alex, "lobby", "lobby"));
+        sender.close(Duration.ofSeconds(5));
+    }
+
+    @Test
+    void redirectsAndCaughtKicksShareTheLimit() {
+        lobbies();
+        bedwars2();
+        UUID alex = UUID.randomUUID();
+        // Velocity's target outside the cloud's groups: kept, but counted.
+        assertEquals(KickOutcome.keep(), bridge.redirect(alex, "bedwars-1", "survival"));
+        assertEquals(move("bedwars-2", null), bridge.kicked(alex, "bedwars-1", SHUTDOWN, false));
+        assertEquals(KickOutcome.move("lobby", ""), bridge.redirect(alex, "bedwars-2", "lobby-2"));
+        assertEquals(KickOutcome.disconnect(TransferMessages.lost(null)), bridge.redirect(alex, "lobby", "lobby-2"),
+                "the fourth move within 60 s");
+        assertEquals(KickOutcome.disconnect(TransferMessages.lost(null)), bridge.kicked(alex, "lobby", SHUTDOWN, false),
+                "also for a caught kick");
         sender.close(Duration.ofSeconds(5));
     }
 

@@ -157,15 +157,26 @@ public final class VelocityBridgePlugin {
         event.setResult(KickedFromServerEvent.DisconnectPlayer.create(reason));
     }
 
-    /** A redirect of the proxy into a group goes to the group's emptiest server instead. */
+    /**
+     * A redirect of the proxy into a group goes to the group's emptiest server instead. It counts
+     * for the kick guard: servers already tried in the incident are skipped, and a player who was
+     * moved too often, or whose only target was tried already, is disconnected
+     * ({@code ProxyBridge.redirect}).
+     */
     private void rebalance(KickedFromServerEvent event, ProxyBridge target, String kickedFrom) {
         if (!(event.getResult() instanceof KickedFromServerEvent.RedirectPlayer redirect)) {
             return;
         }
-        target.redirect(event.getPlayer().getUniqueId(), kickedFrom, redirect.getServer().getServerInfo().getName())
-                .flatMap(proxy::getServer)
-                .ifPresent(server -> event.setResult(
-                        KickedFromServerEvent.RedirectPlayer.create(server, redirect.getMessageComponent())));
+        KickOutcome outcome = target.redirect(event.getPlayer().getUniqueId(), kickedFrom,
+                redirect.getServer().getServerInfo().getName());
+        switch (outcome.action()) {
+            case MOVE -> proxy.getServer(outcome.server()).ifPresent(server -> event.setResult(
+                    KickedFromServerEvent.RedirectPlayer.create(server, redirect.getMessageComponent())));
+            case DISCONNECT -> disconnectWithReason(event, outcome);
+            case KEEP -> {
+                // Velocity's own target, which the guard has counted.
+            }
+        }
     }
 
     /**
