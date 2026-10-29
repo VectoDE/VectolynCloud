@@ -46,6 +46,11 @@ final class VelocityServers implements ProxyServers {
     }
 
     @Override
+    public int playersOn(String name) {
+        return proxy.getServer(name).map(server -> server.getPlayersConnected().size()).orElse(0);
+    }
+
+    @Override
     public void withdraw(String name) {
         proxy.getServer(name).ifPresent(server -> proxy.unregisterServer(server.getServerInfo()));
     }

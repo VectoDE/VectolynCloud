@@ -24,4 +24,12 @@ public interface ProxyServers {
      * is not changed; the cloud renders it without the server on the next start of the proxy.
      */
     void withdraw(String name);
+
+    /**
+     * Players the proxy has on a server right now.
+     *
+     * @param name the server name
+     * @return the count, 0 for an unknown server
+     */
+    int playersOn(String name);
 }

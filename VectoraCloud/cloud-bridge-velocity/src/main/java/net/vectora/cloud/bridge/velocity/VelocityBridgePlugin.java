@@ -3,6 +3,8 @@ package net.vectora.cloud.bridge.velocity;
 import com.google.inject.Inject;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
+import com.velocitypowered.api.event.player.KickedFromServerEvent;
+import com.velocitypowered.api.event.player.PlayerChooseInitialServerEvent;
 import com.velocitypowered.api.event.player.ServerConnectedEvent;
 import com.velocitypowered.api.event.proxy.ListenerBoundEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
@@ -79,6 +81,40 @@ public final class VelocityBridgePlugin {
         }
     }
 
+    /**
+     * A player joins the network: the proxy's first choice (try list or forced host) is replaced
+     * by the backend of the same group with the lowest load.
+     */
+    @Subscribe
+    public void onChooseInitialServer(PlayerChooseInitialServerEvent event) {
+        ProxyBridge target = bridge;
+        if (target == null || event.getInitialServer().isEmpty()) {
+            return;
+        }
+        String choice = event.getInitialServer().get().getServerInfo().getName();
+        target.initialServer(event.getPlayer().getUniqueId(), choice)
+                .flatMap(proxy::getServer)
+                .ifPresent(event::setInitialServer);
+    }
+
+    /**
+     * A backend kicked the player and the proxy sends them on into a group (lobby fallback): the
+     * target is replaced by the backend of the same group with the lowest load, never the one that
+     * kicked. A disconnect or a notice stays as the proxy or another plugin decided.
+     */
+    @Subscribe
+    public void onKickedFromServer(KickedFromServerEvent event) {
+        ProxyBridge target = bridge;
+        if (target == null || !(event.getResult() instanceof KickedFromServerEvent.RedirectPlayer redirect)) {
+            return;
+        }
+        String kickedFrom = event.getServer().getServerInfo().getName();
+        target.redirect(event.getPlayer().getUniqueId(), kickedFrom, redirect.getServer().getServerInfo().getName())
+                .flatMap(proxy::getServer)
+                .ifPresent(server -> event.setResult(
+                        KickedFromServerEvent.RedirectPlayer.create(server, redirect.getMessageComponent())));
+    }
+
     /** The player left the proxy. */
     @Subscribe
     public void onDisconnect(DisconnectEvent event) {
@@ -102,7 +138,7 @@ public final class VelocityBridgePlugin {
                 ProxyRole.describe(platform));
         VelocityServers servers = new VelocityServers(proxy);
         sender = BridgeConnection.open(settings.get(), created -> {
-            ProxyBridge proxyBridge = new ProxyBridge(created, servers, role);
+            ProxyBridge proxyBridge = new ProxyBridge(created, servers, new VelocityPlayers(proxy), role);
             bridge = proxyBridge;
             return proxyBridge;
         });
