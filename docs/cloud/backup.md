@@ -121,10 +121,12 @@ The hashes detect damage and an archive whose content does not match its manifes
 
 1. The node must report the service as stopped, and `ServiceControl.holdStopped` keeps it from starting until the restore is done. A running, starting or stopping service is refused (`SERVICE_RUNNING`, `SERVICE_BUSY`).
 2. The manifest is read and checked (above). The archive must contain files of that service.
-3. The archive is unpacked with `SafeExtractor` into an owner-only staging folder next to the runtime folder, with limits derived from the manifest.
+3. The archive is unpacked with `SafeExtractor` into an owner-only staging folder (`.vectora-restore-staging-*`) next to the runtime folder, with limits derived from the manifest. The file system must have room for the content the manifest lists plus 256 MiB, otherwise nothing is unpacked. A runtime folder that is a symbolic link or junction is refused; restore such a setup by hand.
 4. Every unpacked file of the service is compared with the manifest: the same set of files, the same size and SHA-256. Any difference stops the restore (`HASH_MISMATCH` or `CORRUPT`) before anything is touched.
 5. A safety backup of the current state is taken (`pre-restore`, without database). Its id is shown.
 6. The runtime folder is swapped by renames: the current folder moves aside, the staged one takes its place, then the paths a backup never contains (excluded folders and files such as jars, logs, secrets and the rendered secret files, links, non-portable names) move back from the old folder. Then the old folder is deleted. The next start renders the template files again.
+
+While the folders are swapped, the old one is called `.vectora-restore-old-<folder>-<random>`. If the cloud dies right between the two renames, `BackupService.recoverInterruptedOperations()` moves it back; an old folder next to an existing runtime folder still holds files that were not moved back and is only reported. The same call deletes staging folders, `.partial` archives and dump and option files (with the database password) of an interrupted backup. A restore runs the folder part for its own parent folder first.
 
 The database is not touched (see [Database](#database)).
 
@@ -167,7 +169,7 @@ database:
 | Key | Default | Rule |
 |---|---|---|
 | `schema-version` | `1` | must be 1 |
-| `directory` | `backups` | relative to the home (not under `secrets/`, `groups/`, `tasks/`, `state/`, `logs/`, `cache/`) or absolute, for example a second disk. Only local folders; there are no paid cloud targets. |
+| `directory` | `backups` | relative to the home (not under `secrets/`, `groups/`, `tasks/`, `state/`, `logs/`, `cache/`) or absolute, for example a second disk. Neither inside a runtime folder nor around one: a backup fails with `CONFIG` then. Only local folders; there are no paid cloud targets. |
 | `schedule.enabled` | `false` | `true` needs `cron` or `interval` |
 | `schedule.cron` | none | five fields, see above; not together with `interval` |
 | `schedule.interval` | none | `5m` to `7d` |
@@ -200,7 +202,7 @@ Alias `backups`. Backup ids and service names complete with Tab. Texts exist in 
 | | `Hold holdStopped(id)` | blocks starts of a stopped service until `close()`, fails with `BackupException` if it is not stopped. Used for the copy of a stopped service and for a restore (whose safety backup does not ask a second time) |
 | `DatabaseSource` | `Optional<DatabaseAccess> access()` | usually `DatabaseAccess.of(cloud.yml database section, secrets/vectora.env, installed MariaDB folder)` |
 
-The node then builds one `BackupService`, starts a `BackupScheduler`, registers `BackupCommands` and may call `BackupConfigFile.writeIfMissing()` during setup.
+The node then builds one `BackupService`, calls `recoverInterruptedOperations()` once before it starts any service (otherwise a start would render a fresh template into a runtime folder that a crash left aside), starts a `BackupScheduler`, registers `BackupCommands` and may call `BackupConfigFile.writeIfMissing()` during setup.
 
 ### Backup before a Minecraft version change
 
@@ -208,7 +210,8 @@ The node then builds one `BackupService`, starts a `BackupScheduler`, registers 
 
 ## Limits
 
-- Restore unpacks the whole archive into the staging folder, so it needs free space for the archive's content once more.
+- Restore unpacks the whole archive into the staging folder, also the other services and the dumps, so it needs free space for the archive's content once more.
+- Restored files get the default rights of the staging folder (owner-only on Windows, the process umask on POSIX); file modes are not stored in the archive.
 - Database restore is manual (see above).
 - Dynamic services (tasks) are not backed up. They start from their templates every time.
 - The hashes are no signature (see [Manifest](#manifest)).

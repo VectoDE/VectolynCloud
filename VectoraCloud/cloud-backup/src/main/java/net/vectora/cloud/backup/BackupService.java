@@ -44,6 +44,7 @@ import net.vectora.cloud.backup.config.BackupConfigFile;
 import net.vectora.cloud.backup.database.DatabaseAccess;
 import net.vectora.cloud.backup.database.H2Dumper;
 import net.vectora.cloud.backup.database.MariaDbDumper;
+import net.vectora.cloud.backup.database.OptionFile;
 import net.vectora.cloud.backup.database.ProcessToolRunner;
 import net.vectora.cloud.backup.database.ToolRunner;
 import net.vectora.cloud.backup.manifest.BackupManifest;
@@ -103,6 +104,12 @@ public final class BackupService {
     private static final DateTimeFormatter ID_TIME = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss", Locale.ROOT)
             .withZone(ZoneOffset.UTC);
     private static final int MAX_WALK_DEPTH = 64;
+    /** Staging folder of a restore, next to the service folder. */
+    static final String STAGING_PREFIX = ".vectora-restore-staging-";
+    /** The previous service folder during the swap: {@code <prefix><folder name>-<random>}. */
+    static final String OLD_PREFIX = ".vectora-restore-old-";
+    /** Free space kept beyond the content of a restore. */
+    static final long SPACE_RESERVE = 256L * 1024 * 1024;
 
     /** Reads {@code backup.yml}; replaced in tests. */
     @FunctionalInterface
@@ -241,7 +248,7 @@ public final class BackupService {
 
     private BackupInfo createLocked(BackupRequest request) throws BackupException, InterruptedException {
         BackupConfig settings = settings();
-        Path dir = prepareDirectory(configFile.directory(settings));
+        Path dir = prepareDirectory(checkOutsideServices(configFile.directory(settings)));
         Path work = prepareWorkDirectory();
         removePartials(dir);
         List<BackupTarget> selected = select(request);
@@ -713,9 +720,16 @@ public final class BackupService {
         Path parent = current.getParent();
         Path staging = null;
         try {
+            if (Files.isSymbolicLink(current) || Files.exists(current, LinkOption.NOFOLLOW_LINKS)
+                    && !Files.isDirectory(current, LinkOption.NOFOLLOW_LINKS)) {
+                throw new BackupException(BackupException.Reason.IO, current + " is a link or not a folder; "
+                        + "restore it by hand");
+            }
             Files.createDirectories(parent);
-            staging = Files.createTempDirectory(parent, ".vectora-restore-");
+            List<String> warnings = new ArrayList<>(recover(parent));
+            staging = Files.createTempDirectory(parent, STAGING_PREFIX);
             OwnerOnlyPermissions.restrictDirectory(staging);
+            requireSpace(staging, manifest.totalBytes());
             extractVerified(file, manifest, staging);
             Path source = staging.resolve("services").resolve(serviceId);
             Files.createDirectories(source);
@@ -727,7 +741,7 @@ public final class BackupService {
                         false, "before restoring " + backupId));
                 safety = Optional.of(before.id());
             }
-            List<String> warnings = swap(current, source, parent);
+            warnings.addAll(swap(current, source, parent));
             LOG.log(System.Logger.Level.INFO, "Restored {0} from backup {1} ({2} files)", serviceId, backupId, restored);
             return new RestoreResult(backupId, serviceId, restored, safety, warnings);
         } catch (IOException e) {
@@ -794,7 +808,7 @@ public final class BackupService {
     private List<String> swap(Path current, Path source, Path parent) throws IOException {
         Path old = null;
         if (Files.exists(current, LinkOption.NOFOLLOW_LINKS)) {
-            old = parent.resolve(".vectora-restore-old-" + HexFormat.of().formatHex(randomBytes(4)));
+            old = parent.resolve(OLD_PREFIX + current.getFileName() + "-" + HexFormat.of().formatHex(randomBytes(4)));
             Files.move(current, old, StandardCopyOption.ATOMIC_MOVE);
         }
         try {
@@ -867,6 +881,102 @@ public final class BackupService {
         });
     }
 
+    // ---------------------------------------------------------------- recovery
+
+    /**
+     * Cleans up after a crash: unfinished archives, dump files and option files of an interrupted
+     * backup, and what an interrupted restore left next to the service folders. A service folder
+     * that was moved aside but not yet replaced is moved back. cloud-node calls this once at
+     * startup, before it starts any service, so the start does not render a fresh template into a
+     * folder whose files are only aside.
+     *
+     * @return what needs a look from the operator, also logged; empty if nothing was found
+     * @throws BackupException with {@link BackupException.Reason#BUSY} if another operation runs
+     */
+    public List<String> recoverInterruptedOperations() throws BackupException {
+        acquire();
+        try {
+            List<String> notes = new ArrayList<>();
+            try {
+                removePartials(configFile.directory(settings()));
+            } catch (BackupException e) {
+                notes.add("unfinished archives not checked: " + e.getMessage());
+            }
+            Path work = home.resolve("temp").resolve("backup");
+            if (Files.isDirectory(work, LinkOption.NOFOLLOW_LINKS)) {
+                try {
+                    cleanWorkDirectory(work);
+                } catch (IOException e) {
+                    notes.add("cannot clean " + work + ": " + e.getMessage());
+                }
+            }
+            Set<Path> parents = new java.util.TreeSet<>();
+            for (BackupTarget target : targets.staticServices()) {
+                parents.add(target.directory().getParent());
+            }
+            for (Path parent : parents) {
+                notes.addAll(recover(parent));
+            }
+            notes.forEach(note -> LOG.log(System.Logger.Level.WARNING, "Backup recovery: {0}", note));
+            return notes;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /** Deletes staging folders and moves back a service folder a crash left aside. */
+    private static List<String> recover(Path parent) {
+        List<String> notes = new ArrayList<>();
+        if (!Files.isDirectory(parent, LinkOption.NOFOLLOW_LINKS)) {
+            return notes;
+        }
+        List<Path> leftovers = new ArrayList<>();
+        try (DirectoryStream<Path> children = Files.newDirectoryStream(parent, ".vectora-restore-*")) {
+            children.forEach(leftovers::add);
+        } catch (IOException e) {
+            notes.add("cannot check " + parent + " for an interrupted restore: " + e.getMessage());
+            return notes;
+        }
+        leftovers.sort(Comparator.naturalOrder());
+        for (Path child : leftovers) {
+            String name = child.getFileName().toString();
+            if (!Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)) {
+                continue;
+            }
+            if (name.startsWith(STAGING_PREFIX)) {
+                deleteTree(child);
+                continue;
+            }
+            int dash = name.lastIndexOf('-');
+            if (!name.startsWith(OLD_PREFIX) || dash <= OLD_PREFIX.length()) {
+                continue;
+            }
+            Path original = parent.resolve(name.substring(OLD_PREFIX.length(), dash));
+            if (Files.exists(original, LinkOption.NOFOLLOW_LINKS)) {
+                notes.add("an interrupted restore left " + child + " with files of the previous " + original.getFileName()
+                        + " that were not moved back (jars, logs, secrets); check it and delete it by hand");
+                continue;
+            }
+            try {
+                Files.move(child, original, StandardCopyOption.ATOMIC_MOVE);
+                notes.add("a restore was interrupted before the restored folder took its place; " + original
+                        + " is back as it was before");
+            } catch (IOException e) {
+                notes.add("cannot move " + child + " back to " + original + ": " + e.getMessage());
+            }
+        }
+        return notes;
+    }
+
+    /** Fails if the file system of {@code folder} cannot take {@code bytes} plus a reserve. */
+    private static void requireSpace(Path folder, long bytes) throws BackupException, IOException {
+        long usable = Files.getFileStore(folder).getUsableSpace();
+        if (usable - SPACE_RESERVE < bytes) {
+            throw new BackupException(BackupException.Reason.IO, "not enough free space for the restore: it unpacks "
+                    + bytes + " bytes and keeps " + SPACE_RESERVE + " free, but only " + usable + " bytes are free");
+        }
+    }
+
     // ---------------------------------------------------------------- helpers
 
     private BackupInfo inspect(String id, Path file) {
@@ -936,6 +1046,20 @@ public final class BackupService {
         }
     }
 
+    /**
+     * Refuses a backup folder inside a service folder (a backup would copy the archives, also the
+     * one being written, and a restore would replace them) or one that contains a service folder.
+     */
+    private Path checkOutsideServices(Path dir) throws BackupException {
+        for (BackupTarget target : targets.staticServices()) {
+            if (dir.startsWith(target.directory()) || target.directory().startsWith(dir)) {
+                throw new BackupException(BackupException.Reason.CONFIG, "directory in backup.yml must not lie inside "
+                        + "or contain the folder of " + target.serviceId() + " (" + target.directory() + ")");
+            }
+        }
+        return dir;
+    }
+
     private Path prepareDirectory(Path dir) throws BackupException {
         try {
             if (!Files.exists(dir, LinkOption.NOFOLLOW_LINKS)) {
@@ -956,15 +1080,21 @@ public final class BackupService {
         try {
             Files.createDirectories(work);
             OwnerOnlyPermissions.restrictDirectory(work);
-            try (DirectoryStream<Path> leftovers = Files.newDirectoryStream(work, "*.sql")) {
-                for (Path leftover : leftovers) {
-                    deleteQuietly(leftover);
-                }
-            }
+            cleanWorkDirectory(work);
             return work;
         } catch (IOException e) {
             throw new BackupException(BackupException.Reason.IO, "cannot prepare " + work + ": " + e.getMessage(), e);
         }
+    }
+
+    /** Deletes dumps and option files (with the database password) a crash left behind. */
+    private static void cleanWorkDirectory(Path work) throws IOException {
+        try (DirectoryStream<Path> leftovers = Files.newDirectoryStream(work, "*.sql")) {
+            for (Path leftover : leftovers) {
+                deleteQuietly(leftover);
+            }
+        }
+        OptionFile.removeLeftovers(work);
     }
 
     private static void removePartials(Path dir) {

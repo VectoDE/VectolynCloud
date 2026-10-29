@@ -532,6 +532,66 @@ class BackupServiceTest {
         assertEquals("level-lobby-1", Files.readString(lobby.resolve("world/level.dat")));
     }
 
+    @Test
+    void backupFolderInsideOrAroundAServiceFolderIsRefused() throws Exception {
+        test.config = test.config.withDirectory("Lobby-Server/runtime/backups");
+        assertEquals(BackupException.Reason.CONFIG, assertThrows(BackupException.class,
+                () -> service.create(BackupRequest.all(BackupReason.MANUAL))).reason());
+        assertFalse(Files.exists(lobby.resolve("backups")), "nothing is created inside the service");
+
+        test.config = test.config.withDirectory(home.toString());
+        assertEquals(BackupException.Reason.CONFIG, assertThrows(BackupException.class,
+                () -> service.create(BackupRequest.all(BackupReason.MANUAL))).reason());
+
+        // Counter-check: a sibling folder is fine.
+        test.config = test.config.withDirectory("Lobby-Server/backups");
+        assertTrue(Files.exists(service.create(BackupRequest.all(BackupReason.MANUAL)).file()));
+    }
+
+    @Test
+    void recoveryMovesBackAFolderAnInterruptedRestoreLeftAside() throws Exception {
+        BackupInfo backup = service.create(BackupRequest.all(BackupReason.MANUAL));
+        // A crash between the two renames: the service folder is aside, the staging folder still there.
+        Path aside = lobby.resolveSibling(BackupService.OLD_PREFIX + "runtime-1a2b3c4d");
+        Files.move(lobby, aside);
+        TestHome.write(lobby.resolveSibling(BackupService.STAGING_PREFIX + "123/services/lobby-1/world/level.dat"),
+                "staged");
+        // An earlier restore of survival-1 left preserved files aside although its folder exists.
+        Path survivalAside = survival.resolveSibling(BackupService.OLD_PREFIX + "runtime-00000000");
+        TestHome.write(survivalAside.resolve("paper.jar"), "old jar");
+        // A crashed dump left its option file and a partial archive.
+        TestHome.write(home.resolve("temp/backup/.dump-42/client.cnf"), "password=\"" + TestHome.SECRET + "\"");
+        TestHome.write(home.resolve("backups/.vectora-backup-20261029-031500-0000.zip.partial"), "half");
+
+        List<String> notes = service.recoverInterruptedOperations();
+
+        assertEquals("level-lobby-1", Files.readString(lobby.resolve("world/level.dat")), "folder is back");
+        assertNoLeftoversNextTo(lobby);
+        assertTrue(Files.exists(survivalAside.resolve("paper.jar")), "a folder with unique files is kept");
+        assertEquals(2, notes.size(), notes.toString());
+        assertFalse(Files.exists(home.resolve("temp/backup/.dump-42")), "option file with the password is gone");
+        assertFalse(Files.exists(home.resolve("backups/.vectora-backup-20261029-031500-0000.zip.partial")));
+        assertTrue(Files.exists(backup.file()), "finished archives stay");
+        // Counter-check: a second run finds only the kept folder again.
+        assertEquals(1, service.recoverInterruptedOperations().size());
+    }
+
+    @Test
+    void restoreRefusesALinkedServiceFolder() throws Exception {
+        BackupInfo backup = service.create(BackupRequest.all(BackupReason.MANUAL));
+        Path real = home.resolve("elsewhere");
+        Files.move(lobby, real);
+        try {
+            Files.createSymbolicLink(lobby, real);
+        } catch (java.io.IOException | UnsupportedOperationException e) {
+            org.junit.jupiter.api.Assumptions.abort("symbolic links need extra rights here: " + e.getMessage());
+        }
+        assertEquals(BackupException.Reason.IO, assertThrows(BackupException.class,
+                () -> service.restore(backup.id(), "lobby-1")).reason());
+        assertTrue(Files.isSymbolicLink(lobby), "the link stays");
+        assertEquals("level-lobby-1", Files.readString(real.resolve("world/level.dat")));
+    }
+
     private void assertNoArchives() throws Exception {
         Path dir = home.resolve("backups");
         if (Files.isDirectory(dir)) {
