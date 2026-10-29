@@ -20,8 +20,9 @@ import java.util.Optional;
  *       {@value GeneratedFiles#LEGACY_FORWARDING_PLACEHOLDER}, which must differ from
  *       {@value GeneratedFiles#FORWARDING_PLACEHOLDER}.</li>
  *   <li>{@link ServerPlatform#PAPER}: {@code plugins/floodgate/key.pem}, {@code eula.txt} after
- *       consent.</li>
- *   <li>{@link ServerPlatform#PANDASPIGOT}: {@code eula.txt} after consent.</li>
+ *       consent, {@code spigot.yml} with Spigot's restart turned off.</li>
+ *   <li>{@link ServerPlatform#PANDASPIGOT}: {@code eula.txt} after consent, {@code spigot.yml} with
+ *       Spigot's restart turned off.</li>
  *   <li>{@link ServerPlatform#FABRIC}: {@code config/floodgate/key.pem}, {@code eula.txt} after
  *       consent.</li>
  *   <li>{@link ServerPlatform#NONE}: nothing.</li>
@@ -30,6 +31,12 @@ import java.util.Optional;
  * <p>The Floodgate key comes from {@value GeneratedFiles#FLOODGATE_PLACEHOLDER} and is only written
  * for a template that ships Floodgate's folder ({@link #runsFloodgate}). Secrets are checked before
  * anything is written.
+ *
+ * <p>For Paper and PandaSpigot the node always sets {@code restart-script: ''} and
+ * {@code restart-on-crash: true} in the runtime {@code spigot.yml}, whatever the template says:
+ * otherwise the server would start a second, unmanaged server on {@code /restart} or after a hang,
+ * or (PandaSpigot with {@code false}) stay hung instead of stopping.
+ * {@code spigot.yml} is listed as generated only when the node created or changed it.
  */
 public final class TemplateInstaller {
 
@@ -85,6 +92,9 @@ public final class TemplateInstaller {
         }
         if (platform.needsEula()) {
             GeneratedFiles.writeEula(runtime, eulaAccepted).ifPresent(generated::add);
+        }
+        if (platform.readsSpigotYml()) {
+            SpigotRestart.enforce(runtime).ifPresent(generated::add);
         }
         generated.sort(null);
         return report.withGenerated(generated);
