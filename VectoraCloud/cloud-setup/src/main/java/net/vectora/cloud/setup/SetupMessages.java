@@ -253,7 +253,7 @@ public final class SetupMessages {
     /** Label of the service port range in the port hint. */
     public static final Text PORT_SERVICES = Text.of("services", "Dienste");
     /** Cancelled. */
-    public static final Text CANCELLED =Text.of("Setup cancelled. Nothing was saved.", "Einrichtung abgebrochen. Gespeichert wurde nichts.");
+    public static final Text CANCELLED = Text.of("Setup cancelled. Nothing was saved.", "Einrichtung abgebrochen. Gespeichert wurde nichts.");
     /** Input ended. */
     public static final Text INPUT_ENDED = Text.of(
             "The input ended before the setup was done, so nothing was saved. Without a console,"

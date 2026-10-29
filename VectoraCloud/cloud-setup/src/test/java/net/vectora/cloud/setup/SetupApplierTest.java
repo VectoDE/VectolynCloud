@@ -12,6 +12,7 @@ import java.nio.file.Path;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import net.vectora.cloud.config.CloudHome;
 import net.vectora.cloud.config.ConfigService;
 import net.vectora.cloud.config.io.AtomicFileWriter;
@@ -108,6 +109,28 @@ class SetupApplierTest {
         assertEquals(DatabaseMode.EXTERNAL, config.snapshot().cloud().database().mode());
         assertEquals("Applied", config.snapshot().cloud().networkName());
         assertEquals("first-Pw-42", secrets.load().get("VECTORA_DB_PASSWORD").orElseThrow().reveal());
+    }
+
+    @Test
+    void aFailureAfterThePasswordPutsTheGeneratedOneBack() throws Exception {
+        // Write 1 creates the generated secrets, write 2 stores the external password; right after
+        // it, cloud.yml becomes unwritable, so the final step (setup-complete) fails.
+        AtomicInteger writes = new AtomicInteger();
+        Path cloudFile = config.home().cloudFile();
+        SecretStore sabotaging = new SecretStore(config.home().secretsFile(), new AtomicFileWriter((from, to, options) -> {
+            Files.move(from, to, options);
+            if (writes.incrementAndGet() == 2) {
+                Files.delete(cloudFile);
+                Files.createDirectories(cloudFile.resolve("blocked"));
+            }
+        }));
+
+        assertThrows(Exception.class, () -> SetupApplier.apply(config, sabotaging, external("first-Pw-42"), env));
+
+        String password = secrets.load().get("VECTORA_DB_PASSWORD").orElseThrow().reveal();
+        assertFalse(password.equals("first-Pw-42"), "the external password went back out with its configuration");
+        assertFalse(password.isEmpty(), "the generated password stays");
+        assertFalse(config.snapshot().cloud().setupComplete());
     }
 
     @Test

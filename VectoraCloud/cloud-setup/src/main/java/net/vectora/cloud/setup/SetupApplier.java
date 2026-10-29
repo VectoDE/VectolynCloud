@@ -94,6 +94,9 @@ final class SetupApplier {
         try {
             if (!secrets.ensureGenerated(new SecretGenerator()).isEmpty()) {
                 files.add(secretsFile);
+                // A password that was missing was generated just now; a rollback goes back to that
+                // one, not to the operator's external password.
+                previousPassword = secrets.load().get(GeneratedSecret.DB_PASSWORD.key());
             }
             if (answers.databasePassword().isPresent()
                     && secrets.put(GeneratedSecret.DB_PASSWORD.key(), answers.databasePassword().get(), PASSWORD_COMMENT)) {
