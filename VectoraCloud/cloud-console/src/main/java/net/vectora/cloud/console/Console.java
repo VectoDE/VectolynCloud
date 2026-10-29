@@ -3,7 +3,9 @@ package net.vectora.cloud.console;
 import java.io.InputStream;
 import java.io.PrintStream;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.Objects;
+import java.util.function.LongSupplier;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
@@ -30,14 +32,24 @@ import net.vectora.cloud.console.terminal.TerminalSelector;
  * console.start();
  * }</pre>
  *
- * <p>Ending: Ctrl+C and Ctrl+D on a terminal run the {@code shutdown} command, exactly as if it was
- * typed. Without a terminal the end of stdin only stops reading; the cloud keeps running and is
- * stopped by a signal.
+ * <p>Ending: on a terminal, Ctrl+C or Ctrl+D at the prompt asks first: pressed a second time within
+ * {@link #CONFIRM_WINDOW} (3 seconds), it runs the {@code shutdown} command, exactly as if it was
+ * typed. One press alone stops nothing, so a stray Ctrl+C (for example to cancel a line) does not
+ * take the network down. Without a terminal the end of stdin only stops reading; the cloud keeps
+ * running and is stopped by a signal.
  */
 public final class Console implements AutoCloseable {
 
     /** Name of the command that Ctrl+C and Ctrl+D run. */
     public static final String SHUTDOWN_COMMAND = "shutdown";
+
+    /** Time within which a second Ctrl+C (or Ctrl+D) confirms the shutdown. */
+    public static final Duration CONFIRM_WINDOW = Duration.ofSeconds(3);
+
+    private static final Text CONFIRM = Text.of(
+            "Press Ctrl+C again within %1$d seconds to stop every service and the cloud, or type shutdown.",
+            "Zum Stoppen aller Dienste und der Cloud innerhalb von %1$d Sekunden erneut Strg+C drücken"
+                    + " oder shutdown eingeben.");
 
     private static final System.Logger LOG = System.getLogger(Console.class.getName());
 
@@ -47,8 +59,11 @@ public final class Console implements AutoCloseable {
     private final Prompter prompter;
     private final CommandDispatcher dispatcher;
     private final Supplier<String> prompt;
+    private final LongSupplier nanoTime;
     private volatile boolean running = true;
     private Thread thread;
+    /** {@link #nanoTime} of the last unconfirmed Ctrl+C, or null. Only used on the read thread. */
+    private Long pendingInterrupt;
 
     private Console(Builder builder, CommandRegistry registry, ConsoleTerminal terminal) {
         this.registry = registry;
@@ -57,6 +72,7 @@ public final class Console implements AutoCloseable {
         this.prompter = new Prompter(terminal, output);
         this.dispatcher = new CommandDispatcher(registry, output, prompter);
         this.prompt = builder.prompt;
+        this.nanoTime = builder.nanoTime;
     }
 
     /** Starts a console. */
@@ -107,7 +123,10 @@ public final class Console implements AutoCloseable {
                 return;
             }
             switch (result) {
-                case ReadResult.Line line -> dispatcher.execute(line.text());
+                case ReadResult.Line line -> {
+                    pendingInterrupt = null;
+                    dispatcher.execute(line.text());
+                }
                 case ReadResult.Interrupted() -> shutdownFromKey();
                 case ReadResult.EndOfInput() -> {
                     if (terminal.interactive()) {
@@ -152,12 +171,21 @@ public final class Console implements AutoCloseable {
         return new ConsoleLogHandler(terminal, redactor);
     }
 
+    /** Ctrl+C or Ctrl+D at the prompt: the first press asks, a second one within the window shuts down. */
     private void shutdownFromKey() {
-        if (registry.find(SHUTDOWN_COMMAND).isPresent()) {
-            dispatcher.execute(SHUTDOWN_COMMAND);
-        } else {
+        if (registry.find(SHUTDOWN_COMMAND).isEmpty()) {
             running = false;
+            return;
         }
+        long now = nanoTime.getAsLong();
+        Long previous = pendingInterrupt;
+        if (previous != null && now - previous <= CONFIRM_WINDOW.toNanos()) {
+            pendingInterrupt = null;
+            dispatcher.execute(SHUTDOWN_COMMAND);
+            return;
+        }
+        pendingInterrupt = now;
+        output.warning(CONFIRM, CONFIRM_WINDOW.toSeconds());
     }
 
     /** Builds a {@link Console}. */
@@ -170,6 +198,7 @@ public final class Console implements AutoCloseable {
         private Predicate<String> historyFilter = line -> true;
         private InputStream in = System.in;
         private PrintStream out = System.out;
+        private LongSupplier nanoTime = System::nanoTime;
 
         private Builder() {
         }
@@ -206,6 +235,12 @@ public final class Console implements AutoCloseable {
         public Builder streams(InputStream input, PrintStream output) {
             this.in = Objects.requireNonNull(input, "input");
             this.out = Objects.requireNonNull(output, "output");
+            return this;
+        }
+
+        /** Replaces the clock that times the second Ctrl+C (tests); default {@link System#nanoTime()}. */
+        public Builder nanoTime(LongSupplier value) {
+            this.nanoTime = Objects.requireNonNull(value, "nanoTime");
             return this;
         }
 

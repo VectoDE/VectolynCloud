@@ -41,11 +41,38 @@ class ProvisionersTest {
         DatabaseEndpoint endpoint = p.provision();
         assertEquals(StorageMethod.MARIADB, endpoint.storageMethod());
         assertEquals("db.example.net", endpoint.host());
-        assertEquals(List.of("USE `luckperms`", "SELECT 1"), server.statementsOf("luckperms"));
+        assertEquals(List.of("USE `luckperms`", "SELECT 1", "SELECT @@max_connections"),
+                server.statementsOf("luckperms"));
         assertTrue(server.statementsOf("root").isEmpty(), "never root on an external server");
         assertEquals(TlsMode.VERIFY_FULL, server.targets.get(0).tls(), "remote servers keep TLS verification");
         assertTrue(p.health().healthy());
         p.shutdown();
+    }
+
+    @Test
+    void externalReadsMaxConnectionsForTheConnectionBudget() throws Exception {
+        server.passwords.put("luckperms", APP.reveal());
+        server.maxConnections = "500";
+        ExternalProvisioner p = new ExternalProvisioner(config(DatabaseMode.EXTERNAL, "db.example.net"), APP, server);
+        assertEquals(ConnectionBudget.managed(), p.connectionBudget(), "before provision() the default applies");
+        p.provision();
+        assertEquals(new ConnectionBudget(500, ConnectionBudget.DEFAULT_RESERVED), p.connectionBudget());
+        assertTrue(p.notice().isEmpty());
+
+        server.maxConnections = "10";
+        p.provision();
+        assertEquals(new ConnectionBudget(10, 2), p.connectionBudget(), "a fifth stays free on a small server");
+
+        server.maxConnections = "1";
+        DatabaseException tooSmall = assertThrows(DatabaseException.class, p::provision);
+        assertEquals(DatabaseException.Reason.CONNECTION_BUDGET, tooSmall.reason());
+
+        for (String unreadable : new String[] {null, "many", "-1", "0"}) {
+            server.maxConnections = unreadable;
+            p.provision();
+            assertEquals(ConnectionBudget.managed(), p.connectionBudget(), "unreadable value " + unreadable);
+            assertTrue(p.notice().orElseThrow().contains("max_connections"), "the operator is told");
+        }
     }
 
     @Test

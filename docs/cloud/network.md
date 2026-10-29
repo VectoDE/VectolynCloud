@@ -43,7 +43,7 @@ The token proves which service a connection belongs to, nothing more. It sits in
 ```java
 ServiceTokens tokens = new ServiceTokens();
 CloudNetworkServer server = CloudNetworkServer.builder(NetworkSettings.forNode(node), tokens)
-        .listener(serviceListener)
+        .listener(channelListener)
         .build();
 server.start();
 
@@ -53,6 +53,8 @@ tokens.revoke(serviceId);                  // after the process has ended
 server.close();                            // Disconnect(SHUTDOWN) to everyone
 ```
 
+In the running node the tokens belong to the service core: `ServiceManager` holds the only `ServiceTokens`, issues a token right before it starts a process and revokes it when the process ends or the start fails. `CloudNode` passes `ServiceManager.authenticator()` to the builder, so the channel accepts exactly the services that run now, and `ChannelBridge` closes the connection of a service whose process has ended. `CloudNode` starts the server before the first service and closes it after the last one.
+
 ### Seams for the service core (`cloud-node`, PR 8)
 
 The network module knows nothing about groups or processes. The node connects it through two small interfaces:
@@ -60,7 +62,7 @@ The network module knows nothing about groups or processes. The node connects it
 | Interface | Direction | Purpose |
 |---|---|---|
 | `ServiceAuthenticator` | network asks node | `authenticate(PeerId, AuthToken)` returns an `AuthResult.Outcome`. `ServiceTokens` is the ready-made implementation with `issue`, `register` and `revoke`. |
-| `ServiceListener` | network tells node | `onEvent(ServiceEvent)` with one of the records `Connected`, `Ready`, `StatusReported`, `MessageReceived` (`PlayerJoin`, `PlayerQuit`, `PlayerSwitch`) and `Disconnected`. `ServiceEvent` is sealed, so a `switch` can cover every case. Without a listener the events are dropped. |
+| `ChannelListener` (the service core's own listener in `cloud-node` is `ServiceListener`) | network tells node | `onEvent(ServiceEvent)` with one of the records `Connected`, `Ready`, `StatusReported`, `MessageReceived` (`PlayerJoin`, `PlayerQuit`, `PlayerSwitch`) and `Disconnected`. `ServiceEvent` is sealed, so a `switch` can cover every case. Without a listener the events are dropped. |
 
 And the node talks to services through the server:
 
@@ -118,7 +120,7 @@ The cloud starts every service process with these variables. A system property w
 | `VECTORA_SERVICE_ID` | `vectora.service.id` | required | Id of this service, for example `lobby-1` |
 | `VECTORA_SERVICE_TOKEN` | `vectora.service.token` | required | Token from `ServiceTokens.issue` |
 
-The names are constants in `CloudClientSettings` (`ENV_HOST`, `ENV_PORT`, `ENV_SERVICE_ID`, `ENV_TOKEN`). `cloud-node` sets them in PR 8, the bridges read them in PR 13. A missing or invalid value fails with a message that names the variable and never contains the token.
+The names are constants of `net.vectora.protocol.ServiceEnvironment` (`CLOUD_HOST`, `CLOUD_PORT`, `SERVICE_ID`, `SERVICE_TOKEN`; `CloudClientSettings.ENV_*` point at them). `cloud-node` sets them from the same constants, so both sides use one definition; the bridges read them in PR 13. A missing or invalid value fails with a message that names the variable and never contains the token.
 
 ### Behaviour
 

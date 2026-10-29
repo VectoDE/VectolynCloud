@@ -28,6 +28,12 @@ import java.nio.file.Path;
  * {@code token.txt} for the test, prints every line of the files named in {@code -Dfake.echo}
  * (to prove secrets in rendered files are masked), and creates {@code world/level.dat} like a
  * real server creating its world.
+ *
+ * <p>With {@code -Dfake.cloud=true} it connects to the cloud channel through
+ * {@code FakeCloudBridge} (loaded by name, so this class keeps using only the JDK; packed by
+ * {@link FakeServerJar#writeWithCloudClient}) and does not print {@code Done (…)!}: it reports
+ * readiness only through {@code CloudClient.markReady()}, so the service becomes RUNNING only if
+ * the node handles the channel's {@code ServiceReady}.
  */
 public final class FakeServer {
 
@@ -66,13 +72,22 @@ public final class FakeServer {
         if (mode.equals("ignore-term")) {
             Runtime.getRuntime().addShutdownHook(new Thread(FakeServer::sleepForever));
         }
-        out.println("[fake] Done (0.042s)! For help, type \"help\"");
+        AutoCloseable bridge = null;
+        if (Boolean.getBoolean("fake.cloud")) {
+            bridge = (AutoCloseable) Class.forName("net.vectora.cloud.node.fake.FakeCloudBridge")
+                    .getMethod("connect", PrintStream.class).invoke(null, out);
+        } else {
+            out.println("[fake] Done (0.042s)! For help, type \"help\"");
+        }
         BufferedReader in = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
         String line;
         while ((line = in.readLine()) != null) {
             out.println("> " + line);
             if ((line.equals("stop") || line.equals("shutdown")) && mode.equals("normal")) {
                 out.println("[fake] Stopping the server");
+                if (bridge != null) {
+                    bridge.close();
+                }
                 Files.writeString(Path.of("stopped-cleanly"), "yes", StandardCharsets.UTF_8);
                 System.exit(0);
             }
