@@ -1014,6 +1014,9 @@ public final class ServiceManager implements AutoCloseable {
                 // in between either cancels the restart or finds the service PREPARED.
                 service.pendingRestart = null;
                 try {
+                    // The same gate as every other start: eula-accepted or setup-complete taken
+                    // back by hand (or a new setup) also stops the restart after a crash.
+                    checkStartAllowed(snapshot.cloud());
                     next = prepare(snapshot, task, OptionalInt.of(index));
                 } catch (ServiceException e) {
                     // It stays CRASHED; a dynamic one is forgotten like after its last attempt.

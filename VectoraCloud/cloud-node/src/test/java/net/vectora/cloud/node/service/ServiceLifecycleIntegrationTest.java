@@ -219,6 +219,29 @@ class ServiceLifecycleIntegrationTest {
     }
 
     @Test
+    void aCrashRestartIsRefusedOnceTheEulaIsTakenBack() throws Exception {
+        try (TestNetwork net = TestNetwork.create(dir)) {
+            RestartConfig later = new RestartConfig(true, 3, TimeSpan.parse("2s"), TimeSpan.parse("2s"));
+            net.group("lobby", ServerKind.LOBBY, ServerSoftware.PAPER, TestNetwork.process("crash", "5s", later));
+            net.task("lobby", "lobby", TaskMode.STATIC, 1, 1);
+            Recorder recorder = new Recorder();
+            try (ServiceManager manager = net.manager().build()) {
+                manager.addListener(recorder);
+                manager.startConfigured();
+                TestNetwork.await("first crash", WAIT, () -> recorder.of("lobby-1").contains("CRASHED"));
+                // A hand edit of cloud.yml while the restart waits for its back-off (setup-complete
+                // needs the EULA, so both go back).
+                net.config.apply(current -> current.withCloud(
+                        current.cloud().withSetupComplete(false).withEulaAccepted(false)));
+                Thread.sleep(3500);
+                assertEquals(1, recorder.of("lobby-1").stream().filter(s -> s.equals("STARTING")).count(),
+                        "no restart without eula-accepted: " + recorder.of("lobby-1"));
+                assertEquals(ServiceState.CRASHED, manager.find(new ServiceId("lobby-1")).orElseThrow().state());
+            }
+        }
+    }
+
+    @Test
     void aCrashWithRestartOffStaysCrashedAndADynamicOneIsCleanedUp() throws Exception {
         try (TestNetwork net = TestNetwork.create(dir)) {
             net.group("minigame", ServerKind.MINIGAME, ServerSoftware.PAPER,
