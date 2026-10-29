@@ -24,6 +24,9 @@ import net.vectora.cloud.backup.config.BackupConfig;
 /** A temporary cloud home with a few static services, plus helpers for archives. */
 public final class TestHome {
 
+    /** A rendered secret; no archive may contain it. */
+    public static final String SECRET = "RenderedSecret-0123456789abcdef";
+
     public final Path home;
     public final List<BackupTarget> targets = new ArrayList<>();
     public final FakeServiceControl control = new FakeServiceControl();
@@ -34,21 +37,31 @@ public final class TestHome {
         this.home = home;
     }
 
-    /** Adds a static service with a world, a config, a jar, logs and a cache. */
+    /**
+     * Adds a static service with a world, a config, a jar, logs, a cache and the files the cloud
+     * renders with secrets, as the templates under {@code Server-Network/} produce them.
+     */
     public Path addServer(String id, String group, String template, boolean worldSaving) throws IOException {
         Path dir = home.resolve(template).resolve("runtime");
         targets.add(new BackupTarget(id, group, "26.3", dir, worldSaving));
-        write(dir.resolve("server.properties"), "motd=" + id + "\n");
+        write(dir.resolve("server.properties"), "motd=" + id + "\nmanagement-server-secret=" + SECRET + "\n");
+        write(dir.resolve("config/paper-global.yml"), "proxies:\n  velocity:\n    secret: " + SECRET + "\n");
+        write(dir.resolve("config/paper-world-defaults.yml"), "anticheat: {}\n");
+        write(dir.resolve("config/FabricProxy-Lite.toml"), "secret = \"" + SECRET + "\"\n");
+        write(dir.resolve("config/luckperms/luckperms.conf"), "password = \"" + SECRET + "\"\n");
+        write(dir.resolve("secrets/vectora.env"), "VECTORA_DB_PASSWORD=" + SECRET + "\n");
+        write(dir.resolve("vectora.env"), "VECTORA_DB_PASSWORD=" + SECRET + "\n");
         write(dir.resolve("world/level.dat"), "level-" + id);
         write(dir.resolve("world/region/r.0.0.mca"), "region-" + id);
         write(dir.resolve("world/session.lock"), "lock");
         write(dir.resolve("paper.jar"), "jar");
         write(dir.resolve("plugins/LuckPerms.jar"), "plugin jar");
-        write(dir.resolve("plugins/LuckPerms/config.yml"), "storage-method: h2\n");
+        write(dir.resolve("plugins/LuckPerms/config.yml"), "storage-method: h2\npassword: '" + SECRET + "'\n");
+        write(dir.resolve("plugins/TAB/config.yml"), "header: vectora\n");
         write(dir.resolve("plugins/floodgate/key.pem"), "secret key");
         write(dir.resolve("logs/latest.log"), "log");
         write(dir.resolve("cache/mojang_1.jar"), "cache");
-        write(dir.resolve("forwarding.secret"), "secret");
+        write(dir.resolve("forwarding.secret"), SECRET);
         return dir;
     }
 

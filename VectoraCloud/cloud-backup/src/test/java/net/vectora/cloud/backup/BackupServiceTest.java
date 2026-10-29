@@ -56,14 +56,22 @@ class BackupServiceTest {
         Map<String, String> entries = TestHome.entries(info.file());
         assertEquals("level-lobby-1", entries.get("services/lobby-1/world/level.dat"));
         assertEquals("region-survival-1", entries.get("services/survival-1/world/region/r.0.0.mca"));
-        assertEquals("storage-method: h2\n", entries.get("services/lobby-1/plugins/LuckPerms/config.yml"));
+        assertEquals("header: vectora\n", entries.get("services/lobby-1/plugins/TAB/config.yml"));
+        assertEquals("anticheat: {}\n", entries.get("services/lobby-1/config/paper-world-defaults.yml"));
         assertTrue(entries.containsKey("manifest.json"));
         // Counter-check: nothing excluded is inside.
         for (String name : entries.keySet()) {
             assertFalse(name.endsWith(".jar") || name.endsWith(".log") || name.endsWith(".pem")
                     || name.endsWith(".secret") || name.endsWith("session.lock") || name.contains("/cache/")
-                    || name.contains("/logs/"), name);
+                    || name.contains("/logs/") || name.endsWith(".env") || name.contains("/secrets/"), name);
         }
+        // No rendered secret anywhere: not in a file, not in the manifest.
+        for (Map.Entry<String, String> entry : entries.entrySet()) {
+            assertFalse(entry.getValue().contains(TestHome.SECRET), entry.getKey());
+        }
+        assertFalse(entries.containsKey("services/lobby-1/server.properties"));
+        assertFalse(entries.containsKey("services/lobby-1/config/paper-global.yml"));
+        assertFalse(entries.containsKey("services/lobby-1/plugins/LuckPerms/config.yml"));
         assertTrue(Files.exists(lobby.resolve("paper.jar")), "the source stays untouched");
         assertTrue(test.control.commands().isEmpty(), "stopped services get no commands");
     }
@@ -297,6 +305,11 @@ class BackupServiceTest {
         assertEquals("log 2", Files.readString(lobby.resolve("logs/second.log")), "logs kept");
         assertEquals("secret key", Files.readString(lobby.resolve("plugins/floodgate/key.pem")), "keys kept");
         assertEquals("lock", Files.readString(lobby.resolve("world/session.lock")));
+        assertTrue(Files.readString(lobby.resolve("server.properties")).contains(TestHome.SECRET),
+                "rendered secret files are kept until the next start renders them again");
+        assertTrue(Files.readString(lobby.resolve("plugins/LuckPerms/config.yml")).contains(TestHome.SECRET));
+        assertEquals("VECTORA_DB_PASSWORD=" + TestHome.SECRET + "\n",
+                Files.readString(lobby.resolve("secrets/vectora.env")));
         assertEquals("level-survival-1", Files.readString(survival.resolve("world/level.dat")), "others untouched");
         assertTrue(result.warnings().isEmpty(), result.warnings().toString());
 

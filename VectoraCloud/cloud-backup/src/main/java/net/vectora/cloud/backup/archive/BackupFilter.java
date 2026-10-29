@@ -16,11 +16,25 @@ import java.util.Set;
  *       ({@code session.lock}, {@code *.lock.db}, {@code *.trace.db}, {@code *.tmp}), and key and
  *       secret files ({@code *.secret}, {@code *.key}, {@code *.pem}, {@code *.p12}, {@code *.jks},
  *       {@code *.env}, {@code .env}). The cloud renders these from {@code secrets/} at every start.</li>
+ *   <li>Template files the cloud renders with a secret ({@link #RENDERED_SECRET_FILES}, relative to
+ *       the service folder, any case): {@code server.properties} (management secret),
+ *       {@code config/paper-global.yml} and {@code config/FabricProxy-Lite.toml} (forwarding
+ *       secret), {@code plugins/LuckPerms/config.yml} and {@code config/luckperms/luckperms.conf}
+ *       (database password). Every start renders them again from the template, so a restored
+ *       service gets them back with the current secrets.</li>
  * </ul>
  *
  * Symbolic links and other non-regular files are never followed or stored; the walker skips them.
  */
 public final class BackupFilter {
+
+    /**
+     * Files rendered from a template with a secret in them, as lower-case paths relative to the
+     * service folder. They only match at exactly this place, so a world or plugin file with the
+     * same name elsewhere is still backed up.
+     */
+    public static final Set<String> RENDERED_SECRET_FILES = Set.of("server.properties", "config/paper-global.yml",
+            "config/fabricproxy-lite.toml", "plugins/luckperms/config.yml", "config/luckperms/luckperms.conf");
 
     private static final Set<String> FOLDERS = Set.of("logs", "cache", "crash-reports", "debug", "libraries",
             "versions", "bundler", ".paper-remapped", ".fabric", ".mixin.out", "secrets");
@@ -62,6 +76,17 @@ public final class BackupFilter {
                 return true;
             }
         }
-        return false;
+        return RENDERED_SECRET_FILES.contains(slashedLower(relative));
+    }
+
+    private static String slashedLower(Path relative) {
+        StringBuilder out = new StringBuilder();
+        for (Path part : relative) {
+            if (!out.isEmpty()) {
+                out.append('/');
+            }
+            out.append(part);
+        }
+        return out.toString().toLowerCase(Locale.ROOT);
     }
 }

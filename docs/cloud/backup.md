@@ -43,7 +43,10 @@ manifest.json                       always the last entry
 For every static service, everything under its runtime folder except:
 
 - folders `logs`, `cache`, `crash-reports`, `debug`, `libraries`, `versions`, `bundler`, `.paper-remapped`, `.fabric`, `.mixin.out` and every folder called `secrets`;
-- files `session.lock`, `.env`, `*.jar`, `*.log`, `*.log.gz`, `*.lock.db`, `*.trace.db`, `*.tmp`, and key or secret files (`*.secret`, `*.key`, `*.pem`, `*.p12`, `*.jks`, `*.env`). These come from the templates and `secrets/vectora.env` again, and a backup should not spread them.
+- files `session.lock`, `.env`, `*.jar`, `*.log`, `*.log.gz`, `*.lock.db`, `*.trace.db`, `*.tmp`, and key or secret files (`*.secret`, `*.key`, `*.pem`, `*.p12`, `*.jks`, `*.env`). These come from the templates and `secrets/vectora.env` again, and a backup should not spread them;
+- the template files the cloud renders with a secret in them, at exactly these places in the runtime folder (any case): `server.properties` (`management-server-secret`), `config/paper-global.yml` and `config/FabricProxy-Lite.toml` (forwarding secret), `plugins/LuckPerms/config.yml` (also the proxy's `plugins/luckperms/config.yml`) and `config/luckperms/luckperms.conf` (database password).
+
+So no archive holds a secret from `secrets/vectora.env`: not the forwarding secrets (`forwarding.secret`, `paper-global.yml`, `FabricProxy-Lite.toml`), not the Floodgate `key.pem`, not the management secret and not the database password. Every start renders the template into the runtime folder again ([node](node.md), [template](template.md#template-to-runtime)), so a restored service gets these files back with the secrets that are current then, also after a secret was rotated. Settings changed by hand in one of these files are lost on every start anyway; change them in the template. A custom template that writes a secret into another file must add it here (`BackupFilter.RENDERED_SECRET_FILES`).
 
 Symbolic links are never followed and never stored. Files whose names would not unpack on Windows and Linux alike (reserved names such as `CON`, characters such as `:` or `\`, a trailing dot) are listed in the manifest under `skipped`. So are files that cannot be read.
 
@@ -121,7 +124,7 @@ The hashes detect damage and an archive whose content does not match its manifes
 3. The archive is unpacked with `SafeExtractor` into an owner-only staging folder next to the runtime folder, with limits derived from the manifest.
 4. Every unpacked file of the service is compared with the manifest: the same set of files, the same size and SHA-256. Any difference stops the restore (`HASH_MISMATCH` or `CORRUPT`) before anything is touched.
 5. A safety backup of the current state is taken (`pre-restore`, without database). Its id is shown.
-6. The runtime folder is swapped by renames: the current folder moves aside, the staged one takes its place, then the paths a backup never contains (excluded folders and files such as jars, logs and secrets, links, non-portable names) move back from the old folder. Then the old folder is deleted.
+6. The runtime folder is swapped by renames: the current folder moves aside, the staged one takes its place, then the paths a backup never contains (excluded folders and files such as jars, logs, secrets and the rendered secret files, links, non-portable names) move back from the old folder. Then the old folder is deleted. The next start renders the template files again.
 
 The database is not touched (see [Database](#database)).
 
