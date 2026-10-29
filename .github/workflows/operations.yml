@@ -72,7 +72,7 @@ jobs:
               echo "::error file=$f::needs CRLF line ends (.gitattributes)"; exit 1
             fi
           done
-          for f in VectoraCloud/dist/start.sh VectoraCloud/dist/package.sh .github/scripts/smoke-start-unix.sh; do
+          for f in VectoraCloud/dist/start.sh VectoraCloud/dist/package.sh .github/scripts/smoke-start-unix.sh gradle/update-verification-metadata.sh; do
             if grep -q $'\r' "$f"; then
               echo "::error file=$f::needs LF line ends (.gitattributes)"; exit 1
             fi
@@ -83,7 +83,8 @@ jobs:
         run: |
           set -euo pipefail
           shellcheck --version
-          shellcheck VectoraCloud/dist/start.sh VectoraCloud/dist/package.sh .github/scripts/smoke-start-unix.sh
+          shellcheck VectoraCloud/dist/start.sh VectoraCloud/dist/package.sh .github/scripts/smoke-start-unix.sh \
+            gradle/update-verification-metadata.sh
           # The installer script inside the egg (runs with ash in ghcr.io/pterodactyl/installers:alpine).
           jq -r '.scripts.installation.script' VectoraCloud/dist/pterodactyl/egg-vectora-cloud.json \
             | shellcheck --shell=sh -

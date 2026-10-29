@@ -64,10 +64,11 @@ jobs:
             fail "$f must not contain XML comments or PGP keys (docs/dependency-verification.md)."
           fi
           # Only the IDE-only -javadoc/-sources jars may be trusted without a checksum.
-          [ "$(grep -c '<trust ' "$f")" -eq 2 ] \
-            && grep -qF '<trust file=".*-javadoc[.]jar" regex="true"' "$f" \
-            && grep -qF '<trust file=".*-sources[.]jar" regex="true"' "$f" \
-            || fail "$f may only trust -javadoc.jar and -sources.jar files."
+          if [ "$(grep -c '<trust ' "$f")" -ne 2 ] \
+              || ! grep -qF '<trust file=".*-javadoc[.]jar" regex="true"' "$f" \
+              || ! grep -qF '<trust file=".*-sources[.]jar" regex="true"' "$f"; then
+            fail "$f may only trust -javadoc.jar and -sources.jar files."
+          fi
           grep -qxF 'org.gradle.dependency.verification=strict' gradle.properties \
             || fail "gradle.properties must set org.gradle.dependency.verification=strict."
           # Long and short Gradle options (-F for the verification mode, -M for writing the

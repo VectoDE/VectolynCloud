@@ -126,7 +126,7 @@ jobs:
           fail() { echo "::error::$1"; exit 1; }
           src="$DIR/verification-metadata.xml"
           [ "$(find "$DIR" -mindepth 1 | wc -l)" -eq 1 ] || fail "The artifact must hold exactly one file."
-          [ -f "$src" ] && [ ! -L "$src" ] || fail "The artifact holds no regular verification-metadata.xml."
+          if [ ! -f "$src" ] || [ -L "$src" ]; then fail "The artifact holds no regular verification-metadata.xml."; fi
           [ "$(wc -c < "$src")" -lt 5000000 ] || fail "The metadata file is unexpectedly large."
           sed -n 2p "$src" | grep -q '^<verification-metadata xmlns="https://schema.gradle.org/dependency-verification"' \
             || fail "The file is not Gradle verification metadata."
