@@ -58,6 +58,7 @@ class MessageRegistryTest {
         expected.put(PlayerQuit.class, 0x31);
         expected.put(PlayerSwitch.class, 0x32);
         expected.put(TransferPlayer.class, 0x33);
+        expected.put(NetworkKick.class, 0x34);
         expected.put(ChannelMessage.class, 0x40);
         expected.put(Request.class, 0x50);
         expected.put(Response.class, 0x51);
@@ -68,12 +69,12 @@ class MessageRegistryTest {
         assertEquals(expected.size(), registry.types().size());
     }
 
-    /** Version 1.1 added two messages; a 1.0 connection never carries them, everything else is 1.0. */
+    /** Version 1.1 added three messages; a 1.0 connection never carries them, everything else is 1.0. */
     @Test
     void newMessagesAreOnlyAvailableFromTheVersionThatAddedThem() {
         ProtocolVersion v10 = new ProtocolVersion(1, 0);
         ProtocolVersion v11 = new ProtocolVersion(1, 1);
-        Set<Class<?>> since11 = Set.of(ServerCapacity.class, TransferPlayer.class);
+        Set<Class<?>> since11 = Set.of(ServerCapacity.class, TransferPlayer.class, NetworkKick.class);
         for (MessageType<?> type : registry.types()) {
             boolean added = since11.contains(type.type());
             assertEquals(added ? v11 : v10, type.since(), type.type().getSimpleName());

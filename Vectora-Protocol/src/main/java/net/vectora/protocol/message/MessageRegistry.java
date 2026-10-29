@@ -19,7 +19,7 @@ import net.vectora.protocol.ProtocolVersion;
  */
 public final class MessageRegistry {
 
-    /** Version 1.1 added {@link ServerCapacity} and {@link TransferPlayer}. */
+    /** Version 1.1 added {@link ServerCapacity}, {@link TransferPlayer} and {@link NetworkKick}. */
     private static final ProtocolVersion V1_1 = new ProtocolVersion(1, 1);
 
     private static final MessageRegistry STANDARD = builder()
@@ -37,6 +37,7 @@ public final class MessageRegistry {
             .register(0x31, PlayerQuit.class, PlayerQuit::read)
             .register(0x32, PlayerSwitch.class, PlayerSwitch::read)
             .register(0x33, TransferPlayer.class, TransferPlayer::read, V1_1)
+            .register(0x34, NetworkKick.class, NetworkKick::read, V1_1)
             .register(0x40, ChannelMessage.class, ChannelMessage::read)
             .register(0x50, Request.class, Request::read)
             .register(0x51, Response.class, Response::read)

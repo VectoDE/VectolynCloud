@@ -127,6 +127,18 @@ class MessageCodecTest {
     }
 
     @Test
+    void networkKickReasonIsLimitedToItsLength() {
+        String longest = "r".repeat(NetworkKick.MAX_REASON_LENGTH);
+        assertEquals(new NetworkKick(SampleMessages.PLAYER, new ServiceId("lobby-2"), longest), codec.fromFrame(frame(0x34, 0,
+                out -> out.writeUuid(SampleMessages.PLAYER).writeString("lobby-2", 64).writeString(longest, 1024))).message());
+        // One character too many: within the byte limit, but the record refuses it.
+        assertThrows(ProtocolException.class, () -> codec.fromFrame(frame(0x34, 0, out -> out.writeUuid(SampleMessages.PLAYER)
+                .writeString("lobby-2", 64).writeString(longest + "r", 1024))));
+        assertThrows(IllegalArgumentException.class,
+                () -> new NetworkKick(SampleMessages.PLAYER, new ServiceId("lobby-2"), longest + "r"));
+    }
+
+    @Test
     void streamDecodingReturnsMessagesInOrder() {
         Envelope first = Envelope.of(new Ping(1));
         Envelope second = new Envelope(8, new Response(Response.Status.OK, new byte[] {1}));

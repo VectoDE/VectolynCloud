@@ -37,6 +37,7 @@ final class SampleMessages {
                 new PlayerQuit(PLAYER, "Notch", LOBBY, false),
                 new PlayerSwitch(PLAYER, ".BedrockSteve", LOBBY, SURVIVAL, true),
                 new TransferPlayer(PLAYER, SURVIVAL, TransferPlayer.Reason.SCALE_DOWN),
+                new NetworkKick(PLAYER, SURVIVAL, "Spam im Chat"),
                 new ChannelMessage(new ChannelName("vectora.chat"), new byte[] {1, 2, 3}),
                 new Request(new ChannelName("vectora.lobby.navigator"), new byte[] {4}),
                 new Response(Response.Status.OK, new byte[] {5, 6}));
@@ -74,6 +75,11 @@ final class SampleMessages {
                 new ServerCapacity(longId, MessageLimits.MAX_PLAYERS, false),
                 new ServerCapacity(longId, 1, true),
                 new TransferPlayer(new UUID(Long.MIN_VALUE, Long.MAX_VALUE), longId, TransferPlayer.Reason.SCALE_DOWN),
+                // Three UTF-8 bytes per character, the most a reason of full length can take.
+                new NetworkKick(PLAYER, longId, "€".repeat(NetworkKick.MAX_REASON_LENGTH)),
+                new NetworkKick(PLAYER, longId, "😀".repeat(NetworkKick.MAX_REASON_LENGTH / 2)),
+                new NetworkKick(PLAYER, longId, "r".repeat(NetworkKick.MAX_REASON_LENGTH)),
+                new NetworkKick(PLAYER, LOBBY, ""),
                 new ChannelMessage(longChannel, fullPayload),
                 new ChannelMessage(longChannel, new byte[0]),
                 new Request(longChannel, fullPayload),

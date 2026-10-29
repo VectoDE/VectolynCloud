@@ -89,6 +89,7 @@ All messages are immutable records in `net.vectora.protocol.message`, listed in 
 | `0x31` | `PlayerQuit` | proxy → cloud | UUID, name, service id, Bedrock (bool) |
 | `0x32` | `PlayerSwitch` | proxy → cloud | UUID, name, from (service id), to (service id, different from `from`), Bedrock (bool) |
 | `0x33` | `TransferPlayer` | cloud → proxy | UUID, to (service id), reason (VarInt). Since 1.1. |
+| `0x34` | `NetworkKick` | backend → cloud → proxy | UUID, server (service id), reason (string ≤ 256 characters, ≤ 768 bytes, may be empty). Since 1.1. |
 | `0x40` | `ChannelMessage` | both | channel (string ≤ 64, `[a-z0-9_][a-z0-9_.-]*`), payload (bytes ≤ 64 KiB) |
 | `0x50` | `Request` | both | channel, payload (bytes ≤ 64 KiB) |
 | `0x51` | `Response` | both | status (VarInt), payload (bytes ≤ 64 KiB) |
@@ -105,6 +106,8 @@ Codes:
 Ids are grouped by area: `0x0_` connection, `0x1_` service state, `0x2_` server list, `0x3_` players, `0x4_` messaging, `0x5_` request/response. New messages take the next free id in their group.
 
 `ServerCapacity` tells a proxy how many players a backend is meant for (`players-per-service` of its task) and whether it takes new players; the node sends it after each `RegisterServer` and again when the slots change or the backend is closed for a scale-down or opened again. `TransferPlayer` asks a proxy to move one of its players to another backend of the same group; the proxy carries it out only if the player is on a backend of that group and the target is listed, open and a different backend. Only the cloud sends either message: from a peer, the cloud treats them as a protocol error and closes the connection. See [scaling.md](scaling.md#where-players-go) and [bridges.md](bridges.md).
+
+`NetworkKick` marks a kick as a punishment that takes the player off the whole network: a `/kick` of an entitled sender or a kick of the moderation. A backend bridge sends it with its own service id as `server` (another id is a protocol error that closes the connection). The node passes it on only if the sender is a backend it registered with the proxies: with `server` set to the backend's name on the proxy, to every running proxy of the backend's kind. From a proxy or any other service the node drops it. The proxy disconnects the player and treats the backend's kick that goes with it as a punishment instead of catching it. See [bridges.md](bridges.md#network-wide-kicks).
 
 ### Field rules
 
@@ -142,7 +145,7 @@ The current version is `Protocol.PROTOCOL_VERSION`, **1.1**.
 
 - **Same major version required.** Peers with different major versions cannot talk. A major version changes when the frame layout, an existing message id or the encoding of an existing message changes.
 - **Minor versions only add.** A new message type, a new enum code or a new value range that old peers would reject needs a new minor version. Existing payloads stay as they are.
-- **The lower minor wins.** A connection uses the lower minor version of both peers (`ProtocolVersion.negotiate`). Neither side sends a message or code that came after it, because the older side would reject it as unknown. Each message type knows the version that added it (`MessageType.since`, `availableIn`); the cloud keeps the negotiated version per connection and drops (with a DEBUG line) a message the peer's version does not have. A 1.0 proxy therefore keeps working: it gets no `ServerCapacity` or `TransferPlayer`, picks servers the way Velocity does, and a scale-down of a backend with its players on it ends with the backend kept running.
+- **The lower minor wins.** A connection uses the lower minor version of both peers (`ProtocolVersion.negotiate`). Neither side sends a message or code that came after it, because the older side would reject it as unknown. Each message type knows the version that added it (`MessageType.since`, `availableIn`); the cloud keeps the negotiated version per connection and drops (with a DEBUG line) a message the peer's version does not have. A 1.0 proxy therefore keeps working: it gets no `ServerCapacity`, `TransferPlayer` or `NetworkKick`, picks servers the way Velocity does, and a scale-down of a backend with its players on it ends with the backend kept running.
 - **The frame header never changes within a major version,** so a peer can always read the version of a frame and answer an incompatible one with `Disconnect(INCOMPATIBLE_VERSION)`.
 
 Version history:
@@ -150,7 +153,7 @@ Version history:
 | Version | Changes |
 |---|---|
 | 1.0 | First version: 15 messages. Before the first release (stage 2, PR 9) the handshake frame limit was added, `ServiceStatus` accepts a heap maximum of `-1`, and channel names and hosts got the stricter rules above. No peer with the earlier rules was ever released, so the version stayed 1.0. |
-| 1.1 | `ServerCapacity` (`0x22`) and `TransferPlayer` (`0x33`, reason `SCALE_DOWN`), both cloud → proxy, for the choice of the emptiest server and the moves before a scale-down. |
+| 1.1 | `ServerCapacity` (`0x22`) and `TransferPlayer` (`0x33`, reason `SCALE_DOWN`), both cloud → proxy, for the choice of the emptiest server and the moves before a scale-down; `NetworkKick` (`0x34`), backend → cloud → proxy, for kicks that take a player off the network. |
 
 ## Limits at a glance
 
