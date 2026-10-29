@@ -7,6 +7,11 @@ plugins {
     id("vectora.fuzz-conventions")
 }
 
+vectora {
+    // Jar and manifest name from before the repository layout change.
+    artifactName = "cloud-config"
+}
+
 dependencies {
     api(platform(libs.jackson.bom))
     api(libs.jackson.databind)

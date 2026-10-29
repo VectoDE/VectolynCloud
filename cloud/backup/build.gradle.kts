@@ -10,21 +10,26 @@ plugins {
     id("vectora.fuzz-conventions")
 }
 
+vectora {
+    // Jar and manifest name from before the repository layout change.
+    artifactName = "cloud-backup"
+}
+
 dependencies {
     // backup.yml uses the strict reader, error model and TimeSpan of the configuration layer.
-    api(project(":VectoraCloud:cloud-config"))
+    api(project(":cloud:config"))
     // The command definitions (backup create|list|restore|delete) use the console's command API.
-    api(project(":VectoraCloud:cloud-console"))
+    api(project(":cloud:console"))
     // Restore unpacks with the zip-slip-safe extractor of the download module.
-    implementation(project(":VectoraCloud:cloud-download"))
+    implementation(project(":cloud:download"))
 
     // Only the MariaDB integration test: it sets up a throwaway managed server through it.
-    testImplementation(project(":VectoraCloud:cloud-database"))
+    testImplementation(project(":cloud:database"))
 }
 
 // Tests tagged "mariadb" download and start a real MariaDB server in a temp folder and dump it.
 // They never run in the normal build; run them on purpose with
-// ./gradlew :VectoraCloud:cloud-backup:mariadbTest (.github/workflows/managed-mariadb.yml does).
+// ./gradlew :cloud:backup:mariadbTest (.github/workflows/managed-mariadb.yml does).
 tasks.test {
     useJUnitPlatform {
         excludeTags("mariadb")

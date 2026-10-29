@@ -555,7 +555,7 @@ public final class BackupService {
 
     /** How to dump the Docker database by hand, without any password on the command line. */
     static String dockerHint(DatabaseAccess access) {
-        return "In Server-Network/Database/runtime run: docker compose --env-file ../../secrets/vectora.env "
+        return "In Database/runtime of the cloud home run: docker compose --env-file ../../secrets/vectora.env "
                 + "-f compose.database.yml exec -T vectora-database sh -c 'MYSQL_PWD=\"$MARIADB_ROOT_PASSWORD\" "
                 + "exec mariadb-dump -uroot --single-transaction --routines --events --triggers --databases "
                 + access.database() + "' > " + access.database() + ".sql";

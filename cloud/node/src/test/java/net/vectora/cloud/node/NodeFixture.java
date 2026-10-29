@@ -48,7 +48,7 @@ import net.vectora.cloud.node.software.BridgePlugins;
 /**
  * A cloud home in a temporary folder for whole-node tests: configuration with groups and tasks,
  * the fake server jar (with the cloud client), a recording database and node options that never
- * download anything or bind a fixed channel port. Never touches the real {@code Server-Network/}.
+ * download anything or bind a fixed channel port. Never touches a real cloud home or {@code templates/}.
  */
 final class NodeFixture {
 

@@ -48,7 +48,7 @@ import org.junit.jupiter.api.io.TempDir;
  * like a bridge. Real Paper, Velocity and PandaSpigot and real downloads are a manual or scheduled
  * run, see {@code docs/cloud/node.md#end-to-end-test}.
  *
- * <p>Run with {@code ./gradlew :VectoraCloud:cloud-node:e2eTest}; the build passes the jar and a
+ * <p>Run with {@code ./gradlew :cloud:node:e2eTest}; the build passes the jar and a
  * Java 21 and 25 launcher in {@code vectora.e2e.*}.
  */
 @Tag("e2e")
@@ -184,7 +184,7 @@ class CloudJarEndToEndTest {
     /**
      * The same start with the real downloads and the real Velocity, Paper 26.3 and PandaSpigot 1.8.8:
      * the main proxy with the lobby, the legacy proxy with the 1.8.8 server. Needs internet access
-     * and a few GB of memory; {@code ./gradlew :VectoraCloud:cloud-node:e2eLiveTest} (weekly in
+     * and a few GB of memory; {@code ./gradlew :cloud:node:e2eLiveTest} (weekly in
      * {@code cloud-e2e-live.yml}).
      */
     @Test

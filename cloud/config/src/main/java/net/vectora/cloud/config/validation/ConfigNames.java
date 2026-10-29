@@ -12,7 +12,7 @@ public final class ConfigNames {
      * Windows device names ({@code con}, {@code prn}, {@code aux}, {@code nul}, {@code com0} to
      * {@code com9}, {@code lpt0} to {@code lpt9}), which cannot be used as file names there.
      *
-     * <p>The rule is identical to {@code GroupName} and {@code NodeId} in Vectora-Protocol (both 1 to
+     * <p>The rule is identical to {@code GroupName} and {@code NodeId} in common/protocol (both 1 to
      * 32 characters, lower case only, no device names), so every configured name can travel on the
      * wire. A service id there ({@code ServiceId}) allows up to 64 characters, so that
      * {@code <group>-<index>} fits. Lower case only, because group and task names are file names and

@@ -28,8 +28,8 @@ import java.util.regex.Pattern;
  * so that {@code java -jar VectoraCloud.jar} in an empty folder has every
  * {@code <Server>/template/} it needs.
  *
- * <p>The build copies the tracked files of {@code Server-Network/<Server>/template/} under
- * {@value #RESOURCE_DIR}, without jars or key files, and lists each one with its SHA-256 in
+ * <p>The build copies the tracked files of {@code templates/<Server>/} of the repository to
+ * {@code <Server>/template/} under {@value #RESOURCE_DIR}, without jars or key files, and lists each one with its SHA-256 in
  * {@value #INDEX}. On every start {@link #seed} writes the template folders the home does not
  * have. A folder that exists, also an empty one or a link, belongs to the operator and is never
  * touched; the cloud does not merge or update templates. Each folder is written into a staging

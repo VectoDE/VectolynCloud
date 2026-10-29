@@ -9,8 +9,13 @@ plugins {
     id("vectora.fuzz-conventions")
 }
 
+vectora {
+    // Jar and manifest name from before the repository layout change.
+    artifactName = "cloud-console"
+}
+
 dependencies {
-    api(project(":VectoraCloud:cloud-config"))
+    api(project(":cloud:config"))
     implementation(libs.jline.reader)
     implementation(libs.jline.terminal)
     // Terminal providers. jni works on Java 21 (native helper for Windows, Linux and macOS).

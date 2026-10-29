@@ -4,11 +4,16 @@ plugins {
     id("vectora.java-conventions")
 }
 
+vectora {
+    // Jar and manifest name from before the repository layout change.
+    artifactName = "cloud-launcher"
+}
+
 dependencies {
     // Only so that cloud-node and its libraries end up in VectoraCloud.jar (see cloudJar below).
     // The launcher code itself never references a node class at compile time; it loads
     // net.vectora.cloud.node.NodeMain by name, after the Java, root and argument checks.
-    implementation(project(":VectoraCloud:cloud-node"))
+    implementation(project(":cloud:node"))
 }
 
 // Bootstrap source set: the Main-Class of VectoraCloud.jar, compiled with --release 8.

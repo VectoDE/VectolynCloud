@@ -5,10 +5,15 @@
 // Paper 26.3 itself needs Java 25, so the bridge only runs there. Tests that load API classes
 // carry @Tag("requires-java25"). Details: docs/java-compatibility.md
 //
-// Thin adapter: the logic is in cloud-bridge-common, which is tested on Java 21 as well.
+// Thin adapter: the logic is in plugins/bridge/common, which is tested on Java 21 as well.
 
 plugins {
     id("vectora.java25-api-conventions")
+}
+
+vectora {
+    // Jar and manifest name from before the repository layout change.
+    artifactName = "cloud-bridge-paper"
 }
 
 base {
@@ -16,7 +21,7 @@ base {
 }
 
 dependencies {
-    implementation(project(":VectoraCloud:cloud-bridge-common"))
+    implementation(project(":plugins:bridge:common"))
     compileOnly(libs.paper.api)
 
     testImplementation(libs.paper.api)

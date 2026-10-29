@@ -3,6 +3,11 @@ plugins {
     id("vectora.fuzz-conventions")
 }
 
+vectora {
+    // Jar and manifest name from before the repository layout change.
+    artifactName = "cloud-download"
+}
+
 dependencies {
     // Same Jackson as cloud-config (version from the shared BOM), for the lockfile, the catalog
     // and the API responses.
@@ -12,7 +17,7 @@ dependencies {
 }
 
 // Tests tagged "network" talk to the real download APIs. They never run in the normal build;
-// run them on purpose with ./gradlew :VectoraCloud:cloud-download:networkTest
+// run them on purpose with ./gradlew :cloud:download:networkTest
 tasks.test {
     useJUnitPlatform {
         excludeTags("network")

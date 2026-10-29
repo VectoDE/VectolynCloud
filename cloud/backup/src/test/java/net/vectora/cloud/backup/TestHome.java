@@ -39,7 +39,7 @@ public final class TestHome {
 
     /**
      * Adds a static service with a world, a config, a jar, logs, a cache and the files the cloud
-     * renders with secrets, as the templates under {@code Server-Network/} produce them.
+     * renders with secrets, as the templates under {@code templates/} produce them.
      */
     public Path addServer(String id, String group, String template, boolean worldSaving) throws IOException {
         Path dir = home.resolve(template).resolve("runtime");

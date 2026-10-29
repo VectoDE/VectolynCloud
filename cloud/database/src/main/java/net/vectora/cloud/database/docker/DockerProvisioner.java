@@ -58,7 +58,7 @@ public final class DockerProvisioner implements DatabaseProvisioner {
      *
      * @param config database settings, mode {@code docker}
      * @param secrets root and application password
-     * @param home folder for the compose file, {@code Server-Network/Database/runtime}
+     * @param home folder for the compose file, {@code <home>/Database/runtime}
      * @param connector the connector
      * @param wait how long to wait for the container before giving the start hint
      */

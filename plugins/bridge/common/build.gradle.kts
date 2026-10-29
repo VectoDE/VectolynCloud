@@ -9,6 +9,11 @@ plugins {
     id("vectora.fuzz-conventions")
 }
 
+vectora {
+    // Jar and manifest name from before the repository layout change.
+    artifactName = "cloud-bridge-common"
+}
+
 dependencies {
-    api(project(":Vectora-CloudClient"))
+    api(project(":common:client"))
 }

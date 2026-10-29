@@ -10,8 +10,13 @@ plugins {
     id("vectora.fuzz-conventions")
 }
 
+vectora {
+    // Jar and manifest name from before the repository layout change.
+    artifactName = "cloud-setup"
+}
+
 dependencies {
-    api(project(":VectoraCloud:cloud-console"))
+    api(project(":cloud:console"))
     // Only to tell whether the managed MariaDB runs on this system (ManagedPlatform).
-    implementation(project(":VectoraCloud:cloud-database"))
+    implementation(project(":cloud:database"))
 }

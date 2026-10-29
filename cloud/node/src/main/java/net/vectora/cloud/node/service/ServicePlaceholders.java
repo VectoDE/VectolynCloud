@@ -17,7 +17,7 @@ import net.vectora.cloud.template.TemplateInstaller;
 
 /**
  * Builds the {@code {{VECTORA_*}}} values for one service, as listed in
- * {@code Server-Network/placeholders.md}:
+ * {@code templates/placeholders.md}:
  * <ul>
  *   <li>secrets from {@code secrets/vectora.env}, only those the platform of the service needs
  *       ({@link ServiceSecrets}); {@code VECTORA_DB_ROOT_PASSWORD} never;</li>

@@ -5,7 +5,7 @@ import java.util.Objects;
 import net.vectora.cloud.config.validation.ConfigNames;
 
 /**
- * File layout of the cloud home (in the repository checkout: {@code Server-Network/}).
+ * File layout of the cloud home, the folder the cloud runs in (never a folder of the repository).
  *
  * <pre>
  * &lt;home&gt;/cloud.yml

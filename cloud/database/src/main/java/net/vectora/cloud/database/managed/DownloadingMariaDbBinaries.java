@@ -51,7 +51,7 @@ public final class DownloadingMariaDbBinaries implements MariaDbBinaries {
      * @param provider the MariaDB provider ({@link MariaDbProvider})
      * @param downloader the downloader with its cache
      * @param extractor the extractor
-     * @param home the database home, {@code Server-Network/Database/runtime}
+     * @param home the database home, {@code <home>/Database/runtime}
      * @param version a release ({@code 11.8.9}), a series ({@code 11.8}) or {@code null} for the newest
      *     long-term-support series
      */
@@ -116,7 +116,7 @@ public final class DownloadingMariaDbBinaries implements MariaDbBinaries {
      * The server folder an earlier install recorded below {@code home}, without any download or
      * version check, for tools that need the installed binaries (the backup's {@code mariadb-dump}).
      *
-     * @param home   the database home, {@code Server-Network/Database/runtime}
+     * @param home   the database home, {@code <home>/Database/runtime}
      * @param system the platform
      * @return the folder with {@code bin/}, or empty if nothing usable is installed or the platform
      *         has no managed MariaDB

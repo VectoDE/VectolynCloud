@@ -19,6 +19,15 @@ val testJava: Int? = providers.gradleProperty("testJava").orNull?.toInt()
 
 val vectora = extensions.create<VectoraJavaExtension>("vectora")
 vectora.warningsAsErrors.convention(true)
+vectora.artifactName.convention(project.name)
+
+// A build file that sets base.archivesName itself (the plugin jars) keeps its own name.
+base.archivesName.convention(vectora.artifactName)
+
+// Several modules share a project name (plugins/bridge/paper, plugins/lobby/paper, ...). Gradle
+// tells project dependencies apart by group and name, so each folder gets its own group:
+// net.vectora.cloud, net.vectora.common, net.vectora.plugins.bridge and so on.
+group = "net.vectora" + project.path.substringBeforeLast(':').replace(':', '.')
 
 java {
     toolchain.languageVersion = JavaLanguageVersion.of(toolchainVersion)
@@ -59,7 +68,7 @@ tasks.withType<Test>().configureEach {
 // Implementation-Version lets the code read its own version through
 // Package.getImplementationVersion(), for example for the User-Agent of cloud-download.
 // Outside a jar (tests, IDE) it stays null and the code falls back to "dev".
-val implementationTitle = project.name
+val implementationTitle = vectora.artifactName
 val implementationVersion = project.version.toString()
 tasks.withType<Jar>().configureEach {
     isPreserveFileTimestamps = false

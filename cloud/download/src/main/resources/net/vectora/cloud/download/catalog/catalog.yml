@@ -12,7 +12,7 @@
 #   game-version  how the group's Minecraft version is used: version (it is the version to
 #                 resolve, Paper), filter (only builds for it, Modrinth and Fabric) or none (the
 #                 proxy has no Minecraft version of its own; the newest release is used)
-#   targets       server templates in Server-Network/ that use it
+#   targets       server templates in templates/ that use it
 #   replaced-by   transitional only: what replaces it
 #   alternative   optional second source with a checksum, as provider:project
 #   version       optional, only with game-version none: the exact version to resolve instead of

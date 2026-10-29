@@ -9,12 +9,17 @@ plugins {
     id("vectora.fuzz-conventions")
 }
 
+vectora {
+    // Jar and manifest name from before the repository layout change.
+    artifactName = "cloud-api"
+}
+
 dependencies {
-    api(project(":VectoraCloud:cloud-config"))
+    api(project(":cloud:config"))
     // The "api token" commands are registered in the console's command registry.
-    api(project(":VectoraCloud:cloud-console"))
+    api(project(":cloud:console"))
     // BackupServiceAccess adapts the backup service to the backup endpoints.
-    api(project(":VectoraCloud:cloud-backup"))
+    api(project(":cloud:backup"))
     implementation(platform(libs.netty.bom))
     implementation(libs.netty.transport)
     implementation(libs.netty.handler)

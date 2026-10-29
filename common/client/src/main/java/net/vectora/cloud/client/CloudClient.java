@@ -51,7 +51,7 @@ import net.vectora.protocol.message.ServiceStatus;
 
 /**
  * Connects a proxy or server to VectoraCloud. Uses only the JDK (a blocking socket and three
- * daemon threads) and {@code Vectora-Protocol}, so it brings no library onto the server's class
+ * daemon threads) and {@code common/protocol}, so it brings no library onto the server's class
  * path and runs on every platform from Java 21 on.
  *
  * <p>Typical use in a platform bridge:

@@ -37,7 +37,7 @@ import net.vectora.protocol.message.Response;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
-/** Vectora-CloudClient against the real server over loopback. */
+/** The client of common/client against the real server over loopback. */
 class CloudClientEndToEndTest {
 
     private static final ServiceId LOBBY = new ServiceId("lobby-1");

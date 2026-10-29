@@ -15,12 +15,17 @@ plugins {
     id("vectora.java-conventions")
 }
 
+vectora {
+    // Jar and manifest name from before the repository layout change.
+    artifactName = "cloud-bridge-legacy"
+}
+
 base {
     archivesName = "VectoraCloudBridgeLegacy"
 }
 
 dependencies {
-    implementation(project(":VectoraCloud:cloud-bridge-common"))
+    implementation(project(":plugins:bridge:common"))
     compileOnly(libs.pandaspigot.api) { isTransitive = false }
     compileOnly(libs.pandaspigot.adventure.api)
 

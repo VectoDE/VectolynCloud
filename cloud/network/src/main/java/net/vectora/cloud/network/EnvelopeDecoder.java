@@ -12,7 +12,7 @@ import net.vectora.protocol.message.Envelope;
 import net.vectora.protocol.message.MessageCodec;
 
 /**
- * Turns the byte stream into {@link Envelope}s with the codec of {@code Vectora-Protocol}.
+ * Turns the byte stream into {@link Envelope}s with the codec of {@code common/protocol}.
  *
  * <p>Until {@link #authenticated()} is called, a frame body may have at most
  * {@link Protocol#MAX_HANDSHAKE_FRAME_SIZE} bytes; afterwards {@link Protocol#MAX_FRAME_SIZE}. The

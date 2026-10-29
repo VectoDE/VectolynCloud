@@ -49,7 +49,7 @@ class SecretGeneratorTest {
     /** The generator covers every secret key of the example file; the rest are connection settings from cloud.yml. */
     @Test
     void coversEverySecretOfTheExampleFile() throws IOException, EnvFormatException {
-        Path example = Path.of("../../Server-Network/secrets/vectora.env.example");
+        Path example = Path.of("../dist/secrets/vectora.env.example");
         Set<String> keys = EnvFileParser.parse(Files.readString(example, StandardCharsets.UTF_8)).keys();
         Set<String> generated = EnumSet.allOf(GeneratedSecret.class).stream().map(GeneratedSecret::key).collect(Collectors.toSet());
         Set<String> connection = Set.of("VECTORA_DB_HOST", "VECTORA_DB_PORT", "VECTORA_DB_NAME", "VECTORA_DB_USER");

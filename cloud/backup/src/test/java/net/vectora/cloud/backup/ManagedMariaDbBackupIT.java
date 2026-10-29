@@ -49,7 +49,7 @@ import org.junit.jupiter.api.io.TempDir;
  * Dumps a throwaway managed MariaDB with the real {@code mariadb-dump}: the server is downloaded
  * and set up in a temp folder on a free port, exactly like cloud-database's ManagedMariaDbIT, and
  * stopped afterwards. Never touches an existing database. Tagged {@code mariadb}: runs only through
- * {@code ./gradlew :VectoraCloud:cloud-backup:mariadbTest} (weekly and on pull requests in CI).
+ * {@code ./gradlew :cloud:backup:mariadbTest} (weekly and on pull requests in CI).
  */
 @Tag("mariadb")
 class ManagedMariaDbBackupIT {

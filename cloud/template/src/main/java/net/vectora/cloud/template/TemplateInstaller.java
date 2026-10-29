@@ -46,8 +46,8 @@ public final class TemplateInstaller {
     /**
      * Renders {@code template} into {@code runtime} and writes the generated files.
      *
-     * @param template template folder, e.g. {@code Server-Network/Proxy/template}
-     * @param runtime runtime folder, e.g. {@code Server-Network/Proxy/runtime}; created if missing
+     * @param template template folder, e.g. {@code <home>/Proxy/template}
+     * @param runtime runtime folder, e.g. {@code <home>/Proxy/runtime}; created if missing
      * @param platform server software of the template
      * @param values placeholder values, including the secrets the platform needs
      * @param eulaAccepted whether the operator explicitly accepted the Minecraft EULA

@@ -1,5 +1,5 @@
 /**
- * Renders {@code Server-Network/<Server>/template/} into {@code runtime/}, with placeholders and secrets.
+ * Renders {@code <home>/<Server>/template/} into {@code runtime/}, with placeholders and secrets.
  *
  * <p>{@link net.vectora.cloud.template.TemplateInstaller} renders a template and writes the
  * generated files ({@code forwarding.secret}, Floodgate's {@code key.pem}, {@code eula.txt}).

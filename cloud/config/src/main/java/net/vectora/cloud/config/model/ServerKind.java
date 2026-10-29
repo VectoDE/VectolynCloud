@@ -2,7 +2,8 @@ package net.vectora.cloud.config.model;
 
 /**
  * The nine server kinds of the network. Each has a template folder in the cloud home
- * ({@code Server-Network/<folder>/template/}) and a "wanted" switch in {@code cloud.yml}.
+ * ({@code <folder>/template/}, from {@code templates/<folder>/} of the repository) and a "wanted"
+ * switch in {@code cloud.yml}.
  *
  * <p>The legacy proxy (template {@code Legacy-Proxy}) is no kind of its own: its switch is
  * {@code legacy-proxy.enabled}, because it also carries the port. The 1.8.8 servers behind it are

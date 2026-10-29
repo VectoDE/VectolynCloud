@@ -2,7 +2,7 @@ package net.vectora.cloud.config.secret;
 
 /**
  * The secrets the cloud generates on first start, with the keys of
- * {@code Server-Network/secrets/vectora.env.example}.
+ * {@code cloud/dist/secrets/vectora.env.example}.
  *
  * <p>The other keys of the example ({@code VECTORA_DB_HOST}, {@code VECTORA_DB_PORT},
  * {@code VECTORA_DB_NAME}, {@code VECTORA_DB_USER}) are not secrets; their values come from the

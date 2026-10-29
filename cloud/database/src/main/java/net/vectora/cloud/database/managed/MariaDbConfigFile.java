@@ -6,7 +6,7 @@ import net.vectora.cloud.database.ConnectionBudget;
 
 /**
  * Writes {@code vectora-mariadb.ini} for the managed server. The settings are the ones of the old
- * hand-written file in {@code Server-Network/Database/template/}, with one difference: the server
+ * hand-written file in {@code templates/Database/}, with one difference: the server
  * always binds to {@code 127.0.0.1}, whatever {@code database.host} says. Nothing outside this
  * machine can reach the managed server.
  */

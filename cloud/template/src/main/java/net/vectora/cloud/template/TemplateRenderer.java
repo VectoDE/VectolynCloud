@@ -18,7 +18,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Renders a template folder ({@code Server-Network/<Server>/template/}) into a runtime folder.
+ * Renders a template folder ({@code <home>/<Server>/template/}) into a runtime folder.
  *
  * <ul>
  *   <li>Files with a text extension (see {@link #TEXT_EXTENSIONS}, case-insensitive) go through

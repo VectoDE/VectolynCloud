@@ -53,7 +53,7 @@ class MariaDbFilesTest {
      */
     @Test
     void configKeepsEverySettingOfTheTemplate() throws IOException {
-        Path template = repository().resolve("Server-Network/Database/template/vectora-mariadb.ini");
+        Path template = repository().resolve("templates/Database/vectora-mariadb.ini");
         Map<String, String> old = section(Files.readString(template), "mysqld");
         Map<String, String> generated = section(MariaDbConfigFile.render(3307, Optional.empty()), "mysqld");
         for (Map.Entry<String, String> e : old.entrySet()) {
@@ -68,7 +68,7 @@ class MariaDbFilesTest {
     /** Counter-check: the manual init.sql grants exactly what the cloud grants. */
     @Test
     void templateInitSqlGrantsTheSameRights() throws IOException {
-        String sql = Files.readString(repository().resolve("Server-Network/Database/template/init.sql"));
+        String sql = Files.readString(repository().resolve("templates/Database/init.sql"));
         String grant = sql.lines().filter(l -> l.startsWith("GRANT ")).findFirst().orElseThrow();
         assertEquals("GRANT " + String.join(", ", net.vectora.cloud.database.sql.BootstrapStatements.APPLICATION_PRIVILEGES)
                 + " ON", grant.substring(0, grant.indexOf(" ON") + 3));
@@ -183,7 +183,7 @@ class MariaDbFilesTest {
     static Path repository() {
         Path dir = Path.of("").toAbsolutePath();
         while (dir != null) {
-            if (Files.isRegularFile(dir.resolve("settings.gradle.kts")) && Files.isDirectory(dir.resolve("Server-Network"))) {
+            if (Files.isRegularFile(dir.resolve("settings.gradle.kts")) && Files.isDirectory(dir.resolve("templates"))) {
                 return dir;
             }
             dir = dir.getParent();

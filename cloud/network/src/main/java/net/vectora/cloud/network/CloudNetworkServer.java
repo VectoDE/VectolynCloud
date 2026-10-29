@@ -49,7 +49,7 @@ import net.vectora.protocol.message.ServiceStatus;
  *
  * <p>What it does:
  * <ul>
- *   <li>Frames and messages with the codec of {@code Vectora-Protocol}; 4 KiB frame limit until
+ *   <li>Frames and messages with the codec of {@code common/protocol}; 4 KiB frame limit until
  *       a peer has authenticated, 1 MiB afterwards.</li>
  *   <li>{@code Hello} with the service token, checked by a {@link ServiceAuthenticator} in
  *       constant time; the token is never logged.</li>

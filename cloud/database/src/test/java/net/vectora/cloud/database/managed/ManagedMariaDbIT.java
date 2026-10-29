@@ -38,7 +38,7 @@ import org.junit.jupiter.api.io.TempDir;
 /**
  * Downloads the real MariaDB server, sets it up in a temp folder on a free port, checks what the
  * setup promises and stops it again. Never touches an existing database. Tagged {@code mariadb}:
- * runs only through {@code ./gradlew :VectoraCloud:cloud-database:mariadbTest} (weekly in CI).
+ * runs only through {@code ./gradlew :cloud:database:mariadbTest} (weekly in CI).
  */
 @Tag("mariadb")
 class ManagedMariaDbIT {

@@ -12,7 +12,7 @@ import net.vectora.cloud.config.model.ServerSoftware;
  * <p>Seam for the download step: the full chain (resolve the build, download it through
  * {@code cloud-download}, verify it, copy it into the folder) is wired in with the end-to-end
  * pull request (stage 2 PR 14). Until then {@link #existingJar()} expects the jar to be there
- * already, as it is in today's {@code Server-Network/<Server>/runtime/} folders.
+ * already, as it is in today's {@code <home>/<Server>/runtime/} folders.
  */
 @FunctionalInterface
 public interface ServerSoftwareProvider {

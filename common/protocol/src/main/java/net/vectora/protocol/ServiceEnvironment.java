@@ -2,7 +2,7 @@ package net.vectora.protocol;
 
 /**
  * Names of the environment variables the cloud sets for every service process. The node writes
- * them ({@code cloud-node}), the client and the bridges read them ({@code Vectora-CloudClient}).
+ * them ({@code cloud-node}), the client and the bridges read them ({@code common/client}).
  * Both sides use these constants, so the names cannot drift apart.
  */
 public final class ServiceEnvironment {

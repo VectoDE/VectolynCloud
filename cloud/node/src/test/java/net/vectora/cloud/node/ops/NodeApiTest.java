@@ -25,7 +25,7 @@ class NodeApiTest {
     @Test
     void aMessageWithAPathStaysInTheNodeLog() {
         for (String message : new String[] {
-                "cannot start lobby-1: /opt/vectora/Server-Network/Lobby-Server/runtime is already in use",
+                "cannot start lobby-1: /opt/vectora/Lobby-Server/runtime is already in use",
                 "cannot start lobby-1: C:\\vectora\\secrets\\vectora.env is already locked",
                 "secrets/vectora.env is malformed (line 3)",
                 "cannot start lobby-1: java.io.IOException: disk full"}) {

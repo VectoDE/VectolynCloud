@@ -12,6 +12,11 @@ plugins {
     id("vectora.java25-api-conventions")
 }
 
+vectora {
+    // Jar and manifest name from before the repository layout change.
+    artifactName = "Vectora-PortalBridge"
+}
+
 base {
     archivesName = "VectoraPortalBridge"
 }

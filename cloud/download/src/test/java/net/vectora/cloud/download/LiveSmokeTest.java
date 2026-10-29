@@ -39,7 +39,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Live smoke test against the real download APIs. Tagged {@code network}, so it never runs in
- * the normal build. Run it with {@code ./gradlew :VectoraCloud:cloud-download:networkTest}; CI runs it
+ * the normal build. Run it with {@code ./gradlew :cloud:download:networkTest}; CI runs it
  * weekly ({@code .github/workflows/network-smoke.yml}).
  * A summary goes to {@code build/network-smoke.txt}.
  */

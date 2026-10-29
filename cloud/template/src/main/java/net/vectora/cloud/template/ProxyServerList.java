@@ -18,7 +18,7 @@ import java.util.stream.Collectors;
 /**
  * The proxy's server list, built from the wanted servers only.
  *
- * <p>It produces the values of three placeholders in {@code Server-Network/Proxy/template/velocity.toml}:
+ * <p>It produces the values of three placeholders in {@code templates/Proxy/velocity.toml}:
  * <ul>
  *   <li>{@value #SERVERS}: one line per wanted server, {@code name = "host:port"}, sorted by name.
  *       Placed under {@code [servers]}.</li>

@@ -4,10 +4,15 @@ plugins {
     id("vectora.fuzz-conventions")
 }
 
+vectora {
+    // Jar and manifest name from before the repository layout change.
+    artifactName = "cloud-database"
+}
+
 dependencies {
-    api(project(":VectoraCloud:cloud-config"))
+    api(project(":cloud:config"))
     // Managed mode downloads the MariaDB server through the shared downloader.
-    api(project(":VectoraCloud:cloud-download"))
+    api(project(":cloud:download"))
     implementation(libs.mariadb.java.client)
 
     // Only to check that the generated compose file is valid YAML.
@@ -16,7 +21,7 @@ dependencies {
 }
 
 // Tests tagged "mariadb" download and start a real MariaDB server in a temp folder. They never run
-// in the normal build; run them on purpose with ./gradlew :VectoraCloud:cloud-database:mariadbTest
+// in the normal build; run them on purpose with ./gradlew :cloud:database:mariadbTest
 // (the weekly workflow .github/workflows/managed-mariadb.yml does that on Linux and Windows).
 tasks.test {
     useJUnitPlatform {

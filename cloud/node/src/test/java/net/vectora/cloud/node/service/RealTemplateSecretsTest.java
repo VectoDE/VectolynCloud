@@ -36,10 +36,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Renders every real {@code Server-Network/<Server>/template/} of the repository the way the node
- * does (secrets scoped by {@link ServiceSecrets}) into a temporary folder, then searches every
- * written byte for each secret. Reads only the {@code template/} folders, never {@code runtime/}
- * or {@code secrets/}; the secrets are made-up test values.
+ * Renders every real {@code templates/<Server>/} of the repository the way the node does (secrets
+ * scoped by {@link ServiceSecrets}) into a temporary folder, then searches every written byte for
+ * each secret. Reads only the template folders, never a {@code runtime/} or {@code secrets/}
+ * folder; the secrets are made-up test values.
  */
 class RealTemplateSecretsTest {
 
@@ -72,11 +72,11 @@ class RealTemplateSecretsTest {
                 ServiceSecrets.FLOODGATE + "=" + Base64.getEncoder().encodeToString(FLOODGATE_KEY),
                 ""));
         List<Path> templates = templates();
-        assertEquals(10, templates.size(), "every server folder of Server-Network: " + templates);
+        assertEquals(10, templates.size(), "every server folder of templates/: " + templates);
 
         Map<String, Map<String, Boolean>> seen = new TreeMap<>();
         for (Path template : templates) {
-            String folder = template.getParent().getFileName().toString();
+            String folder = template.getFileName().toString();
             ServerPlatform platform = PLATFORMS.getOrDefault(folder, ServerPlatform.PAPER);
             Path runtime = out.resolve(folder);
             PlaceholderValues values = values(folder, platform, env);
@@ -159,9 +159,9 @@ class RealTemplateSecretsTest {
         String name = folder.toLowerCase(java.util.Locale.ROOT);
         int port = platform == ServerPlatform.VELOCITY ? 25565 : platform == ServerPlatform.VELOCITY_LEGACY ? 25564 : 30001;
         // The real template folder, read only: whether it ships Floodgate decides about the key.
-        Path home = serverNetwork();
+        Path templates = templatesRoot();
         ServiceSpec spec = new ServiceSpec(new ServiceId(name + "-1"), name, name, 1, group, TaskMode.STATIC,
-                ServicePlanner.kindOf(group), home.resolve(folder).resolve("template"),
+                ServicePlanner.kindOf(group), templates.resolve(folder),
                 Path.of("home").toAbsolutePath().resolve(folder).resolve("runtime"), port);
         Map<String, String> database = new HashMap<>();
         database.put("VECTORA_DB_POOL_SIZE", "4");
@@ -195,20 +195,20 @@ class RealTemplateSecretsTest {
         return -1;
     }
 
-    static Path serverNetwork() {
+    static Path templatesRoot() {
         Path dir = Path.of("").toAbsolutePath();
         while (dir != null) {
-            if (Files.isRegularFile(dir.resolve("settings.gradle.kts")) && Files.isDirectory(dir.resolve("Server-Network"))) {
-                return dir.resolve("Server-Network");
+            if (Files.isRegularFile(dir.resolve("settings.gradle.kts")) && Files.isDirectory(dir.resolve("templates"))) {
+                return dir.resolve("templates");
             }
             dir = dir.getParent();
         }
-        throw new IllegalStateException("Server-Network/ not found above " + Path.of("").toAbsolutePath());
+        throw new IllegalStateException("templates/ not found above " + Path.of("").toAbsolutePath());
     }
 
     static List<Path> templates() throws IOException {
-        try (Stream<Path> servers = Files.list(serverNetwork())) {
-            return servers.map(server -> server.resolve("template")).filter(Files::isDirectory).sorted().toList();
+        try (Stream<Path> servers = Files.list(templatesRoot())) {
+            return servers.filter(Files::isDirectory).sorted().toList();
         }
     }
 }

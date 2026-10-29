@@ -47,7 +47,7 @@ import org.bukkit.event.server.ServerCommandEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
- * VectoraCloud bridge for Paper 26.3. Thin adapter over cloud-bridge-common: every call to the
+ * VectoraCloud bridge for Paper 26.3. Thin adapter over plugins/bridge/common: every call to the
  * cloud goes through {@link BridgeSender}, the main thread only takes a snapshot and queues it.
  *
  * <ul>

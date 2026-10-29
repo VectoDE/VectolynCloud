@@ -6,7 +6,7 @@ import java.nio.file.Path;
 import java.util.Objects;
 
 /**
- * Files of the managed server below its home, {@code Server-Network/Database/runtime/}. The names
+ * Files of the managed server below its home, {@code <home>/Database/runtime/}. The names
  * are the ones the old start script used, so an existing local database is taken over as it is.
  *
  * <pre>

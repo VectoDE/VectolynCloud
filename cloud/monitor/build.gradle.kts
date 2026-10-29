@@ -9,14 +9,19 @@ plugins {
     id("vectora.fuzz-conventions")
 }
 
+vectora {
+    // Jar and manifest name from before the repository layout change.
+    artifactName = "cloud-monitor"
+}
+
 dependencies {
     // monitor.yml is read with the shared strict YAML mapper; TimeSpan, Secret, SecretStore and
     // AtomicFileWriter come from there as well.
-    api(project(":VectoraCloud:cloud-config"))
+    api(project(":cloud:config"))
     // ServiceId and ServiceStatus are part of the monitor's API.
-    api(project(":Vectora-Protocol"))
+    api(project(":common:protocol"))
     // monitor and alerts commands; MonitorCommands hands out console Command objects.
-    api(project(":VectoraCloud:cloud-console"))
+    api(project(":cloud:console"))
 }
 
 tasks.withType<Test>().configureEach {

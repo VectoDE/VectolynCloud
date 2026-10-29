@@ -34,7 +34,7 @@ import net.vectora.cloud.node.fake.FakeServerJar;
 
 /**
  * A complete cloud home in a temporary folder: configuration, generated secrets, small templates
- * with real placeholders, and the fake server jar. Never touches the real {@code Server-Network/}.
+ * with real placeholders, and the fake server jar. Never touches a real cloud home or {@code templates/}.
  */
 final class TestNetwork implements AutoCloseable {
 

@@ -58,7 +58,7 @@ class BackupServiceAccessTest {
 
     @Test
     void failuresOfTheNodeDoNotPassPathsToTheClient() {
-        String path = "/home/vectora/Server-Network/backups/20261029-031500-ab12";
+        String path = "/home/vectora/backups/20261029-031500-ab12";
         ApiBackendException io = BackupServiceAccess.translate(
                 new BackupException(BackupException.Reason.IO, "cannot list " + path + ": AccessDeniedException"));
         assertFalse(io.getMessage().contains(path), io.getMessage());

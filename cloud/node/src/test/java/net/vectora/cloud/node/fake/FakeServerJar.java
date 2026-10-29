@@ -23,7 +23,7 @@ import net.vectora.protocol.ServiceId;
 /**
  * Builds the fake server jar: {@link FakeServer} as {@code Main-Class}, and for
  * {@link #writeWithCloudClient} also {@link FakeCloudBridge} with the classes of
- * {@code Vectora-CloudClient} and {@code Vectora-Protocol}, as a bridge plugin would bring them.
+ * {@code common/client} and {@code common/protocol}, as a bridge plugin would bring them.
  */
 public final class FakeServerJar {
 

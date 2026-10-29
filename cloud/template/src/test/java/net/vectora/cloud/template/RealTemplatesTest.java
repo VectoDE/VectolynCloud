@@ -30,7 +30,7 @@ import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.dataformat.yaml.YAMLMapper;
 
 /**
- * Renders every real {@code Server-Network/<Server>/template/} of the repository with test values
+ * Renders every real {@code templates/<Server>/} of the repository with test values
  * and checks the result.
  */
 class RealTemplatesTest {
@@ -54,25 +54,30 @@ class RealTemplatesTest {
     @TempDir
     Path out;
 
-    static Path serverNetwork() {
+    static Path templatesRoot() {
         Path dir = Path.of("").toAbsolutePath();
         while (dir != null) {
-            if (Files.isRegularFile(dir.resolve("settings.gradle.kts")) && Files.isDirectory(dir.resolve("Server-Network"))) {
-                return dir.resolve("Server-Network");
+            if (Files.isRegularFile(dir.resolve("settings.gradle.kts")) && Files.isDirectory(dir.resolve("templates"))) {
+                return dir.resolve("templates");
             }
             dir = dir.getParent();
         }
-        throw new IllegalStateException("Server-Network/ not found above " + Path.of("").toAbsolutePath());
+        throw new IllegalStateException("templates/ not found above " + Path.of("").toAbsolutePath());
+    }
+
+    /** The template of one server, {@code templates/<server>/}. */
+    static Path template(String server) {
+        return templatesRoot().resolve(server);
     }
 
     static List<Path> templates() throws IOException {
-        try (Stream<Path> servers = Files.list(serverNetwork())) {
-            return servers.map(server -> server.resolve("template")).filter(Files::isDirectory).sorted().toList();
+        try (Stream<Path> servers = Files.list(templatesRoot())) {
+            return servers.filter(Files::isDirectory).sorted().toList();
         }
     }
 
     static ServerPlatform platformOf(Path template) {
-        String server = template.getParent().getFileName().toString();
+        String server = template.getFileName().toString();
         return switch (server) {
             case "Proxy" -> ServerPlatform.VELOCITY;
             case "Legacy-Proxy" -> ServerPlatform.VELOCITY_LEGACY;
@@ -121,7 +126,7 @@ class RealTemplatesTest {
                 + templates);
         List<String> problems = new ArrayList<>();
         for (Path template : templates) {
-            String server = template.getParent().getFileName().toString();
+            String server = template.getFileName().toString();
             Path runtime = out.resolve(server);
             TemplateInstaller.install(template, runtime, platformOf(template), values(ALL_BUT_SURVIVAL), true);
             try (Stream<Path> files = Files.walk(runtime)) {
@@ -163,7 +168,7 @@ class RealTemplatesTest {
     @Test
     void renderedFilesKeepTheirLineEndings() throws Exception {
         for (Path template : templates()) {
-            String server = template.getParent().getFileName().toString();
+            String server = template.getFileName().toString();
             Path runtime = out.resolve(server);
             TemplateInstaller.install(template, runtime, platformOf(template), values(ALL_BUT_SURVIVAL), false);
             try (Stream<Path> files = Files.walk(template)) {
@@ -184,13 +189,12 @@ class RealTemplatesTest {
 
     @Test
     void generatedFilesLandWhereTheTemplatesExpectThem() throws Exception {
-        Path network = serverNetwork();
         Map<String, String> keyPaths = Map.of(
                 "Proxy", "plugins/floodgate/key.pem",
                 "Lobby-Server", "plugins/floodgate/key.pem",
                 "Mod-Server", "config/floodgate/key.pem");
         for (Map.Entry<String, String> entry : keyPaths.entrySet()) {
-            Path template = network.resolve(entry.getKey()).resolve("template");
+            Path template = template(entry.getKey());
             Path runtime = out.resolve(entry.getKey());
             TemplateInstaller.install(template, runtime, platformOf(template), values(ALL_BUT_SURVIVAL), true);
             Path key = runtime.resolve(entry.getValue());
@@ -208,7 +212,7 @@ class RealTemplatesTest {
 
     @Test
     void proxyWithoutSurvivalNeverMentionsSurvival() throws Exception {
-        Path template = serverNetwork().resolve("Proxy/template");
+        Path template = template("Proxy");
         TemplateInstaller.install(template, out, ServerPlatform.VELOCITY, values(ALL_BUT_SURVIVAL), false);
         String velocity = Files.readString(out.resolve("velocity.toml"));
         assertFalse(velocity.toLowerCase(Locale.ROOT).contains("survival"), velocity);
@@ -224,7 +228,7 @@ class RealTemplatesTest {
             case 6 -> Set.of("lobby", "survival", "mod", "creative", "end", "minigame");
             default -> throw new IllegalArgumentException();
         };
-        Path template = serverNetwork().resolve("Proxy/template");
+        Path template = template("Proxy");
         TemplateInstaller.install(template, out, ServerPlatform.VELOCITY, values(wanted), false);
         String velocity = Files.readString(out.resolve("velocity.toml"));
         int start = velocity.indexOf("[servers]");
@@ -251,7 +255,7 @@ class RealTemplatesTest {
     @Test
     void newTemplatesHaveBothReadmesAndNoneReachesRuntime() throws Exception {
         for (String server : List.of("Minigame-Server", "Legacy-Proxy", "Legacy-Server")) {
-            Path template = serverNetwork().resolve(server).resolve("template");
+            Path template = template(server);
             assertTrue(Files.isRegularFile(template.resolve("README.md")), server);
             assertTrue(Files.isRegularFile(template.resolve("README.de.md")), server);
             Path runtime = out.resolve(server);
@@ -265,7 +269,7 @@ class RealTemplatesTest {
 
     @Test
     void legacyProxyForwardsWithBungeeguardOnItsOwnPort() throws Exception {
-        Path template = serverNetwork().resolve("Legacy-Proxy/template");
+        Path template = template("Legacy-Proxy");
         TemplateInstaller.install(template, out, ServerPlatform.VELOCITY_LEGACY, values(Set.of("lobby")), false);
         String velocity = Files.readString(out.resolve("velocity.toml"));
         assertTrue(velocity.contains("player-info-forwarding-mode = \"bungeeguard\""), velocity);
@@ -277,13 +281,13 @@ class RealTemplatesTest {
         assertFalse(Files.exists(out.resolve("plugins/floodgate/key.pem")), "no Floodgate on the legacy proxy yet");
         assertNull(TomlCheck.problem(velocity));
 
-        String main = Files.readString(serverNetwork().resolve("Proxy/template/velocity.toml"));
+        String main = Files.readString(template("Proxy").resolve("velocity.toml"));
         assertTrue(main.contains("player-info-forwarding-mode = \"modern\""), "the main proxy stays on modern");
     }
 
     @Test
     void legacyServerAcceptsTheLegacyProxyOnly() throws Exception {
-        Path template = serverNetwork().resolve("Legacy-Server/template");
+        Path template = template("Legacy-Server");
         RenderReport report = TemplateInstaller.install(template, out, ServerPlatform.PANDASPIGOT, values(Set.of()),
                 false);
         assertEquals(List.of(), report.generated(), "no Floodgate key and, without consent, no eula.txt");
@@ -303,7 +307,7 @@ class RealTemplatesTest {
         List<String> checked = new ArrayList<>();
         for (Path template : templates()) {
             ServerPlatform platform = platformOf(template);
-            String server = template.getParent().getFileName().toString();
+            String server = template.getFileName().toString();
             Path runtime = out.resolve(server);
             RenderReport report = TemplateInstaller.install(template, runtime, platform, values(ALL_BUT_SURVIVAL), true);
             if (!platform.readsSpigotYml()) {
@@ -331,7 +335,7 @@ class RealTemplatesTest {
         PlaceholderValues values = PlaceholderValues.of(db).orElse(values(ALL_BUT_SURVIVAL));
         for (String server : List.of("Lobby-Server", "Survival-Server", "Creative-Server", "End-Server",
                 "Minigame-Server", "Proxy")) {
-            Path template = serverNetwork().resolve(server).resolve("template");
+            Path template = template(server);
             Path runtime = out.resolve(method).resolve(server);
             TemplateInstaller.install(template, runtime, platformOf(template), values, false);
             Path config = runtime.resolve(server.equals("Proxy") ? "plugins/luckperms/config.yml"
@@ -341,7 +345,7 @@ class RealTemplatesTest {
             assertEquals(3, yaml.get("data").get("pool-settings").get("maximum-pool-size").asInt(), server);
             assertEquals(2, yaml.get("data").get("pool-settings").get("minimum-idle").asInt(), server);
         }
-        Path mod = serverNetwork().resolve("Mod-Server/template");
+        Path mod = template("Mod-Server");
         Path runtime = out.resolve(method).resolve("Mod-Server");
         TemplateInstaller.install(mod, runtime, ServerPlatform.FABRIC, values, false);
         String conf = Files.readString(runtime.resolve("config/luckperms/luckperms.conf"));
@@ -351,11 +355,14 @@ class RealTemplatesTest {
 
     @Test
     void gitignoreKeepsEveryRuntimeFolderOut() throws Exception {
-        Path gitignore = serverNetwork().getParent().resolve(".gitignore");
-        assertTrue(Files.readAllLines(gitignore).contains("Server-Network/*/runtime/"));
+        List<String> lines = Files.readAllLines(templatesRoot().getParent().resolve(".gitignore"));
+        // A runtime/ folder anywhere (a cloud home put into the checkout by mistake), and the whole
+        // Server-Network/ folder that checkouts from before the repository layout change may hold.
+        assertTrue(lines.contains("**/runtime/"), lines.toString());
+        assertTrue(lines.contains("Server-Network/"), lines.toString());
         for (Path template : templates()) {
-            // The pattern covers exactly one folder level below Server-Network/.
-            assertEquals(serverNetwork(), template.getParent().getParent(), template.toString());
+            // Templates sit directly below templates/; the build maps them to <Server>/template/.
+            assertEquals(templatesRoot(), template.getParent(), template.toString());
         }
     }
 }

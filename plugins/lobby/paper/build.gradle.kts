@@ -13,6 +13,8 @@ plugins {
 }
 
 vectora {
+    // Jar and manifest name from before the repository layout change.
+    artifactName = "Vectora-Lobby"
     // The lobby still uses Paper APIs that 26.3 deprecates (GameRule constants, Sign#setLine).
     // They are replaced in stage 4; until then these warnings must not fail the build.
     warningsAsErrors = false

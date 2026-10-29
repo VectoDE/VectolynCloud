@@ -22,7 +22,7 @@ import net.vectora.cloud.database.ConnectionBudget;
  */
 public final class DockerComposeFile {
 
-    /** File name, next to the managed server's files in {@code Server-Network/Database/runtime/}. */
+    /** File name, next to the managed server's files in {@code <home>/Database/runtime/}. */
     public static final String FILE_NAME = "compose.database.yml";
     /** Name of the compose service and the volume. */
     public static final String SERVICE = "vectora-database";
@@ -83,7 +83,7 @@ public final class DockerComposeFile {
     /**
      * The command that starts the container, for messages.
      *
-     * @return the command, run from {@code Server-Network/Database/runtime/}
+     * @return the command, run from {@code <home>/Database/runtime/}
      */
     public static String startCommand() {
         return "docker compose --env-file ../../secrets/vectora.env -f " + FILE_NAME + " up -d";

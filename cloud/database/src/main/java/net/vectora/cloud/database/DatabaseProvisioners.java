@@ -51,7 +51,7 @@ public final class DatabaseProvisioners {
      *
      * @param config database settings
      * @param secrets the passwords from {@code secrets/vectora.env}
-     * @param home the database home, {@code Server-Network/Database/runtime}
+     * @param home the database home, {@code <home>/Database/runtime}
      * @param connector opens connections (normally {@link net.vectora.cloud.database.sql.JdbcConnector})
      * @param managed what the managed mode needs
      * @return the provisioner
