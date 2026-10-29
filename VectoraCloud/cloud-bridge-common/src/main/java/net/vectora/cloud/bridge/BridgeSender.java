@@ -24,7 +24,9 @@ import net.vectora.protocol.message.Message;
  *   <li>Status reports are coalesced: however many arrive while one is waiting, only the newest is
  *       sent and only one queue slot is used.</li>
  *   <li>{@link #close(Duration)} sends what is queued, then closes the link, and waits at most the
- *       given time. That bounded wait at plugin shutdown is the one place a server thread waits.</li>
+ *       given time. That bounded wait at plugin shutdown is the one place a server thread waits.
+ *       If the sender thread still hangs in a call after that, the link is closed from the closing
+ *       thread, so a stuck socket is closed all the same.</li>
  * </ul>
  */
 public final class BridgeSender implements AutoCloseable {
@@ -184,6 +186,10 @@ public final class BridgeSender implements AutoCloseable {
         if (thread.isAlive()) {
             LOG.log(Level.WARNING, "VectoraCloud sender did not finish within {0} ms", timeout.toMillis());
             thread.interrupt();
+            // The sender hangs in a call on the link, so the queued close would never run. Closing
+            // the link from here closes its socket, which fails the hung write and ends the thread;
+            // CloudClient.close() itself returns within about a second and may be called twice.
+            link.close();
         }
     }
 

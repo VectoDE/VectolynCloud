@@ -53,9 +53,11 @@ final class FakeLink implements CloudLink {
         record("send", playerEvent);
     }
 
+    /** Like closing a real socket: never blocks and frees a call that hangs. */
     @Override
     public void close() {
-        record("close", null);
+        calls.add(new Call("close", null, Thread.currentThread()));
+        release.countDown();
     }
 
     List<String> names() {

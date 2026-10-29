@@ -43,8 +43,10 @@ public final class LegacyBridgePlugin extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(HandshakeGuard.fromEnvironment(System::getenv, getLogger()), this);
         Optional<CloudClientSettings> settings = BridgeConnection.settings();
         if (!settings.isPresent()) {
+            getLogger().info("Not started by VectoraCloud (no connection settings): only the BungeeGuard check runs");
             return;
         }
+        getLogger().info("VectoraCloud bridge runs as a 1.8.8 backend behind the legacy proxy (BungeeGuard check)");
         sender = BridgeConnection.open(settings.get(), created -> null);
         getServer().getPluginManager().registerEvents(this, this);
         // The player count changes: report at once. The leaving player is still counted during the

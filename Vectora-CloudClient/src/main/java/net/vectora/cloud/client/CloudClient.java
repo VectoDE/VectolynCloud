@@ -78,6 +78,8 @@ public final class CloudClient implements AutoCloseable {
 
     private static final System.Logger LOG = System.getLogger(CloudClient.class.getName());
     private static final byte[] EMPTY = new byte[0];
+    /** How long {@link #close()} waits for the goodbye to be written before it closes the socket. */
+    private static final long GOODBYE_GRACE_MILLIS = 500;
 
     /** Requests this client may have open at the same time. */
     static final int MAX_PENDING_REQUESTS = 256;
@@ -332,7 +334,21 @@ public final class CloudClient implements AutoCloseable {
         }
         Connection open = connection;
         if (open != null) {
+            // A cloud that stopped reading leaves a writer blocked in write() with the write lock
+            // held; the goodbye would wait for it forever. The watchdog closes the socket after a
+            // short grace period, which fails both writes and lets close() go on.
+            Thread watchdog = new Thread(() -> {
+                try {
+                    Thread.sleep(GOODBYE_GRACE_MILLIS);
+                    open.close();
+                } catch (InterruptedException sent) {
+                    // The goodbye went out in time.
+                }
+            }, "vectora-cloud-client-close-watchdog");
+            watchdog.setDaemon(true);
+            watchdog.start();
             send(open, Envelope.of(new Disconnect(Disconnect.Reason.SHUTDOWN)));
+            watchdog.interrupt();
         }
         Connection any = current;
         if (any != null) {

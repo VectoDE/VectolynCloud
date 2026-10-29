@@ -36,8 +36,10 @@ public final class PaperBridgePlugin extends JavaPlugin implements Listener {
     public void onEnable() {
         Optional<CloudClientSettings> settings = BridgeConnection.settings();
         if (settings.isEmpty()) {
+            getLogger().info("Not started by VectoraCloud (no connection settings): the bridge stays idle");
             return;
         }
+        getLogger().info("VectoraCloud bridge runs as a backend behind the main proxy (modern forwarding)");
         sender = BridgeConnection.open(settings.get(), created -> null);
         // The player count changes: report at once. The leaving player is still counted during the
         // quit event. Registered as executors, the handlers need nothing from the event.

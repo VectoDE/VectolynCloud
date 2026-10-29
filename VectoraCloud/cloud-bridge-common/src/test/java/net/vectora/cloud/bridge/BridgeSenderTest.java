@@ -159,6 +159,8 @@ class BridgeSenderTest {
         sender.close(Duration.ofMillis(200));
         long tookMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
         assertTrue(tookMillis < 2_000, "close took " + tookMillis + " ms");
+        // The link is closed anyway, from the closing thread: that is what frees a hung socket write.
+        assertTrue(link.names().contains("close"), "the stuck link was left open: " + link.names());
         link.release.countDown();
     }
 

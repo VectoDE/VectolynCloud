@@ -27,6 +27,7 @@ import net.vectora.protocol.message.Envelope;
 import net.vectora.protocol.message.Hello;
 import net.vectora.protocol.message.Message;
 import net.vectora.protocol.message.MessageCodec;
+import net.vectora.protocol.message.MessageLimits;
 import net.vectora.protocol.message.Ping;
 import net.vectora.protocol.message.PlayerJoin;
 import net.vectora.protocol.message.ServiceReady;
@@ -165,6 +166,44 @@ class CloudClientTest {
         assertTrue(System.nanoTime() - started < Duration.ofSeconds(3).toNanos());
         assertThrows(IllegalStateException.class, client::start);
         assertFalse(client.isConnected());
+    }
+
+    @Test
+    void closeReturnsEvenWhileAWriteHangsOnACloudThatStoppedReading() throws Exception {
+        start(Duration.ofSeconds(30));
+        try (Peer peer = accept()) {
+            peer.read();
+            peer.send(new AuthResult(AuthResult.Outcome.ACCEPTED, Protocol.PROTOCOL_VERSION));
+            awaitConnected();
+            // The fake cloud reads nothing more: a writer fills both socket buffers and then blocks
+            // in the write, holding the connection's write lock.
+            java.util.concurrent.atomic.AtomicLong sent = new java.util.concurrent.atomic.AtomicLong();
+            byte[] payload = new byte[MessageLimits.MAX_PAYLOAD_SIZE / 2];
+            Thread writer = new Thread(() -> {
+                while (client.publish(new ChannelName("flood"), payload)) {
+                    sent.incrementAndGet();
+                }
+            }, "test-writer");
+            writer.setDaemon(true);
+            writer.start();
+            long last = -1;
+            while (sent.get() != last) {
+                last = sent.get();
+                Thread.sleep(300);
+            }
+            assertTrue(writer.isAlive(), "the writer is stuck in a write");
+
+            Thread closer = new Thread(client::close, "test-closer");
+            closer.setDaemon(true);
+            long started = System.nanoTime();
+            closer.start();
+            closer.join(Duration.ofSeconds(5).toMillis());
+            assertFalse(closer.isAlive(), "close() hung behind the blocked write");
+            assertTrue(System.nanoTime() - started < Duration.ofSeconds(4).toNanos());
+            // Closing the socket also frees the stuck writer.
+            writer.join(Duration.ofSeconds(2).toMillis());
+            assertFalse(writer.isAlive());
+        }
     }
 
     private void awaitConnected() throws InterruptedException {

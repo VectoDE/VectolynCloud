@@ -17,6 +17,9 @@ public enum ProxyRole {
     /** Environment variable with the platform of the service ({@link ServiceEnvironment#SERVICE_PLATFORM}). */
     public static final String ENV_PLATFORM = ServiceEnvironment.SERVICE_PLATFORM;
 
+    /** Value of {@link #ENV_PLATFORM} for the main proxy. */
+    public static final String MAIN_PLATFORM = "VELOCITY";
+
     /** Value of {@link #ENV_PLATFORM} for the legacy proxy. */
     public static final String LEGACY_PLATFORM = "VELOCITY_LEGACY";
 
@@ -32,6 +35,36 @@ public enum ProxyRole {
      * forwarding is weaker.
      */
     public static ProxyRole fromPlatform(String platform) {
-        return platform != null && LEGACY_PLATFORM.equals(platform.strip().toUpperCase(Locale.ROOT)) ? LEGACY : MAIN;
+        return platform != null && LEGACY_PLATFORM.equals(normalized(platform)) ? LEGACY : MAIN;
+    }
+
+    /**
+     * Whether {@code platform} is one of the two values the node sets for a proxy:
+     * {@value #MAIN_PLATFORM} or {@value #LEGACY_PLATFORM}. Anything else (missing, a typo, a
+     * backend platform) still makes the main proxy, but the bridge warns about it.
+     */
+    public static boolean isProxyPlatform(String platform) {
+        return platform != null && (MAIN_PLATFORM.equals(normalized(platform)) || LEGACY_PLATFORM.equals(normalized(platform)));
+    }
+
+    /**
+     * The line a proxy bridge logs when it connects: which role it took and, for a value that is
+     * no proxy platform, why it fell back to the main proxy. The raw value is not repeated.
+     */
+    public static String describe(String platform) {
+        ProxyRole role = fromPlatform(platform);
+        String what = role == LEGACY
+                ? "legacy proxy: only 1.8.8 servers (PandaSpigot) are registered, forwarding bungeeguard"
+                : "main proxy: only current servers (Paper, Fabric) are registered, forwarding modern";
+        if (isProxyPlatform(platform)) {
+            return "VectoraCloud bridge runs as the " + what;
+        }
+        return "VectoraCloud bridge runs as the " + what + "; " + ENV_PLATFORM
+                + (platform == null || platform.isBlank() ? " is not set" : " has an unknown value")
+                + ", expected " + MAIN_PLATFORM + " or " + LEGACY_PLATFORM;
+    }
+
+    private static String normalized(String platform) {
+        return platform.strip().toUpperCase(Locale.ROOT);
     }
 }
