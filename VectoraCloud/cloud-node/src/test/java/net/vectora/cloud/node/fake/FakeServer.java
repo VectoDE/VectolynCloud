@@ -20,6 +20,8 @@ import java.nio.file.Path;
  *       line as {@code > line}, and on {@code stop} (Paper) or {@code shutdown} (Velocity) writes
  *       {@code stopped-cleanly} and exits 0;</li>
  *   <li>{@code crash}: exits with code 3 right after starting;</li>
+ *   <li>{@code exit-0}: exits with code 0 right after starting, unasked (like CraftBukkit 1.8 on an
+ *       unknown option, or Spigot's watchdog without a restart script);</li>
  *   <li>{@code ignore-stop}: never reacts to {@code stop}; ends on the termination request;</li>
  *   <li>{@code ignore-term}: like {@code ignore-stop}, and its shutdown hook blocks, so only the
  *       forced end stops it (on Linux and macOS).</li>
@@ -76,6 +78,10 @@ public final class FakeServer {
         if (mode.equals("crash")) {
             out.println("[fake] crashing on purpose");
             System.exit(3);
+        }
+        if (mode.equals("exit-0")) {
+            out.println("[fake] ending on its own with exit code 0");
+            System.exit(0);
         }
         if (mode.equals("ignore-term")) {
             Runtime.getRuntime().addShutdownHook(new Thread(FakeServer::sleepForever));

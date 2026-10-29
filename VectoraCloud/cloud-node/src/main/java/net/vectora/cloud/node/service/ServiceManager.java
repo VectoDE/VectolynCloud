@@ -1032,13 +1032,22 @@ public final class ServiceManager implements AutoCloseable {
             }
             releasePort(service);
             boolean requested = service.stopRequested;
-            ServiceState next = requested || exit == 0 ? ServiceState.STOPPED : ServiceState.CRASHED;
+            // Only a stop the node asked for ends in STOPPED. A server that ends on its own is down
+            // whatever its exit code: CraftBukkit 1.8 on an unknown option, Spigot's watchdog and
+            // /restart without a restart script all end with 0. While the node shuts down, an exit
+            // with 0 is the server following the same signal (Ctrl+C reaches the whole group).
+            ServiceState next = requested || (closing && exit == 0) ? ServiceState.STOPPED : ServiceState.CRASHED;
             if (service.state == ServiceState.STOPPING && next == ServiceState.CRASHED) {
                 next = ServiceState.STOPPED;
             }
             transition(service, next);
             if (next == ServiceState.CRASHED) {
-                LOG.log(System.Logger.Level.WARNING, "{0} crashed with exit code {1}", service.spec.id(), exit);
+                if (exit == 0) {
+                    LOG.log(System.Logger.Level.WARNING, "{0} ended on its own with exit code 0 although no stop "
+                            + "was requested; it counts as a crash (stop a server with \"service stop\")", service.spec.id());
+                } else {
+                    LOG.log(System.Logger.Level.WARNING, "{0} crashed with exit code {1}", service.spec.id(), exit);
+                }
                 scheduleRestart(service);
             } else {
                 LOG.log(System.Logger.Level.INFO, "{0} stopped (exit code {1})", service.spec.id(), exit);
