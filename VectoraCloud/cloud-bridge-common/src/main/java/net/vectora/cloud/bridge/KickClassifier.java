@@ -110,12 +110,21 @@ public final class KickClassifier {
         if (reason.keys().stream().anyMatch(RESCUED_KEYS::contains)) {
             return Verdict.SERVER_GONE;
         }
-        String bare = text.replaceAll("[.!]+$", "");
+        String bare = withoutClosingPunctuation(text);
         if (RESCUED_TEXTS.contains(bare) || text.startsWith(INTERNAL_EXCEPTION)
                 || (text.isEmpty() && reason.keys().isEmpty())) {
             return Verdict.SERVER_GONE;
         }
         return Verdict.OTHER_REASON;
+    }
+
+    /** The text without the dots and exclamation marks at its end, without a regular expression. */
+    private static String withoutClosingPunctuation(String text) {
+        int end = text.length();
+        while (end > 0 && (text.charAt(end - 1) == '.' || text.charAt(end - 1) == '!')) {
+            end--;
+        }
+        return text.substring(0, end);
     }
 
     /**

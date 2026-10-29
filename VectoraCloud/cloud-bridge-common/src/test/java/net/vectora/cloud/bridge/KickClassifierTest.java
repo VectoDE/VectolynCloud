@@ -58,7 +58,7 @@ class KickClassifierTest {
     @ParameterizedTest
     @ValueSource(strings = {"Server closed", "server closed.", "Server is restarting", "Server restarting",
             "Timed out", "The server is full!", "Server is full", "Internal Exception: java.io.IOException: reset",
-            "§cServer closed", "  Server closed  "})
+            "§cServer closed", "  Server closed  ", "Server closed!!!", "Server closed.!."})
     void shutdownTimeoutErrorAndFullTextsAreCaughtWithTheNotice(String text) {
         assertEquals(Verdict.SERVER_GONE, text(text), text);
     }
@@ -74,7 +74,7 @@ class KickClassifierTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"Kicked by an operator.", "Du wurdest gekickt", "Hacking is not allowed", "Spam",
-            "Wartungsarbeiten", "Banana"})
+            "Wartungsarbeiten", "Banana", "Server closed?", "!!!"})
     void unknownTextsAreCaughtWithTheReason(String text) {
         assertEquals(Verdict.OTHER_REASON, text(text), text);
     }
