@@ -72,7 +72,7 @@ public final class VelocityBridgePlugin {
     public void onServerConnected(ServerConnectedEvent event) {
         ProxyBridge target = bridge;
         if (target != null) {
-            target.playerConnected(event.getPlayer().getUniqueId(), event.getPlayer().getUsername(),
+            target.playerConnected(event.getPlayer(), event.getPlayer().getUniqueId(), event.getPlayer().getUsername(),
                     event.getServer().getServerInfo().getName());
         }
     }
@@ -82,7 +82,7 @@ public final class VelocityBridgePlugin {
     public void onDisconnect(DisconnectEvent event) {
         ProxyBridge target = bridge;
         if (target != null) {
-            target.playerDisconnected(event.getPlayer().getUniqueId());
+            target.playerDisconnected(event.getPlayer(), event.getPlayer().getUniqueId());
         }
     }
 

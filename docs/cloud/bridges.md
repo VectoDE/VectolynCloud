@@ -57,6 +57,8 @@ The proxy's events are not passed on as they come. `PlayerTracker` checks them a
 - The "previous server" of the platform event is not trusted: a switch is reported from the service the tracker reported last.
 - A connect to the current server again, a second disconnect, a disconnect of an unknown player, a server the proxy does not know, a server name that is not a valid service id and a player name the protocol does not allow change nothing and produce nothing.
 - The name of the join is kept for the later events of that player.
+- State is kept per session, that is per Velocity player object, because Velocity fires the connect and disconnect events of one player on different threads. A connect that arrives after the disconnect of its session is ignored (ended sessions are remembered weakly). An old session's late disconnect leaves a newer login with the same UUID alone. A newer session that connects while the old one is still recorded ends it first: `PlayerQuit`, then `PlayerJoin`.
+- The events are queued while the tracker's lock is held, so two threads cannot swap them on the way to the send queue.
 - Bedrock players are recognised by Floodgate's UUID scheme (upper 64 bits zero), without the Floodgate API.
 
 Backend names: a dynamic server is registered under its service id. A static backend appears in `velocity.toml` under its group name (`lobby`) when its index is 1 (see [node.md](node.md#ids-folders-and-ports)), so the proxy reports `lobby`, not `lobby-1`. `cloud-node` has to map that name when it checks the events.
@@ -138,6 +140,5 @@ All tests of `cloud-bridge-common` and `cloud-bridge-legacy` run on Java 25 and,
 ## Open for later pull requests
 
 - `cloud-node`: set `VECTORA_SERVICE_PLATFORM` for every service and `VECTORA_LEGACY_FORWARDING_SECRET` for `PANDASPIGOT` services, copy the bridge jar into the plugin folder of each service, send `RegisterServer` with the right `legacy` flag to the right proxy, check the player events and map static backend names.
-- Velocity fires connect and disconnect events of one player on different threads. If a connect arrives after the disconnect of the same session, or an old session's disconnect after a new login with the same UUID, the tracker can be off for that player until the next quit. To be checked in a real start (PR 14); the fix would key the state by session.
 - PR 24 (legacy proxy group): a real start of the legacy proxy with a PandaSpigot backend and the token check end to end.
 - Stage 3: the Vectora plugin per platform takes over `cloud-bridge-common`.

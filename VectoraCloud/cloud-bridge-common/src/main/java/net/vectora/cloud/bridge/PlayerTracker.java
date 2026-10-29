@@ -1,10 +1,14 @@
 package net.vectora.cloud.bridge;
 
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.WeakHashMap;
 import java.util.function.Predicate;
 import net.vectora.protocol.ServiceId;
 import net.vectora.protocol.message.Message;
@@ -31,15 +35,30 @@ import net.vectora.protocol.message.PlayerSwitch;
  *       an unknown player produce nothing.</li>
  * </ul>
  *
+ * <p>State is kept per session: the platform's player object of one login, compared with
+ * {@code equals} (Velocity's player objects use identity). Velocity fires the events of one
+ * player on different threads, so they can arrive out of order:
+ *
+ * <ul>
+ *   <li>A connect that arrives after the disconnect of its session is ignored. Ended sessions are
+ *       remembered weakly, so they cost nothing once the platform drops the player object.</li>
+ *   <li>A disconnect of an older session after a newer login with the same UUID is ignored.</li>
+ *   <li>A connect of a newer session while an older one with the same UUID is still recorded
+ *       (its disconnect is still on the way) ends the older one first: {@code PlayerQuit}, then
+ *       {@code PlayerJoin}.</li>
+ * </ul>
+ *
  * <p>Bedrock players are recognised by Floodgate's UUID scheme (the upper 64 bits are zero), so
  * the bridge needs no Floodgate API.
  *
- * <p>Thread-safe: Velocity fires events on several threads.
+ * <p>Thread-safe: Velocity fires events on several threads. A caller that queues the returned
+ * events while holding the tracker's monitor keeps their order across threads.
  */
 public final class PlayerTracker {
 
     private final Predicate<String> knownServer;
     private final Map<UUID, Entry> players = new HashMap<>();
+    private final Set<Object> ended = Collections.newSetFromMap(new WeakHashMap<>());
 
     /**
      * Creates a tracker.
@@ -53,49 +72,59 @@ public final class PlayerTracker {
     /**
      * A backend accepted the player.
      *
+     * @param session the platform's player object of this login
      * @param uuid the player
      * @param name the player's name
      * @param server the server the player is on now
-     * @return the event to report, if any
+     * @return the events to report, in order; empty if there is nothing to report
      */
-    public synchronized Optional<Message> connected(UUID uuid, String name, String server) {
+    public synchronized List<Message> connected(Object session, UUID uuid, String name, String server) {
+        Objects.requireNonNull(session, "session");
         Objects.requireNonNull(uuid, "uuid");
+        if (ended.contains(session)) {
+            return List.of();
+        }
         Optional<ServiceId> to = serviceId(server);
         if (to.isEmpty()) {
-            return Optional.empty();
+            return List.of();
         }
         Entry entry = players.get(uuid);
+        if (entry != null && entry.session.equals(session)) {
+            if (entry.service.equals(to.get())) {
+                return List.of();
+            }
+            PlayerSwitch change = new PlayerSwitch(uuid, entry.name, entry.service, to.get(), isBedrock(uuid));
+            entry.service = to.get();
+            return List.of(change);
+        }
+        Optional<PlayerJoin> join = join(uuid, name, to.get());
+        if (join.isEmpty()) {
+            return List.of();
+        }
+        players.put(uuid, new Entry(session, join.get().name(), to.get()));
         if (entry == null) {
-            if (name == null) {
-                return Optional.empty();
-            }
-            PlayerJoin join;
-            try {
-                join = new PlayerJoin(uuid, name, to.get(), isBedrock(uuid));
-            } catch (IllegalArgumentException invalidName) {
-                return Optional.empty();
-            }
-            players.put(uuid, new Entry(join.name(), to.get()));
-            return Optional.of(join);
+            return List.of(join.get());
         }
-        if (entry.service.equals(to.get())) {
-            return Optional.empty();
-        }
-        PlayerSwitch change = new PlayerSwitch(uuid, entry.name, entry.service, to.get(), isBedrock(uuid));
-        entry.service = to.get();
-        return Optional.of(change);
+        // Another session of this UUID is still recorded: its disconnect has not arrived yet.
+        return List.of(new PlayerQuit(uuid, entry.name, entry.service, isBedrock(uuid)), join.get());
     }
 
     /**
      * The player left the proxy.
      *
-     * @return the {@code PlayerQuit} to report, if the player was reported as joined
+     * @param session the platform's player object of the login that ended
+     * @param uuid the player
+     * @return the {@code PlayerQuit} to report, if this session was reported as joined
      */
-    public synchronized Optional<Message> disconnected(UUID uuid) {
-        Entry entry = players.remove(Objects.requireNonNull(uuid, "uuid"));
-        if (entry == null) {
+    public synchronized Optional<Message> disconnected(Object session, UUID uuid) {
+        Objects.requireNonNull(session, "session");
+        Objects.requireNonNull(uuid, "uuid");
+        ended.add(session);
+        Entry entry = players.get(uuid);
+        if (entry == null || !entry.session.equals(session)) {
             return Optional.empty();
         }
+        players.remove(uuid);
         return Optional.of(new PlayerQuit(uuid, entry.name, entry.service, isBedrock(uuid)));
     }
 
@@ -115,6 +144,17 @@ public final class PlayerTracker {
         return uuid.getMostSignificantBits() == 0;
     }
 
+    private static Optional<PlayerJoin> join(UUID uuid, String name, ServiceId to) {
+        if (name == null) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(new PlayerJoin(uuid, name, to, isBedrock(uuid)));
+        } catch (IllegalArgumentException invalidName) {
+            return Optional.empty();
+        }
+    }
+
     private Optional<ServiceId> serviceId(String server) {
         if (server == null || !knownServer.test(server)) {
             return Optional.empty();
@@ -127,10 +167,12 @@ public final class PlayerTracker {
     }
 
     private static final class Entry {
+        private final Object session;
         private final String name;
         private ServiceId service;
 
-        Entry(String name, ServiceId service) {
+        Entry(Object session, String name, ServiceId service) {
+            this.session = session;
             this.name = name;
             this.service = service;
         }

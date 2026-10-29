@@ -39,13 +39,14 @@ class ProxyBridgeTest {
     @Test
     void playerEventsAreCheckedAndSentFromTheSenderThread() {
         UUID uuid = UUID.randomUUID();
+        Object session = new Object();
         Thread caller = Thread.currentThread();
         bridge.ready();
-        bridge.playerDisconnected(uuid); // unknown player: nothing
-        bridge.playerConnected(uuid, "Alex", "lobby");
-        bridge.playerConnected(uuid, "Alex", "lobby");
+        bridge.playerDisconnected(new Object(), uuid); // unknown player: nothing
+        bridge.playerConnected(session, uuid, "Alex", "lobby");
+        bridge.playerConnected(session, uuid, "Alex", "lobby");
         bridge.status(1, 500);
-        bridge.playerDisconnected(uuid);
+        bridge.playerDisconnected(session, uuid);
         sender.close(Duration.ofSeconds(5));
 
         assertEquals(List.of("ready", "send", "status", "send", "close"), link.names());

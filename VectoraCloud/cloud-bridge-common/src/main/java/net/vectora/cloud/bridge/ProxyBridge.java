@@ -52,14 +52,23 @@ public final class ProxyBridge implements CloudClientListener {
         sender.markReady();
     }
 
-    /** A backend accepted the player. Call from the proxy's "server connected" event. */
-    public void playerConnected(UUID uuid, String name, String server) {
-        tracker.connected(uuid, name, server).ifPresent(sender::send);
+    /**
+     * A backend accepted the player. Call from the proxy's "server connected" event, with the
+     * platform's player object as {@code session}.
+     */
+    public void playerConnected(Object session, UUID uuid, String name, String server) {
+        // Queued under the tracker's lock, so events of different threads keep the tracker's order.
+        // Submitting never blocks.
+        synchronized (tracker) {
+            tracker.connected(session, uuid, name, server).forEach(sender::send);
+        }
     }
 
-    /** The player left the proxy. */
-    public void playerDisconnected(UUID uuid) {
-        tracker.disconnected(uuid).ifPresent(sender::send);
+    /** The player left the proxy. {@code session} is the player object of the login that ended. */
+    public void playerDisconnected(Object session, UUID uuid) {
+        synchronized (tracker) {
+            tracker.disconnected(session, uuid).ifPresent(sender::send);
+        }
     }
 
     /** Queues a status report. */
