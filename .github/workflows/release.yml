@@ -40,31 +40,17 @@ jobs:
         with:
           cache-disabled: true
 
-      # The tag (v1.2.3) sets the version, so plugin.yml and the jar names match the release.
+      # The tag (v1.2.3) sets the version of every module. The full build runs all tests, but
+      # only VectoraCloud.jar is released: the plugin jars are not part of a release (the
+      # owner's decision of 2026-10-29); operators build them from the repository.
       - name: Build
         env:
           TAG: ${{ github.ref_name }}
         run: bash ./gradlew build --no-daemon --no-build-cache -Pversion="${TAG#v}"
 
-      # Each plugin module produces exactly one jar (no -plain, -sources or -javadoc jars).
-      # Stage 3 replaces them with Vectora-Paper.jar, Vectora-Velocity.jar and
-      # Vectora-Fabric.jar; this list changes with it.
-      - name: Collect jars
-        env:
-          TAG: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-          version="${TAG#v}"
-          mkdir -p dist
-          for jar in \
-            "Vectora-Lobby/build/libs/VectoraLobby-${version}.jar" \
-            "Vectora-PortalBridge/build/libs/VectoraPortalBridge-${version}.jar"; do
-            test -f "$jar" || { echo "::error::missing $jar"; exit 1; }
-            cp "$jar" dist/
-          done
-
-      # VectoraCloud.jar plus one archive per operating system with the start scripts.
-      # The same script runs as a dry run in operations.yml on every pull request.
+      # The release files: VectoraCloud.jar plus one archive per operating system with the
+      # start scripts, nothing else. The same script runs as a dry run in operations.yml on
+      # every pull request.
       - name: Package VectoraCloud
         env:
           TAG: ${{ github.ref_name }}
@@ -74,12 +60,24 @@ jobs:
             VectoraCloud/cloud-launcher/build/cloud/VectoraCloud.jar dist
           ls -l dist
 
+      # SHA256SUMS lists exactly the three release files; the provenance and the attestation
+      # cover every file in it, so nothing may be missing and nothing else may slip in.
       - name: Checksums
         id: hash
         working-directory: dist
+        env:
+          TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          sha256sum -- *.jar *.zip *.tar.gz > SHA256SUMS
+          version="${TAG#v}"
+          files=(VectoraCloud.jar "VectoraCloud-${version}-windows.zip" "VectoraCloud-${version}-linux-macos.tar.gz")
+          found=$(find . -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort)
+          want=$(printf '%s\n' "${files[@]}" | LC_ALL=C sort)
+          if [ "$found" != "$want" ]; then
+            printf '::error::unexpected release files:\n%s\n' "$found"
+            exit 1
+          fi
+          sha256sum -- "${files[@]}" > SHA256SUMS
           cat SHA256SUMS
           echo "hashes=$(base64 -w0 SHA256SUMS)" >> "$GITHUB_OUTPUT"
 

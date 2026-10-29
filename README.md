@@ -12,7 +12,7 @@ Vectora is an open-source kit (GPL-3.0) for running your own Minecraft network, 
 
 We do not run a network ourselves: there is no official server, domain, hosted website, Discord bot or store. The website, Discord bot and store are code in this repository. You configure them with your own bot token and your own Stripe account and host them yourself.
 
-The long-term goal: you run `java -jar VectoraCloud.jar` on Windows, Linux, macOS, in Docker or on Pterodactyl, answer a setup wizard, and the complete network comes up with database, proxy, lobby, game modes and minigames. A release will contain `VectoraCloud.jar`, start scripts for Windows, Linux and macOS, and a Docker image on GHCR. The Dockerfile, the compose file and the Pterodactyl egg live in this repository.
+The long-term goal: you run `java -jar VectoraCloud.jar` on Windows, Linux, macOS, in Docker or on Pterodactyl, answer a setup wizard, and the complete network comes up with database, proxy, lobby, game modes and minigames. A release will contain `VectoraCloud.jar`, start scripts for Windows, Linux and macOS, and a Docker image on GHCR, all signed and with provenance. Plugin jars are not attached to releases. The Dockerfile, the compose file and the Pterodactyl egg live in this repository.
 
 ## Status
 

@@ -12,7 +12,7 @@ Vectora ist ein Open-Source-Baukasten (GPL-3.0), mit dem du dein eigenes Minecra
 
 Wir selbst betreiben kein Netzwerk: Es gibt keinen offiziellen Server, keine Domain und keine gehostete Website, keinen Discord-Bot und keinen Store. Website, Discord-Bot und Store liegen als Code in diesem Repository. Du konfigurierst sie mit deinem eigenen Bot-Token und deinem eigenen Stripe-Konto und hostest sie selbst.
 
-Das langfristige Ziel: Du startest `java -jar VectoraCloud.jar` unter Windows, Linux, macOS, in Docker oder auf Pterodactyl, beantwortest einen Einrichtungsassistenten, und danach läuft das komplette Netzwerk mit Datenbank, Proxy, Lobby, Spielmodi und Minigames. Ein Release wird `VectoraCloud.jar`, Startskripte für Windows, Linux und macOS und ein Docker-Image auf GHCR enthalten. Dockerfile, compose-Datei und Pterodactyl-Egg liegen in diesem Repository.
+Das langfristige Ziel: Du startest `java -jar VectoraCloud.jar` unter Windows, Linux, macOS, in Docker oder auf Pterodactyl, beantwortest einen Einrichtungsassistenten, und danach läuft das komplette Netzwerk mit Datenbank, Proxy, Lobby, Spielmodi und Minigames. Ein Release wird `VectoraCloud.jar`, Startskripte für Windows, Linux und macOS und ein Docker-Image auf GHCR enthalten, alles signiert und mit Provenance. Plugin-Jars hängen nicht am Release. Dockerfile, compose-Datei und Pterodactyl-Egg liegen in diesem Repository.
 
 ## Stand
 

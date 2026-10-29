@@ -1,6 +1,6 @@
 name: Operations
 
-# Dry run of everything the release ships besides the plugin jars, without publishing anything:
+# Dry run of everything the release ships, without publishing anything:
 # start scripts on Linux, macOS and Windows, the release archives (VectoraCloud/dist/package.sh,
 # the same script release.yml runs), the systemd unit on a real systemd, the container image
 # (built from source and through the release path with the jar as named context, both without

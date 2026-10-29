@@ -24,8 +24,7 @@ The release workflow ([`release.yml`](../../.github/workflows/release.yml)) runs
 | `VectoraCloud.jar` | the cloud, for `java -jar`, Docker and Pterodactyl |
 | `VectoraCloud-<version>-windows.zip` | `VectoraCloud.jar`, `start.bat`, `start.ps1` |
 | `VectoraCloud-<version>-linux-macos.tar.gz` | `VectoraCloud.jar`, `start.sh` (executable) |
-| `VectoraLobby-<version>.jar`, `VectoraPortalBridge-<version>.jar` | the stage 1 plugins, until stage 3 replaces them |
-| `SHA256SUMS` | SHA-256 of every file above |
+| `SHA256SUMS` | SHA-256 of the three files above |
 | `<file>.sigstore.json` | cosign signature bundle for each file and for `SHA256SUMS` |
 | `vectora.intoto.jsonl` | SLSA level 3 provenance for every file in `SHA256SUMS` |
 
@@ -235,7 +234,7 @@ How the egg works:
 
 ## Verifying a release
 
-Every file of a release is signed with cosign keyless (Sigstore, the GitHub Actions identity of `release.yml`), has a GitHub build provenance attestation, and is listed in the SLSA provenance. Replace `v0.2.0` with the tag you downloaded.
+Every file of a release is signed with cosign keyless (Sigstore, the GitHub Actions identity of `release.yml`). The three files in `SHA256SUMS` also have a GitHub build provenance attestation and are listed in the SLSA provenance; `SHA256SUMS` itself is covered by its signature. Replace `v0.2.0` with the tag you downloaded.
 
 ```sh
 # 1. Checksums (only integrity: SHA256SUMS comes from the same place)

@@ -24,8 +24,7 @@ Der Release-Workflow ([`release.yml`](../../.github/workflows/release.yml)) läu
 | `VectoraCloud.jar` | die Cloud, für `java -jar`, Docker und Pterodactyl |
 | `VectoraCloud-<version>-windows.zip` | `VectoraCloud.jar`, `start.bat`, `start.ps1` |
 | `VectoraCloud-<version>-linux-macos.tar.gz` | `VectoraCloud.jar`, `start.sh` (ausführbar) |
-| `VectoraLobby-<version>.jar`, `VectoraPortalBridge-<version>.jar` | die Plugins aus Etappe 1, bis Etappe 3 sie ersetzt |
-| `SHA256SUMS` | SHA-256 aller Dateien darüber |
+| `SHA256SUMS` | SHA-256 der drei Dateien darüber |
 | `<datei>.sigstore.json` | cosign-Signatur-Bundle für jede Datei und für `SHA256SUMS` |
 | `vectora.intoto.jsonl` | SLSA-Level-3-Provenance für jede Datei aus `SHA256SUMS` |
 
@@ -235,7 +234,7 @@ So funktioniert das Egg:
 
 ## Ein Release prüfen
 
-Jede Datei eines Releases ist mit cosign keyless signiert (Sigstore, die GitHub-Actions-Identität von `release.yml`), hat eine Build-Provenance-Attestierung von GitHub und steht in der SLSA-Provenance. Ersetze `v0.2.0` durch den Tag, den du heruntergeladen hast.
+Jede Datei eines Releases ist mit cosign keyless signiert (Sigstore, die GitHub-Actions-Identität von `release.yml`). Die drei Dateien aus `SHA256SUMS` haben zusätzlich eine Build-Provenance-Attestierung von GitHub und stehen in der SLSA-Provenance; `SHA256SUMS` selbst sichert seine Signatur ab. Ersetze `v0.2.0` durch den Tag, den du heruntergeladen hast.
 
 ```sh
 # 1. Prüfsummen (nur Integrität: SHA256SUMS kommt vom selben Ort)

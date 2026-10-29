@@ -13,6 +13,8 @@ Each [release](https://github.com/VectoDE/Vectora-Network/releases) contains:
 - `VectoraCloud-<version>-linux-macos.tar.gz` with `start.sh`
 - `SHA256SUMS`, a cosign signature for every file and SLSA provenance
 
+Nothing else: the plugin jars are not part of a release.
+
 The container image is `ghcr.io/vectode/vectora-cloud:<version>`; `latest` points to the newest stable release only. Dockerfile, `compose.yml`, the systemd unit and the Pterodactyl egg are in [`VectoraCloud/dist/`](https://github.com/VectoDE/Vectora-Network/tree/main/VectoraCloud/dist).
 
 ## Where it runs
