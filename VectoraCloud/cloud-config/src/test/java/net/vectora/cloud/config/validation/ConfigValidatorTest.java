@@ -232,6 +232,24 @@ class ConfigValidatorTest {
     }
 
     @Test
+    void corsOriginsAreChecked() {
+        ApiConfig good = ApiConfig.defaults().withCorsOrigins(List.of("https://dashboard.example.org",
+                "http://localhost:5173", "http://[::1]:8080"));
+        assertEquals(Set.of(), codes(withCloud(valid.cloud().withApi(good))));
+        ApiConfig bad = ApiConfig.defaults().withCorsOrigins(List.of("*", "https://example.org/", "HTTPS://example.org",
+                "https://user@example.org", "ftp://example.org", "https://dashboard.example.org",
+                "https://dashboard.example.org"));
+        assertEquals(Set.of("cloud.yml api.cors-origins[0] INVALID_ORIGIN", "cloud.yml api.cors-origins[1] INVALID_ORIGIN",
+                "cloud.yml api.cors-origins[2] INVALID_ORIGIN", "cloud.yml api.cors-origins[3] INVALID_ORIGIN",
+                "cloud.yml api.cors-origins[4] INVALID_ORIGIN", "cloud.yml api.cors-origins[6] DUPLICATE_ENTRY"),
+                codes(withCloud(valid.cloud().withApi(bad))));
+        List<String> many = java.util.stream.IntStream.range(0, ApiConfig.MAX_CORS_ORIGINS + 1)
+                .mapToObj(i -> "https://d" + i + ".example.org").toList();
+        assertEquals(Set.of("cloud.yml api.cors-origins OUT_OF_RANGE"),
+                codes(withCloud(valid.cloud().withApi(ApiConfig.defaults().withCorsOrigins(many)))));
+    }
+
+    @Test
     void setupCannotCompleteWithoutEula() {
         assertEquals(Set.of("cloud.yml setup-complete EULA_REQUIRED"), codes(withCloud(valid.cloud().withSetupComplete(true))));
         assertEquals(Set.of(), codes(withCloud(valid.cloud().withEulaAccepted(true).withSetupComplete(true))));

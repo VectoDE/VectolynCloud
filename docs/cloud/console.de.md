@@ -59,9 +59,9 @@ Leert den Bildschirm, wenn das Terminal ANSI kann.
 | `config list` | Alle Schlüssel mit Wert. |
 | `config reload` | Liest alle Konfigurationsdateien neu. Eine fehlerhafte Datei lässt die aktuelle Konfiguration aktiv und zeigt die Fehler. |
 
-Schlüssel: `network-name`, `language`, `eula-accepted`, `setup-complete`, `node-id`, `servers.<proxy|lobby|survival|creative|mod|end|database|minigame|legacy-server>`, `proxy.bind`, `proxy.port`, `proxy.bedrock-port`, `legacy-proxy.enabled`, `legacy-proxy.port`, `database.mode`, `database.host`, `database.port`, `database.name`, `database.user`, `database.docker-image`, `api.enabled`, `api.bind`, `api.port`, `api.tls.enabled`, `api.tls.keystore`.
+Schlüssel: `network-name`, `language`, `eula-accepted`, `setup-complete`, `node-id`, `servers.<proxy|lobby|survival|creative|mod|end|database|minigame|legacy-server>`, `proxy.bind`, `proxy.port`, `proxy.bedrock-port`, `legacy-proxy.enabled`, `legacy-proxy.port`, `database.mode`, `database.host`, `database.port`, `database.name`, `database.user`, `database.docker-image`, `api.enabled`, `api.bind`, `api.port`, `api.tls.enabled`, `api.tls.keystore`, `api.cors-origins`.
 
-Werte wie in der Datei: nur `true` oder `false`, ganze Zahlen, Enum-Werte klein geschrieben. Passwörter stehen nicht in `cloud.yml`, sondern in `secrets/vectora.env`.
+Werte wie in der Datei: nur `true` oder `false`, ganze Zahlen, Enum-Werte klein geschrieben. `api.cors-origins` nimmt eine durch Komma getrennte Liste von Origins, `""` schaltet CORS aus. Passwörter stehen nicht in `cloud.yml`, sondern in `secrets/vectora.env`.
 
 ### `setup`
 
@@ -94,6 +94,17 @@ Vor dem Löschen prüft die Konsole, ob es nach denselben Regeln wie `ConfigServ
 `wanted` gilt je Serverart, nicht je Gruppe. Eine Gruppe gehört zu der Serverart, deren Template-Ordner sie nutzt (`Lobby-Server` ist `lobby`). Der Schalter wirkt also auf alle Gruppen mit diesem Template. Für eine Gruppe mit anderem Template gibt es keinen Schalter, der Befehl meldet das.
 
 Den Katalog einer Gruppe (Plugins und Mods) ändert man vorerst in der Datei. Befehle für Dienste (`start`, `stop`, `screen` usw.) bringt cloud-node mit.
+
+### `api`
+
+Kommt aus `cloud-api` ([api.de.md](api.de.md)). Der ganze Befehl gilt als sensibel, keine seiner Zeilen landet in der History.
+
+| Zeile | Wirkung |
+|---|---|
+| `api token create <Name> <Scopes>` | Erstellt ein Token mit den durch Komma getrennten Scopes (`services:read,config:read`) und zeigt es einmal an. Gespeichert wird nur der SHA-256-Wert. |
+| `api token list` | ID, Name, Erstellungszeit und Scopes aller Tokens, nie das Token selbst. |
+| `api token revoke <ID\|Name>` | Widerruft sofort; offene Event-Streams des Tokens werden geschlossen. Aliase: `delete`, `remove`. |
+| `api scopes` | Listet die Scopes auf. |
 
 ## Fragen von Assistenten
 

@@ -78,7 +78,16 @@ public enum ErrorCode {
     EULA_REQUIRED("The setup can only be completed after the Minecraft EULA has been accepted.",
             "Die Einrichtung kann erst abgeschlossen werden, wenn die Minecraft-EULA akzeptiert ist."),
     /** At least one entry is required. */
-    EMPTY("At least one entry is required.", "Mindestens ein Eintrag ist erforderlich.");
+    EMPTY("At least one entry is required.", "Mindestens ein Eintrag ist erforderlich."),
+    /** A JVM flag that loads code, runs a command or opens remote access (see {@code JvmFlagPolicy}). */
+    JVM_FLAG_FORBIDDEN("This JVM flag loads code, runs commands or opens remote access; the cloud does not set it.",
+            "Dieses JVM-Flag lädt Code, führt Befehle aus oder öffnet einen Fernzugang; die Cloud setzt es nicht."),
+    /** A JVM flag outside the allowlist (see {@code JvmFlagPolicy}). */
+    JVM_FLAG_NOT_LISTED("This JVM flag is not on the allowlist in docs/cloud/config.md.",
+            "Dieses JVM-Flag steht nicht auf der Allowlist in docs/cloud/config.md."),
+    /** An origin for CORS that is not {@code http(s)://host[:port]}. */
+    INVALID_ORIGIN("Must be an origin like https://dashboard.example.org or http://localhost:5173, without path.",
+            "Muss ein Origin wie https://dashboard.example.org oder http://localhost:5173 sein, ohne Pfad.");
 
     private final String english;
     private final String german;

@@ -40,6 +40,21 @@ public final class ConfigNames {
     private static final Pattern DEVICE_NAME = Pattern.compile("con|prn|aux|nul|com[0-9]|lpt[0-9]");
     private static final int MAX_ARGUMENT_LENGTH = 64;
     private static final Pattern LOOPBACK_V4 = Pattern.compile("127(\\.[0-9]{1,3}){3}");
+    /** A browser origin: lower-case scheme and host, optional port, no path, no trailing slash. */
+    private static final Pattern ORIGIN = Pattern.compile(
+            "https?://([a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?)*|\\[[0-9a-f:.]{2,45}\\])"
+                    + "(:[0-9]{1,5})?");
+
+    /**
+     * Tells whether {@code value} is a browser origin for CORS ({@code https://dashboard.example.org},
+     * {@code http://localhost:5173}). {@code *}, paths, user info and upper case are refused.
+     *
+     * @param value the text to check
+     * @return whether it is an origin
+     */
+    public static boolean isOrigin(String value) {
+        return value != null && value.length() <= 300 && ORIGIN.matcher(value).matches();
+    }
 
     private ConfigNames() {
     }

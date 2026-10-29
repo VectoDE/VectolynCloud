@@ -60,6 +60,7 @@ api:
   tls:
     enabled: false
     # keystore: secrets/api.p12  required when enabled, relative to the home
+  # cors-origins: [https://dashboard.example.org]   optional, up to 16 origins, off when empty
 ```
 
 Passwords are not in `cloud.yml`. They are in `secrets/vectora.env`.
@@ -93,7 +94,7 @@ process:                     # optional, see docs/cloud/node.md; every key has a
     max-backoff: 300s
 ```
 
-`process.jvm-flags` must not set what the node controls: `-Xms`, `-Xmx`, `-jar`, `-cp`/`-classpath`/`--class-path`, `-XX:Flags=`, `-XX:VMOptionsFile=`, and the version and help switches are rejected.
+`process.jvm-flags` must not set what the node controls: `-Xms`, `-Xmx`, `-jar`, `-cp`/`-classpath`/`--class-path`, `-XX:Flags=`, `-XX:VMOptionsFile=`, and the version and help switches are rejected. On top of that, a change through `ConfigService.apply` (console, API) may only add flags from the [allowlist](#jvm-flag-allowlist).
 
 `transitional` marks the third-party plugins the cloud installs until Vectora's own replacement is ready (LuckPerms, TAB, PlaceholderAPI, WorldEdit, WorldGuard, Chunky, spark, ProxyPortal). `mod` entries are only allowed with `fabric`, `plugin` entries only without it. `pandaspigot` only runs `1.8.8`.
 
@@ -163,7 +164,7 @@ cloud.yml: proxy.port (line 13): Must be between 1 and 65535. [out-of-range]
 cloud.yml: proxy.port (Zeile 13): Muss zwischen 1 und 65535 liegen.
 ```
 
-Codes (`ErrorCode.code()`): `syntax`, `not-a-mapping`, `file-too-large`, `file-missing`, `file-access`, `invalid-file-name`, `schema-version-missing`, `schema-version-unsupported`, `unknown-field`, `duplicate-field`, `invalid-value`, `required`, `out-of-range`, `pattern-mismatch`, `min-greater-than-max`, `port-conflict`, `port-in-service-range`, `duplicate-entry`, `unknown-group`, `unknown-task`, `unknown-node`, `already-exists`, `not-allowed`, `catalog-kind-mismatch`, `software-version-mismatch`, `api-tls-required`, `eula-required`, `empty`, `not-regular`.
+Codes (`ErrorCode.code()`): `syntax`, `not-a-mapping`, `file-too-large`, `file-missing`, `file-access`, `invalid-file-name`, `schema-version-missing`, `schema-version-unsupported`, `unknown-field`, `duplicate-field`, `invalid-value`, `required`, `out-of-range`, `pattern-mismatch`, `min-greater-than-max`, `port-conflict`, `port-in-service-range`, `duplicate-entry`, `unknown-group`, `unknown-task`, `unknown-node`, `already-exists`, `not-allowed`, `catalog-kind-mismatch`, `software-version-mismatch`, `api-tls-required`, `eula-required`, `empty`, `not-regular`, `jvm-flag-forbidden`, `jvm-flag-not-listed`, `invalid-origin`.
 
 An error never contains the value that was wrong, only the limit, pattern or name involved. A secret pasted into the wrong field therefore cannot reach a log through its error message. Names taken from the input (an unknown field, group, task or node) are passed on unchanged only when they are valid names; otherwise control and non-ASCII characters become `?` and the text is cut to 64 characters, so it cannot break or forge a log line.
 
@@ -289,6 +290,31 @@ Seed inputs live in `VectoraCloud/cloud-config/src/test/resources/net/vectora/cl
 ./gradlew :VectoraCloud:cloud-config:test --tests 'net.vectora.cloud.config.io.ConfigYamlFuzzTest.loadAndValidateFailOnlyWithConfigErrors' -Pfuzz -PfuzzMaxDuration=5m
 ```
 
+## JVM flag allowlist
+
+Groups can be written through the [REST API](api.md), so a stolen token must not turn into code execution on the node through `process.jvm-flags`. `JvmFlagPolicy` sorts every flag into one of three classes:
+
+**Forbidden** (`jvm-flag-forbidden`): flags that load code, run commands, open remote access, write files outside the service or bypass a gate of the node.
+
+- `@argfiles`, `-javaagent:`, `-agentpath:`, `-agentlib:`, `-Xrun`, `-Xdebug`, `-Xbootclasspath`, `--patch-module`, `--module-path`/`-p`, `--upgrade-module-path`, `--system`, `--limit-modules`, `-Xplugin`
+- `-XX:+EnableDynamicAgentLoading`, `-XX:+EnableJVMCI`, `-XX:+UseJVMCICompiler`, `-XX:+EnableJVMCIProduct`
+- `-XX:OnOutOfMemoryError=`, `-XX:OnError=`, `-XX:Flags=`, `-XX:VMOptionsFile=`, `-XX:CompileCommand(File)=`, `-XX:JVMCILibPath=`, `-XX:JVMCIPrintProperties`, `-XX:StartFlightRecording`, `-XX:FlightRecorderOptions`, `-XX:ErrorFile=`, `-XX:HeapDumpPath=`, `-XX:LogFile=`, `-XX:SharedArchiveFile=`, `-XX:AOTCache=`, `-XX:AOTConfiguration=`, `-XX:ArchiveClassesAtExit=`
+- `-D` (names compared in lower case) for `java.system.class.loader`, `java.security.*`, `java.library.path`, `sun.boot.library.path`, `java.class.path`, `java.home`, `java.ext.dirs`, `java.endorsed.dirs`, `jdk.attach.allowAttachSelf`, `java.rmi.server.codebase`, `com.mojang.eula.agree`, the log4j configuration files, and every property starting with `com.sun.management.jmxremote`, `jdk.module.`, `jdk.internal.` or `log4j2.script`
+
+**Allowed:**
+
+- boolean `-XX:+Name` / `-XX:-Name` (except the four above)
+- `-XX:Name=value` for GC and sizing flags (`MaxGCPauseMillis`, the `G1…` flags, `MaxRAMPercentage`, `ShenandoahGCMode`, ...), value `[A-Za-z0-9.+-]{1,64}`
+- `-Xss`, `-Xmn` with a size, `-Xrs`, `-Xnoclassgc`, `-Xint`, `-Xmixed`, `-Xbatch`, `-Xshare:auto|on|off`, `-server`, `--enable-preview`, assertions (`-ea`, `-da`, ...)
+- `--add-opens`, `--add-exports`, `--add-reads`, `--add-modules`, `--enable-native-access`, `--sun-misc-unsafe-memory-access`, `--illegal-native-access`
+- `-Xlog` to the console only (no `file=`)
+- `-D` for `file.encoding`, `stdout.encoding`, `stderr.encoding`, `user.language`, `user.country`, `user.timezone`, `java.awt.headless`, `java.net.preferIPv4Stack`, `java.net.preferIPv6Addresses`, the Aikar flags (`using.aikars.flags`, `aikars.new.flags`), Paper switches (`disable.watchdog`, `IReallyKnowWhatIAmDoingISwear`), `log4j2.formatMsgNoLookups`, and properties starting with `paper.`, `velocity.`, `fabric.`, `vectora.`, `terminal.`, `jline.`, `io.netty.`, `net.kyori.`, `com.velocitypowered.`, `geyser.`, `floodgate.`, `spark.`, `jdk.virtualThreadScheduler.`
+- `-D` with any other name outside the reserved namespaces, so a plugin's own switch such as `-Dmyplugin.debug=true` works. Reserved (names compared in lower case): `java.`, `javax.`, `jdk.`, `sun.`, `com.sun.`, `oracle.`, `com.ibm.`, `os.`, `user.`, `file.`, `path.`, `line.`, `native.`, `jna.`, `jnr.`, `org.lwjgl.`, `log4j…`, `org.apache.logging.`, `logback.`, `org.slf4j.`, `graal.`, `polyglot.`, `truffle.`, `nashorn.`, `http.`, `https.`, `ftp.`, `socks…`, `networkaddress.`, `jndi.`, `javafx.`, `com.mojang.`. A property there is only allowed when it is named above.
+
+**Not listed** (`jvm-flag-not-listed`): everything else.
+
+**Existing configurations.** Files written before the allowlist keep working. Only a change through `ConfigService.apply` is checked, and only for flags it adds: a flag that is already in the group (counted per occurrence) may stay, a new forbidden or unlisted flag is refused with the errors above. Flags in the files that are not allowed are logged as warnings when the node starts and after every reload, and `GET /api/v1/config/warnings` lists them. Hand edits of the files are not refused, because whoever can edit them can already change the node itself.
+
 ## JSON API
 
-The API (stage 2, PR 15) uses the same records. `ConfigMappers.configure(JsonMapper.builder()).build()` gives a JSON mapper with the same names and the same strictness as the YAML files.
+The [REST API](api.md) uses the same records. `ConfigMappers.configure(JsonMapper.builder()).build()` gives a JSON mapper with the same names and the same strictness as the YAML files.

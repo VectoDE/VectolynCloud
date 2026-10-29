@@ -52,6 +52,7 @@ include(
     "VectoraCloud:cloud-console",
     "VectoraCloud:cloud-database",
     "VectoraCloud:cloud-setup",
+    "VectoraCloud:cloud-api",
     "VectoraCloud:cloud-node",
     "VectoraCloud:cloud-backup",
     "VectoraCloud:cloud-monitor",

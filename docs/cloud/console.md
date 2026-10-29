@@ -82,9 +82,9 @@ Clears the screen. Without an ANSI terminal it says so and does nothing.
 | `config list` | Shows every key with its value. |
 | `config reload` | Reads every configuration file again; an invalid file keeps the current configuration and prints the errors. |
 
-Keys: `network-name`, `language`, `eula-accepted`, `setup-complete`, `node-id`, `servers.<proxy|lobby|survival|creative|mod|end|database|minigame|legacy-server>`, `proxy.bind`, `proxy.port`, `proxy.bedrock-port`, `legacy-proxy.enabled`, `legacy-proxy.port`, `database.mode`, `database.host`, `database.port`, `database.name`, `database.user`, `database.docker-image`, `api.enabled`, `api.bind`, `api.port`, `api.tls.enabled`, `api.tls.keystore`.
+Keys: `network-name`, `language`, `eula-accepted`, `setup-complete`, `node-id`, `servers.<proxy|lobby|survival|creative|mod|end|database|minigame|legacy-server>`, `proxy.bind`, `proxy.port`, `proxy.bedrock-port`, `legacy-proxy.enabled`, `legacy-proxy.port`, `database.mode`, `database.host`, `database.port`, `database.name`, `database.user`, `database.docker-image`, `api.enabled`, `api.bind`, `api.port`, `api.tls.enabled`, `api.tls.keystore`, `api.cors-origins`.
 
-Values follow the file rules: `true` or `false` only, whole numbers, enum values in lower case. `""` clears `database.docker-image` and `api.tls.keystore`. Secrets are not in `cloud.yml`; they stay in `secrets/vectora.env`.
+Values follow the file rules: `true` or `false` only, whole numbers, enum values in lower case. `""` clears `database.docker-image`, `api.tls.keystore` and `api.cors-origins`. `api.cors-origins` takes a comma-separated list of origins. Secrets are not in `cloud.yml`; they stay in `secrets/vectora.env`.
 
 ### `setup`
 
@@ -119,6 +119,17 @@ Before deleting, the console checks the deletion with the same rules as `ConfigS
 The catalog of a group (plugins and mods) is edited in the file for now.
 
 Service commands (`start`, `stop`, `screen`, ...) come from cloud-node, which registers them in the same registry.
+
+### `api`
+
+Comes from `cloud-api` ([api.md](api.md)). The whole command is sensitive: no line of it is written to the history.
+
+| Line | Effect |
+|---|---|
+| `api token create <name> <scopes>` | Creates a token with the comma-separated scopes (`services:read,config:read`) and prints it once. Only its SHA-256 is stored. |
+| `api token list` | Id, name, creation time and scopes of every token, never the token. |
+| `api token revoke <id\|name>` | Revokes it at once; open event streams of the token are closed. Aliases: `delete`, `remove`. |
+| `api scopes` | Lists the scopes. |
 
 ## Adding commands
 

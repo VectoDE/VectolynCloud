@@ -35,7 +35,8 @@ import net.vectora.cloud.config.operation.SetServerWanted;
  * {@code ConfigService.apply} then runs the same validation as for a hand-edited file.
  *
  * <p>{@code schema-version} is not a key: the cloud manages it. Secrets are not in {@code cloud.yml}.
- * Optional texts ({@code database.docker-image}, {@code api.tls.keystore}) are cleared with {@code ""}.
+ * Optional texts ({@code database.docker-image}, {@code api.tls.keystore}) are cleared with {@code ""};
+ * {@code api.cors-origins} is a comma list, {@code ""} switches CORS off.
  */
 final class ConfigKeys {
 
@@ -101,27 +102,28 @@ final class ConfigKeys {
         add("api.enabled", c -> String.valueOf(api(c).enabled()), (s, v) -> {
             boolean value = Values.bool(FILE, "api.enabled", v);
             ApiConfig a = api(s.cloud());
-            return new SetApi(new ApiConfig(value, a.bind(), a.port(), a.tls()));
+            return new SetApi(a.withEnabled(value));
         }, bool);
         add("api.bind", c -> api(c).bind(), (s, v) -> {
             ApiConfig a = api(s.cloud());
-            return new SetApi(new ApiConfig(a.enabled(), v, a.port(), a.tls()));
+            return new SetApi(a.withBind(v));
         }, List.of());
         add("api.port", c -> String.valueOf(api(c).port()), (s, v) -> {
             int port = Values.integer(FILE, "api.port", v);
             ApiConfig a = api(s.cloud());
-            return new SetApi(new ApiConfig(a.enabled(), a.bind(), port, a.tls()));
+            return new SetApi(a.withPort(port));
         }, List.of());
         add("api.tls.enabled", c -> String.valueOf(tls(c).enabled()), (s, v) -> {
             boolean value = Values.bool(FILE, "api.tls.enabled", v);
             ApiConfig a = api(s.cloud());
-            return new SetApi(new ApiConfig(a.enabled(), a.bind(), a.port(), new TlsConfig(value, tls(s.cloud()).keystore())));
+            return new SetApi(a.withTls(new TlsConfig(value, tls(s.cloud()).keystore())));
         }, bool);
         add("api.tls.keystore", c -> orEmpty(tls(c).keystore()), (s, v) -> {
             ApiConfig a = api(s.cloud());
-            return new SetApi(new ApiConfig(a.enabled(), a.bind(), a.port(),
-                    new TlsConfig(tls(s.cloud()).enabled(), Values.optionalText(v))));
+            return new SetApi(a.withTls(new TlsConfig(tls(s.cloud()).enabled(), Values.optionalText(v))));
         }, List.of());
+        add("api.cors-origins", c -> String.join(",", api(c).corsOrigins()), (s, v) -> new SetApi(api(s.cloud())
+                .withCorsOrigins(v.isEmpty() ? List.of() : List.of(v.split(",", -1)))), List.of());
     }
 
     private ConfigKeys() {

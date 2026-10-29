@@ -1,0 +1,29 @@
+package net.vectora.cloud.api.backend;
+
+import java.util.List;
+
+/**
+ * Backups for the API. Prepared for cloud-backup (PR #43): cloud-node implements it with
+ * {@code BackupService.list()} and {@code BackupService.create(BackupRequest)}. Until then
+ * {@link ApiBackend#backups()} is empty and the backup endpoints answer 501 {@code not-available}.
+ */
+public interface BackupAccess {
+
+    /**
+     * Every backup in the backup folder, newest first.
+     *
+     * @return the backups
+     * @throws ApiBackendException if the backup folder cannot be read
+     */
+    List<BackupView> list() throws ApiBackendException;
+
+    /**
+     * Makes a backup and waits until it is written.
+     *
+     * @param order what it contains
+     * @return the new backup
+     * @throws ApiBackendException  if it cannot be made (unknown service, backup already running, ...)
+     * @throws InterruptedException if the request thread is interrupted while waiting
+     */
+    BackupView create(BackupOrder order) throws ApiBackendException, InterruptedException;
+}
