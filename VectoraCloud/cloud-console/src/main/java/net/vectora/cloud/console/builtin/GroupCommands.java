@@ -54,7 +54,9 @@ final class GroupCommands {
     static final MemorySize DEFAULT_HEAP_MAX = MemorySize.ofMegabytes(1024);
 
     private static final List<String> GROUP_FIELDS = List.of("template", "software", "minecraft-version", "java",
-            "heap.min", "heap.max", "combat");
+            "heap.min", "heap.max", "combat", "drain-timeout");
+    /** Value of {@code group set <name> drain-timeout} that removes the field, so the default applies. */
+    static final String DEFAULT_VALUE = "default";
     private static final List<String> TASK_FIELDS = List.of("group", "mode", "static-services", "min-services",
             "max-services", "players-per-service", "scale-up-at", "scale-down-below", "scale-down-after", "cooldown",
             "nodes");
@@ -277,6 +279,8 @@ final class GroupCommands {
             case "heap.min" -> g.withHeap(new HeapConfig(parse(file, field, MemorySize.FORMAT, () -> MemorySize.parse(value)), heap(g).max()));
             case "heap.max" -> g.withHeap(new HeapConfig(heap(g).min(), parse(file, field, MemorySize.FORMAT, () -> MemorySize.parse(value))));
             case "combat" -> g.withCombat(Values.enumValue(file, field, value, CombatSystem.class));
+            case "drain-timeout" -> g.withDrainTimeout(DEFAULT_VALUE.equals(value) ? null
+                    : parse(file, field, TimeSpan.FORMAT + ", or " + DEFAULT_VALUE, () -> TimeSpan.parse(value)));
             default -> throw unknownField(file, GROUP_FIELDS);
         };
     }
@@ -422,6 +426,7 @@ final class GroupCommands {
         out.println("  heap.min          = " + heap(g).min());
         out.println("  heap.max          = " + heap(g).max());
         out.println("  combat            = " + (g.combat() == null ? "" : Values.name(g.combat())));
+        out.println("  drain-timeout     = " + g.drainTimeoutOrDefault() + (g.drainTimeout() == null ? " (default)" : ""));
         out.println("  catalog           = " + String.join(", ", g.catalog().stream().map(c -> c.id()).toList()));
         out.println("  wanted            = " + wantedLabel(snapshot, g, out));
     }

@@ -334,6 +334,10 @@ public final class SetupMessages {
     public static final Text FILE_UNKNOWN_MEMORY_GROUP = Text.of(
             "memory: %1$s is neither an existing group nor a group the setup creates.",
             "memory: %1$s ist weder eine vorhandene Gruppe noch eine, die die Einrichtung anlegt.");
+    /** Unknown group under drain-timeout; %1$s the group. */
+    public static final Text FILE_UNKNOWN_DRAIN_GROUP = Text.of(
+            "drain-timeout: %1$s is neither an existing group nor a group the setup creates.",
+            "drain-timeout: %1$s ist weder eine vorhandene Gruppe noch eine, die die Einrichtung anlegt.");
     /** Unknown task under services; %1$s the task. */
     public static final Text FILE_UNKNOWN_SERVICES_TASK = Text.of(
             "services: %1$s is neither an existing task nor one the setup creates (the proxies always run one service).",

@@ -172,6 +172,28 @@ class BuiltinCommandsTest {
     }
 
     @Test
+    void groupSetDrainTimeout() throws Exception {
+        run("group create lobby Lobby-Server paper 26.3");
+        assertEquals(Outcome.DONE, run("group info lobby"));
+        assertTrue(terminal.output().contains("drain-timeout     = 30s (default)"), terminal.output());
+        assertEquals(Outcome.DONE, run("group set lobby drain-timeout 45s"));
+        assertEquals(net.vectora.cloud.config.model.TimeSpan.parse("45s"), config.snapshot().groups().get("lobby").drainTimeout());
+        assertTrue(Files.readString(home.resolve("groups/lobby.yml")).contains("drain-timeout: \"45s\""));
+        // Out of range and wrong form are refused, the value stays.
+        assertEquals(Outcome.FAILED, run("group set lobby drain-timeout 4s"));
+        assertTrue(terminal.output().contains("Must be between 5s and 10m."), terminal.output());
+        assertEquals(Outcome.FAILED, run("group set lobby drain-timeout 11m"));
+        assertEquals(Outcome.FAILED, run("group set lobby drain-timeout soon"));
+        assertEquals(net.vectora.cloud.config.model.TimeSpan.parse("45s"), config.snapshot().groups().get("lobby").drainTimeout());
+        // Counter-check: the limits themselves are accepted, and default removes the field.
+        assertEquals(Outcome.DONE, run("group set lobby drain-timeout 10m"));
+        assertEquals(Outcome.DONE, run("group set lobby drain-timeout 5s"));
+        assertEquals(Outcome.DONE, run("group set lobby drain-timeout default"));
+        assertEquals(null, config.snapshot().groups().get("lobby").drainTimeout());
+        assertFalse(Files.readString(home.resolve("groups/lobby.yml")).contains("drain-timeout"));
+    }
+
+    @Test
     void deleteAsksFirstAndEnterOrNoKeepsTheFile() throws Exception {
         run("group create lobby Lobby-Server paper 26.3");
         run("task create lobby lobby");

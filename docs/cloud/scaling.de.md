@@ -46,6 +46,10 @@ Datei, Konsole und API ändern das alle über `ConfigService.apply` und denselbe
 
 Der Scaler liest die Konfiguration in jeder Runde neu. Alle drei Wege wirken deshalb gleich, spätestens nach einer Runde (5 Sekunden). Eine ungültige Änderung wird überall mit denselben Fehlern abgelehnt und ändert nichts.
 
+### Gruppeneinstellungen für den Scaler
+
+`drain-timeout` in `groups/<name>.yml` (5s bis 10m, Standard 30s) gibt an, wie lange ein Dienst der Gruppe Zeit hat, seine Spieler anderswohin zu schicken, bevor der Scaler ihn stoppt. Gespeichert und geprüft wird der Wert schon jetzt, genutzt ab einer späteren Änderung. Ändern lässt er sich in der Datei, mit `group set <Name> drain-timeout 45s`, über `PUT /api/v1/groups/{name}` oder mit `drain-timeout:` in der Setup-Datei.
+
 ## Welche Tasks skaliert werden
 
 Nur Tasks dieses Nodes (`nodes` leer oder mit diesem Node), deren Gruppe gewollt ist. „Gewollt“ entscheidet die eine Regel `GroupRules.isWanted` aus cloud-config, die auch Planung, Starts, die Proxy-Listen und `runs` in der API bestimmt: das eigene `wanted` der Gruppe, ihr Schalter unter `servers:` in `cloud.yml` und für die 1.8.8-Gruppen `legacy-proxy.enabled` (siehe [node.md](node.md#which-services-run)). Eine abgeschaltete Gruppe wird nie skaliert, ihre Dienste stoppen wie bisher beim Neuladen.

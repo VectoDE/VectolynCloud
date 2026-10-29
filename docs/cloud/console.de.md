@@ -74,7 +74,7 @@ Startet den Einrichtungsassistenten erneut. Die aktuellen Werte sind die Vorschl
 | `group list` | Alle Gruppen mit Template, Software, Version und ob ihre Serverart gewünscht ist. |
 | `group info <Name>` | Alle Felder einer Gruppe. |
 | `group create <Name> <Template> <Software> <Minecraft-Version>` | Neue `groups/<Name>.yml` mit `java: auto`, Heap 512M bis 1G, Kampfsystem `legacy` bei `pandaspigot`, sonst `modern`. Scheitert, wenn es die Gruppe schon gibt. |
-| `group set <Name> <Feld> <Wert>` | Felder: `template`, `software`, `minecraft-version`, `java`, `heap.min`, `heap.max`, `combat`. |
+| `group set <Name> <Feld> <Wert>` | Felder: `template`, `software`, `minecraft-version`, `java`, `heap.min`, `heap.max`, `combat`, `drain-timeout` (5s bis 10m, `default` entfernt den Wert, dann gelten 30s), zum Beispiel `group set lobby drain-timeout 45s`. |
 | `group delete <Name> [--yes]`, `group remove <Name> [--yes]` | Löscht die Datei nach Rückfrage. Scheitert, solange ein Task die Gruppe nutzt. |
 | `group wanted <Name> <on\|off>` | Schaltet die Serverart der Gruppe in `cloud.yml` (`servers:`) ein oder aus. |
 

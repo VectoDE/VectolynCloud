@@ -78,6 +78,7 @@ heap:
   max: 768M
 combat: modern               # legacy (1.8 style) or modern
 wanted: false                # optional; only written when off. Switches one group off, for example one of several minigames
+drain-timeout: 30s           # optional, 5s to 10m, default 30s; only written when set
 catalog:                     # plugins and mods from the download catalog
   - id: luckperms
     kind: transitional       # plugin, mod or transitional
@@ -95,6 +96,8 @@ process:                     # optional, see docs/cloud/node.md; every key has a
 ```
 
 `process.jvm-flags` must not set what the node controls: `-Xms`, `-Xmx`, `-jar`, `-cp`/`-classpath`/`--class-path`, `-XX:Flags=`, `-XX:VMOptionsFile=`, and the version and help switches are rejected. On top of that, a change through the [REST API](api.md) may only add flags from the [allowlist](#jvm-flag-allowlist).
+
+`drain-timeout` is how long a service of the group may take to send its players to other services before the scaler stops it. It is stored and validated now; the scaler uses it from a later change on.
 
 `transitional` marks the third-party plugins the cloud installs until Vectora's own replacement is ready (LuckPerms, TAB, PlaceholderAPI, WorldEdit, WorldGuard, Chunky, spark, ProxyPortal). `mod` entries are only allowed with `fabric`, `plugin` entries only without it. `pandaspigot` only runs `1.8.8`.
 
@@ -206,6 +209,7 @@ Besides types and patterns, `ConfigValidator` checks the configuration as a whol
 - `docker-image` only and always with `mode: docker`.
 - An enabled API on a non-loopback address needs TLS.
 - `setup-complete: true` needs `eula-accepted: true`.
+- A group's `drain-timeout`, if set, lies between 5s and 10m (`out-of-range`).
 - `process`: flag count, flag pattern and reserved flags, `stop-command` pattern, `stop-timeout` from 1 s to 600 s, `max-attempts` from 1 to 1000, `backoff` ≤ `max-backoff`.
 
 Not checked here: whether a template folder or a catalog id exists. The template and download modules check that when they use them.

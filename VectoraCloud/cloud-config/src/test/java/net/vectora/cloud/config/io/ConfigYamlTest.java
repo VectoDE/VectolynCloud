@@ -368,6 +368,25 @@ class ConfigYamlTest {
     }
 
     @Test
+    void drainTimeoutIsOptionalInTheGroupFile() throws ConfigException {
+        GroupConfig plain = Samples.lobbyGroup();
+        String base = new String(ConfigYaml.write(plain), StandardCharsets.UTF_8);
+        assertFalse(base.contains("drain-timeout"), "not written when missing: " + base);
+        assertEquals(GroupConfig.DEFAULT_DRAIN_TIMEOUT, read(base, ConfigFormat.GROUP).drainTimeoutOrDefault());
+        GroupConfig set = read(base + "drain-timeout: 45s\n", ConfigFormat.GROUP);
+        assertEquals(TimeSpan.parse("45s"), set.drainTimeout());
+        String written = new String(ConfigYaml.write(set), StandardCharsets.UTF_8);
+        assertTrue(written.contains("drain-timeout: \"45s\""), written);
+        assertRoundTrip(set, ConfigFormat.GROUP);
+        assertEquals(set, plain.withDrainTimeout(TimeSpan.parse("45s")).withWanted(true), "the switch keeps it");
+        // Counter-check: a value in the wrong form is invalid-value with the expected form.
+        ConfigError bad = single(base + "drain-timeout: 45 seconds\n", ConfigFormat.GROUP);
+        assertEquals(ErrorCode.INVALID_VALUE, bad.code());
+        assertEquals("drain-timeout", bad.path());
+        assertEquals(List.of(TimeSpan.FORMAT), bad.args());
+    }
+
+    @Test
     void groupSwitchAcceptsOnlyBooleans() {
         String base = new String(ConfigYaml.write(Samples.lobbyGroup()), StandardCharsets.UTF_8);
         assertEquals(ErrorCode.INVALID_VALUE, assertThrows(ConfigException.class,

@@ -105,6 +105,8 @@ services:                     # per task: any of the three numbers, the rest kee
     max-services: 6
   minigame:
     max-services: 12
+drain-timeout:                # optional, per group, 5s to 10m; missing: the group keeps its value (new groups 30s)
+  lobby: 45s
 database:
   mode: external              # managed, docker, external or h2
   host: db.example.org
@@ -119,7 +121,7 @@ Rules:
 
 - Everything except `schema-version` and `eula` may be left out and then keeps the default the assistant would offer.
 - The file is read as strictly as `cloud.yml`: unknown fields, duplicate keys, wrong types or a missing `eula: true` are errors. The file is checked with exactly the same rules as typed answers (ports, heap, legacy server only with legacy proxy, Docker not on Pterodactyl, the whole-configuration validation). On any error nothing is written and every problem is listed.
-- `memory` and `minigames` may only name groups that exist or that the setup creates. `services` may only name tasks that exist or that the setup creates; the proxies are not among them, they always run one service. Each entry is checked like a typed answer (`static ≤ min ≤ max`, max from 1 to 1000).
+- `memory` and `minigames` may only name groups that exist or that the setup creates. `services` may only name tasks that exist or that the setup creates; the proxies are not among them, they always run one service. Each entry is checked like a typed answer (`static ≤ min ≤ max`, max from 1 to 1000). `drain-timeout` may only name groups that exist or that the setup creates; the console assistant does not ask for it, `group set <name> drain-timeout` changes it later.
 - The file is used only while `setup-complete` is false. Once the setup is done, a file that stays mounted is ignored, so it cannot undo later changes made with `config set` or the dashboard.
 - The file holds no secret. The password of an external database comes from `secrets/vectora.env` (`VECTORA_DB_PASSWORD`) or from `database.password-file`: a regular file (a link to one is fine; a FIFO or device is refused) with the password on one line (a trailing line break is dropped), at most 4 KiB, UTF-8, relative to the home or absolute. That fits Docker and Kubernetes secrets.
 

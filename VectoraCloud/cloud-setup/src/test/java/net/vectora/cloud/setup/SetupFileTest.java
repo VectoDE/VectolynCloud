@@ -21,6 +21,7 @@ import net.vectora.cloud.config.model.DatabaseMode;
 import net.vectora.cloud.config.model.Language;
 import net.vectora.cloud.config.model.MemorySize;
 import net.vectora.cloud.config.model.ServerKind;
+import net.vectora.cloud.config.model.TimeSpan;
 import net.vectora.cloud.config.secret.SecretStore;
 import net.vectora.cloud.console.Console;
 import org.junit.jupiter.api.AfterEach;
@@ -190,6 +191,32 @@ class SetupFileTest {
                 .describe(Language.EN);
         assertTrue(proxy.contains("proxies always run one service"), proxy);
         refused("schema-version: 1\neula: true\nservices:\n  lobby: {static: 1}\n", false);
+    }
+
+    @Test
+    void drainTimeoutIsOptionalPerGroup() throws Exception {
+        String file = "schema-version: 1\neula: true\ndrain-timeout:\n  lobby: 45s\n";
+        assertEquals(SetupResult.Status.COMPLETED, SetupWizard.nonInteractive(config, env(file, false), null).status());
+        var groups = config.snapshot().groups();
+        assertEquals(TimeSpan.parse("45s"), groups.get("lobby").drainTimeout());
+        assertEquals(null, groups.get("survival").drainTimeout(), "counter-check: other groups keep the default");
+        assertEquals(TimeSpan.parse("30s"), groups.get("survival").drainTimeoutOrDefault());
+    }
+
+    @Test
+    void drainTimeoutOfAnExistingGroupIsChangedAndCheckedLikeTheFile() throws Exception {
+        config.apply(new net.vectora.cloud.config.operation.PutGroup("survival",
+                SetupPlan.newGroup(NetworkServer.SURVIVAL, MemorySize.parse("2G")).withDrainTimeout(TimeSpan.parse("40s"))));
+        String range = refused("schema-version: 1\neula: true\ndrain-timeout:\n  survival: 11m\n", false).describe(Language.EN);
+        assertTrue(range.contains("drain-timeout") && range.contains("between 5s and 10m"), range);
+        String unknown = refused("schema-version: 1\neula: true\ndrain-timeout:\n  nonsense: 45s\n", false).describe(Language.EN);
+        assertTrue(unknown.contains("nonsense"), unknown);
+        refused("schema-version: 1\neula: true\ndrain-timeout:\n  survival: soon\n", false);
+        assertEquals(TimeSpan.parse("40s"), config.snapshot().groups().get("survival").drainTimeout(), "unchanged");
+        // Counter-check: a valid value replaces the one of the existing group.
+        String change = "schema-version: 1\neula: true\ndrain-timeout:\n  survival: 2m\n";
+        assertEquals(SetupResult.Status.COMPLETED, SetupWizard.nonInteractive(config, env(change, false), null).status());
+        assertEquals(TimeSpan.parse("2m"), config.snapshot().groups().get("survival").drainTimeout());
     }
 
     @Test

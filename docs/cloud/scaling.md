@@ -46,6 +46,10 @@ The file, the console and the API all change it through `ConfigService.apply` an
 
 The scaler reads the configuration again in every round, so all three take effect the same way, at the latest after one round (5 seconds). An invalid change is refused with the same errors everywhere and changes nothing.
 
+### Group settings for the scaler
+
+`drain-timeout` in `groups/<name>.yml` (5s to 10m, default 30s) is how long a service of the group may take to send its players elsewhere before the scaler stops it. Stored and checked now, used by a later change. File, `group set <name> drain-timeout 45s`, `PUT /api/v1/groups/{name}` or `drain-timeout:` in the setup file.
+
 ## Which tasks are scaled
 
 Only tasks of this node (`nodes` empty or naming this node) whose group is wanted. "Wanted" is the one rule `GroupRules.isWanted` in cloud-config that also decides planning, starts, the proxy lists and `runs` in the API: the group's own `wanted`, its switch under `servers:` in `cloud.yml`, and `legacy-proxy.enabled` for the 1.8.8 groups (see [node.md](node.md#which-services-run)). A group that is switched off is never scaled; its services stop on the reload as before.

@@ -72,6 +72,26 @@ class ConfigValidatorTest {
     }
 
     @Test
+    void drainTimeoutIsOptionalAndLimited() {
+        GroupConfig lobby = Samples.lobbyGroup();
+        assertEquals(GroupConfig.DEFAULT_DRAIN_TIMEOUT, lobby.drainTimeoutOrDefault(), "missing: 30s");
+        assertEquals(TimeSpan.parse("30s"), GroupConfig.DEFAULT_DRAIN_TIMEOUT);
+        for (String ok : List.of("5s", "45s", "10m")) {
+            assertEquals(Set.of(), codes(valid.withGroup("lobby", lobby.withDrainTimeout(TimeSpan.parse(ok)))), ok);
+        }
+        for (String bad : List.of("0s", "4s", "601s", "1h")) {
+            assertEquals(Set.of("groups/lobby.yml drain-timeout OUT_OF_RANGE"),
+                    codes(valid.withGroup("lobby", lobby.withDrainTimeout(TimeSpan.parse(bad)))), bad);
+        }
+        ConfigError error = ConfigValidator.validate(valid.withGroup("lobby", lobby.withDrainTimeout(TimeSpan.parse("1h"))))
+                .getFirst();
+        assertEquals("Must be between 5s and 10m.", error.message(Language.EN));
+        assertEquals(TimeSpan.parse("45s"), lobby.withDrainTimeout(TimeSpan.parse("45s")).drainTimeoutOrDefault());
+        assertEquals(GroupConfig.DEFAULT_DRAIN_TIMEOUT,
+                lobby.withDrainTimeout(TimeSpan.parse("45s")).withDrainTimeout(null).drainTimeoutOrDefault(), "null: default");
+    }
+
+    @Test
     void reservedJvmFlagsAreRecognised() {
         for (String flag : List.of("-Xms1G", "-Xmx1G", "-jar", "-cp", "-classpath", "--class-path", "--class-path=a",
                 "-version", "--version", "-help", "-?", "-X", "-XX:Flags=x", "-XX:VMOptionsFile=x")) {

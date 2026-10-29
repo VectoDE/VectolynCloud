@@ -627,6 +627,13 @@ components:
     Group:
       type: object
       description: "groups/<name>.yml, see docs/cloud/config.md. Unknown fields are refused."
+      properties:
+        drain-timeout:
+          type: string
+          example: "45s"
+          description: >-
+            Optional, 5s to 10m; missing means 30s and is not returned. How long a service may take
+            to send its players elsewhere before the scaler stops it (used from a later change on).
     Task:
       type: object
       description: >-

@@ -224,6 +224,28 @@ class ApiServerTest {
     }
 
     @Test
+    void groupDrainTimeoutIsTakenAndChecked() throws Exception {
+        try (TestApi api = new TestApi(home)) {
+            String drain = GROUP.replace("\"catalog\":[]", "\"catalog\":[],\"drain-timeout\":\"45s\"");
+            HttpResponse<String> created = api.send("PUT", "/api/v1/groups/lobby", api.admin, drain);
+            assertEquals(201, created.statusCode(), created.body());
+            assertTrue(created.body().contains("\"drain-timeout\":\"45s\""), created.body());
+            assertEquals("45s", api.config.snapshot().groups().get("lobby").drainTimeout().toString());
+            HttpResponse<String> tooLong = api.send("PUT", "/api/v1/groups/lobby", api.admin, drain.replace("45s", "11m"));
+            assertEquals(422, tooLong.statusCode(), tooLong.body());
+            assertTrue(tooLong.body().contains("\"path\":\"drain-timeout\"") && tooLong.body().contains("out-of-range"),
+                    tooLong.body());
+            assertEquals(400, api.send("PUT", "/api/v1/groups/lobby", api.admin, drain.replace("45s", "45")).statusCode());
+            assertEquals("45s", api.config.snapshot().groups().get("lobby").drainTimeout().toString(), "unchanged");
+            // Counter-check: without the field the default applies and nothing is written.
+            HttpResponse<String> plain = api.send("PUT", "/api/v1/groups/lobby", api.admin, GROUP);
+            assertEquals(200, plain.statusCode(), plain.body());
+            assertFalse(plain.body().contains("drain-timeout"), plain.body());
+            assertEquals("30s", api.config.snapshot().groups().get("lobby").drainTimeoutOrDefault().toString());
+        }
+    }
+
+    @Test
     void groupsTasksAndConfigGoThroughConfigService() throws Exception {
         try (TestApi api = new TestApi(home)) {
             assertEquals(201, api.send("PUT", "/api/v1/groups/lobby", api.admin, GROUP).statusCode());

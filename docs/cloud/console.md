@@ -97,7 +97,7 @@ Runs the setup assistant again. The current values are the defaults, and only wh
 | `group list` | Every group with template, software, version and whether its server kind is wanted. |
 | `group info <name>` | All fields of one group. |
 | `group create <name> <template> <software> <minecraft-version>` | New `groups/<name>.yml` with `java: auto`, heap 512M to 1G, combat `legacy` for `pandaspigot`, otherwise `modern`. Fails if the group exists. |
-| `group set <name> <field> <value>` | Fields: `template`, `software`, `minecraft-version`, `java`, `heap.min`, `heap.max`, `combat`. |
+| `group set <name> <field> <value>` | Fields: `template`, `software`, `minecraft-version`, `java`, `heap.min`, `heap.max`, `combat`, `drain-timeout` (5s to 10m, `default` removes it and 30s applies), for example `group set lobby drain-timeout 45s`. |
 | `group delete <name> [--yes]`, `group remove <name> [--yes]` | Deletes the file after asking. Fails while a task uses the group. |
 | `group wanted <name> <on\|off>` | Switches the server kind of the group in `cloud.yml` (`servers:`). |
 

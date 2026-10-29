@@ -25,12 +25,14 @@ import net.vectora.cloud.config.model.ProxyConfig;
 import net.vectora.cloud.config.model.ScalingConfig;
 import net.vectora.cloud.config.model.ServerKind;
 import net.vectora.cloud.config.model.TaskConfig;
+import net.vectora.cloud.config.model.TimeSpan;
 import net.vectora.cloud.config.operation.AcceptEula;
 import net.vectora.cloud.config.operation.CompleteSetup;
 import net.vectora.cloud.config.operation.ConfigOperation;
 import net.vectora.cloud.config.operation.PutGroup;
 import net.vectora.cloud.config.operation.PutTask;
 import net.vectora.cloud.config.operation.SetDatabase;
+import net.vectora.cloud.config.operation.SetGroupDrainTimeout;
 import net.vectora.cloud.config.operation.SetGroupHeap;
 import net.vectora.cloud.config.operation.SetGroupWanted;
 import net.vectora.cloud.config.operation.SetLanguage;
@@ -112,6 +114,12 @@ public final class SetupPlan {
                         : ServiceCounts.of(existing.scaling()));
             }
         }
+        Map<String, TimeSpan> drainTimeouts = new TreeMap<>();
+        snapshot.groups().forEach((name, group) -> {
+            if (group.drainTimeout() != null) {
+                drainTimeouts.put(name, group.drainTimeout());
+            }
+        });
         DatabaseConfig database = cloud.database() == null ? DatabaseConfig.defaults() : cloud.database();
         if (first && database.mode() == DatabaseMode.MANAGED && !env.managedDatabase()) {
             database = switchMode(database, DatabaseMode.H2);
@@ -123,7 +131,7 @@ public final class SetupPlan {
         return new SetupAnswers(language == null ? env.language() : language, cloud.eulaAccepted(),
                 cloud.networkName() == null ? CloudConfig.defaults().networkName() : cloud.networkName(), servers, switches,
                 proxy.bind() == null ? ProxyConfig.defaults().bind() : proxy.bind(), javaPort, proxy.bedrockPort(),
-                legacy.port(), heap, services, database, Optional.empty());
+                legacy.port(), heap, services, drainTimeouts, database, Optional.empty());
     }
 
     /**
@@ -210,7 +218,8 @@ public final class SetupPlan {
                 if (answers.wants(server)) {
                     String name = newGroupName(taken, server);
                     taken.add(name);
-                    ops.add(new PutGroup(name, newGroup(server, answers.heap().getOrDefault(name, server.defaultHeap()))));
+                    ops.add(new PutGroup(name, newGroup(server, answers.heap().getOrDefault(name, server.defaultHeap()))
+                            .withDrainTimeout(answers.drainTimeouts().get(name))));
                     ops.add(new PutTask(name, newTask(server, name,
                             server.isProxy() ? server.defaultCounts() : answers.services().getOrDefault(name, server.defaultCounts()))));
                 }
@@ -232,6 +241,10 @@ public final class SetupPlan {
                 if (max != null && (heap == null || !max.equals(heap.max()))) {
                     MemorySize min = heap == null || heap.min() == null ? initialHeap(max) : smaller(heap.min(), max);
                     ops.add(new SetGroupHeap(group, min, max));
+                }
+                TimeSpan drain = answers.drainTimeouts().get(group);
+                if (drain != null && !drain.equals(current.groups().get(group).drainTimeout())) {
+                    ops.add(new SetGroupDrainTimeout(group, drain));
                 }
             }
         }

@@ -30,6 +30,7 @@ import net.vectora.cloud.config.model.RestartConfig;
 import net.vectora.cloud.config.model.ScalingConfig;
 import net.vectora.cloud.config.model.ServerSoftware;
 import net.vectora.cloud.config.model.TaskConfig;
+import net.vectora.cloud.config.model.TimeSpan;
 
 /**
  * Checks a whole {@link ConfigSnapshot}: value ranges, patterns, references between files and port
@@ -211,6 +212,14 @@ public final class ConfigValidator {
             }
         }
         validateProcess(c, f, group.process());
+        if (group.drainTimeout() != null) {
+            long seconds = group.drainTimeout().duration().getSeconds();
+            if (seconds < GroupConfig.MIN_DRAIN_TIMEOUT_SECONDS || seconds > GroupConfig.MAX_DRAIN_TIMEOUT_SECONDS) {
+                c.add(ConfigError.of(f, "drain-timeout", ErrorCode.OUT_OF_RANGE,
+                        TimeSpan.ofSeconds(GroupConfig.MIN_DRAIN_TIMEOUT_SECONDS),
+                        TimeSpan.ofSeconds(GroupConfig.MAX_DRAIN_TIMEOUT_SECONDS)));
+            }
+        }
     }
 
     private static void validateProcess(Checks c, String f, ProcessConfig process) {

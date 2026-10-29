@@ -20,6 +20,7 @@ import net.vectora.cloud.config.model.DatabaseConfig;
 import net.vectora.cloud.config.model.DatabaseMode;
 import net.vectora.cloud.config.model.Language;
 import net.vectora.cloud.config.model.MemorySize;
+import net.vectora.cloud.config.model.TimeSpan;
 import net.vectora.cloud.config.secret.Secret;
 import net.vectora.cloud.config.validation.ConfigNames;
 import net.vectora.cloud.console.Text;
@@ -46,11 +47,14 @@ import net.vectora.cloud.console.Text;
  * @param memory        maximum heap per group name
  * @param services      static, minimum and maximum services per task name; a missing value keeps
  *                      the suggestion
+ * @param drainTimeout  optional {@code drain-timeout} per group name (5s to 10m); a group without
+ *                      an entry keeps what its file says, a new group gets the default 30s. The
+ *                      console assistant does not ask for it.
  * @param database      database settings
  */
 public record SetupFile(int schemaVersion, Language language, Boolean eula, String networkName, Servers servers,
                         Map<String, Boolean> minigames, Network network, Map<String, MemorySize> memory,
-                        Map<String, Services> services, Database database) {
+                        Map<String, Services> services, Map<String, TimeSpan> drainTimeout, Database database) {
 
     /** Current version of the format. */
     public static final int SCHEMA_VERSION = 1;
@@ -237,6 +241,16 @@ public record SetupFile(int schemaVersion, Language language, Boolean eula, Stri
                     continue;
                 }
                 answers = answers.withServices(task, entry.getValue().over(suggested));
+            }
+        }
+        if (drainTimeout != null) {
+            for (Map.Entry<String, TimeSpan> entry : drainTimeout.entrySet()) {
+                String group = entry.getKey();
+                if (!defaults.heap().containsKey(group) || entry.getValue() == null) {
+                    problems.add(SetupMessages.fill(SetupMessages.FILE_UNKNOWN_DRAIN_GROUP, ConfigNames.safeArgument(group)));
+                    continue;
+                }
+                answers = answers.withDrainTimeout(group, entry.getValue());
             }
         }
         if (database != null) {
