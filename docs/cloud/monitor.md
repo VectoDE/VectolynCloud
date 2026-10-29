@@ -10,7 +10,7 @@ The module does not depend on `cloud-node`. The node plugs it in through a small
 
 | Metric (rule id) | Unit | Source | Available today |
 |---|---|---|---|
-| `tps` | ticks per second | `ServiceStatus.tps` from the bridge | yes: the Paper, legacy and Velocity bridges report it every 5 s |
+| `tps` | ticks per second | `ServiceStatus.tps` from the bridge | yes: the Paper and legacy bridges report it every 100 ticks (5 s at 20 TPS); the Velocity value is ignored on proxies |
 | `mspt` | milliseconds per tick | `ServiceStatus.mspt` from the bridge | same as `tps` |
 | `heap` | percent of the maximum heap | `ServiceStatus.heapUsed` / `heapMax` | same; missing when `heapMax` is `-1` (JVM without limit) |
 | `heap-used` | bytes | `ServiceStatus.heapUsed` | same |
@@ -143,7 +143,8 @@ Rules of the webhook:
 | HTTPS only | `http://`, other schemes, user info before the host, fragments, spaces and non-ASCII characters are refused when the cloud starts. The JDK trust store checks the certificate. |
 | No redirects | Redirects are never followed, so a post cannot be sent on to another host. A 3xx answer is a failure. |
 | Time limit | `timeout` applies to connecting and to the answer. |
-| Content | Rule names, service ids and numbers only. Discord posts set `allowed_mentions` to none, so a post cannot ping `@everyone`. |
+| Content | Rule names, service ids and numbers only. Discord posts set `allowed_mentions` to none, so a post cannot ping `@everyone`. The chat formats escape their markup on top: `discord` puts a backslash before `\`, `*`, `_`, `~`, `` ` ``, `\|`, `<`, `>` and `@`, `slack` writes `&`, `<` and `>` as `&amp;`, `&lt;` and `&gt;`. `json` sends the raw values; a receiver of your own escapes them for its output. |
+| Target address | The cloud does not check where the URL points. A receiver on your own network (a bot, a relay, a ticket system) is a valid use, so private and loopback addresses are allowed. The URL comes only from `vectora.env`, which only the operator can write; whoever can edit that file can point the cloud at any host the node reaches. |
 
 An enabled webhook whose key is missing or whose URL breaks a rule is logged as a warning when the cloud starts; monitoring runs without it.
 
@@ -192,7 +193,8 @@ With `prometheus.enabled: true` the cloud serves `GET /metrics` in the Prometheu
 
 - Loopback only. Any other address is a configuration error, and the endpoint refuses to bind elsewhere as well. Reach it from another machine through an SSH tunnel or a local agent.
 - Requests whose `Host` header is not a loopback name get `421`, so a web page cannot read the metrics through DNS rebinding. Other paths get `404`, other methods `405`.
-- No authentication; the values contain no secrets.
+- No authentication; the values contain no secrets. Labels are only `service`, `group` and `severity`: no addresses, paths, pids or player names.
+- Limits: one handler thread and a backlog of 16 connections; request bodies are never read and the answer is built from memory. The JDK server sets no further limit on connections or on slow requests, so this endpoint trusts every local process. Leave it off on a machine shared with users you do not trust, or put a reverse proxy with limits in front of it.
 - It uses the JDK's `jdk.httpserver` module, no extra library.
 
 `PrometheusFormat.render(monitor)` builds the text without any I/O, so the API (PR 15) can serve the same output on its own server and this endpoint can go. Series: `vectora_node_cpu_percent`, `vectora_node_memory_used_bytes`, `vectora_node_memory_total_bytes`, `vectora_node_disk_free_bytes`, `vectora_node_disk_total_bytes`, and per service with the labels `service` and `group`: `vectora_service_running`, `_restart_attempts`, `_crashes_total`, `_players`, `_max_players`, `_tps`, `_mspt`, `_heap_used_bytes`, `_heap_max_bytes`, `_cpu_percent`, `_rss_bytes`; finally `vectora_alerts_active{severity}`. Values that were not measured are left out.

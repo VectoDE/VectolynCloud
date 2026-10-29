@@ -115,6 +115,35 @@ class WebhookNotifierTest {
     }
 
     @Test
+    void chatFormatsEscapeMarkupInNamesAndOrigin() throws Exception {
+        Alert alert = new Alert(4, "low_tps_x", "game_lobby-1", Severity.WARNING, RuleParser.parse("tps < 18"), 12.0,
+                Instant.parse("2026-10-29T12:00:00Z"), Optional.empty(), Optional.empty(), Optional.empty());
+        AlertEvent event = new AlertEvent.Fired(alert);
+        WebhookUrl url = WebhookUrl.of(Secret.of("https://hooks.example.org/x"));
+        JsonMapper json = JsonMapper.builder().build();
+        try (WebhookNotifier discord = new WebhookNotifier(url, WebhookFormat.DISCORD, Duration.ofSeconds(1),
+                     "@everyone *node* <@&1>", tls.client);
+             WebhookNotifier slack = new WebhookNotifier(url, WebhookFormat.SLACK, Duration.ofSeconds(1),
+                     "<!channel> & node", tls.client);
+             WebhookNotifier plain = new WebhookNotifier(url, WebhookFormat.JSON, Duration.ofSeconds(1),
+                     "<!channel>", tls.client)) {
+            String content = json.readTree(discord.body(event)).get("content").asString();
+            assertTrue(content.contains("low\\_tps\\_x on game\\_lobby-1"), content);
+            assertTrue(content.contains("tps \\< 18"), content);
+            assertTrue(content.endsWith("\\@everyone \\*node\\* \\<\\@&1\\>"), content);
+
+            String text = json.readTree(slack.body(event)).get("text").asString();
+            assertTrue(text.contains("tps &lt; 18"), text);
+            assertTrue(text.endsWith("&lt;!channel&gt; &amp; node"), text);
+            assertFalse(text.contains("<") || text.contains(">"), text);
+
+            JsonNode full = json.readTree(plain.body(event));
+            assertEquals("low_tps_x", full.get("rule").asString(), "the json format keeps raw values");
+            assertEquals("<!channel>", full.get("origin").asString());
+        }
+    }
+
+    @Test
     void slackAndJsonFormats() throws Exception {
         WebhookUrl url = WebhookUrl.of(Secret.of("https://hooks.example.org/x"));
         JsonMapper json = JsonMapper.builder().build();

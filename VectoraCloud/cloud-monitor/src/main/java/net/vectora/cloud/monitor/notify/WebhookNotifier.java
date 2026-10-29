@@ -32,7 +32,10 @@ import tools.jackson.databind.node.ObjectNode;
  *       the kind of network error.</li>
  *   <li>The text contains rule names, service ids and numbers only, which the configuration and the
  *       protocol have validated. Discord posts set {@code allowed_mentions} to none, so nothing can
- *       ping {@code @everyone}.</li>
+ *       ping {@code @everyone}. The chat formats escape their markup as well: Discord markdown and
+ *       mentions with a backslash, Slack's {@code & < >} as entities.</li>
+ *   <li>The URL is not checked against internal addresses: the operator chooses it, and a receiver
+ *       on the own network is a legitimate use.</li>
  * </ul>
  */
 public final class WebhookNotifier implements Notifier {
@@ -122,10 +125,10 @@ public final class WebhookNotifier implements Notifier {
         ObjectNode root = JSON.createObjectNode();
         switch (format) {
             case DISCORD -> {
-                root.put("content", text(event));
+                root.put("content", escapeDiscord(text(event)));
                 root.putObject("allowed_mentions").putArray("parse");
             }
-            case SLACK -> root.put("text", text(event));
+            case SLACK -> root.put("text", escapeSlack(text(event)));
             case JSON -> {
                 root.put("event", kind(event));
                 root.put("id", alert.id());
@@ -155,6 +158,31 @@ public final class WebhookNotifier implements Notifier {
         };
         return "[" + alert.severity().id().toUpperCase(java.util.Locale.ROOT) + "] " + what + " " + alert.summary()
                 + " - " + origin;
+    }
+
+    /**
+     * Escapes Discord markdown and mention syntax with a backslash: {@code \ * _ ~ ` | < > @}. Rule
+     * names and service ids may contain {@code _}, conditions contain {@code <} or {@code >}, and
+     * the origin comes from the node; none of it may format the post or form a mention.
+     */
+    static String escapeDiscord(String text) {
+        StringBuilder out = new StringBuilder(text.length() + 16);
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if ("\\*_~`|<>@".indexOf(c) >= 0) {
+                out.append('\\');
+            }
+            out.append(c);
+        }
+        return out.toString();
+    }
+
+    /**
+     * Escapes the three characters Slack's message format reserves ({@code & < >}), so a condition
+     * such as {@code tps < 18} or a name can never form a {@code <!channel>} or link.
+     */
+    static String escapeSlack(String text) {
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
     private static String kind(AlertEvent event) {
