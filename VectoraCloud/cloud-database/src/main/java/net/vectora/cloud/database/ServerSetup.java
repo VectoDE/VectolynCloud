@@ -114,6 +114,9 @@ public final class ServerSetup {
             }
             int max = Integer.parseInt(value);
             return max > 0 ? java.util.OptionalInt.of(max) : java.util.OptionalInt.empty();
+        } catch (NumberFormatException e) {
+            // Not reachable after the pattern check (at most nine digits); kept as a safe fallback.
+            return java.util.OptionalInt.empty();
         } catch (SQLException e) {
             return java.util.OptionalInt.empty();
         }

@@ -40,7 +40,10 @@ public final class ManagedJavaRuntimes implements JavaRuntimeResolver {
     public interface Minimums {
 
         /** No minimum is known for any group. */
-        Minimums NONE = group -> new OptionalInt[0];
+        Minimums NONE = group -> {
+            Objects.requireNonNull(group, "group");
+            return new OptionalInt[0];
+        };
 
         /**
          * Returns the minimums the sources know for a group, for example Mojang's and Fill's.

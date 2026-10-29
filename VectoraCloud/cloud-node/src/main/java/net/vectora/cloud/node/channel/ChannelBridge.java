@@ -92,9 +92,9 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
             case ServiceEvent.Disconnected disconnected ->
                     LOG.log(System.Logger.Level.DEBUG, "{0} left the cloud channel ({1})", disconnected.service(),
                             disconnected.reason() == null ? "connection lost" : disconnected.reason());
-            case ServiceEvent.MessageReceived received -> {
-                // Player events: used from stage 2 PR 13 on.
-            }
+            // Player events: used from stage 2 PR 13 on. Only the sender is logged, never the content.
+            case ServiceEvent.MessageReceived received ->
+                    LOG.log(System.Logger.Level.TRACE, "{0} sent a message on the cloud channel", received.service());
         }
     }
 
