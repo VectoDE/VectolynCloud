@@ -53,6 +53,7 @@ include(
     "VectoraCloud:cloud-database",
     "VectoraCloud:cloud-setup",
     "VectoraCloud:cloud-node",
+    "VectoraCloud:cloud-backup",
     "VectoraCloud:cloud-bridge-common",
     "VectoraCloud:cloud-bridge-velocity",
     "VectoraCloud:cloud-bridge-paper",

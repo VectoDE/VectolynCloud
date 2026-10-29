@@ -1,0 +1,1 @@
+{"schema-version": 1, "id": "20261029-031500-1a2b", "created-at": "2026-10-29T03:15:00Z", "reason": "manual", "cloud-version": "1.0.0", "note": "n", "services": [{"id": "lobby-1", "group": "lobby", "minecraft-version": "26.3", "consistency": "saved"}], "files": [], "skipped": []}

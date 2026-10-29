@@ -4,6 +4,8 @@ name: Managed MariaDB
 # downloads the real MariaDB server, initialises a throwaway data directory in a temp folder,
 # starts it on a free port, sets up root, the application database and user, checks bind address,
 # rights and shutdown, then deletes everything. It never touches Server-Network/*/runtime/.
+# cloud-backup reuses such a throwaway server to dump it with the real mariadb-dump
+# (see docs/cloud/backup.md).
 #
 # Weekly, on demand, and on pull requests that change the database module or this workflow.
 # The normal CI excludes these tests (tag "mariadb"), because they need internet access and take
@@ -17,6 +19,7 @@ on:
     branches: [main]
     paths:
       - 'VectoraCloud/cloud-database/**'
+      - 'VectoraCloud/cloud-backup/**'
       - 'VectoraCloud/cloud-download/src/main/java/net/vectora/cloud/download/provider/MariaDbProvider.java'
       - '.github/workflows/managed-mariadb.yml'
 
@@ -82,10 +85,21 @@ jobs:
           -PtestJava="$TEST_JAVA"
           -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64,JAVA_HOME_25_X64
 
+      - name: Run the backup dump test
+        shell: bash
+        env:
+          TEST_JAVA: ${{ matrix.java }}
+        run: >-
+          bash ./gradlew :VectoraCloud:cloud-backup:mariadbTest --no-daemon --stacktrace
+          -PtestJava="$TEST_JAVA"
+          -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64,JAVA_HOME_25_X64
+
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: managed-mariadb-${{ matrix.os }}-java${{ matrix.java }}
-          path: VectoraCloud/cloud-database/build/reports/tests/
+          path: |
+            VectoraCloud/cloud-database/build/reports/tests/
+            VectoraCloud/cloud-backup/build/reports/tests/
           retention-days: 7
