@@ -135,20 +135,65 @@ public final class SetupWizard {
 
     /** Registers {@code setup}, which runs the questions again with the current values as defaults. */
     public static void registerCommand(Console console, ConfigService config, SetupEnvironment env) {
+        registerCommand(console, config, env, CommandHooks.NONE);
+    }
+
+    /**
+     * Like {@link #registerCommand(Console, ConfigService, SetupEnvironment)}, and tells
+     * {@code hooks} when a run starts and ends. A run saves in several steps and rolls them back if
+     * a later one fails, so a caller that reacts to configuration changes (the node stops what is no
+     * longer wanted) waits for {@link CommandHooks#finished()} and then compares the configuration
+     * with the one at {@link CommandHooks#started()}.
+     *
+     * @param console the console to register in
+     * @param config  the configuration
+     * @param env     the setup environment
+     * @param hooks   told about every run
+     */
+    public static void registerCommand(Console console, ConfigService config, SetupEnvironment env, CommandHooks hooks) {
         Objects.requireNonNull(config, "config");
         Objects.requireNonNull(env, "env");
-        console.commands().register(command(console, config, env));
+        Objects.requireNonNull(hooks, "hooks");
+        console.commands().register(command(console, config, env, hooks));
+    }
+
+    /** What the caller of {@link #registerCommand(Console, ConfigService, SetupEnvironment, CommandHooks)} learns. */
+    public interface CommandHooks {
+
+        /** No hooks. */
+        CommandHooks NONE = new CommandHooks() {
+            @Override
+            public void started() {
+            }
+
+            @Override
+            public void finished() {
+            }
+        };
+
+        /** A run of {@code setup} begins; nothing is saved yet. */
+        void started();
+
+        /** The run ended: saved, unchanged, cancelled or rolled back after a failure. Always called. */
+        void finished();
     }
 
     /** The {@code setup} command. */
     static Command command(Console console, ConfigService config, SetupEnvironment env) {
+        return command(console, config, env, CommandHooks.NONE);
+    }
+
+    static Command command(Console console, ConfigService config, SetupEnvironment env, CommandHooks hooks) {
         return Command.builder(COMMAND)
                 .description(SetupMessages.COMMAND_DESCRIPTION)
                 .executes(context -> {
+                    hooks.started();
                     try {
                         run(console, config, env.withLanguage(context.language()));
                     } catch (IOException e) {
                         throw new CommandException(SetupMessages.WRITE_FAILED, String.valueOf(e.getMessage()));
+                    } finally {
+                        hooks.finished();
                     }
                 })
                 .build();
