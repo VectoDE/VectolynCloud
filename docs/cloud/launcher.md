@@ -55,6 +55,16 @@ If no source works, the launcher prints a boxed `WARNING` (German: `WARNUNG`) an
 
 Values may follow as the next argument or after `=` (`--home=/data`). Each option may appear once. Unknown arguments, positional arguments, missing or invalid values and switches with a value are errors. The parser is hand-written; seven options do not justify a library in the one module that has to load before everything else.
 
+## Local start from the repository
+
+For development and tests, `./gradlew :cloud:node:runLocal` builds `VectoraCloud.jar` (`:cloud:launcher:cloudJar`) and starts it on the Java 25 toolchain with `run/` in the repository root as working directory and `--home`. The folder is created if it is missing. Standard input is passed through, so the setup assistant and the console work as in a normal terminal. `.gitignore` ignores `run/` completely: configuration, secrets, worlds, logs and downloaded software stay local.
+
+The task puts the jar on the class path and calls `Bootstrap` directly instead of using `-jar`; the launcher still finds `libs.index` there. The manifest attribute `Enable-Native-Access` only applies with `-jar`, so the task passes `--enable-native-access=ALL-UNNAMED` itself. Under Gradle the process has no console of its own, so the task also sets `stdout.encoding` and `stderr.encoding` to UTF-8; otherwise Java would fall back to the platform encoding and German messages would arrive garbled. Further launcher options go after `--args`, for example `./gradlew :cloud:node:runLocal --args="--lang en"`; `--home` and `--allow-root` are added by the task and must not be repeated there.
+
+`-PallowRoot=true` adds `--allow-root` for a development shell that runs as root or administrator, like `-Pe2eAllowRoot=true` for the end-to-end test. No secret is passed on the command line; the setup assistant writes them to `run/secrets/`.
+
+Production operators do not use this task. They start the released `VectoraCloud.jar` in their own cloud home outside any checkout ([operations](operations.md)).
+
 ## Platform detection
 
 `PlatformDetector` produces a `Platform` value: operating system, architecture (`x86_64`, `aarch64` or the raw `os.arch`), container, Pterodactyl and terminal. The setup assistant will use it, for example to skip the Docker database mode inside Pterodactyl or to ask nothing without a terminal.

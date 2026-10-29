@@ -86,7 +86,7 @@ VectoraCloud/
   .github/                Workflows, Issue-Formulare, Dependabot
 ```
 
-Server-Laufzeiten (Jars, Welten, Logs) und Secrets gehören nicht ins Repository. Sie liegen im Cloud-Home, dem Ordner, in dem VectoraCloud läuft.
+Server-Laufzeiten (Jars, Welten, Logs) und Secrets gehören nicht ins Repository. Sie liegen im Cloud-Home, dem Ordner, in dem VectoraCloud läuft. Bei der lokalen Entwicklung ist das `run/` im Wurzelverzeichnis des Repositorys (siehe [Lokal starten](#lokal-starten)); `.gitignore` hält den ganzen Ordner aus Git heraus.
 
 ## Schnellstart (Übergang, bis es VectoraCloud gibt)
 
@@ -131,6 +131,18 @@ Unter Windows `gradlew.bat build`. Der Gradle-Wrapper lädt Gradle selbst herunt
 - Das Bytecode-Ziel ist Java 21 (`--release 21`). Die Server selbst brauchen Java 25, weil Paper 26.3 es verlangt.
 - Die CI baut und testet alles mit JDK 25 unter Linux und Windows und führt die Tests zusätzlich auf einer Java-21-Laufzeit aus. Tests, die Paper-Klassen laden, werden dort übersprungen; Details in [docs/java-compatibility.md](docs/java-compatibility.md).
 - Code, der Java 25 braucht, trägt `@RequiresJava25` und behält einen Java-21-Weg.
+
+## Lokal starten
+
+```sh
+./gradlew :cloud:node:runLocal
+```
+
+Das baut `VectoraCloud.jar` und startet es mit `run/` im Wurzelverzeichnis des Repositorys als Cloud-Home. Beim ersten Start wird der Ordner angelegt. Der Einrichtungsassistent stellt seine Fragen im selben Terminal, danach lädt die Cloud die Server-Software herunter und startet das Netzwerk. Konfiguration, Secrets, Welten, Logs und Downloads bleiben alle in `run/`, und Git ignoriert den Ordner vollständig. Wer neu anfangen will, löscht ihn einfach.
+
+Als root oder Administrator verweigert der Launcher den Start. Läuft deine Entwicklungs-Shell trotzdem mit erhöhten Rechten, hängst du `-PallowRoot=true` an (gibt `--allow-root` weiter).
+
+`run/` ist nur zum Entwickeln und Testen da. Produktivserver bekommen ein eigenes Cloud-Home außerhalb jedes Checkouts, siehe [docs/cloud/operations.de.md](docs/cloud/operations.de.md).
 
 ## Doku und Community
 

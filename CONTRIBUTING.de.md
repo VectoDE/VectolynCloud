@@ -15,7 +15,7 @@ Danke, dass du helfen willst. Vectora steht noch am Anfang, deshalb sind die Reg
 
 1. Repository forken und von `main` einen Branch anlegen (`fix/end-portal-return`, `feat/lobby-navigator`).
 2. Kleine, abgegrenzte Commits machen.
-3. Vor dem Push `./gradlew build` ausführen.
+3. Vor dem Push `./gradlew build` ausführen. Um eine Änderung in einem laufenden Netzwerk auszuprobieren, startest du es mit `./gradlew :cloud:node:runLocal`; es läuft in `run/`, das Git ignoriert.
 4. Pull Request gegen `main` öffnen und die Vorlage ausfüllen. Das Issue mit `Fixes #123` verknüpfen.
 5. CI, CodeQL und Dependency Review müssen grün sein, und alle Review-Konversationen müssen aufgelöst sein. Ein Maintainer prüft und merged per Squash. Auf `main` gibt es keine direkten Pushes und keine Force-Pushes.
 
@@ -50,7 +50,7 @@ Vergessen? `git commit --amend -s` für den letzten Commit, `git rebase --signof
 - Jede Abhängigkeit und jedes Plugin wird gegen SHA-256-Prüfsummen in `gradle/verification-metadata.xml` geprüft. Wenn du eine hinzufügst, entfernst oder aktualisierst, führe `bash gradle/update-verification-metadata.sh` aus, prüfe den Diff und committe ihn mit deiner Änderung. Siehe [docs/dependency-verification.de.md](docs/dependency-verification.de.md).
 - Keine neuen Fremd-Plugins. Die erlaubte Basis steht im README, alles andere entsteht in diesem Repository.
 - Jeder Spielmodus muss für Bedrock-Spieler funktionieren. Menüs sind Inventar-Menüs, keine Bedrock-Formulare.
-- Nie Secrets, IPs, Spielerdaten, Welten oder Server-Jars committen. `templates/` enthält nur Vorlagen; Server-Laufzeiten liegen im Cloud-Home außerhalb des Repositorys.
+- Nie Secrets, IPs, Spielerdaten, Welten oder Server-Jars committen. `templates/` enthält nur Vorlagen; Server-Laufzeiten liegen in `run/` (lokale Entwicklung, von Git ignoriert) oder in einem Cloud-Home außerhalb des Repositorys.
 
 ## Sprachen
 

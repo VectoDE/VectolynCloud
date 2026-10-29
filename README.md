@@ -86,7 +86,7 @@ VectoraCloud/
   .github/                workflows, issue forms, Dependabot
 ```
 
-Server runtimes (jars, worlds, logs) and secrets are not part of the repository. They live in the cloud home, the folder VectoraCloud runs in.
+Server runtimes (jars, worlds, logs) and secrets are not part of the repository. They live in the cloud home, the folder VectoraCloud runs in. For local development that is `run/` in the repository root (see [Run locally](#run-locally)); `.gitignore` keeps the whole folder out of Git.
 
 ## Quick start (transitional, until VectoraCloud exists)
 
@@ -131,6 +131,18 @@ On Windows use `gradlew.bat build`. The Gradle wrapper downloads Gradle itself. 
 - The bytecode target is Java 21 (`--release 21`). The servers themselves need Java 25, because Paper 26.3 does.
 - CI builds and runs all tests with JDK 25 on Linux and Windows, and runs the tests a second time on a Java 21 runtime. Tests that load Paper classes are skipped there; see [docs/java-compatibility.md](docs/java-compatibility.md).
 - Code that needs Java 25 gets `@RequiresJava25` and keeps a Java 21 path.
+
+## Run locally
+
+```sh
+./gradlew :cloud:node:runLocal
+```
+
+This builds `VectoraCloud.jar` and starts it with `run/` in the repository root as the cloud home. The folder is created on the first start. The setup assistant asks its questions in the same terminal, then the cloud downloads the server software and starts the network. Configuration, secrets, worlds, logs and downloads all stay in `run/`, which Git ignores as a whole. Delete the folder to start over.
+
+The launcher refuses to run as root or administrator. If your development shell runs elevated anyway, add `-PallowRoot=true` (passes `--allow-root`).
+
+`run/` is for development and testing only. Production servers get their own cloud home outside any checkout, see [docs/cloud/operations.md](docs/cloud/operations.md).
 
 ## Documentation and community
 
