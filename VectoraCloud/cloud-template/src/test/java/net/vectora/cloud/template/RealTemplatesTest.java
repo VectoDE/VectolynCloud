@@ -315,7 +315,8 @@ class RealTemplatesTest {
             assertFalse(report.generated().contains("spigot.yml"), server + ": the node had to fix spigot.yml");
             tools.jackson.databind.JsonNode settings = new YAMLMapper()
                     .readTree(Files.readString(runtime.resolve("spigot.yml"))).get("settings");
-            assertFalse(settings.get("restart-on-crash").asBoolean(true), server);
+            // true: with the empty script the watchdog stops a hung PandaSpigot instead of leaving it hung.
+            assertTrue(settings.get("restart-on-crash").asBoolean(false), server);
             assertEquals("", settings.get("restart-script").asString(), server);
             checked.add(server);
         }

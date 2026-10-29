@@ -140,8 +140,10 @@ settings:
   bungeecord: false
   timeout-time: 60
   # Restarts are the node's job. With a script here, /restart and a watchdog crash would start a
-  # second server outside the cloud. The node enforces both values (docs/cloud/template.md).
-  restart-on-crash: false
+  # second server outside the cloud; with '' they only stop it, and the node starts it again.
+  # restart-on-crash stays true so that the watchdog stops a hung server. The node enforces both
+  # values (docs/cloud/template.md).
+  restart-on-crash: true
   restart-script: ''
   log-villager-deaths: true
   log-named-deaths: true

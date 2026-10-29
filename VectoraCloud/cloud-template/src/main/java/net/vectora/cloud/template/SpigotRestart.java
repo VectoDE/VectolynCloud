@@ -21,18 +21,21 @@ import java.util.regex.Pattern;
  * Turns off Spigot's own restart in the {@code spigot.yml} of a runtime folder.
  *
  * <p>Spigot, Paper and PandaSpigot run {@code settings.restart-script} by themselves: on
- * {@code /restart}, and after the watchdog has ended a hung server if {@code restart-on-crash} is
- * on. If the script exists as a file, the server starts it from a shutdown hook ({@code sh script},
- * on Windows {@code cmd /c start script}); that is a second server outside the node, without a
- * service token and maybe on the same port and world. If it does not exist, the server only stops.
- * Spigot fills in {@code restart-on-crash: true} and {@code restart-script: ./start.sh} when the keys
- * are missing.
+ * {@code /restart}, and when the watchdog ends a hung server with {@code restart-on-crash} on. If
+ * the script exists as a file, the server starts it from a shutdown hook ({@code sh script}, on
+ * Windows {@code cmd /c start script}); that is a second server outside the node, without a service
+ * token and maybe on the same port and world. If it does not exist, the server only stops. Spigot
+ * fills in {@code restart-on-crash: true} and {@code restart-script: ./start.sh} when the keys are
+ * missing.
  *
- * <p>So after rendering, the node sets {@code restart-on-crash: false} and {@code restart-script: ''}
- * under {@code settings:}: an empty path is never a file, so {@code /restart} just stops the server
- * and the node decides whether it starts again. Every other line stays as it is. A file without a
- * {@code settings:} block gets one; a missing file gets just that block (Spigot adds the rest on its
- * first start).
+ * <p>So after rendering, the node sets {@code restart-script: ''} under {@code settings:}: an empty
+ * path is never a file, so {@code /restart} just stops the server and the node decides whether it
+ * starts again. {@code restart-on-crash} stays {@code true}, because on PandaSpigot (Spigot 1.8.8)
+ * it is the only way the watchdog ends a hung server at all: with {@code false} it logs a thread dump
+ * and leaves the hung process running, which the node cannot tell from a healthy one. With the empty
+ * script, {@code true} means "stop", nothing more. Paper ends a hung server either way. Every other
+ * line stays as it is. A file without a {@code settings:} block gets one; a missing file gets just
+ * that block (Spigot adds the rest on its first start).
  */
 final class SpigotRestart {
 
@@ -41,16 +44,18 @@ final class SpigotRestart {
 
     private static final String ON_CRASH = "restart-on-crash";
     private static final String SCRIPT = "restart-script";
-    private static final String ON_CRASH_LINE = ON_CRASH + ": false";
+    private static final String ON_CRASH_LINE = ON_CRASH + ": true";
     private static final String SCRIPT_LINE = SCRIPT + ": ''";
     private static final String DEFAULT_INDENT = "  ";
+    /** Byte order mark, written as a number so that the source holds no invisible character. */
+    private static final char BOM = (char) 0xFEFF;
 
     /** A top-level {@code settings} key, maybe quoted, maybe after a byte order mark. */
-    private static final Pattern SETTINGS = Pattern.compile("﻿?(settings|'settings'|\"settings\")[ \t]*:(.*)");
+    private static final Pattern SETTINGS = Pattern.compile("\\x{FEFF}?(settings|'settings'|\"settings\")[ \t]*:(.*)");
     /** One of the two keys at the start of a line inside the block, maybe quoted. */
     private static final Pattern KEY = Pattern.compile("(['\"]?)(" + ON_CRASH + "|" + SCRIPT + ")\\1[ \t]*:(?:[ \t].*)?");
-    private static final Pattern ON_CRASH_OFF = Pattern.compile(ON_CRASH + ":[ \t]+false[ \t]*(?:#.*)?");
-    private static final Pattern SCRIPT_OFF = Pattern.compile(SCRIPT + ":[ \t]*(?:''|\"\")[ \t]*(?:#.*)?");
+    private static final Pattern ON_CRASH_SET = Pattern.compile(ON_CRASH + ":[ \t]+true[ \t]*(?:#.*)?");
+    private static final Pattern SCRIPT_SET =Pattern.compile(SCRIPT + ":[ \t]*(?:''|\"\")[ \t]*(?:#.*)?");
     /** A bare document marker, maybe with a comment. */
     private static final Pattern MARKER = Pattern.compile("(?:---|\\.\\.\\.)(?:[ \t]+#.*|[ \t]*)");
     /**
@@ -66,8 +71,8 @@ final class SpigotRestart {
     }
 
     /**
-     * Makes {@value #FILE} in {@code runtime} turn off Spigot's restart, writing it only if
-     * something changes.
+     * Makes {@value #FILE} in {@code runtime} turn off Spigot's restart ({@code restart-script: ''},
+     * {@code restart-on-crash: true}), writing it only if something changes.
      *
      * @param runtime runtime folder
      * @return {@value #FILE} if the file was created or changed, otherwise empty
@@ -88,10 +93,10 @@ final class SpigotRestart {
     }
 
     /**
-     * Returns {@code text} with both settings turned off.
+     * Returns {@code text} with {@code restart-script: ''} and {@code restart-on-crash: true}.
      *
      * @param text content of {@value #FILE}, maybe empty
-     * @return the new content; equal to {@code text} if both settings were off already
+     * @return the new content; equal to {@code text} if both settings were right already
      * @throws TemplateException if {@code settings} is no block mapping or appears twice, or a
      *     top-level key or a key directly in {@code settings} is no plain or simply quoted key
      */
@@ -107,7 +112,7 @@ final class SpigotRestart {
                 String rest = m.group(2).strip();
                 if (!rest.isEmpty() && !rest.startsWith("#")) {
                     throw new TemplateException(FILE, i + 1, "settings must be a block mapping, so the cloud can"
-                            + " turn off restart-on-crash and restart-script");
+                            + " set restart-on-crash and restart-script");
                 }
                 if (settings >= 0) {
                     throw new TemplateException(FILE, i + 1, "settings appears twice");
@@ -115,11 +120,11 @@ final class SpigotRestart {
                 settings = i;
             } else if (settings < 0 && (line.startsWith("{") || line.startsWith("["))) {
                 throw new TemplateException(FILE, i + 1, "the file must be a block mapping, so the cloud can"
-                        + " turn off restart-on-crash and restart-script");
+                        + " set restart-on-crash and restart-script");
             } else if (endsBlock(stripBom(line, i)) && !isMarker(line)
                     && !SIMPLE_KEY.matcher(stripBom(line, i)).matches()) {
                 throw new TemplateException(FILE, i + 1, "top-level keys must be plain or quoted without escapes"
-                        + " (no ?, -, anchor, tag or flow), so the cloud can turn off restart-on-crash and"
+                        + " (no ?, -, anchor, tag or flow), so the cloud can set restart-on-crash and"
                         + " restart-script");
             }
         }
@@ -160,7 +165,7 @@ final class SpigotRestart {
             String body = line.substring(indent.length());
             if (!SIMPLE_KEY.matcher(body).matches()) {
                 throw new TemplateException(FILE, i + 1, "keys in settings must be plain or quoted without escapes"
-                        + " (no ?, -, anchor or tag), so the cloud can turn off restart-on-crash and restart-script");
+                        + " (no ?, -, anchor or tag), so the cloud can set restart-on-crash and restart-script");
             }
             Matcher key = KEY.matcher(body);
             if (!key.matches()) {
@@ -184,8 +189,8 @@ final class SpigotRestart {
             }
             end -= last - i;
             boolean isOnCrash = key.group(2).equals(ON_CRASH);
-            boolean off = (isOnCrash ? ON_CRASH_OFF : SCRIPT_OFF).matcher(body).matches();
-            if (!off || last > i) {
+            boolean set = (isOnCrash ? ON_CRASH_SET : SCRIPT_SET).matcher(body).matches();
+            if (!set || last > i) {
                 lines.set(i, indent + (isOnCrash ? ON_CRASH_LINE : SCRIPT_LINE));
             }
             if (isOnCrash) {
@@ -235,7 +240,7 @@ final class SpigotRestart {
 
     /** The line without a byte order mark, which only the first line may start with. */
     private static String stripBom(String line, int index) {
-        return index == 0 && line.startsWith("﻿") ? line.substring(1) : line;
+        return index == 0 && !line.isEmpty() && line.charAt(0) == BOM ? line.substring(1) : line;
     }
 
     private static boolean isContent(String line) {

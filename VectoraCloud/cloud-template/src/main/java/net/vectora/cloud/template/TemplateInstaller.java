@@ -32,9 +32,10 @@ import java.util.Optional;
  * for a template that ships Floodgate's folder ({@link #runsFloodgate}). Secrets are checked before
  * anything is written.
  *
- * <p>For Paper and PandaSpigot the node always sets {@code restart-on-crash: false} and
- * {@code restart-script: ''} in the runtime {@code spigot.yml}, whatever the template says:
- * otherwise the server would start a second, unmanaged server on {@code /restart} or after a hang.
+ * <p>For Paper and PandaSpigot the node always sets {@code restart-script: ''} and
+ * {@code restart-on-crash: true} in the runtime {@code spigot.yml}, whatever the template says:
+ * otherwise the server would start a second, unmanaged server on {@code /restart} or after a hang,
+ * or (PandaSpigot with {@code false}) stay hung instead of stopping.
  * {@code spigot.yml} is listed as generated only when the node created or changed it.
  */
 public final class TemplateInstaller {

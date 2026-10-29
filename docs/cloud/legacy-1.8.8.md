@@ -17,7 +17,7 @@ The weekly workflow [`legacy-fork-smoke.yml`](../../.github/workflows/legacy-for
 | sha256 | `ac73146b275230cbd0612ef0f3d6b40333abd3182beae457cad5321efff6359b`, matches the API metadata |
 | Java 21 | Temurin 21.0.12.1+1 (archive sha256 checked against the Adoptium API) |
 | Java 25 | Temurin JRE 25.0.5+8 (archive sha256 checked against the Adoptium API) |
-| Settings | `online-mode=false`, `spigot.yml` `settings.bungeecord: true`, `restart-on-crash: false` and `restart-script: ''` (restarts are the node's job, see [template](template.md#restarts-are-the-nodes-job)), flat world, bound to 127.0.0.1 |
+| Settings | `online-mode=false`, `spigot.yml` `settings.bungeecord: true`, `restart-script: ''` and `restart-on-crash: true` (restarts are the node's job, see [template](template.md#restarts-are-the-nodes-job)), flat world, bound to 127.0.0.1 |
 | Check | wait for `Done (`, status ping with protocol 47 plus ping/pong, `stop`, exit code |
 | Host | Windows 11 locally; the workflow runs the same script on `ubuntu-latest` |
 

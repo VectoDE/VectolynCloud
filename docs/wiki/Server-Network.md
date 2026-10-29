@@ -21,7 +21,7 @@ Only the proxy ports should be reachable from outside. The backends bind to `127
 
 You will not have to run all of them. In the VectoraCloud setup wizard or the cloud config you mark each server and each minigame group as wanted or not. The cloud creates only wanted servers from `Server-Network/<Server>/template/` in `runtime/`, downloads the software, fills in secrets and starts them. Unwanted servers are not created, and neither the proxy nor the lobby refers to them.
 
-Restarts belong to the cloud alone. The Paper and PandaSpigot templates turn off Spigot's `restart-on-crash` and `restart-script`, and the cloud enforces that for your own templates too. `/restart` therefore stops the server, and the cloud starts it again.
+Restarts belong to the cloud alone. The Paper and PandaSpigot templates leave Spigot's `restart-script` empty, and the cloud enforces that for your own templates too. `/restart` and the watchdog therefore only stop the server, and the cloud starts it again.
 
 Until stage 2 the existing servers run locally from `runtime/` via the Windows start scripts.
 

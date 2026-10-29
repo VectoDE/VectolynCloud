@@ -8,7 +8,7 @@ Die Vorlage enthält nur, was Vectora braucht. Alle übrigen Einstellungen ergä
 
 - `server.properties`: `online-mode=false`, gebunden an `VECTORA_SERVER_HOST`. Das sollte eine Loopback- oder private Adresse bleiben.
 - `spigot.yml`: `settings.bungeecord: true`, damit der Server das Forwarding des Legacy-Proxys annimmt.
-- `spigot.yml`: `settings.restart-on-crash: false` und `settings.restart-script: ''`, damit weder `/restart` noch ein Watchdog-Absturz einen Server außerhalb der Cloud startet. Neustarts übernimmt der Node; er setzt beide Werte auch selbst.
+- `spigot.yml`: `settings.restart-script: ''`, damit weder `/restart` noch ein Watchdog-Absturz einen Server außerhalb der Cloud startet; beide halten ihn nur an. `settings.restart-on-crash: true`, weil der 1.8.8-Watchdog bei `false` einen hängenden Server weiterlaufen lässt, statt ihn zu beenden. Neustarts übernimmt der Node; er setzt beide Werte auch selbst.
 - `pandaspigot.yml`: `proxyOnlineMode: true`, passend zu `online-mode = true` des Legacy-Proxys.
 
 PandaSpigot prüft den `bungeeguard-token` nicht selbst. Bis die Vectora-Bridge das übernimmt (Etappe 2, PR 13), kann jeder, der einen Backend-Port erreicht, mit beliebigem Namen beitreten. Die Ports müssen deshalb nach außen geschlossen bleiben.

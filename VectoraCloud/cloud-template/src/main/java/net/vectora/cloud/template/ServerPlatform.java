@@ -85,7 +85,7 @@ public enum ServerPlatform {
      * Tells whether the server reads {@code spigot.yml} and would restart itself through its
      * {@code restart-script}. The node turns that off, because restarts are its job.
      *
-     * @return whether {@code restart-on-crash} and {@code restart-script} are turned off after rendering
+     * @return whether {@code restart-script: ''} and {@code restart-on-crash: true} are set after rendering
      */
     public boolean readsSpigotYml() {
         return spigot;

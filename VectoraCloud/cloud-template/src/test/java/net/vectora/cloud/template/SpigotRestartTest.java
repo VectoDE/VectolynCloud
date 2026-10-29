@@ -2,7 +2,6 @@ package net.vectora.cloud.template;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -25,19 +24,20 @@ class SpigotRestartTest {
         return new YAMLMapper().readTree(yaml).get("settings");
     }
 
+    /** The script is empty, so a restart only stops; the watchdog may still end a hung server. */
     private static void assertOff(String yaml) {
         JsonNode settings = settings(yaml);
-        assertFalse(settings.get("restart-on-crash").asBoolean(), yaml);
+        assertTrue(settings.get("restart-on-crash").asBoolean(false), yaml);
         assertEquals("", settings.get("restart-script").asString(), yaml);
     }
 
     @Test
-    void turnsBothSettingsOffAndKeepsTheRest() throws Exception {
+    void turnsTheRestartOffAndKeepsTheRest() throws Exception {
         String before = """
                 # comment
                 settings:
                   bungeecord: true
-                  restart-on-crash: true
+                  restart-on-crash: false
                   restart-script: ./start.sh # the default
                   debug: false
                 world-settings:
@@ -49,7 +49,7 @@ class SpigotRestartTest {
                 # comment
                 settings:
                   bungeecord: true
-                  restart-on-crash: false
+                  restart-on-crash: true
                   restart-script: ''
                   debug: false
                 world-settings:
@@ -60,19 +60,19 @@ class SpigotRestartTest {
     }
 
     @Test
-    void settingsThatAreOffAlreadyStayByteForByte() throws Exception {
-        String yaml = "settings:\r\n    restart-on-crash: false   # off\r\n    restart-script: \"\"\r\n";
+    void settingsThatAreRightAlreadyStayByteForByte() throws Exception {
+        String yaml = "settings:\r\n    restart-on-crash: true   # stop when hung\r\n    restart-script: \"\"\r\n";
         assertEquals(yaml, SpigotRestart.fix(yaml));
-        // Counter-check: one setting on, and only its line changes, CRLF kept.
-        String on = yaml.replace("false   # off", "true");
-        assertEquals("settings:\r\n    restart-on-crash: false\r\n    restart-script: \"\"\r\n", SpigotRestart.fix(on));
+        // Counter-check: one setting wrong, and only its line changes, CRLF kept.
+        String wrong = yaml.replace("true   # stop when hung", "false");
+        assertEquals("settings:\r\n    restart-on-crash: true\r\n    restart-script: \"\"\r\n", SpigotRestart.fix(wrong));
     }
 
     @Test
     void missingKeysAreAddedWithTheIndentOfTheBlock() throws Exception {
         // Spigot would add restart-on-crash: true and restart-script: ./start.sh itself.
         String after = SpigotRestart.fix("settings:\n    bungeecord: true\nstats:\n  x: 1\n");
-        assertEquals("settings:\n    restart-on-crash: false\n    restart-script: ''\n    bungeecord: true\nstats:\n  x: 1\n",
+        assertEquals("settings:\n    restart-on-crash: true\n    restart-script: ''\n    bungeecord: true\nstats:\n  x: 1\n",
                 after);
         assertOff(after);
         assertTrue(settings(after).get("bungeecord").asBoolean());
@@ -82,7 +82,7 @@ class SpigotRestartTest {
     void aFileWithoutSettingsGetsTheBlock() throws Exception {
         assertOff(SpigotRestart.fix(""));
         String after = SpigotRestart.fix("config-version: 12");
-        assertEquals("config-version: 12\nsettings:\n  restart-on-crash: false\n  restart-script: ''\n", after);
+        assertEquals("config-version: 12\nsettings:\n  restart-on-crash: true\n  restart-script: ''\n", after);
         assertOff(after);
         assertOff(SpigotRestart.fix("settings:\n# nothing yet\n"));
     }
@@ -96,8 +96,8 @@ class SpigotRestartTest {
 
     @Test
     void aValueOverSeveralLinesIsReplacedWhole() throws Exception {
-        String after = SpigotRestart.fix("settings:\n  restart-script: |\n    ./start.sh\n\n    --again\n  'restart-on-crash': yes\n  x: 1\n");
-        assertEquals("settings:\n  restart-script: ''\n  restart-on-crash: false\n  x: 1\n", after);
+        String after = SpigotRestart.fix("settings:\n  restart-script: |\n    ./start.sh\n\n    --again\n  'restart-on-crash': no\n  x: 1\n");
+        assertEquals("settings:\n  restart-script: ''\n  restart-on-crash: true\n  x: 1\n", after);
         assertOff(after);
     }
 
@@ -120,7 +120,7 @@ class SpigotRestartTest {
         }
         // Counter-check: a byte order mark before a comment, bare document markers, a directive, quoted
         // keys and keys with the same prefix are fine.
-        for (String yaml : List.of("﻿# c\nsettings:\n  x: 1\n", "---\nsettings:\n  x: 1\n...\n",
+        for (String yaml : List.of((char) 0xFEFF + "# c\nsettings:\n  x: 1\n", "---\nsettings:\n  x: 1\n...\n",
                 "'settings':\n  'restart-script': x\n  \"debug\": false\n  restart-script-x: y\n")) {
             assertOff(SpigotRestart.fix(yaml));
         }
