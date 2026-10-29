@@ -2,8 +2,8 @@ package net.vectora.cloud.node.scaling;
 
 import java.time.Duration;
 import java.util.List;
-import net.vectora.cloud.node.channel.ChannelBridge;
 import java.util.Objects;
+import net.vectora.cloud.node.channel.ChannelBridge;
 import net.vectora.cloud.node.service.ServiceException;
 import net.vectora.cloud.node.service.ServiceInfo;
 import net.vectora.cloud.node.service.ServiceManager;
