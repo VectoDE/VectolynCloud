@@ -57,8 +57,8 @@ Ein Java-Node mit Konsole (JLine) und Einrichtungsassistent.
 - **Messaging:** ein eigener Kanal (Netty/WebSocket) zwischen Cloud, Proxy und Servern.
 - **API:** REST und WebSocket mit Token-Auth.
 - **Backups und Monitoring (Etappe 2):** Backups von Welten und Datenbank, Monitoring von TPS, RAM und Spielern mit Warnungen.
-- **Extras (Etappe 8):** Web-Dashboard (inklusive kompletter Einrichtung) und Discord-Bot.
-- **Betrieb:** Docker-Image, Pterodactyl-Egg, systemd-Unit, Startskripte für Windows und macOS.
+- **Extras (Etappe 8):** Web-Dashboard (inklusive kompletter Einrichtung), Discord-Bot, Website und kosmetischer Store. Der Betreiber hostet sie selbst und bringt eigenen Bot-Token und eigenes Stripe-Konto mit.
+- **Betrieb:** Docker-Image auf GHCR (Dockerfile und compose-Datei im Repository), Pterodactyl-Egg, systemd-Unit, Startskripte für Windows, Linux und macOS.
 
 ## Vectora-Plugin (geplant, Etappe 3)
 

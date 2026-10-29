@@ -12,7 +12,7 @@ Server stoppen, Welten und Stand lokal sichern; Server-Ordner nach `Server-Netwo
 
 ## 2. VectoraCloud-Kern ([#11](https://github.com/VectoDE/Vectora-Network/issues/11))
 
-Node mit Konsole, Einrichtungsassistent beim ersten Start wie bei CloudNet, Konfiguration über Dateien und Konsolenbefehle und eine gemeinsame Konfigurationsschicht, die das Dashboard in Etappe 8 weiterverwendet. Auswahl der gewollten Server und Minigame-Gruppen; nur gewollte entstehen aus ihren Templates. Gruppen und Tasks, Autoskalierung, Multi-Node über TLS, REST-/WebSocket-API, Plattform-Downloader mit Prüfsummen und Rollback, JRE-Verwaltung, Datenbank-Assistent, Secret-Erzeugung, eigener Messaging-Kanal, Backups und Monitoring, Docker-Image, Pterodactyl-Egg, systemd-Unit. Recherche eines 1.8.8-Forks für Java 21. Geplante Schutzregel: VectoraCloud verweigert den Start als Administrator oder root, außer mit einem ausdrücklichen Schalter (etwa `--allow-root`). Die Meldung erklärt dann, wie man ohne Admin-Rechte startet.
+Node mit Konsole, Einrichtungsassistent beim ersten Start wie bei CloudNet, Konfiguration über Dateien und Konsolenbefehle und eine gemeinsame Konfigurationsschicht, die das Dashboard in Etappe 8 weiterverwendet. Auswahl der gewollten Server und Minigame-Gruppen; nur gewollte entstehen aus ihren Templates. Gruppen und Tasks, Autoskalierung, Multi-Node über TLS, REST-/WebSocket-API, Plattform-Downloader mit Prüfsummen und Rollback, JRE-Verwaltung, Datenbank-Assistent, Secret-Erzeugung, eigener Messaging-Kanal, Backups und Monitoring, Docker-Image auf GHCR mit Dockerfile und compose-Datei, Pterodactyl-Egg, systemd-Unit, Startskripte für Windows, Linux und macOS. Recherche eines 1.8.8-Forks für Java 21. Geplante Schutzregel: VectoraCloud verweigert den Start als Administrator oder root, außer mit einem ausdrücklichen Schalter (etwa `--allow-root`). Die Meldung erklärt dann, wie man ohne Admin-Rechte startet.
 
 ## 3. Vectora-Plugin-Basis ([#12](https://github.com/VectoDE/Vectora-Network/issues/12))
 
@@ -36,7 +36,7 @@ Neue Marke (Logo, Palette, Schrift, Tonalität), vor der Umsetzung freigegeben. 
 
 ## 8. Dashboard, Discord-Bot, Website, Store ([#17](https://github.com/VectoDE/Vectora-Network/issues/17))
 
-Web-Dashboard, das alles kann, was die Konsole kann, inklusive Ersteinrichtung und Server-Auswahl; Discord-Bot; öffentliche Website auf Cloudflare; rein kosmetischer Store, Stripe im Testmodus, bis das Rechtliche geprüft ist.
+Web-Dashboard, das alles kann, was die Konsole kann, inklusive Ersteinrichtung und Server-Auswahl; Discord-Bot; Website; rein kosmetischer Store mit Stripe, entwickelt im Testmodus. Alle drei liegen als Code in diesem Repository: Betreiber konfigurieren sie mit eigenem Bot-Token und eigenem Stripe-Konto und hosten sie selbst. Wir hosten nichts.
 
 ## Offene Fragen
 

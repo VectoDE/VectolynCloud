@@ -8,13 +8,15 @@
 
 [English](README.md) · **Deutsch**
 
-Vectora ist ein Minecraft-Netzwerk, auf dem Java-Spieler (1.8 bis 26.3) und Bedrock-Spieler zusammen spielen. Das ganze Netzwerk steht als Open Source unter der GPL-3.0. Du kannst es also auch als Baukasten für dein eigenes Netzwerk nehmen.
+Vectora ist ein Open-Source-Baukasten (GPL-3.0), mit dem du dein eigenes Minecraft-Netzwerk betreibst. Darauf spielen Java-Spieler (1.8 bis 26.3) und Bedrock-Spieler zusammen.
 
-Das langfristige Ziel: Du startest `java -jar VectoraCloud.jar` unter Windows, Linux, macOS, in Docker oder auf Pterodactyl, beantwortest einen Einrichtungsassistenten, und danach läuft das komplette Netzwerk mit Datenbank, Proxy, Lobby, Spielmodi und Minigames.
+Wir selbst betreiben kein Netzwerk: Es gibt keinen offiziellen Server, keine Domain und keine gehostete Website, keinen Discord-Bot und keinen Store. Website, Discord-Bot und Store liegen als Code in diesem Repository. Du konfigurierst sie mit deinem eigenen Bot-Token und deinem eigenen Stripe-Konto und hostest sie selbst.
+
+Das langfristige Ziel: Du startest `java -jar VectoraCloud.jar` unter Windows, Linux, macOS, in Docker oder auf Pterodactyl, beantwortest einen Einrichtungsassistenten, und danach läuft das komplette Netzwerk mit Datenbank, Proxy, Lobby, Spielmodi und Minigames. Ein Release wird `VectoraCloud.jar`, Startskripte für Windows, Linux und macOS und ein Docker-Image auf GHCR enthalten. Dockerfile, compose-Datei und Pterodactyl-Egg liegen in diesem Repository.
 
 ## Stand
 
-**Etappe 1 von 8: Fundament.** Gerade ziehen die vorhandenen Server in dieses Repository um. Secrets fliegen raus, bekannte Konfigurationsfehler werden behoben, und der Gradle-Build entsteht. Einen öffentlichen Server und ein Release gibt es noch nicht. Das meiste unter *Architektur* ist Plan, kein fertiger Code.
+**Etappe 1 von 8: Fundament.** Gerade ziehen die vorhandenen Server in dieses Repository um. Secrets fliegen raus, bekannte Konfigurationsfehler werden behoben, und der Gradle-Build entsteht. Ein Release gibt es noch nicht. Das meiste unter *Architektur* ist Plan, kein fertiger Code.
 
 - Roadmap und Fortschritt: [Vectora Roadmap](https://github.com/users/VectoDE/projects/11)
 - Aktuelle Etappe: [#1 Stage 1: Foundation](https://github.com/VectoDE/Vectora-Network/issues/1)
