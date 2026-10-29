@@ -65,7 +65,7 @@ Backend names: a dynamic server is registered under its service id. A static bac
 
 ### Status
 
-Players online and the shown player limit. A proxy has no game loop and reports 20 TPS and 0 MSPT.
+Players online and the shown player limit. A proxy has no game loop and reports 20 TPS and 0 MSPT. The players a backend reports are what the [autoscaler](scaling.md#signals) scales on, together with the players the proxy reports on it.
 
 ## Paper bridge
 

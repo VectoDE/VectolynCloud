@@ -2,14 +2,16 @@ package net.vectora.cloud.config.model;
 
 /**
  * How many services of a task run. A static task keeps {@code minServices} running; a dynamic
- * task scales between {@code minServices} and {@code maxServices} by player count.
+ * task scales between {@code minServices} and {@code maxServices} by player count. The rules are in
+ * {@code docs/cloud/scaling.md}.
  *
  * @param minServices       services that always run, 0 or more
  * @param maxServices       upper limit, at least 1 and at least {@code minServices}
  * @param playersPerService players one service is meant for
- * @param scaleUpAt         start another service when the fullest one reaches this share of
+ * @param scaleUpAt         start another service when every running one has reached this share of
  *                          {@code playersPerService}, in percent (1 to 100)
- * @param scaleDownAfter    stop a surplus empty service after it has been empty this long
+ * @param scaleDownAfter    stop a surplus empty service after it has been empty this long, as long as
+ *                          another service of the task still has room
  * @param cooldown          minimum time between two scaling decisions of the task
  */
 public record ScalingConfig(int minServices, int maxServices, int playersPerService, int scaleUpAt,

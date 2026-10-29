@@ -97,7 +97,7 @@ public final class FakeServer {
         String line;
         while ((line = in.readLine()) != null) {
             out.println("> " + line);
-            if (line.startsWith("player ") && bridge != null) {
+            if ((line.startsWith("player ") || line.startsWith("status ")) && bridge != null) {
                 Class.forName("net.vectora.cloud.node.fake.FakeCloudBridge")
                         .getMethod("command", Object.class, PrintStream.class, String.class)
                         .invoke(null, bridge, out, line);

@@ -67,6 +67,12 @@ public final class FakeCloudBridge {
     public static void command(Object client, PrintStream out, String line) {
         String[] parts = line.split(" ");
         CloudClient cloud = (CloudClient) client;
+        if (parts[0].equals("status")) {
+            // "status <online> <max>": what a bridge reports every 5 seconds, sent once.
+            boolean sent = cloud.reportStatus(Integer.parseInt(parts[1]), Integer.parseInt(parts[2]), 20.0, 1.0);
+            out.println("[fake] status sent=" + sent);
+            return;
+        }
         UUID uuid = UUID.fromString(parts[2]);
         String name = parts[3];
         boolean sent = switch (parts[1]) {

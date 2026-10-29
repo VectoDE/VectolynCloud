@@ -212,6 +212,7 @@ With `prometheus.enabled: true` the cloud serves `GET /metrics` in the Prometheu
 | Console | after the console is built | `console.commands().register(monitoring.commands().monitor()); console.commands().register(monitoring.commands().alerts());` |
 | Start | after the cloud channel, before the first service | `monitoring.start();` |
 | Stop | `CloudNode.close()`, after the last service | `monitoring.close();` (writes the history file, sends queued notifications) |
+| Autoscaler | `CloudNode.buildOps` | `ScalingSignals.of(monitoring.monitor(), channel.players(), clock)`: `players` of the newest sample and `node-memory` decide scaling ([scaling.md](scaling.md#signals)) |
 | API (PR 15) | | `monitoring.monitor().addListener(...)` for alert events; `services()`, `history(id)`, `node()`, `activeAlerts()` for reads; `PrometheusFormat.render(...)` for `/metrics` |
 
 `ServicePhase` has the same names as `ServiceState` in `cloud-node`, so the mapping is `valueOf(state.name())`. The calls return at once and are safe from Netty and node threads.

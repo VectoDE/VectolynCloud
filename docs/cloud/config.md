@@ -114,6 +114,8 @@ scaling:
 nodes: [node-1]              # empty: any node
 ```
 
+What the node does with these values (when a service starts or stops, the memory budget, what is never stopped) is in [scaling.md](scaling.md).
+
 ### `nodes.yml`
 
 ```yaml

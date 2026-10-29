@@ -108,7 +108,7 @@ Runs the setup assistant again. The current values are the defaults, and only wh
 | `task list` | Every task with group, mode and service range. |
 | `task info <name>` | All fields of one task. |
 | `task create <name> <group> [static\|dynamic]` | New `tasks/<name>.yml` with one service on any node. The group must exist. |
-| `task set <name> <field> <value>` | Fields: `group`, `mode`, `min-services`, `max-services`, `players-per-service`, `scale-up-at`, `scale-down-after`, `cooldown`, `nodes` (comma list, `""` for any node). |
+| `task set <name> <field> <value>` | Fields: `group`, `mode`, `min-services`, `max-services`, `players-per-service`, `scale-up-at`, `scale-down-after`, `cooldown`, `nodes` (comma list, `""` for any node). The [autoscaler](scaling.md) applies a change within one round. |
 | `task delete <name> [--yes]`, `task remove <name> [--yes]` | Deletes the file after asking. |
 | `task wanted <name> <on\|off>` | Switches the server kind of the task's group. |
 

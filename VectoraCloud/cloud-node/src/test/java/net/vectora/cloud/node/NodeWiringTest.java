@@ -15,18 +15,24 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import net.vectora.cloud.config.model.ScalingConfig;
 import net.vectora.cloud.config.model.ServerKind;
 import net.vectora.cloud.config.model.ServerSoftware;
+import net.vectora.cloud.config.model.TaskConfig;
 import net.vectora.cloud.config.model.TaskMode;
+import net.vectora.cloud.config.model.TimeSpan;
 import net.vectora.cloud.config.operation.AcceptEula;
 import net.vectora.cloud.config.operation.CompleteSetup;
 import net.vectora.cloud.config.operation.PutGroup;
+import net.vectora.cloud.config.operation.PutTask;
 import net.vectora.cloud.config.operation.SetGroupWanted;
 import net.vectora.cloud.config.operation.SetLegacyProxy;
 import net.vectora.cloud.config.operation.SetServerWanted;
 import net.vectora.cloud.console.Console;
 import net.vectora.cloud.console.terminal.PlainTerminal;
+import net.vectora.cloud.node.scaling.Autoscaler;
 import net.vectora.cloud.node.service.JavaRuntimeResolver;
 import net.vectora.cloud.node.service.ServiceException;
 import net.vectora.cloud.node.service.ServiceState;
@@ -246,7 +252,7 @@ class NodeWiringTest {
     }
 
     @Test
-    void theGroupsOwnSwitchStopsItOnReloadAndSwitchingItOnAllowsTheStartAgain() throws Exception {
+    void theGroupsOwnSwitchStopsItOnReloadAndSwitchingItOnBringsItBack() throws Exception {
         NodeFixture fixture = NodeFixture.create(dir, true, List.of());
         ServiceId lobby = new ServiceId("lobby-1");
         CloudNode node = CloudNode.open(fixture.settings(), fixture.options());
@@ -259,14 +265,74 @@ class NodeWiringTest {
             ServiceException refused = assertThrows(ServiceException.class, () -> node.services().start("lobby"));
             assertTrue(refused.getMessage().contains("wanted: false"), refused.getMessage());
 
-            // Counter-check: switched on again, "service start" brings it back (no automatic start).
+            // Counter-check: switched on again, the scaler brings it back at its own index.
             node.config().apply(new SetGroupWanted("lobby", true));
-            Thread.sleep(300);
-            assertEquals(ServiceState.STOPPED, NodeEndToEndTest.state(node, lobby), "not started by the reload");
-            node.services().start("lobby");
             NodeFixture.await("lobby-1 running again", () -> NodeEndToEndTest.state(node, lobby) == ServiceState.RUNNING);
+            assertEquals(1, node.services().services().size(), "the same service, no lobby-2");
         } finally {
             node.close();
+        }
+    }
+
+    @Test
+    void theScalerFollowsThePlayerCountsOfTheBridgesAndNeverStopsAStaticServer() throws Exception {
+        // One player per minigame server is the threshold (2 players, scale at 50 %); no waiting.
+        NodeFixture fixture = NodeFixture.create(dir, true, List.of(
+                new PutGroup("minigame", NodeFixture.group(ServerKind.MINIGAME.templateFolder(), ServerSoftware.PAPER,
+                        "-Dfake.cloud=true")),
+                new PutTask("minigame", new TaskConfig(TaskConfig.SCHEMA_VERSION, "minigame", TaskMode.DYNAMIC,
+                        new ScalingConfig(1, 2, 2, 50, TimeSpan.parse("0s"), TimeSpan.parse("0s")), List.of()))));
+        fixture.file("monitor.yml", "schema-version: 1\nsample-interval: 1s\n");
+        ServiceId lobby = new ServiceId("lobby-1");
+        ServiceId first = new ServiceId("minigame-1");
+        ServiceId second = new ServiceId("minigame-2");
+        CloudNode node = CloudNode.open(fixture.settings(), fixture.options());
+        try {
+            node.start();
+            NodeFixture.await("lobby-1 and minigame-1 running", () -> NodeEndToEndTest.state(node, lobby)
+                    == ServiceState.RUNNING && NodeEndToEndTest.state(node, first) == ServiceState.RUNNING);
+            // The reports are repeated while the test waits, as a bridge sends one every 5 seconds.
+            // A player on minigame-1: one more server, under the usual id.
+            awaitReporting(node, "minigame-2 running", () -> NodeEndToEndTest.state(node, second) == ServiceState.RUNNING,
+                    Map.of(lobby, "status 0 50", first, "status 1 2"));
+
+            // Both empty: the surplus one stops, minigame-1 stays for min-services, the empty lobby stays.
+            awaitReporting(node, "minigame-2 stopped", () -> node.services().find(second).isEmpty()
+                            || NodeEndToEndTest.state(node, second) == ServiceState.STOPPED,
+                    Map.of(lobby, "status 0 50", first, "status 0 2", second, "status 0 2"));
+            Thread.sleep(Autoscaler.INTERVAL.toMillis() + 1000);
+            assertEquals(ServiceState.RUNNING, NodeEndToEndTest.state(node, first), "min-services");
+            assertEquals(ServiceState.RUNNING, NodeEndToEndTest.state(node, lobby), "static, never scaled down");
+
+            // Stopped by hand: stays down, although the task asks for one.
+            node.services().stop(lobby);
+            Thread.sleep(Autoscaler.INTERVAL.toMillis() + 1000);
+            assertEquals(ServiceState.STOPPED, NodeEndToEndTest.state(node, lobby), "a stop by hand is kept");
+        } finally {
+            node.close();
+        }
+    }
+
+    /** Waits like {@link NodeFixture#await}, and sends each status line to its fake server once a second. */
+    private static void awaitReporting(CloudNode node, String what, java.util.function.BooleanSupplier condition,
+                                       Map<ServiceId, String> reports) throws InterruptedException {
+        long end = System.nanoTime() + NodeFixture.WAIT.toNanos();
+        long nextReport = 0;
+        while (!condition.getAsBoolean()) {
+            if (System.nanoTime() > end) {
+                throw new AssertionError("timed out waiting for " + what + "; services: " + node.services().services());
+            }
+            if (System.nanoTime() >= nextReport) {
+                for (Map.Entry<ServiceId, String> report : reports.entrySet()) {
+                    try {
+                        node.services().sendCommand(report.getKey(), report.getValue());
+                    } catch (ServiceException e) {
+                        // Stopping already.
+                    }
+                }
+                nextReport = System.nanoTime() + 1_000_000_000L;
+            }
+            Thread.sleep(25);
         }
     }
 
