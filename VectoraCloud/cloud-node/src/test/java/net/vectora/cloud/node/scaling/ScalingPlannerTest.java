@@ -24,6 +24,7 @@ import net.vectora.cloud.config.model.DatabaseMode;
 import net.vectora.cloud.config.model.GroupConfig;
 import net.vectora.cloud.config.model.HeapConfig;
 import net.vectora.cloud.config.model.JavaSelection;
+import net.vectora.cloud.config.model.MemoryReserve;
 import net.vectora.cloud.config.model.MemorySize;
 import net.vectora.cloud.config.model.NodeConfig;
 import net.vectora.cloud.config.model.NodesConfig;
@@ -291,7 +292,7 @@ class ScalingPlannerTest {
         s.maxMemory(null);
         long nodeHeap = 512 * MB;
         // Managed database: 1 GiB + 512 MiB + 256 MiB + 512 MiB = 2304 MiB; 3 GB of heaps need 5376 MiB.
-        assertEquals(2304 * MB, ScalingPlanner.reserve(s.snapshot(), nodeHeap));
+        assertEquals(2304 * MB, ScalingPlanner.reserve(s.snapshot(), "node-1", nodeHeap));
         s.memory(Optional.of(new Memory(0, 5376 * MB - 1, nodeHeap)));
         assertEquals(List.of(new Held("minigame", Hold.MEMORY_BUDGET)), s.plan());
         s.memory(Optional.of(new Memory(0, 5376 * MB, nodeHeap)));
@@ -299,12 +300,34 @@ class ScalingPlannerTest {
 
         // Counter-check: an external database or none at all needs no reserve here.
         s.cloud = s.cloud.withDatabase(DatabaseConfig.defaults().withMode(DatabaseMode.EXTERNAL));
-        assertEquals(1792 * MB, ScalingPlanner.reserve(s.snapshot(), nodeHeap));
+        assertEquals(1792 * MB, ScalingPlanner.reserve(s.snapshot(), "node-1", nodeHeap));
         s.cloud = s.cloud.withDatabase(DatabaseConfig.defaults().withMode(DatabaseMode.DOCKER))
                 .withServers(s.cloud.servers().with(ServerKind.DATABASE, false));
-        assertEquals(1792 * MB, ScalingPlanner.reserve(s.snapshot(), nodeHeap));
+        assertEquals(1792 * MB, ScalingPlanner.reserve(s.snapshot(), "node-1", nodeHeap));
         s.cloud = s.cloud.withServers(s.cloud.servers().with(ServerKind.DATABASE, true));
-        assertEquals(2304 * MB, ScalingPlanner.reserve(s.snapshot(), nodeHeap), "docker counts like managed");
+        assertEquals(2304 * MB, ScalingPlanner.reserve(s.snapshot(), "node-1", nodeHeap), "docker counts like managed");
+    }
+
+    @Test
+    void theReserveComesFromMemoryReserveOfTheNodeWithDefaultsForMissingFields() {
+        Scenario s = new Scenario().task("minigame", TaskMode.DYNAMIC, 1, 3).task("lobby", TaskMode.STATIC, 1, 1)
+                .running("lobby", 1, TaskMode.STATIC, 0).running("minigame", 1, TaskMode.DYNAMIC, 40);
+        long nodeHeap = 512 * MB;
+        // system 2G, node-overhead missing (256M), database 1G with a managed database: 3328 MiB + heap.
+        s.nodes = new NodesConfig(NodesConfig.SCHEMA_VERSION, List.of(NodeConfig.defaults().withMemoryReserve(
+                new MemoryReserve(MemorySize.parse("2G"), null, MemorySize.parse("1G")))));
+        assertEquals(3840 * MB, ScalingPlanner.reserve(s.snapshot(), "node-1", nodeHeap));
+        // 3 GB of heaps need 3072 + 3840 MiB.
+        s.memory(Optional.of(new Memory(0, 6912 * MB - 1, nodeHeap)));
+        assertEquals(List.of(new Held("minigame", Hold.MEMORY_BUDGET)), s.plan());
+        s.memory(Optional.of(new Memory(0, 6912 * MB, nodeHeap)));
+        assertEquals(List.of(new Start("minigame", OptionalInt.empty(), Reason.LOAD)), s.plan());
+
+        // Counter-check: another node's reserve does not apply; this node then has the defaults.
+        s.nodes = new NodesConfig(NodesConfig.SCHEMA_VERSION, List.of(new NodeConfig("node-2", "127.0.0.1", 7000,
+                NodeConfig.defaults().servicePorts()).withMemoryReserve(
+                new MemoryReserve(MemorySize.parse("8G"), null, null))));
+        assertEquals(2304 * MB, ScalingPlanner.reserve(s.snapshot(), "node-1", nodeHeap));
     }
 
     @Test

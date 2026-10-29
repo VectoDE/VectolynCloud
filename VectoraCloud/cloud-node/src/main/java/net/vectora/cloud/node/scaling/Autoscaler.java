@@ -76,9 +76,6 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
     /** How long a task gets no new service after {@value #FAILURE_LIMIT} failed starts. */
     public static final Duration FAILURE_PAUSE = Duration.ofMinutes(10);
 
-    /** How long the players of a service that is emptied get to move before its stop is called off. */
-    public static final Duration DRAIN_TIMEOUT = Duration.ofSeconds(30);
-
     private final ScalingTarget target;
     private final Supplier<ConfigSnapshot> config;
     private final ScalingSignals signals;
@@ -338,8 +335,8 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
 
     /**
      * Closes a service on the proxies, empties it, then stops it; also one that looks empty, since a
-     * player may have been routed there just now. If players are left after {@link #DRAIN_TIMEOUT},
-     * the stop is called off and the service keeps running; nobody is kicked. If the stop fails,
+     * player may have been routed there just now. If players are left after the group's
+     * {@code drain-timeout} ({@link #drainTimeout}), the stop is called off and the service keeps running; nobody is kicked. If the stop fails,
      * the service is opened again. Either way the task waits {@code scale-down-after} again before
      * the next attempt.
      */
@@ -350,16 +347,17 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
         try {
             LOG.log(System.Logger.Level.INFO, "Scaling: the players of {0} of task {1} are moved to other servers ({2})",
                     drain.service(), drain.task(), describe(drain.reason(), snapshot.tasks().get(drain.task())));
+            Duration timeout = drainTimeout(snapshot, drain.task());
             boolean empty;
             try {
-                empty = target.drain(drain.service(), DRAIN_TIMEOUT);
+                empty = target.drain(drain.service(), timeout);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return;
             }
             if (!empty) {
                 LOG.log(System.Logger.Level.WARNING, "Scaling: {0} keeps running: players are still on it after {1} s,"
-                        + " a move did not work", drain.service(), DRAIN_TIMEOUT.toSeconds());
+                        + " a move did not work", drain.service(), timeout.toSeconds());
                 return;
             }
             LOG.log(System.Logger.Level.INFO, "Scaling: {0} of task {1} is empty and is stopped", drain.service(),
@@ -377,6 +375,21 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
                 lowSince.remove(drain.task());
             }
         }
+    }
+
+    /**
+     * How long the players of a service of this task get to move before its stop is called off:
+     * {@code drain-timeout} of the task's group, 30 seconds when it is not set or the task or group
+     * is gone.
+     *
+     * @param snapshot the configuration
+     * @param task     task name
+     * @return the timeout
+     */
+    static Duration drainTimeout(ConfigSnapshot snapshot, String task) {
+        TaskConfig config = snapshot.tasks().get(task);
+        GroupConfig group = config == null ? null : snapshot.groups().get(config.group());
+        return group == null ? GroupConfig.DEFAULT_DRAIN_TIMEOUT.duration() : group.drainTimeoutOrDefault().duration();
     }
 
     private static String describe(ScalingPlanner.Reason reason, TaskConfig task) {

@@ -116,6 +116,28 @@ class AutoscalerTest {
     }
 
     @Test
+    void theDrainWaitsTheDrainTimeoutOfTheGroup() {
+        Fixture f = new Fixture().task("minigame", TaskMode.DYNAMIC, 1, 3);
+        f.groups.put("minigame", f.groups.get("minigame").withDrainTimeout(TimeSpan.parse("45s")));
+        f.target.add("minigame", 1, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.target.add("minigame", 2, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.players.put(new ServiceId("minigame-1"), 10);
+        f.players.put(new ServiceId("minigame-2"), 0);
+        f.scaler.tick();
+        f.advance(Duration.ofMinutes(5));
+        f.scaler.tick();
+        assertEquals(List.of(Duration.ofSeconds(45)), f.target.drainTimeouts);
+
+        // Counter-check: without drain-timeout the default of 30 seconds.
+        f.groups.put("minigame", f.groups.get("minigame").withDrainTimeout(null));
+        f.target.add("minigame", 2, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.scaler.tick();
+        f.advance(Duration.ofMinutes(5));
+        f.scaler.tick();
+        assertEquals(List.of(Duration.ofSeconds(45), Duration.ofSeconds(30)), f.target.drainTimeouts);
+    }
+
+    @Test
     void everyMissingServiceComesBackInOneRoundAfterTheEulaWasGivenAgain() {
         Fixture f = new Fixture().task("lobby", TaskMode.STATIC, 3, 3);
         for (int i = 1; i <= 3; i++) {
@@ -453,6 +475,7 @@ class AutoscalerTest {
     private static final class FakeTarget implements ScalingTarget {
         final Map<ServiceId, ServiceInfo> services = new LinkedHashMap<>();
         final List<String> calls = new ArrayList<>();
+        final List<Duration> drainTimeouts = new ArrayList<>();
         boolean failStarts;
         boolean crashEvent;
         boolean failStops;
@@ -528,6 +551,7 @@ class AutoscalerTest {
         @Override
         public boolean drain(ServiceId service, Duration timeout) {
             calls.add("drain " + service.value());
+            drainTimeouts.add(timeout);
             if (duringDrain != null) {
                 Runnable during = duringDrain;
                 duringDrain = null;

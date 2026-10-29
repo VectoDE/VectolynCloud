@@ -11,8 +11,8 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
 import net.vectora.cloud.config.model.ConfigSnapshot;
-import net.vectora.cloud.config.model.DatabaseMode;
 import net.vectora.cloud.config.model.GroupConfig;
+import net.vectora.cloud.config.model.MemoryReserve;
 import net.vectora.cloud.config.model.NodeConfig;
 import net.vectora.cloud.config.model.ScalingConfig;
 import net.vectora.cloud.config.model.ServerSoftware;
@@ -57,15 +57,6 @@ import net.vectora.protocol.ServiceId;
  * running service of the group without a player count) blocks both scale-up and scale-down.
  */
 public final class ScalingPlanner {
-
-    /** Kept free for the operating system when {@code max-memory} is not set: 1 GiB. */
-    public static final long OS_RESERVE = 1024L * 1024L * 1024L;
-
-    /** On top of the node's own maximum heap, for its metaspace, threads and buffers: 256 MiB. */
-    public static final long NODE_NON_HEAP_RESERVE = 256L * 1024L * 1024L;
-
-    /** For a MariaDB the node runs on this machine (managed or Docker): 512 MiB. */
-    public static final long DATABASE_RESERVE = 512L * 1024L * 1024L;
 
     private ScalingPlanner() {
     }
@@ -544,26 +535,25 @@ public final class ScalingPlanner {
         if (config.isPresent() && config.get().maxMemory() != null) {
             return Math.min(config.get().maxMemory().megabytes() * 1024L * 1024L, memory.total());
         }
-        return Math.max(0, memory.total() - reserve(snapshot, memory.nodeHeap()));
+        return Math.max(0, memory.total() - reserve(snapshot, node, memory.nodeHeap()));
     }
 
     /**
-     * What stays free when {@code max-memory} is not set: {@link #OS_RESERVE}, the node's maximum
-     * heap plus {@link #NODE_NON_HEAP_RESERVE}, and {@link #DATABASE_RESERVE} if the database
-     * server is wanted and runs on this machine (managed or Docker).
+     * What stays free when {@code max-memory} is not set: the node's {@code memory-reserve} in
+     * {@code nodes.yml} ({@code system} and {@code node-overhead}, plus {@code database} while
+     * {@link MemoryReserve#countsDatabase} holds; missing fields and an unknown node at their
+     * defaults) and the node's own maximum heap.
      *
      * @param snapshot the configuration
+     * @param node     id of this node
      * @param nodeHeap maximum heap of the node's JVM
      * @return bytes
      */
-    public static long reserve(ConfigSnapshot snapshot, long nodeHeap) {
-        long reserve = OS_RESERVE + Math.max(0, nodeHeap) + NODE_NON_HEAP_RESERVE;
-        var cloud = snapshot.cloud();
-        if (cloud.servers() != null && cloud.servers().database() && cloud.database() != null
-                && (cloud.database().mode() == DatabaseMode.MANAGED || cloud.database().mode() == DatabaseMode.DOCKER)) {
-            reserve += DATABASE_RESERVE;
-        }
-        return reserve;
+    public static long reserve(ConfigSnapshot snapshot, String node, long nodeHeap) {
+        MemoryReserve reserve = snapshot.nodes().find(node).map(NodeConfig::memoryReserve)
+                .orElseGet(MemoryReserve::defaults);
+        long megabytes = reserve.megabytes(MemoryReserve.countsDatabase(snapshot.cloud()));
+        return megabytes * 1024L * 1024L + Math.max(0, nodeHeap);
     }
 
     /**
