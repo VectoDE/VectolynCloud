@@ -23,6 +23,7 @@ import net.vectora.protocol.message.Disconnect;
 import net.vectora.protocol.message.Envelope;
 import net.vectora.protocol.message.Hello;
 import net.vectora.protocol.message.Message;
+import net.vectora.protocol.message.NetworkKick;
 import net.vectora.protocol.message.Ping;
 import net.vectora.protocol.message.PlayerJoin;
 import net.vectora.protocol.message.PlayerQuit;
@@ -153,6 +154,13 @@ final class ConnectionHandler extends SimpleChannelInboundHandler<Envelope> {
             case PlayerJoin join -> server.messageReceived(session, join);
             case PlayerQuit quit -> server.messageReceived(session, quit);
             case PlayerSwitch change -> server.messageReceived(session, change);
+            // A backend reports only its own kicks; whether the sender is a backend at all is the
+            // node's business.
+            case NetworkKick kick -> {
+                if (ownReport(ctx, kick.server())) {
+                    server.messageReceived(session, kick);
+                }
+            }
             case ChannelMessage channelMessage -> server.channelMessage(session, channelMessage);
             case Request request -> server.incomingRequest(session, envelope.requestId(), request);
             case Response response -> session.complete(envelope.requestId(), response);

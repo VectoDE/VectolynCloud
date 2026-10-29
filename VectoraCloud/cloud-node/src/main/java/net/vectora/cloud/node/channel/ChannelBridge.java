@@ -23,6 +23,7 @@ import net.vectora.cloud.node.service.ServiceState;
 import net.vectora.protocol.ServiceId;
 import net.vectora.protocol.message.Disconnect;
 import net.vectora.protocol.message.Message;
+import net.vectora.protocol.message.NetworkKick;
 import net.vectora.protocol.message.PlayerJoin;
 import net.vectora.protocol.message.PlayerQuit;
 import net.vectora.protocol.message.PlayerSwitch;
@@ -56,6 +57,9 @@ import net.vectora.protocol.message.UnregisterServer;
  * <p>Player events from the proxies ({@code PlayerJoin}, {@code PlayerSwitch}, {@code PlayerQuit})
  * go into {@link NetworkPlayers}, with the static backend names of the proxy ({@code lobby}) mapped
  * to the service ({@code lobby-1}).
+ *
+ * <p>A {@code NetworkKick} of a backend goes on to the running proxies of its kind
+ * ({@link #onEvent}); from any other service it is dropped.
  */
 public final class ChannelBridge implements ChannelListener, ServiceListener {
 
@@ -289,6 +293,7 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
             case ServiceEvent.Disconnected disconnected ->
                     LOG.log(System.Logger.Level.DEBUG, "{0} left the cloud channel ({1})", disconnected.service(),
                             disconnected.reason() == null ? "connection lost" : disconnected.reason());
+            case ServiceEvent.MessageReceived(var sender, NetworkKick kick) -> networkKick(sender, kick);
             // Only the sender and the outcome are logged, never the content (player names).
             case ServiceEvent.MessageReceived received -> {
                 Optional<NetworkPlayers.Player> before = received.message() instanceof PlayerQuit quit
@@ -302,6 +307,32 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
                 }
             }
         }
+    }
+
+    /**
+     * A backend marked a kick as a punishment that takes the player off the network. It is passed
+     * on only if the sender is a backend on the proxies' lists (not a proxy, not an unknown
+     * service): with the backend's name on the proxy, to every running proxy of its kind. A proxy
+     * that does not have the player ignores it. The network layer has already checked that the
+     * message names the sender itself.
+     */
+    private void networkKick(ServiceId sender, NetworkKick kick) {
+        Optional<Boolean> legacy = services.backendKind(sender);
+        Optional<RegisterServer> listed = services.registration(sender);
+        if (legacy.isEmpty() || listed.isEmpty() || !kick.server().equals(sender)) {
+            LOG.log(System.Logger.Level.WARNING, "A network kick from {0} was dropped: it is no backend on the"
+                    + " proxies'' lists", sender);
+            return;
+        }
+        NetworkKick forward = new NetworkKick(kick.uuid(), listed.get().name(), kick.reason());
+        int sent = 0;
+        for (ServiceId proxy : services.runningProxies(legacy.get())) {
+            if (send(proxy, forward)) {
+                sent++;
+            }
+        }
+        LOG.log(System.Logger.Level.INFO, "{0} kicked a player off the network; passed on to {1} proxies", sender,
+                sent);
     }
 
     /** Told about every player event the bridge applied; for the API's event stream. */

@@ -26,6 +26,7 @@ import net.vectora.protocol.message.Disconnect;
 import net.vectora.protocol.message.Envelope;
 import net.vectora.protocol.message.Hello;
 import net.vectora.protocol.message.Message;
+import net.vectora.protocol.message.NetworkKick;
 import net.vectora.protocol.message.MessageCodec;
 import net.vectora.protocol.message.MessageLimits;
 import net.vectora.protocol.message.Ping;
@@ -145,6 +146,9 @@ class CloudClientTest {
         assertThrows(IllegalArgumentException.class, () -> client.reportStatus(
                 new ServiceStatus(new ServiceId("other-1"), 0, 0, 20, 1, 0, 0)));
         assertFalse(client.send(new PlayerJoin(UUID.randomUUID(), "Steve", LOBBY, false)));
+        assertThrows(IllegalArgumentException.class, () -> client.send(
+                new NetworkKick(UUID.randomUUID(), new ServiceId("other-1"), "")), "only its own kicks");
+        assertFalse(client.send(new NetworkKick(UUID.randomUUID(), LOBBY, "")));
         assertFalse(client.publish(new ChannelName("c"), new byte[0]));
         ExecutionException failed = assertThrows(ExecutionException.class,
                 () -> client.request(new ChannelName("c"), new byte[0]).get());

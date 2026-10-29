@@ -58,7 +58,8 @@ public sealed interface ServiceEvent {
 
     /**
      * Any other message the network layer does not handle itself, currently {@code PlayerJoin},
-     * {@code PlayerQuit} and {@code PlayerSwitch} from the proxies.
+     * {@code PlayerQuit} and {@code PlayerSwitch} from the proxies and {@code NetworkKick} from the
+     * backends (only for the sender's own service id).
      *
      * @param service the sender
      * @param message the message

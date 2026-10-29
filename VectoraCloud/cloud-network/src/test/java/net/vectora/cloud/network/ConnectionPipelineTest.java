@@ -16,6 +16,7 @@ import net.vectora.protocol.Protocol;
 import net.vectora.protocol.ProtocolVersion;
 import net.vectora.protocol.ServiceId;
 import net.vectora.protocol.message.Message;
+import net.vectora.protocol.message.NetworkKick;
 import net.vectora.protocol.message.ServerCapacity;
 import net.vectora.protocol.message.TransferPlayer;
 import net.vectora.protocol.message.UnregisterServer;
@@ -121,6 +122,29 @@ class ConnectionPipelineTest {
             connection.receive(CODEC.encode(Envelope.of(new Hello(Protocol.PROTOCOL_VERSION, LOBBY, token))));
             connection.receive(CODEC.encode(Envelope.of(new ChannelMessage(new ChannelName("c"), new byte[] {1}))));
             assertTrue(connection.isOpen());
+        }
+    }
+
+    /** A backend reports only its own kicks: a NetworkKick that names another service cuts it off. */
+    @Test
+    void networkKickOnlyForTheSendersOwnServer() {
+        List<ServiceEvent> events = new java.util.concurrent.CopyOnWriteArrayList<>();
+        CloudNetworkServer listened = CloudNetworkServer.builder(NetworkSettings.defaults(), tokens)
+                .listener(events::add).build();
+        NetworkKick own = new NetworkKick(UUID.randomUUID(), LOBBY, "Spam");
+        try (EmbeddedConnection connection = new EmbeddedConnection(listened)) {
+            connection.receive(CODEC.encode(Envelope.of(new Hello(Protocol.PROTOCOL_VERSION, LOBBY, token))));
+            connection.receive(CODEC.encode(Envelope.of(own)));
+            assertTrue(connection.isOpen());
+            assertTrue(events.contains(new ServiceEvent.MessageReceived(LOBBY, own)), events.toString());
+        }
+        try (EmbeddedConnection connection = new EmbeddedConnection(listened)) {
+            connection.receive(CODEC.encode(Envelope.of(new Hello(Protocol.PROTOCOL_VERSION, LOBBY, token))));
+            connection.receive(CODEC.encode(Envelope.of(
+                    new NetworkKick(UUID.randomUUID(), new ServiceId("lobby-2"), "Spam"))));
+            List<Envelope> sent = connection.sent();
+            assertEquals(Envelope.of(new Disconnect(Disconnect.Reason.PROTOCOL_ERROR)), sent.get(sent.size() - 1));
+            assertFalse(connection.isOpen());
         }
     }
 

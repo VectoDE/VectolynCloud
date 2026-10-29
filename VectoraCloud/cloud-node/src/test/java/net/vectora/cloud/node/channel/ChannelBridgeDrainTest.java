@@ -23,6 +23,7 @@ import net.vectora.protocol.GroupName;
 import net.vectora.protocol.ServiceId;
 import net.vectora.protocol.message.Disconnect;
 import net.vectora.protocol.message.Message;
+import net.vectora.protocol.message.NetworkKick;
 import net.vectora.protocol.message.PlayerJoin;
 import net.vectora.protocol.message.PlayerSwitch;
 import net.vectora.protocol.message.RegisterServer;
@@ -196,6 +197,23 @@ class ChannelBridgeDrainTest {
         assertEquals(DrainResult.NO_TARGET, f.bridge.drain(ONE, TIMEOUT), "nobody can move its players");
         assertEquals(List.of(), f.channel.sent);
         assertEquals(Duration.ZERO, f.ticker.slept());
+    }
+
+    /**
+     * A network kick goes on to the proxies only from a backend on their lists; the proxy itself,
+     * a backend of another service id or an unknown service cannot trigger one.
+     */
+    @Test
+    void networkKicksArePassedOnOnlyFromListedBackends() {
+        Fixture f = new Fixture().backend(ONE);
+        NetworkKick kick = new NetworkKick(ALEX, ONE, "Spam");
+        f.bridge.onEvent(new ServiceEvent.MessageReceived(PROXY, new NetworkKick(ALEX, PROXY, "Spam")));
+        f.bridge.onEvent(new ServiceEvent.MessageReceived(TWO, new NetworkKick(ALEX, TWO, "Spam")));
+        f.bridge.onEvent(new ServiceEvent.MessageReceived(TWO, kick));
+        assertEquals(List.of(), f.channel.sent, "from a proxy, an unknown service or for another backend");
+        // Counter-check: the listed backend's own kick reaches the proxy.
+        f.bridge.onEvent(new ServiceEvent.MessageReceived(ONE, kick));
+        assertEquals(List.of(kick), f.channel.sent);
     }
 
     // ---------------------------------------------------------------- fixture
