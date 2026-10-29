@@ -275,6 +275,13 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
             reject(ctx, request.origin(), e, true);
             return;
         }
+        String offered = request.head().headers().get(HttpHeaderNames.SEC_WEBSOCKET_PROTOCOL);
+        if (offered != null && Arrays.stream(offered.split(",")).map(String::strip).noneMatch(WS_PROTOCOL::equals)) {
+            // Netty would log the offered list (with a bearer subprotocol in it) when none fits.
+            reject(ctx, request.origin(), new ApiException(400, "subprotocol-required",
+                    "Offer the subprotocol " + WS_PROTOCOL + "."), true);
+            return;
+        }
         if (server.events().size() >= server.limits().maxWebSockets()) {
             reject(ctx, request.origin(), new ApiException(503, "too-many-streams", "Too many event streams are open."), true);
             return;
@@ -293,6 +300,11 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
         }
         if (!server.events().add(ctx.channel(), request.token().id(), types, services)) {
             reject(ctx, request.origin(), new ApiException(503, "too-many-streams", "Too many event streams are open."), true);
+            return;
+        }
+        if (!server.tokens().isValid(request.token().id())) {
+            // Revoked between the check of the head and now; a revoke from here on closes the stream.
+            reject(ctx, request.origin(), unauthorized(), true);
             return;
         }
         ctx.pipeline().replace(ApiServer.IDLE, ApiServer.IDLE, new IdleStateHandler(90, 30, 0, TimeUnit.SECONDS));

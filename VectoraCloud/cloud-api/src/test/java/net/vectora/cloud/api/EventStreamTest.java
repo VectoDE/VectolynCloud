@@ -98,6 +98,20 @@ class EventStreamTest {
     }
 
     @Test
+    void aBearerSubprotocolWithoutVectoraV1IsRefused() throws Exception {
+        try (TestApi api = new TestApi(home)) {
+            // Without a protocol the server can pick, Netty would log the offered list with the token in it.
+            CompletableFuture<WebSocket> future = api.http.newWebSocketBuilder()
+                    .subprotocols("vectora.bearer." + api.admin)
+                    .buildAsync(URI.create("ws://127.0.0.1:" + api.address.getPort() + "/api/v1/events"), new Recorder());
+            CompletionException e = org.junit.jupiter.api.Assertions.assertThrows(CompletionException.class, future::join);
+            assertInstanceOf(WebSocketHandshakeException.class, e.getCause());
+            assertEquals(400, ((WebSocketHandshakeException) e.getCause()).getResponse().statusCode());
+            assertEquals(0, api.server.openEventStreams());
+        }
+    }
+
+    @Test
     void unknownFilterValuesAreRefused() throws Exception {
         try (TestApi api = new TestApi(home)) {
             CompletableFuture<WebSocket> future = api.http.newWebSocketBuilder()
