@@ -15,6 +15,8 @@
 #   targets       server templates in Server-Network/ that use it
 #   replaced-by   transitional only: what replaces it
 #   alternative   optional second source with a checksum, as provider:project
+#   version       optional, only with game-version none: the exact version to resolve instead of
+#                 the newest one. Whatever is resolved is pinned in software.lock.yml either way.
 schema-version: 1
 artifacts:
   # --- Server software -------------------------------------------------------------------
@@ -31,7 +33,10 @@ artifacts:
     provider: papermc
     project: velocity
     game-version: none
-    targets: [Proxy]
+    # The Velocity bridge is compiled against velocity-api 4.3.1 (gradle/libs.versions.toml); move
+    # both together.
+    version: "4.3.1"
+    targets: [Proxy, Legacy-Proxy]
   - id: fabric-server
     kind: server
     type: standard
@@ -46,7 +51,8 @@ artifacts:
     project: pandaspigot
     platform: paperclip
     game-version: none
-    targets: [legacy 1.8.8 groups]
+    version: "1.8.8"
+    targets: [Legacy-Server]
   - id: mariadb
     kind: database
     type: standard

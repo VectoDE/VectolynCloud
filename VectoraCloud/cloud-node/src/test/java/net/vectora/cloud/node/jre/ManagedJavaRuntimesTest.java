@@ -59,7 +59,7 @@ class ManagedJavaRuntimesTest {
         assertEquals(25, feature(none, group(ServerSoftware.PANDASPIGOT, JavaSelection.of(25))));
 
         ManagedJavaRuntimes minimum22 = new ManagedJavaRuntimes(CHOOSING,
-                group -> new OptionalInt[] {OptionalInt.of(17), OptionalInt.empty(), OptionalInt.of(22)});
+                (name, group) -> new OptionalInt[] {OptionalInt.of(17), OptionalInt.empty(), OptionalInt.of(22)});
         assertEquals(22, feature(minimum22, group(ServerSoftware.PANDASPIGOT, JavaSelection.AUTO)),
                 "the highest minimum beats the legacy default");
         JreException tooLow = assertThrows(JreException.class,

@@ -37,6 +37,11 @@ The container image goes to `ghcr.io/vectode/vectora-cloud`, tagged with the ver
 - **Java 21 or later** for the cloud itself. The servers it starts get the Java version their Minecraft version needs; if no installed Java fits, the cloud downloads a Temurin JRE into `<home>/jre/` (see [node.md](node.md#java-runtimes)).
 - A normal user account. The cloud refuses to start as root or administrator (see [below](#never-as-root-or-administrator)).
 - Memory: the cloud's own heap (`VECTORA_XMX`, default 512M) plus the heap of every server it runs.
+- **Internet access on the first start of a group.** The cloud then downloads the server software (Paper, Velocity, Fabric, PandaSpigot) and the plugins and mods of the catalog: Geyser and Floodgate for Bedrock, ViaVersion, ViaBackwards and ViaRewind so Java clients from 1.8 to 26.3 can join, LuckPerms, the Fabric performance mods. Every file is checked against its checksum and pinned in `software.lock.yml`; later starts take it from `cache/artifacts/` without the network ([download.md](download.md#what-the-node-installs)).
+
+## First start: what lands in each server
+
+Before each start the node fills the server's folder: the server jar, the plugins (or mods on Fabric) its group needs, and the VectoraCloud bridge of its platform. It notes what it put there in `plugins/.vectora-managed` (`mods/` on Fabric) and removes those files again once the group no longer wants them; plugins you copy in yourself stay. A PandaSpigot 1.8.8 server does not start without its bridge, because only the bridge checks the legacy proxy's token. Details: [node.md](node.md#server-software).
 
 ## Start scripts
 

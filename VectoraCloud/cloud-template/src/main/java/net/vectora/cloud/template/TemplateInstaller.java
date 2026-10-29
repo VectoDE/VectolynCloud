@@ -1,10 +1,13 @@
 package net.vectora.cloud.template;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Creates or refreshes the runtime folder of one server: renders its template and writes the
@@ -24,7 +27,8 @@ import java.util.Objects;
  *   <li>{@link ServerPlatform#NONE}: nothing.</li>
  * </ul>
  *
- * <p>The Floodgate key comes from {@value GeneratedFiles#FLOODGATE_PLACEHOLDER}. Secrets are checked before
+ * <p>The Floodgate key comes from {@value GeneratedFiles#FLOODGATE_PLACEHOLDER} and is only written
+ * for a template that ships Floodgate's folder ({@link #runsFloodgate}). Secrets are checked before
  * anything is written.
  */
 public final class TemplateInstaller {
@@ -62,7 +66,7 @@ public final class TemplateInstaller {
             }
         }
         String floodgateKey = null;
-        if (platform.floodgateKeyPath().isPresent()) {
+        if (runsFloodgate(template, platform)) {
             String path = platform.floodgateKeyPath().get();
             floodgateKey = required(values, GeneratedFiles.FLOODGATE_PLACEHOLDER, path);
             GeneratedFiles.decodeFloodgateKey(path, floodgateKey);
@@ -76,12 +80,50 @@ public final class TemplateInstaller {
         }
         if (floodgateKey != null) {
             generated.add(GeneratedFiles.writeFloodgateKey(runtime, platform, floodgateKey));
+        } else if (platform.floodgateKeyPath().isPresent()) {
+            removeStaleFloodgateKey(runtime, platform.floodgateKeyPath().get());
         }
         if (platform.needsEula()) {
             GeneratedFiles.writeEula(runtime, eulaAccepted).ifPresent(generated::add);
         }
         generated.sort(null);
         return report.withGenerated(generated);
+    }
+
+    /**
+     * Whether a template runs Floodgate: its platform can (it has a key path) and the template ships
+     * Floodgate's folder there ({@code plugins/floodgate/} or {@code config/floodgate/}, a real folder,
+     * not a link). Only then does the runtime folder get the key; a custom template without
+     * Floodgate never holds it, and a key of an earlier start is deleted.
+     *
+     * @param template the template folder
+     * @param platform its platform
+     * @return whether {@code key.pem} is written
+     */
+    public static boolean runsFloodgate(Path template, ServerPlatform platform) {
+        Optional<String> key = platform.floodgateKeyPath();
+        if (key.isEmpty()) {
+            return false;
+        }
+        Path folder = template.resolve(key.get()).getParent();
+        return folder != null && Files.isDirectory(folder, LinkOption.NOFOLLOW_LINKS);
+    }
+
+    /**
+     * Deletes the key an earlier start wrote, once the template no longer ships Floodgate, so the
+     * runtime folder does not keep the secret. Only a regular file reached without a link is
+     * deleted; anything else at that path was not written by the cloud and stays.
+     */
+    private static void removeStaleFloodgateKey(Path runtime, String path) throws IOException {
+        Path target;
+        try {
+            target = RuntimePaths.check(runtime, path);
+        } catch (TemplateException e) {
+            return;
+        }
+        if (Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)) {
+            Files.delete(target);
+        }
     }
 
     private static String required(PlaceholderValues values, String name, String file) throws TemplateException {

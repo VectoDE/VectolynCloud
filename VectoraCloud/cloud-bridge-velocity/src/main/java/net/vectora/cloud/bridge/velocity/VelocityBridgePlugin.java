@@ -37,6 +37,8 @@ public final class VelocityBridgePlugin {
     /** How often the proxy reports its status. */
     public static final Duration STATUS_PERIOD = Duration.ofSeconds(5);
 
+    private static final System.Logger LOG = System.getLogger(VelocityBridgePlugin.class.getName());
+
     private final ProxyServer proxy;
     private volatile BridgeSender sender;
     private volatile ProxyBridge bridge;
@@ -94,7 +96,10 @@ public final class VelocityBridgePlugin {
         if (settings.isEmpty()) {
             return null;
         }
-        ProxyRole role = ProxyRole.fromPlatform(System.getenv(ProxyRole.ENV_PLATFORM));
+        String platform = System.getenv(ProxyRole.ENV_PLATFORM);
+        ProxyRole role = ProxyRole.fromPlatform(platform);
+        LOG.log(ProxyRole.isProxyPlatform(platform) ? System.Logger.Level.INFO : System.Logger.Level.WARNING,
+                ProxyRole.describe(platform));
         VelocityServers servers = new VelocityServers(proxy);
         sender = BridgeConnection.open(settings.get(), created -> {
             ProxyBridge proxyBridge = new ProxyBridge(created, servers, role);

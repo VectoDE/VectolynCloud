@@ -42,6 +42,8 @@ import net.vectora.cloud.node.database.NodeDatabase;
 import net.vectora.cloud.node.fake.FakeServerJar;
 import net.vectora.cloud.node.service.JavaRuntimeResolver;
 import net.vectora.cloud.node.service.ServerSoftwareProvider;
+import net.vectora.cloud.node.service.ServiceManager;
+import net.vectora.cloud.node.software.BridgePlugins;
 
 /**
  * A cloud home in a temporary folder for whole-node tests: configuration with groups and tasks,
@@ -160,6 +162,12 @@ final class NodeFixture {
         return (spec, folder) -> {
             String name = ServerSoftwareProvider.jarName(spec.group().software());
             Files.copy(fakeJar, folder.resolve(name), StandardCopyOption.REPLACE_EXISTING);
+            // The real bridge of the platform, as the node installs it; a PandaSpigot server does not
+            // start without its own.
+            Optional<BridgePlugins.Bridge> bridge = BridgePlugins.bridgeOf(ServiceManager.platformOf(spec.group()));
+            if (bridge.isPresent()) {
+                BridgePlugins.fromClassPath().install(bridge.get(), folder.resolve("plugins"));
+            }
             return name;
         };
     }

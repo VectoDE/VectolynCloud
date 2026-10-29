@@ -54,6 +54,7 @@ import net.vectora.cloud.config.secret.RedactingFilter;
 import net.vectora.cloud.config.secret.Secret;
 import net.vectora.cloud.network.ServiceAuthenticator;
 import net.vectora.cloud.network.ServiceTokens;
+import net.vectora.cloud.node.software.BridgePlugins;
 import net.vectora.cloud.node.state.ServiceRecord;
 import net.vectora.cloud.node.state.ServiceStateStore;
 import net.vectora.cloud.node.state.ServiceStates;
@@ -616,8 +617,10 @@ public final class ServiceManager implements AutoCloseable {
             }
             TemplateInstaller.install(spec.templateDir(), spec.workDirectory(), platform,
                     values, snapshot.cloud().eulaAccepted());
-            JavaRuntimeResolver.JavaRuntime runtime = javaRuntimes.resolve(spec.groupName(), spec.group());
+            // The software first: its sources state the Java minimum the runtime must meet.
             String jar = software.provide(spec, spec.workDirectory());
+            requireLegacyBridge(spec, platform);
+            JavaRuntimeResolver.JavaRuntime runtime = javaRuntimes.resolve(spec.groupName(), spec.group());
             token = tokens.issue(spec.id());
             List<Secret> redact = new ArrayList<>(env.entries().stream().map(EnvFile.Entry::value).toList());
             redact.add(Secret.of(token.value()));
@@ -666,6 +669,29 @@ public final class ServiceManager implements AutoCloseable {
                     // Nothing was written to it.
                 }
             }
+        }
+    }
+
+    /**
+     * A PandaSpigot server runs with {@code bungeecord: true}: it takes the player's address and UUID
+     * from whoever connects. Only the legacy bridge checks the {@code bungeeguard} token, so without
+     * it anyone who reaches the port could log in as anyone. Such a server is never started.
+     */
+    private static void requireLegacyBridge(ServiceSpec spec, ServerPlatform platform) throws ServiceException {
+        if (platform != ServerPlatform.PANDASPIGOT) {
+            return;
+        }
+        boolean present;
+        try {
+            present = BridgePlugins.isInstalled(spec.workDirectory().resolve("plugins"), BridgePlugins.Bridge.LEGACY);
+        } catch (IOException e) {
+            present = false;
+        }
+        if (!present) {
+            throw new ServiceException(spec.id() + " is not started: plugins/"
+                    + BridgePlugins.Bridge.LEGACY.baseName()
+                    + "-<version>.jar is missing. Without it the server would trust every connection"
+                    + " (bungeecord: true without the BungeeGuard check).");
         }
     }
 
@@ -1381,8 +1407,11 @@ public final class ServiceManager implements AutoCloseable {
      * The template platform of a group: the legacy proxy (template {@code Legacy-Proxy}) is
      * {@link ServerPlatform#VELOCITY_LEGACY} with its own forwarding secret, PandaSpigot is
      * {@link ServerPlatform#PANDASPIGOT} (EULA, no Floodgate key).
+     *
+     * @param group the group
+     * @return its platform
      */
-    static ServerPlatform platformOf(GroupConfig group) {
+    public static ServerPlatform platformOf(GroupConfig group) {
         return switch (group.software()) {
             case VELOCITY -> ServicePlanner.isLegacy(group) ? ServerPlatform.VELOCITY_LEGACY : ServerPlatform.VELOCITY;
             case PAPER -> ServerPlatform.PAPER;

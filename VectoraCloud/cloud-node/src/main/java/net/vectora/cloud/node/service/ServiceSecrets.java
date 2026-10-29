@@ -82,8 +82,27 @@ public final class ServiceSecrets {
      *                          {@code vectora.env}, or the legacy secret equals the modern one
      */
     public static Map<String, String> placeholders(ServerPlatform platform, EnvFile secrets) throws ServiceException {
+        return placeholders(platform, secrets, true);
+    }
+
+    /**
+     * Like {@link #placeholders(ServerPlatform, EnvFile)}, without the Floodgate key for a template
+     * that runs no Floodgate ({@code TemplateInstaller.runsFloodgate}): it neither gets the key as a
+     * placeholder nor needs it in {@code vectora.env}.
+     *
+     * @param platform  the platform of the service
+     * @param secrets   {@code secrets/vectora.env}
+     * @param floodgate whether the template ships Floodgate
+     * @return placeholder name to value
+     * @throws ServiceException as {@link #placeholders(ServerPlatform, EnvFile)}
+     */
+    public static Map<String, String> placeholders(ServerPlatform platform, EnvFile secrets, boolean floodgate)
+            throws ServiceException {
         Map<String, String> values = new LinkedHashMap<>();
         for (String key : placeholdersOf(platform)) {
+            if (!floodgate && FLOODGATE.equals(key)) {
+                continue;
+            }
             values.put(key, require(secrets, key, platform).reveal());
         }
         if (platform == ServerPlatform.VELOCITY_LEGACY) {

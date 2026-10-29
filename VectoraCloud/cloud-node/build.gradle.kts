@@ -1,3 +1,5 @@
+import java.security.MessageDigest
+
 plugins {
     id("vectora.java-conventions")
     // state/services.json is read back on every start and may have been edited or damaged.
@@ -22,6 +24,71 @@ dependencies {
 
     // End-to-end test: the fake server connects with the real client.
     testImplementation(project(":Vectora-CloudClient"))
+}
+
+// The bridge plugins the node copies into the plugin folder of each service (docs/cloud/bridges.md).
+// They travel inside the node's own jar, so VectoraCloud.jar carries them and the launcher's hash
+// index covers them. Only the plugin jars themselves: each one already bundles its Vectora classes.
+val bridgeJars: Configuration = configurations.create("bridgeJars") {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    isTransitive = false
+}
+
+dependencies {
+    bridgeJars(project(":VectoraCloud:cloud-bridge-velocity"))
+    bridgeJars(project(":VectoraCloud:cloud-bridge-paper"))
+    bridgeJars(project(":VectoraCloud:cloud-bridge-legacy"))
+}
+
+/**
+ * Writes bridges.index next to the bridge jars: one line per jar, "<sha256 hex>  <file name>", the
+ * layout of sha256sum. The node reads it to find the jars (a class loader cannot list resources)
+ * and checks every copy against it.
+ */
+abstract class BridgeIndex : DefaultTask() {
+
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.NAME_ONLY)
+    abstract val jars: ConfigurableFileCollection
+
+    @get:OutputDirectory
+    abstract val outputDirectory: DirectoryProperty
+
+    @TaskAction
+    fun write() {
+        val target = outputDirectory.get().asFile.resolve("net/vectora/cloud/node/bridge")
+        target.deleteRecursively()
+        target.mkdirs()
+        val lines = jars.files.filter { it.isFile }.sortedBy { it.name }.map { jar ->
+            val digest = MessageDigest.getInstance("SHA-256")
+            jar.inputStream().use { input ->
+                val buffer = ByteArray(64 * 1024)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    digest.update(buffer, 0, read)
+                }
+            }
+            jar.copyTo(target.resolve(jar.name))
+            digest.digest().joinToString("") { "%02x".format(it) } + "  " + jar.name
+        }
+        check(lines.size == 3) { "Expected the velocity, paper and legacy bridge jars, got $lines" }
+        target.resolve("bridges.index").writeText(
+            "# VectoraCloud bridge plugins, format 1: <sha256>  <file name>\n" + lines.joinToString("") { "$it\n" },
+            Charsets.UTF_8,
+        )
+    }
+}
+
+val bridgeResources = tasks.register<BridgeIndex>("bridgeResources") {
+    description = "Puts the bridge plugin jars and their index into the node's resources."
+    jars.from(bridgeJars)
+    outputDirectory = layout.buildDirectory.dir("generated/bridge-resources")
+}
+
+sourceSets.main {
+    resources.srcDir(bridgeResources)
 }
 
 tasks.withType<Test>().configureEach {

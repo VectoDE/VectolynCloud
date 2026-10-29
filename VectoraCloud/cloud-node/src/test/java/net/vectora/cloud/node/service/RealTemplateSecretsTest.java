@@ -158,10 +158,11 @@ class RealTemplateSecretsTest {
                 new HeapConfig(MemorySize.parse("256M"), MemorySize.parse("1G")), List.of(), CombatSystem.MODERN);
         String name = folder.toLowerCase(java.util.Locale.ROOT);
         int port = platform == ServerPlatform.VELOCITY ? 25565 : platform == ServerPlatform.VELOCITY_LEGACY ? 25564 : 30001;
-        Path home = Path.of("home").toAbsolutePath();
+        // The real template folder, read only: whether it ships Floodgate decides about the key.
+        Path home = serverNetwork();
         ServiceSpec spec = new ServiceSpec(new ServiceId(name + "-1"), name, name, 1, group, TaskMode.STATIC,
                 ServicePlanner.kindOf(group), home.resolve(folder).resolve("template"),
-                home.resolve(folder).resolve("runtime"), port);
+                Path.of("home").toAbsolutePath().resolve(folder).resolve("runtime"), port);
         Map<String, String> database = new HashMap<>();
         database.put("VECTORA_DB_POOL_SIZE", "4");
         database.put("VECTORA_DB_STORAGE_METHOD", "mariadb");

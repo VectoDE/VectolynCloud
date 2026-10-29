@@ -28,7 +28,8 @@ import net.vectora.cloud.node.service.JavaRuntimeResolver;
  *       of the server software;</li>
  *   <li>the minimum is the highest of the known ones ({@link JavaRequirement#minimumOf}): Mojang's
  *       {@code javaVersion} and Fill's {@code java.version.minimum}. They come from the download
- *       step through {@link Minimums}; until that is wired in (stage 2 PR 14) none is known.</li>
+ *       step through {@link Minimums} ({@code SoftwareInstaller} in the node), which runs before
+ *       the runtime is resolved.</li>
  * </ul>
  * The runtime is an installed system Java with exactly that version, or a Temurin JRE that
  * {@link JreManager} downloads into {@code <home>/jre/} and pins in {@code software.lock.yml}.
@@ -40,19 +41,21 @@ public final class ManagedJavaRuntimes implements JavaRuntimeResolver {
     public interface Minimums {
 
         /** No minimum is known for any group. */
-        Minimums NONE = group -> {
+        Minimums NONE = (name, group) -> {
             Objects.requireNonNull(group, "group");
             return new OptionalInt[0];
         };
 
         /**
          * Returns the minimums the sources know for a group, for example Mojang's and Fill's.
+         * Asked for each start, after the server software of that start is in place.
          *
+         * @param groupName the group's name
          * @param group the group
          * @return the minimums; empty entries and an empty array are fine
          * @throws IOException if a source cannot be asked
          */
-        OptionalInt[] of(GroupConfig group) throws IOException;
+        OptionalInt[] of(String groupName, GroupConfig group) throws IOException;
     }
 
     /** Provides a runtime for a requirement; {@code JreManager::provide} in production. */
@@ -118,7 +121,7 @@ public final class ManagedJavaRuntimes implements JavaRuntimeResolver {
     @Override
     public JavaRuntime resolve(String group, GroupConfig config) throws IOException {
         Objects.requireNonNull(group, "group");
-        JavaRequirement requirement = requirement(config, minimums.of(config));
+        JavaRequirement requirement = requirement(config, minimums.of(group, config));
         try {
             net.vectora.cloud.download.jre.JavaRuntime runtime = provider.provide(requirement);
             return new JavaRuntime(runtime.executable(), runtime.feature());

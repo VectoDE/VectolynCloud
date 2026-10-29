@@ -129,6 +129,25 @@ class ServerRegistryTest {
         assertEquals(ProxyRole.MAIN, ProxyRole.fromPlatform("PAPER"));
     }
 
+    @Test
+    void theBridgeSaysWhichRoleItTookAndWarnsAboutAnUnknownPlatform() {
+        assertTrue(ProxyRole.isProxyPlatform("VELOCITY"));
+        assertTrue(ProxyRole.isProxyPlatform(" velocity_legacy "));
+        assertFalse(ProxyRole.isProxyPlatform(null));
+        assertFalse(ProxyRole.isProxyPlatform("PAPER"));
+        assertFalse(ProxyRole.isProxyPlatform("VELOCITY-LEGACY"));
+
+        String legacy = ProxyRole.describe("VELOCITY_LEGACY");
+        assertTrue(legacy.contains("legacy proxy"), legacy);
+        assertFalse(legacy.contains("expected"), "a known value gets no warning: " + legacy);
+        assertTrue(ProxyRole.describe("VELOCITY").contains("main proxy"));
+        String typo = ProxyRole.describe("VELOCITY-LEGACY-secretish");
+        assertTrue(typo.contains("main proxy") && typo.contains("unknown value"), typo);
+        assertFalse(typo.contains("secretish"), "the raw value is not logged: " + typo);
+        assertTrue(ProxyRole.describe(null).contains("is not set"));
+        assertTrue(ProxyRole.describe("  ").contains("is not set"));
+    }
+
     static RegisterServer server(String name, int port, boolean legacy) {
         String group = name.substring(0, name.indexOf('-') < 0 ? name.length() : name.indexOf('-'));
         return new RegisterServer(new ServiceId(name), "127.0.0.1", port, new GroupName(group), legacy);
