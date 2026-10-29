@@ -57,6 +57,18 @@ class BackupServiceAccessTest {
     }
 
     @Test
+    void failuresOfTheNodeDoNotPassPathsToTheClient() {
+        String path = "/home/vectora/Server-Network/backups/20261029-031500-ab12";
+        ApiBackendException io = BackupServiceAccess.translate(
+                new BackupException(BackupException.Reason.IO, "cannot list " + path + ": AccessDeniedException"));
+        assertFalse(io.getMessage().contains(path), io.getMessage());
+        assertTrue(io.getMessage().contains("(io)"), io.getMessage());
+        // Counter-check: the client's own mistake keeps its message.
+        assertEquals("no static service lobby-9", BackupServiceAccess.translate(
+                new BackupException(BackupException.Reason.UNKNOWN_SERVICE, "no static service lobby-9")).getMessage());
+    }
+
+    @Test
     void badServiceIdsAreRefusedBeforeTheServiceIsAsked() {
         // The service is never reached, so a null-free dummy is not needed: the order fails first.
         BackupServiceAccess access = new BackupServiceAccess(service(Path.of("unused-home")));

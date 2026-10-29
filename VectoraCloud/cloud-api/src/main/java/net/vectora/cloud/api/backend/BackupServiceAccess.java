@@ -3,6 +3,7 @@ package net.vectora.cloud.api.backend;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import net.vectora.cloud.backup.BackupException;
 import net.vectora.cloud.backup.BackupInfo;
@@ -21,6 +22,8 @@ import net.vectora.cloud.backup.manifest.BackupManifest;
  * path, only the id.
  */
 public final class BackupServiceAccess implements BackupAccess {
+
+    private static final System.Logger LOG = System.getLogger(BackupServiceAccess.class.getName());
 
     private final BackupService backups;
 
@@ -83,7 +86,11 @@ public final class BackupServiceAccess implements BackupAccess {
                 manifest.database() != null, info.size(), true, null, info.warnings());
     }
 
-    /** Maps the reasons of cloud-backup to HTTP; the message names only files, services and ids. */
+    /**
+     * Maps the reasons of cloud-backup to HTTP. Only the messages of the client's own mistakes and of
+     * conflicts (ids, service names) are passed on. The other reasons carry absolute paths, file
+     * system errors and database tool output; the client gets the reason, the node log the detail.
+     */
     static ApiBackendException translate(BackupException e) {
         ApiBackendException.Reason reason = switch (e.reason()) {
             case NOT_FOUND -> ApiBackendException.Reason.NOT_FOUND;
@@ -91,6 +98,11 @@ public final class BackupServiceAccess implements BackupAccess {
             case BUSY, SERVICE_RUNNING, SERVICE_BUSY -> ApiBackendException.Reason.CONFLICT;
             default -> ApiBackendException.Reason.UNAVAILABLE;
         };
-        return new ApiBackendException(reason, e.getMessage() == null ? "The backup failed." : e.getMessage());
+        if (reason != ApiBackendException.Reason.UNAVAILABLE) {
+            return new ApiBackendException(reason, e.getMessage() == null ? "The backup failed." : e.getMessage());
+        }
+        String code = e.reason().name().toLowerCase(Locale.ROOT).replace('_', '-');
+        LOG.log(System.Logger.Level.WARNING, "Backup through the API failed ({0}): {1}", code, e.getMessage());
+        return new ApiBackendException(reason, "The backup failed (" + code + "). The node log has the details.");
     }
 }
