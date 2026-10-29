@@ -38,7 +38,9 @@ services:
         target: vectora-db
     ports:
       - "25565:25565/tcp"     # Java proxy
-      - "19132:19132/udp"     # Bedrock (Geyser)
+      - "19132:19132/udp"     # Bedrock (Geyser, RakNet)
+      - "19132:19132/tcp"     # Bedrock (Geyser, NetherNet signaling)
+      - "19133:19133/udp"     # Bedrock (Geyser, NetherNet: always bedrock-port + 1)
       # - "25564:25564/tcp"   # legacy proxy for 1.8.8, if servers.legacy-proxy is on
     depends_on:
       database:

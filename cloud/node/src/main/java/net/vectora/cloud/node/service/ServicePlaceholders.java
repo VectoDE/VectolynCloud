@@ -70,6 +70,7 @@ final class ServicePlaceholders {
             proxyValues.put("VECTORA_PROXY_BIND", proxy.bind());
             proxyValues.put("VECTORA_PROXY_PORT", Integer.toString(proxy.port()));
             proxyValues.put("VECTORA_BEDROCK_PORT", Integer.toString(proxy.bedrockPort()));
+            proxyValues.put("VECTORA_BEDROCK_NETHERNET_PORT", Integer.toString(proxy.netherNetPort()));
             if (spec.isLegacyProxy()) {
                 proxyValues.put("VECTORA_LEGACY_PROXY_PORT", Integer.toString(spec.port()));
             }

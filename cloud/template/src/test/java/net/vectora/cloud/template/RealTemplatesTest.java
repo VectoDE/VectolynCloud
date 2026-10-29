@@ -107,6 +107,7 @@ class RealTemplatesTest {
         values.put("VECTORA_PROXY_BIND", "0.0.0.0");
         values.put("VECTORA_PROXY_PORT", "25565");
         values.put("VECTORA_BEDROCK_PORT", "19132");
+        values.put("VECTORA_BEDROCK_NETHERNET_PORT", "19133");
         values.put("VECTORA_DB_POOL_SIZE", "4");
         values.put("VECTORA_DB_STORAGE_METHOD", "mariadb");
         values.put("VECTORA_LEGACY_PROXY_PORT", "25564");

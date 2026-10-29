@@ -24,13 +24,16 @@ bedrock:
   # The UDP port used for NetherNet connections. When set to 0, Geyser uses the "port" value set above.
   # Players connect to it directly, so forward it when behind a router. With "nxs" signaling and
   # assisted-joins off, they cannot connect otherwise.
-  webrtc-port: 0
+  # VectoraCloud: always the port after "port", because "both" needs its own UDP port for NetherNet.
+  webrtc-port: {{VECTORA_BEDROCK_NETHERNET_PORT}}
 
   # How Bedrock players can connect. Changes require a restart.
   # "nethernet": the new connection method for Bedrock Edition. It needs signaling, see "signaling" below.
   # "both": accepts NetherNet and RakNet. Each needs its own UDP port, see "port" and "webrtc-port".
   # "raknet": the old connection method. Bedrock Edition will stop supporting it in a future version.
-  transport: nethernet
+  # VectoraCloud: "both", so current clients join over NetherNet and RakNet keeps answering
+  # server list pings, LAN discovery and clients without NetherNet.
+  transport: both
 
   # Some hosting services change your Java port everytime you start the server and require the same port to be used for Bedrock.
   # This option makes the Bedrock port the same as the Java port every time you start the server.

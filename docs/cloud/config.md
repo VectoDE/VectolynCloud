@@ -43,7 +43,7 @@ servers:                     # the "wanted" switch per server; a missing entry c
 proxy:
   bind: 0.0.0.0
   port: 25565
-  bedrock-port: 19132        # Geyser, UDP plus TCP
+  bedrock-port: 19132        # Geyser: RakNet UDP plus NetherNet signaling TCP; NetherNet itself takes UDP bedrock-port + 1 (19133)
 legacy-proxy:                # second Velocity (bungeeguard) for the 1.8.8 groups
   enabled: false
   port: 25564

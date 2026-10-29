@@ -81,7 +81,7 @@
         },
         {
             "name": "Bedrock port",
-            "description": "Port for Bedrock players (Geyser, UDP). Must be an additional allocation of this server.",
+            "description": "Port for Bedrock players (Geyser: RakNet on UDP, NetherNet signaling on TCP). NetherNet also uses the next port (UDP). Both must be additional allocations of this server.",
             "env_variable": "BEDROCK_PORT",
             "default_value": "19132",
             "user_viewable": true,

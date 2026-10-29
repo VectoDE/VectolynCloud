@@ -109,7 +109,8 @@ Standard-Ports des aktuellen Aufbaus:
 | Dienst | Port |
 |---|---|
 | Proxy, Java | 25565 |
-| Proxy, Bedrock (Geyser, UDP) | 19132 |
+| Proxy, Bedrock (Geyser: RakNet UDP, NetherNet-Signaling TCP) | 19132 |
+| Proxy, Bedrock NetherNet (Geyser, UDP, immer Bedrock + 1) | 19133 |
 | Lobby | 25566 |
 | Survival | 25567 |
 | Mod-Server | 25568 |

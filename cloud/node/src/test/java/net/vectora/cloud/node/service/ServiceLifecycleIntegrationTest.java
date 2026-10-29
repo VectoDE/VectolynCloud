@@ -78,6 +78,25 @@ class ServiceLifecycleIntegrationTest {
             net.task("proxy", "proxy", TaskMode.STATIC, 1, 1);
             net.unwanted(ServerKind.SURVIVAL);
             Recorder recorder = new Recorder();
+            List<String> infos = new java.util.concurrent.CopyOnWriteArrayList<>();
+            java.util.logging.Logger logger = java.util.logging.Logger.getLogger(ServiceManager.class.getName());
+            java.util.logging.Handler handler = new java.util.logging.Handler() {
+                @Override
+                public void publish(java.util.logging.LogRecord r) {
+                    if (r.getLevel() == java.util.logging.Level.INFO) {
+                        infos.add(java.text.MessageFormat.format(r.getMessage(), r.getParameters()));
+                    }
+                }
+
+                @Override
+                public void flush() {
+                }
+
+                @Override
+                public void close() {
+                }
+            };
+            logger.addHandler(handler);
 
             try (ServiceManager manager = net.manager().build()) {
                 manager.addListener(recorder);
@@ -88,6 +107,12 @@ class ServiceLifecycleIntegrationTest {
                 for (ServiceId id : List.of(lobby, minigame, proxy)) {
                     TestNetwork.await(id + " running", WAIT, () -> state(manager, id) == ServiceState.RUNNING);
                 }
+                // Ready through "Done" in the console (no bridge here) is logged like the bridge's ready.
+                for (ServiceId id : List.of(lobby, minigame, proxy)) {
+                    TestNetwork.await(id + " ready line", WAIT,
+                            () -> infos.contains(id + " is ready (\"Done\" in its console)"));
+                }
+                logger.removeHandler(handler);
                 // Listeners run on their own thread, a moment after the state has changed.
                 TestNetwork.await("running event", WAIT, () -> recorder.of("lobby-1").contains("RUNNING"));
                 assertEquals(List.of("prepared", "starting", "running"),

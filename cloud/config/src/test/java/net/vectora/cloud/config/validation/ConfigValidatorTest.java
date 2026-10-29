@@ -123,6 +123,22 @@ class ConfigValidatorTest {
     }
 
     @Test
+    void theNetherNetPortAfterTheBedrockPortIsAFixedPortToo() {
+        // Geyser runs RakNet and NetherNet ("both"): NetherNet takes UDP bedrock-port + 1.
+        ConfigSnapshot java = withCloud(valid.cloud().withProxy(new ProxyConfig("0.0.0.0", 25565, 25564)));
+        assertEquals(Set.of("cloud.yml proxy.bedrock-port PORT_CONFLICT"), codes(java));
+        assertEquals(List.of("cloud.yml proxy.port"), ConfigValidator.validate(java).getFirst().args());
+        ConfigSnapshot range = withCloud(valid.cloud().withProxy(new ProxyConfig("0.0.0.0", 25565, 29999)));
+        assertEquals(Set.of("cloud.yml proxy.bedrock-port PORT_IN_SERVICE_RANGE"), codes(range));
+        ConfigSnapshot last = withCloud(valid.cloud().withProxy(new ProxyConfig("0.0.0.0", 25565, 65535)));
+        assertEquals(Set.of("cloud.yml proxy.bedrock-port OUT_OF_RANGE"), codes(last));
+        // Counter-check: the port right before the Java port and the highest possible one are fine.
+        assertEquals(Set.of(), codes(withCloud(valid.cloud().withProxy(new ProxyConfig("0.0.0.0", 25565, 25563)))));
+        assertEquals(Set.of(), codes(withCloud(valid.cloud().withProxy(new ProxyConfig("0.0.0.0", 25565, 65534)))));
+        assertEquals(19133, ProxyConfig.defaults().netherNetPort());
+    }
+
+    @Test
     void disabledListenersAndExternalDatabasesDoNotTakePorts() {
         ConfigSnapshot s = withCloud(valid.cloud()
                 .withLegacyProxy(new LegacyProxyConfig(false, 25565))

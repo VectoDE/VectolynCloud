@@ -395,6 +395,7 @@ final class InteractiveSetup {
             taken.put(javaPort, "Java");
             bedrockPort = port(SetupMessages.BEDROCK_PORT, bedrockPort, taken);
             taken.put(bedrockPort, "Bedrock");
+            taken.put(bedrockPort + 1, "Bedrock NetherNet");
         }
         if (answers.wants(NetworkServer.LEGACY_PROXY)) {
             legacyPort = port(SetupMessages.LEGACY_PORT, legacyPort, taken);
@@ -614,7 +615,7 @@ final class InteractiveSetup {
         List<String> ports = new ArrayList<>();
         if (answers.wants(NetworkServer.PROXY)) {
             ports.add("Java " + answers.javaPort());
-            ports.add("Bedrock " + answers.bedrockPort());
+            ports.add("Bedrock " + answers.bedrockPort() + " (NetherNet " + (answers.bedrockPort() + 1) + ")");
         }
         if (answers.wants(NetworkServer.LEGACY_PROXY)) {
             ports.add("Legacy " + answers.legacyPort());

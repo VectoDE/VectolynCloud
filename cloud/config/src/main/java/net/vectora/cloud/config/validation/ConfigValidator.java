@@ -45,6 +45,8 @@ public final class ConfigValidator {
     public static final int MIN_PORT = 1;
     /** Highest port. */
     public static final int MAX_PORT = 65535;
+    /** Owner of the NetherNet port in port conflicts; its errors are reported at {@code proxy.bedrock-port}. */
+    private static final String NETHERNET_PORT_OWNER = "cloud.yml proxy.bedrock-port +1 (NetherNet)";
     /** Upper limit for services of one task. */
     public static final int MAX_SERVICES = 1000;
     /** Upper limit for players per service. */
@@ -83,7 +85,8 @@ public final class ConfigValidator {
         if (c.required(f, "proxy", proxy)) {
             c.pattern(f, "proxy.bind", proxy.bind(), ConfigNames.HOST);
             c.port(f, "proxy.port", proxy.port());
-            c.port(f, "proxy.bedrock-port", proxy.bedrockPort());
+            // The NetherNet port is the next one, so it must exist too.
+            c.range(f, "proxy.bedrock-port", proxy.bedrockPort(), MIN_PORT, MAX_PORT - 1);
         }
         if (c.required(f, "legacy-proxy", cloud.legacyProxy())) {
             c.port(f, "legacy-proxy.port", cloud.legacyProxy().port());
@@ -326,7 +329,9 @@ public final class ConfigValidator {
 
     /**
      * Fixed ports of this node must differ from each other and lie outside its service port range.
-     * The Bedrock port counts although it is UDP, because Geyser also opens TCP for signaling.
+     * The Bedrock port counts although it is UDP, because Geyser also opens TCP for signaling; so
+     * does the NetherNet port right after it ({@link ProxyConfig#netherNetPort()}), whose errors are
+     * reported at {@code proxy.bedrock-port}.
      */
     private static void validatePorts(Checks c, ConfigSnapshot snapshot) {
         CloudConfig cloud = snapshot.cloud();
@@ -334,6 +339,7 @@ public final class ConfigValidator {
         if (cloud.proxy() != null) {
             fixed.put("cloud.yml proxy.port", cloud.proxy().port());
             fixed.put("cloud.yml proxy.bedrock-port", cloud.proxy().bedrockPort());
+            fixed.put(NETHERNET_PORT_OWNER, cloud.proxy().netherNetPort());
         }
         if (cloud.legacyProxy() != null && cloud.legacyProxy().enabled()) {
             fixed.put("cloud.yml legacy-proxy.port", cloud.legacyProxy().port());
@@ -355,7 +361,8 @@ public final class ConfigValidator {
             if (port < MIN_PORT || port > MAX_PORT) {
                 continue; // already reported as out of range
             }
-            String[] location = entry.getKey().split(" ", 2);
+            // File and path; the NetherNet key has a third part that only names it.
+            String[] location = entry.getKey().split(" ", 3);
             String previous = owners.putIfAbsent(port, entry.getKey());
             if (previous != null) {
                 c.add(ConfigError.of(location[0], location[1], ErrorCode.PORT_CONFLICT, previous));
