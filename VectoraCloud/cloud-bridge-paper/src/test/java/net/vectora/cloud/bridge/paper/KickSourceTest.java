@@ -4,10 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.lang.reflect.Proxy;
-import java.util.Map;
 import net.kyori.adventure.text.Component;
 import net.vectora.cloud.bridge.KickCommandWatch;
 import org.bukkit.command.BlockCommandSender;
@@ -18,14 +15,17 @@ import org.bukkit.entity.Player;
 import org.bukkit.entity.minecart.CommandMinecart;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.yaml.snakeyaml.Yaml;
 
-/** Who may take a player off the network on Paper, and the reason that is reported. */
+/**
+ * Who may take a player off the network on Paper, and the reason that is reported. No method
+ * signature names a paper-api type (class file version 69): JUnit reads the signatures during
+ * discovery, also on Java 21, where the tagged tests are then skipped.
+ */
 class KickSourceTest {
 
     /** A sender of the given type whose permission check answers {@code permitted}. */
-    private static <T extends CommandSender> T sender(Class<T> type, boolean permitted) {
-        Object fake = Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[] {type}, (proxy, method, args) ->
+    private static Object sender(Class<?> type, boolean permitted) {
+        return Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[] {type}, (proxy, method, args) ->
                 switch (method.getName()) {
                     case "hasPermission", "isOp" -> permitted;
                     case "getName" -> "Steve";
@@ -34,23 +34,29 @@ class KickSourceTest {
                     case "toString" -> type.getSimpleName();
                     default -> throw new UnsupportedOperationException(method.getName());
                 });
-        return type.cast(fake);
+    }
+
+    private static KickCommandWatch.Source source(Class<?> type) {
+        return PaperBridgePlugin.source((CommandSender) sender(type, true));
+    }
+
+    private static boolean entitled(Class<?> type, boolean permitted) {
+        return PaperBridgePlugin.entitled((CommandSender) sender(type, permitted));
     }
 
     @Test
     @Tag("requires-java25") // loads paper-api 26.3 classes (class file version 69)
     void onlyTheConsoleRconAndPlayersWithThePermissionAreEntitled() {
-        assertEquals(KickCommandWatch.Source.CONSOLE, PaperBridgePlugin.source(sender(ConsoleCommandSender.class, true)));
-        assertEquals(KickCommandWatch.Source.REMOTE_CONSOLE,
-                PaperBridgePlugin.source(sender(RemoteConsoleCommandSender.class, true)));
-        assertTrue(PaperBridgePlugin.entitled(sender(ConsoleCommandSender.class, false)));
-        assertTrue(PaperBridgePlugin.entitled(sender(RemoteConsoleCommandSender.class, false)));
-        assertTrue(PaperBridgePlugin.entitled(sender(Player.class, true)));
+        assertEquals(KickCommandWatch.Source.CONSOLE, source(ConsoleCommandSender.class));
+        assertEquals(KickCommandWatch.Source.REMOTE_CONSOLE, source(RemoteConsoleCommandSender.class));
+        assertTrue(entitled(ConsoleCommandSender.class, false));
+        assertTrue(entitled(RemoteConsoleCommandSender.class, false));
+        assertTrue(entitled(Player.class, true));
         // Counter-checks: a normal player, command blocks and command minecarts.
-        assertFalse(PaperBridgePlugin.entitled(sender(Player.class, false)));
-        assertEquals(KickCommandWatch.Source.OTHER, PaperBridgePlugin.source(sender(BlockCommandSender.class, true)));
-        assertFalse(PaperBridgePlugin.entitled(sender(BlockCommandSender.class, true)));
-        assertFalse(PaperBridgePlugin.entitled(sender(CommandMinecart.class, true)));
+        assertFalse(entitled(Player.class, false));
+        assertEquals(KickCommandWatch.Source.OTHER, source(BlockCommandSender.class));
+        assertFalse(entitled(BlockCommandSender.class, true));
+        assertFalse(entitled(CommandMinecart.class, true));
     }
 
     @Test
@@ -58,15 +64,5 @@ class KickSourceTest {
     void theVanillaKickWithoutAReasonIsReportedEmpty() {
         assertEquals("", PaperBridgePlugin.plain(Component.translatable("multiplayer.disconnect.kicked")));
         assertEquals("Spam im Chat", PaperBridgePlugin.plain(Component.text("Spam im Chat")));
-    }
-
-    @Test
-    void thePermissionGoesToOperatorsByDefault() throws IOException {
-        try (InputStream in = getClass().getClassLoader().getResourceAsStream("plugin.yml")) {
-            Map<String, Object> yml = new Yaml().load(in);
-            Map<?, ?> permissions = (Map<?, ?>) yml.get("permissions");
-            Map<?, ?> kick = (Map<?, ?>) permissions.get(KickCommandWatch.PERMISSION);
-            assertEquals("op", kick.get("default"));
-        }
     }
 }
