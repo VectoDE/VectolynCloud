@@ -39,6 +39,9 @@ public final class ProxyBridge implements CloudClientListener {
     /** The group a kicked player goes to when no other server of their own group is free. */
     public static final String FALLBACK_GROUP = "lobby";
 
+    /** Lets a player onto a server the cloud closed. */
+    public static final String BYPASS_CLOSED_PERMISSION = "vectora.server.bypass-closed";
+
     /** Creates the bridge for a proxy in {@code role} whose server list is {@code servers}. */
     public ProxyBridge(BridgeSender sender, ProxyServers servers, ProxyPlayers players, ProxyRole role) {
         this(sender, servers, players, role, new ServerLoads(), new KickGuard(), FALLBACK_GROUP);
@@ -168,6 +171,21 @@ public final class ProxyBridge implements CloudClientListener {
         }
         guard.rescued(player, kickedFrom, target.get());
         return KickOutcome.move(target.get(), TransferMessages.rescued(locale));
+    }
+
+    /**
+     * Whether a player may connect to a backend: not if the cloud closed it (it is being emptied
+     * before it stops), unless the player has {@link #BYPASS_CLOSED_PERMISSION}. The first server
+     * of a login is always allowed: Velocity leaves a player without any server hanging when that
+     * connect is refused, and {@link #initialServer} already avoids closed servers where it can.
+     *
+     * @param server   the backend
+     * @param bypass   whether the player has {@link #BYPASS_CLOSED_PERMISSION}
+     * @param onServer whether the player is on a backend already (a switch, not a login)
+     * @return whether the connect may go ahead
+     */
+    public boolean mayConnect(String server, boolean bypass, boolean onServer) {
+        return bypass || !onServer || !loads.isClosed(server);
     }
 
     private Optional<String> enter(UUID player, String proxysChoice, Set<String> exclude) {

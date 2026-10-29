@@ -101,7 +101,7 @@ Der Proxy schickt einen Spieler auf den Server der Gruppe mit der geringsten Las
 - die Umzüge eines geleerten Servers (der Node plant sie mit derselben Regel, `TransferPlanner`);
 - einen Spieler, dessen Server gestoppt wurde, abgestürzt ist, die Verbindung verloren hat oder voll ist: ein anderer Server derselben Gruppe, sonst die Lobby, sonst wird der Spieler mit dem ursprünglichen Grund getrennt. Bans, die Whitelist und gewollte Kicks fängt der Proxy nie ab. Jeder Server wird pro Vorfall nur einmal versucht, und pro Spieler werden höchstens 3 Kicks in 60 Sekunden abgefangen (Einzelheiten in [bridges.md](bridges.md#catching-kicks)).
 
-Hauptproxy und Legacy-Proxy arbeiten gleich. Der Node teilt den Proxys mit `ServerCapacity` die Plätze jedes Backends mit und ob es offen ist (siehe [protocol.md](protocol.md)); ein Backend, das geleert wird, ist geschlossen. Ein Backend ohne Plätze (von einem älteren Node) wählt der Proxy so, wie Velocity es täte.
+Hauptproxy und Legacy-Proxy arbeiten gleich. Der Node teilt den Proxys mit `ServerCapacity` die Plätze jedes Backends mit und ob es offen ist (siehe [protocol.md](protocol.md)); ein Backend, das geleert wird, ist geschlossen. Die Proxys lehnen dann jeden Wechsel dorthin ab, auch mit `/server`, außer für Spieler mit der Berechtigung `vectora.server.bypass-closed`; nur der erste Server eines Logins wird durchgelassen (siehe [bridges.md](bridges.md#closed-servers)). Ein Backend ohne Plätze (von einem älteren Node) wählt der Proxy so, wie Velocity es täte.
 
 ## Signale
 
@@ -159,7 +159,6 @@ Ein skalierter Dienst ist ein gewöhnlicher Dienst des Service-Kerns ([node.md](
 ## Grenzen
 
 - Ein Node. Mit dem Cluster (PR 20) skaliert jeder Node seine eigenen Tasks; ein Task auf mehreren Nodes wird noch nicht zwischen ihnen verteilt.
-- Zwischen dem Ende des Leerens und dem Stopp könnte ein Spieler den Server noch direkt mit `/server` erreichen. Er verlässt ihn mit dem Stopp wie bei jedem anderen Stopp eines Servers.
 - Die Proxys kennen die Plätze nur von Backends, die der Node angemeldet hat. Von Hand in `velocity.toml` eingetragene Server wählt der Proxy so, wie Velocity es täte.
 - Skaliert wird ab einem laufenden Dienst: Ein Task mit `min-services: 0` ohne Dienst hat keine Spielerzahl, nach der er skalieren könnte (noch keine Warteschlange).
 - Das Budget rechnet mit den maximalen Heaps, nicht mit dem, was eine JVM darüber hinaus braucht (Metaspace, Threads, nativer Speicher). In `heap.max` Luft lassen.

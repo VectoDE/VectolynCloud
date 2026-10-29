@@ -138,9 +138,22 @@ class ServerLoadsTest {
     }
 
     @Test
-    void rescueAndLostTextsFollowTheClientLanguage() {
+    void onlyAServerWithSlotsThatTheCloudClosedCountsAsClosed() {
+        assertFalse(loads.isClosed("lobby"), "unknown");
+        loads.registered("lobby", "lobby");
+        assertFalse(loads.isClosed("lobby"), "no slots known yet");
+        loads.capacity("lobby", 50, true);
+        assertFalse(loads.isClosed("lobby"), "open");
+        loads.capacity("lobby", 50, false);
+        assertTrue(loads.isClosed("lobby"), "closed");
+        loads.removed("lobby");
+        assertFalse(loads.isClosed("lobby"), "removed");
+    }
+
+    @Test
+    void rescueLostAndClosedTextsFollowTheClientLanguage() {
         java.util.List<java.util.function.Function<java.util.Locale, String>> texts =
-                java.util.List.of(TransferMessages::rescued, TransferMessages::lost);
+                java.util.List.of(TransferMessages::rescued, TransferMessages::lost, TransferMessages::closed);
         for (var text : texts) {
             String german = text.apply(java.util.Locale.GERMANY);
             String english = text.apply(java.util.Locale.US);

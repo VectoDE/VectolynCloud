@@ -1,6 +1,7 @@
 package net.vectora.cloud.bridge;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -176,6 +177,24 @@ class ProxyBridgeTest {
                 "no other bedwars server: the player stays where he is, no lobby");
         // Counter-check: without a server to stay on, the lobby takes him.
         assertEquals(move("lobby", null), bridge.kicked(alex, "bedwars-2", FULL, false));
+        sender.close(Duration.ofSeconds(5));
+    }
+
+    @Test
+    void aServerTheCloudClosedTakesNobodyWithoutTheBypass() {
+        lobbies();
+        assertEquals("vectora.server.bypass-closed", ProxyBridge.BYPASS_CLOSED_PERMISSION);
+        assertTrue(bridge.mayConnect("lobby-2", false, true), "open");
+        receive(new ServerCapacity(new ServiceId("lobby-2"), 50, false));
+        assertFalse(bridge.mayConnect("lobby-2", false, true), "closed");
+        // Counter-checks: the bypass, the first server of a login, a server the cloud never closed.
+        assertTrue(bridge.mayConnect("lobby-2", true, true), "bypass");
+        assertTrue(bridge.mayConnect("lobby-2", false, false), "first server of a login");
+        assertTrue(bridge.mayConnect("survival", false, true), "unknown to the cloud");
+        receive(ServerRegistryTest.server("bedwars-2", 30004, false));
+        assertTrue(bridge.mayConnect("bedwars-2", false, true), "no slots known yet");
+        receive(new ServerCapacity(new ServiceId("lobby-2"), 50, true));
+        assertTrue(bridge.mayConnect("lobby-2", false, true), "open again");
         sender.close(Duration.ofSeconds(5));
     }
 

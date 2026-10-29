@@ -55,6 +55,18 @@ public final class TransferMessages {
                 : "The connection to the server was lost, and no other server is free right now.";
     }
 
+    /**
+     * The message for a player who wants onto a server the cloud is emptying.
+     *
+     * @param locale the client's language, or {@code null} if unknown
+     * @return plain text without formatting codes
+     */
+    public static String closed(Locale locale) {
+        return german(locale)
+                ? "Dieser Server nimmt gerade keine Spieler auf, weil er bald heruntergefahren wird."
+                : "This server is not taking players right now because it is about to shut down.";
+    }
+
     private static boolean german(Locale locale) {
         return locale != null && "de".equals(locale.getLanguage());
     }

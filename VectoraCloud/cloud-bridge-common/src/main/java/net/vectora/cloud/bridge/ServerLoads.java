@@ -114,6 +114,18 @@ public final class ServerLoads {
     }
 
     /**
+     * Whether the cloud closed a backend: known slots, not open. A backend whose slots are not
+     * known yet (or not at all, from an older node) is not closed.
+     *
+     * @param name server name on the proxy
+     * @return whether it is closed
+     */
+    public synchronized boolean isClosed(String name) {
+        Entry entry = servers.get(name);
+        return entry != null && entry.slots() > 0 && !entry.open();
+    }
+
+    /**
      * Chooses the backend of a group with the lowest load and counts the player there until they
      * arrive.
      *

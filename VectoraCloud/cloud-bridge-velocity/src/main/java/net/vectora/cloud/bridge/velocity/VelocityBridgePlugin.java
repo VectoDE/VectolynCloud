@@ -6,6 +6,7 @@ import com.velocitypowered.api.event.connection.DisconnectEvent;
 import com.velocitypowered.api.event.player.KickedFromServerEvent;
 import com.velocitypowered.api.event.player.PlayerChooseInitialServerEvent;
 import com.velocitypowered.api.event.player.ServerConnectedEvent;
+import com.velocitypowered.api.event.player.ServerPreConnectEvent;
 import com.velocitypowered.api.event.proxy.ListenerBoundEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.network.ListenerType;
@@ -22,6 +23,7 @@ import net.vectora.cloud.bridge.BridgeSender;
 import net.vectora.cloud.bridge.KickOutcome;
 import net.vectora.cloud.bridge.ProxyBridge;
 import net.vectora.cloud.bridge.ProxyRole;
+import net.vectora.cloud.bridge.TransferMessages;
 import net.vectora.cloud.client.CloudClientSettings;
 
 /**
@@ -39,6 +41,8 @@ import net.vectora.cloud.client.CloudClientSettings;
  *       state ({@code PlayerTracker}).</li>
  *   <li>Kicks: a player whose server stopped, crashed or is full goes to another server of the
  *       group or to the lobby ({@code ProxyBridge.kicked}).</li>
+ *   <li>Closed servers: a server the cloud is emptying takes no player who switches to it, except
+ *       with the bypass permission ({@code ProxyBridge.mayConnect}).</li>
  * </ul>
  */
 public final class VelocityBridgePlugin {
@@ -162,6 +166,26 @@ public final class VelocityBridgePlugin {
                 .flatMap(proxy::getServer)
                 .ifPresent(server -> event.setResult(
                         KickedFromServerEvent.RedirectPlayer.create(server, redirect.getMessageComponent())));
+    }
+
+    /**
+     * A player wants onto a backend (a switch, {@code /server}, a redirect): a server the cloud
+     * closed is refused with a short line, unless the player has
+     * {@value ProxyBridge#BYPASS_CLOSED_PERMISSION}. The first server of a login is let through.
+     */
+    @Subscribe
+    public void onServerPreConnect(ServerPreConnectEvent event) {
+        ProxyBridge target = bridge;
+        Optional<RegisteredServer> server = event.getResult().getServer();
+        if (target == null || !event.getResult().isAllowed() || server.isEmpty()) {
+            return;
+        }
+        Player player = event.getPlayer();
+        if (!target.mayConnect(server.get().getServerInfo().getName(),
+                player.hasPermission(ProxyBridge.BYPASS_CLOSED_PERMISSION), player.getCurrentServer().isPresent())) {
+            event.setResult(ServerPreConnectEvent.ServerResult.denied());
+            player.sendMessage(Component.text(TransferMessages.closed(player.getEffectiveLocale()), NamedTextColor.RED));
+        }
     }
 
     /** The player left the proxy. */
