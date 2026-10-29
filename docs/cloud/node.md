@@ -1,6 +1,6 @@
 # VectoraCloud node: service core
 
-`VectoraCloud/cloud-node` (package `net.vectora.cloud.node`) is the node itself. This page covers the entry point the launcher calls, how the node puts its parts together (home lock, Java runtimes, database, cloud channel, console) and the service core, which renders the wanted servers, starts them as plain Java processes, watches them, restarts them after a crash and stops them in stages. The [setup assistant](setup.md) runs before the first service starts. Scaling, software downloads and copying the bridge jars come in later pull requests; the interfaces they plug into are listed at the end.
+`VectoraCloud/cloud-node` (package `net.vectora.cloud.node`) is the node itself. This page covers the entry point the launcher calls, how the node puts its parts together (home lock, Java runtimes, database, cloud channel, console) and the service core, which renders the wanted servers, starts them as plain Java processes, watches them, restarts them after a crash and stops them in stages. The [setup assistant](setup.md) runs before the first service starts. Before each start the node downloads the server software and the plugins of the group and copies the bridge jar into the service ([Server software](#server-software)). Scaling comes in a later pull request; the interfaces left open are listed at the end.
 
 ## Start order
 
@@ -32,10 +32,20 @@ Only one cloud may use a home. The node holds an exclusive lock on `state/cloud.
 
 - PandaSpigot (the 1.8.8 groups) gets Java 21, every other software Java 25.
 - `java: <major>` in the group file overrides that. An override below the minimum of the server software fails the start with a message that names both versions.
-- The minimum is the highest known one (`JavaRequirement.minimumOf`): Mojang's `javaVersion`, Fill's `java.version.minimum`. They come from the software downloads (PR 14); until then none is known.
+- The minimum is the highest known one (`JavaRequirement.minimumOf`): Mojang's `javaVersion`, Fill's `java.version.minimum`. `SoftwareInstaller` records it per group while it provides the server jar, which happens before the Java runtime is picked, and keeps it in `cache/java-minimums.properties` for offline starts.
 - A system Java of exactly that version is used if there is one; otherwise a Temurin JRE is downloaded into `<home>/jre/` and pinned in `software.lock.yml`, the same `SoftwareLockStore.inHome(home)` the other downloads use.
 
 The JRE manager is built on the first start that needs it.
+
+## Server software
+
+`software.SoftwareInstaller` is the node's `ServerSoftwareProvider`. A start goes: render the template, provide the software, check the bridge, pick the Java runtime, launch.
+
+- The server jar, the group's plugins or mods and the bridge jar come from the [catalog](download.md#what-the-node-installs), pinned in `software.lock.yml` on the first start and replayed from `cache/artifacts/` afterwards.
+- The bridge of the platform (`VELOCITY` and `VELOCITY_LEGACY`: Velocity bridge, `PAPER`: Paper bridge, `PANDASPIGOT`: legacy bridge) is copied from the node's resources into `plugins/`. Fabric has none yet.
+- **A `PANDASPIGOT` service without `plugins/VectoraCloudBridgeLegacy-<version>.jar` does not start.** Its `server.properties` has `bungeecord: true`; without the bridge's token check it would trust every connection that claims to come from the legacy proxy. The check runs in `ServiceManager` itself, also when a test or a later module plugs in another `ServerSoftwareProvider`.
+- A download that fails stops this start: the service fails with the reason, like any other error before the launch.
+- Floodgate's `key.pem` is only written, and `VECTORA_FLOODGATE_KEY_B64` only needed, when the template ships Floodgate's folder (`plugins/floodgate/` or `config/floodgate/` on Fabric; `TemplateInstaller.runsFloodgate`).
 
 ## Database
 
@@ -236,8 +246,8 @@ Afterwards the leftover folders in `temp/services/` are deleted, except blocked 
 | `NodeSettings.nonInteractive()`, `setupFile()`, `toMap()` | from the launcher; `toMap()` feeds `SetupEnvironment.of` | |
 | `CloudNode.Options.environment(Map)` | `System.getenv()` | tests (no Pterodactyl or Docker detection) |
 | `ServiceManager.registration(id)`, `registrations(legacy)`, `runningProxies(legacy)`, `proxyKind(id)`, `backendNamed(proxy, name)` | used by `ChannelBridge` | PR 13, PR 15 |
-| `service.JavaRuntimeResolver` | `ManagedJavaRuntimes` on `JreManager` | `ManagedJavaRuntimes.Minimums` gets the Mojang and Fill minimums in PR 14 |
-| `service.ServerSoftwareProvider` (`provide(spec, folder)` returns the jar name) | `existingJar()`: the jar must already be in the folder | PR 14, downloads |
+| `service.JavaRuntimeResolver` | `ManagedJavaRuntimes` on `JreManager`; `Minimums.of(groupName, group)` from `SoftwareInstaller` | |
+| `service.ServerSoftwareProvider` (`provide(spec, folder)` returns the jar name) | `SoftwareInstaller` (catalog, lockfile, bridge); `existingJar()` for tests | |
 | `service.PlaceholderContributor` (extra placeholder values; the node's own values win) | `NodeDatabase` | PR 24 (legacy proxy) |
 | `ServiceManager.StartGate` (`beforeStart()`, before every start) | `NodeDatabase` | |
 | `ServiceManager.addListener(ServiceListener)` | `ChannelBridge`, `ServiceCommands` | PR 11 (monitoring) |
@@ -247,7 +257,8 @@ Afterwards the leftover folders in `temp/services/` are deleted, except blocked 
 
 ## Limits today
 
-- Server software is not downloaded yet. Until PR 14, a service only starts if its jar is already in the folder (`paper.jar`, `velocity.jar`, `fabric-server.jar`, `pandaspigot.jar`).
+- The Paper bridge is compiled against Paper 26.3. A Paper group on another Minecraft version gets the same bridge; whether it loads there is not tested.
+- Updates of the server software or a plugin are not automatic: a pinned entry stays until it is removed from `software.lock.yml`.
 - `service-ports` and `node-id` are read once when the node starts; a change needs a restart.
 - One proxy and one legacy proxy per node. PR 24 completes the legacy proxy.
 - New tasks and a higher `min-services` after a reload start only with `service start` or the next start of the node (PR 15).

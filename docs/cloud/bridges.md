@@ -16,7 +16,7 @@ Each jar contains the bridge core, `Vectora-CloudClient` and `Vectora-Protocol`,
 | Variable | Read by | Set by | Content |
 |---|---|---|---|
 | `VECTORA_CLOUD_HOST`, `VECTORA_CLOUD_PORT`, `VECTORA_SERVICE_ID`, `VECTORA_SERVICE_TOKEN` | all bridges | `cloud-node` | See [network.md](network.md#environment-variables). Missing id or token: the bridge logs why and stays inactive (the legacy token check still runs). |
-| `VECTORA_SERVICE_PLATFORM` | Velocity bridge | `cloud-node`, for every service | Name of cloud-template's `ServerPlatform`. `VELOCITY_LEGACY` makes the bridge the legacy proxy, anything else (also a missing value) the main proxy. |
+| `VECTORA_SERVICE_PLATFORM` | Velocity bridge | `cloud-node`, for every service | Name of cloud-template's `ServerPlatform`. `VELOCITY_LEGACY` makes the bridge the legacy proxy, anything else (also a missing value) the main proxy. The bridge logs the role it took; for a value other than `VELOCITY` or `VELOCITY_LEGACY` it logs a warning (without repeating the value). The Paper and legacy bridges log their role on enable as well. |
 | `VECTORA_LEGACY_FORWARDING_SECRET` | legacy bridge | `cloud-node`, for `PANDASPIGOT` services only | The forwarding secret of the legacy proxy, the same value as in `Legacy-Proxy/runtime/forwarding.secret`. Must follow the template's secret rule (16 or more characters from `A-Z a-z 0-9 . _ ~ + / = -`). Read from the environment only, never from a system property, which would show on the command line. |
 
 All names are constants in `net.vectora.protocol.ServiceEnvironment` (`SERVICE_PLATFORM` and `LEGACY_FORWARDING_SECRET` added with this module), so node and bridges cannot drift apart. `cloud-node` passes the services an environment without the cloud's own `VECTORA_*` variables (see [node.md](node.md#process)), so the node adds the last two explicitly: the platform for every service, the legacy secret only for `PANDASPIGOT`.
@@ -28,7 +28,7 @@ All names are constants in `net.vectora.protocol.ServiceEnvironment` (`SERVICE_P
 - Every call goes through `BridgeSender`: a bounded queue (1024 actions) and one daemon thread, `vectora-bridge-sender`, which makes the actual calls. Submitting never blocks. A full queue drops the action and counts it, with a warning for the first drop and every thousandth.
 - Status reports are coalesced. However many are waiting, only the newest is sent and only one queue slot is used.
 - Even the connect (`CloudClient.start`) is queued. `onEnable` only creates the client and the sender.
-- The one wait on a platform thread is at shutdown: `BridgeSender.close()` lets the queue drain, closes the client (which sends `Disconnect(SHUTDOWN)`) and waits at most 3 seconds.
+- The one wait on a platform thread is at shutdown: `BridgeSender.close()` lets the queue drain, closes the client (which sends `Disconnect(SHUTDOWN)`) and waits at most 3 seconds. If the sender thread still hangs in a write after that (a cloud that stopped reading), the client is closed from the closing thread. `CloudClient.close()` gives the goodbye 500 ms and then closes the socket, which also fails the hung write, so neither close blocks on a full socket.
 - Messages from the cloud (`RegisterServer`, `UnregisterServer`) arrive on the client's event thread. The Velocity bridge changes the server list there; Velocity's server list is thread-safe. A host name in `RegisterServer` (the cloud sends IP literals) would be resolved on that thread, not on a proxy thread.
 
 ## Velocity bridge
@@ -139,6 +139,6 @@ All tests of `cloud-bridge-common` and `cloud-bridge-legacy` run on Java 25 and,
 
 ## Open for later pull requests
 
-- PR 14 (downloads): copy the bridge jar into the plugin folder of each service. Environment, `RegisterServer` with the `legacy` flag to the proxy of the right kind, and the player events with static backend names are in `cloud-node` since stage 2 (see [node.md](node.md#life-cycle)).
+- The node copies the bridge jar into the plugin folder of each service before it starts ([node.md](node.md#server-software)); the three jars are embedded in `cloud-node` with their SHA-256. A PandaSpigot service does not start without the legacy bridge.
 - PR 24 (legacy proxy group): a real start of the legacy proxy with a PandaSpigot backend and the token check end to end.
 - Stage 3: the Vectora plugin per platform takes over `cloud-bridge-common`.

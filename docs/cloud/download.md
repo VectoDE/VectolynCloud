@@ -146,6 +146,7 @@ Rules:
 | `targets` | Server templates in `Server-Network/` that use it |
 | `replaced-by` | What replaces a transitional entry |
 | `alternative` | A second source with a checksum, as `provider:project` |
+| `version` | Optional. Pins the version to resolve. Only for `game-version: none`, where the group's Minecraft version says nothing about the version wanted. `velocity` is pinned to `4.3.1`, the Velocity API the bridge is compiled against (move both together); `pandaspigot` to `1.8.8`. |
 
 Sources, checked on 2026-10-28 against the live APIs for Minecraft 26.3:
 
@@ -169,6 +170,18 @@ Sources, checked on 2026-10-28 against the live APIs for Minecraft 26.3:
 | `proxyportal` | transitional | Modrinth (fabric) | sha512 |
 
 Every catalog entry has a source with a checksum except the Fabric launcher. A Hangar alternative is listed where Hangar has a release for 26.3 with a checksum. There is none for TAB and PlaceholderAPI (both on Hangar, but without a 26.3 release on 2026-10-28), LuckPerms, WorldGuard and spark (not on Hangar), and the Fabric mods, which Hangar does not host. The catalog mirrors what the servers use today ([Getting started](../wiki/Getting-Started.md)): Chunky, spark and ProxyPortal run as Fabric mods on the Mod-Server.
+
+## What the node installs
+
+`cloud-node` uses the catalog through `software.SoftwareInstaller` (its `ServerSoftwareProvider`) and `software.LockedDownloads`:
+
+- **Server jar.** `paper`, `velocity`, `fabric-server` or `pandaspigot`, by the group's `software`, copied into the service folder as `paper.jar`, `velocity.jar`, `fabric-server.jar` or `pandaspigot.jar`.
+- **Plugins and mods.** An empty `catalog` in the group file means the catalog's defaults: every `plugin` or `mod` entry whose `targets` name the group's template and whose platform fits the software (mods only on Fabric, Velocity plugins only on Velocity). A non-empty `catalog` is exactly that list; an unknown id or one for another platform fails the start and names the id. Plugins go to `plugins/`, mods to `mods/`. The legacy proxy gets no defaults yet (Bedrock and ViaVersion on the legacy side come with PR 24).
+- **Lock names.** An entry with `game-version: none` is locked under its `id`; one that depends on the Minecraft version under `<id>-<minecraft version>` (`paper-26.3`, `floodgate-fabric-26.3`), so groups on different versions do not share a pin.
+- **Pinning.** The first resolve of a lock name asks the provider for the newest stable version (or the pinned `version`), downloads it and writes the coordinate and checksum to `software.lock.yml`. Every later start replays that entry: from `cache/artifacts/<sha256>` without the network, or by downloading exactly that file again. A newer upstream build is only taken after the entry is removed from the lockfile. A lock entry that no longer fits (another provider, another pinned version, another Minecraft version) is resolved again.
+- **Java minimum.** The highest of Fill's `java.version.minimum` and Mojang's `javaVersion` for that Minecraft version is noted per group in `cache/java-minimums.properties`, so `ManagedJavaRuntimes` knows it on a later offline start.
+- **Bridge.** `BridgePlugins` copies `VectoraCloudBridge{Velocity,Paper,Legacy}-<version>.jar` from the node's own resources (listed with their SHA-256 in `bridges.index`, built by `:VectoraCloud:cloud-node:bridgeResources`) into `plugins/`, checked against that hash, and removes older versions of the same bridge. Fabric has no bridge yet.
+- **Bookkeeping.** `plugins/.vectora-managed` (`mods/.vectora-managed`) lists the files the node put there. On the next start, a listed file that is no longer wanted is deleted; files the operator added are not touched.
 
 ## Safe extraction
 
