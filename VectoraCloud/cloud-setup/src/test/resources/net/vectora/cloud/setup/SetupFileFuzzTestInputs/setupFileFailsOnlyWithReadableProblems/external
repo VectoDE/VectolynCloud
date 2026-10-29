@@ -1,0 +1,7 @@
+schema-version: 1
+eula: true
+database:
+  mode: external
+  host: db.example.org
+  port: 3306
+  password-file: /run/secrets/db

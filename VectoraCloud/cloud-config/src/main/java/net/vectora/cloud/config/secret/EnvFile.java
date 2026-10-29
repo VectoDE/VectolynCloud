@@ -135,6 +135,25 @@ public final class EnvFile {
         return new EnvFile(copy);
     }
 
+    /**
+     * A copy where {@code key} has {@code value}, replacing a value it already has. The entry keeps
+     * its place in the file; a missing key is appended like in {@link #withValueIfAbsent}. Only for
+     * values the operator chose (for example the password of an external database), never for
+     * generated secrets, which must stay as they are.
+     */
+    public EnvFile withValue(String key, Secret value, String comment) {
+        EnvFileParser.checkKey(key);
+        EnvFileParser.checkValue(value.reveal());
+        List<Line> copy = new ArrayList<>(lines);
+        for (int i = 0; i < copy.size(); i++) {
+            if (copy.get(i) instanceof Entry entry && entry.key().equals(key)) {
+                copy.set(i, new Entry(key, value));
+                return new EnvFile(copy);
+            }
+        }
+        return withValueIfAbsent(key, value, comment);
+    }
+
     /** The file content with {@code \n} line endings. */
     public String render() {
         StringBuilder out = new StringBuilder();

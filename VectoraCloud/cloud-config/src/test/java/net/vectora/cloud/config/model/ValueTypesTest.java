@@ -58,14 +58,15 @@ class ValueTypesTest {
 
     @Test
     void wantedServersSwitchesExactlyOneServer() {
-        WantedServers none = new WantedServers(false, false, false, false, false, false, false, false);
+        WantedServers none = WantedServers.none();
         for (ServerKind kind : ServerKind.values()) {
             WantedServers one = none.with(kind, true);
             for (ServerKind other : ServerKind.values()) {
                 assertEquals(other == kind, one.isWanted(other), kind + " / " + other);
             }
         }
-        assertEquals(8, WantedServers.all().asMap().size());
+        assertEquals(9, WantedServers.all().asMap().size());
+        assertTrue(WantedServers.none().asMap().values().stream().noneMatch(Boolean::booleanValue));
     }
 
     @Test
