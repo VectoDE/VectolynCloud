@@ -19,7 +19,9 @@ import net.vectora.cloud.config.io.ConfigYaml;
 import net.vectora.cloud.config.model.DatabaseConfig;
 import net.vectora.cloud.config.model.DatabaseMode;
 import net.vectora.cloud.config.model.Language;
+import net.vectora.cloud.config.model.MemoryReserve;
 import net.vectora.cloud.config.model.MemorySize;
+import net.vectora.cloud.config.model.TimeSpan;
 import net.vectora.cloud.config.secret.Secret;
 import net.vectora.cloud.config.validation.ConfigNames;
 import net.vectora.cloud.console.Text;
@@ -44,10 +46,18 @@ import net.vectora.cloud.console.Text;
  * @param minigames     the own switch of existing minigame groups, by group name
  * @param network       bind address and ports
  * @param memory        maximum heap per group name
+ * @param services      static, minimum and maximum services per task name; a missing value keeps
+ *                      the suggestion
+ * @param drainTimeout  optional {@code drain-timeout} per group name (5s to 10m); a group without
+ *                      an entry keeps what its file says, a new group gets the default 30s. The
+ *                      console assistant asks for it under "advanced settings".
+ * @param node          optional memory settings of this node in {@code nodes.yml}; the console
+ *                      assistant asks for them under "advanced settings"
  * @param database      database settings
  */
 public record SetupFile(int schemaVersion, Language language, Boolean eula, String networkName, Servers servers,
                         Map<String, Boolean> minigames, Network network, Map<String, MemorySize> memory,
+                        Map<String, Services> services, Map<String, TimeSpan> drainTimeout, Node node,
                         Database database) {
 
     /** Current version of the format. */
@@ -97,6 +107,38 @@ public record SetupFile(int schemaVersion, Language language, Boolean eula, Stri
      * @param legacyPort  port of the legacy proxy
      */
     public record Network(String bind, Integer javaPort, Integer bedrockPort, Integer legacyPort) {
+    }
+
+    /**
+     * Service counts of one task, like in its task file; a missing one keeps the suggestion.
+     *
+     * @param staticServices {@code static-services}
+     * @param minServices    {@code min-services}
+     * @param maxServices    {@code max-services}
+     */
+    public record Services(Integer staticServices, Integer minServices, Integer maxServices) {
+
+        ServiceCounts over(ServiceCounts defaults) {
+            return new ServiceCounts(staticServices != null ? staticServices : defaults.staticServices(),
+                    minServices != null ? minServices : defaults.minServices(),
+                    maxServices != null ? maxServices : defaults.maxServices());
+        }
+    }
+
+    /**
+     * Memory settings of the node the setup runs on ({@code node-id} in {@code cloud.yml}). A missing
+     * key keeps what {@code nodes.yml} says; a field of {@code memory-reserve} replaces only that
+     * field.
+     *
+     * @param maxMemory     {@code max-memory}: a size of at least 512M, or {@value #AUTO} to remove the
+     *                      limit so the node works it out
+     * @param memoryReserve {@code memory-reserve}: {@code system}, {@code node-overhead},
+     *                      {@code database}, each 1M to 64G
+     */
+    public record Node(String maxMemory, MemoryReserve memoryReserve) {
+
+        /** Value of {@code max-memory} that removes the limit. */
+        public static final String AUTO = "auto";
     }
 
     /**
@@ -209,6 +251,42 @@ public record SetupFile(int schemaVersion, Language language, Boolean eula, Stri
                 }
                 answers = answers.withHeap(group, entry.getValue());
             }
+        }
+        if (services != null) {
+            for (Map.Entry<String, Services> entry : services.entrySet()) {
+                String task = entry.getKey();
+                ServiceCounts suggested = defaults.services().get(task);
+                if (suggested == null || entry.getValue() == null) {
+                    problems.add(SetupMessages.fill(SetupMessages.FILE_UNKNOWN_SERVICES_TASK, ConfigNames.safeArgument(task)));
+                    continue;
+                }
+                answers = answers.withServices(task, entry.getValue().over(suggested));
+            }
+        }
+        if (drainTimeout != null) {
+            for (Map.Entry<String, TimeSpan> entry : drainTimeout.entrySet()) {
+                String group = entry.getKey();
+                if (!defaults.heap().containsKey(group) || entry.getValue() == null) {
+                    problems.add(SetupMessages.fill(SetupMessages.FILE_UNKNOWN_DRAIN_GROUP, ConfigNames.safeArgument(group)));
+                    continue;
+                }
+                answers = answers.withDrainTimeout(group, entry.getValue());
+            }
+        }
+        if (node != null) {
+            MemorySize max = answers.maxMemory();
+            if (Node.AUTO.equals(node.maxMemory())) {
+                max = null;
+            } else if (node.maxMemory() != null) {
+                try {
+                    max = MemorySize.parse(node.maxMemory());
+                } catch (IllegalArgumentException e) {
+                    problems.add(SetupMessages.FILE_NODE_MAX_MEMORY);
+                }
+            }
+            MemoryReserve reserve = node.memoryReserve() != null ? node.memoryReserve().over(answers.memoryReserve())
+                    : answers.memoryReserve();
+            answers = answers.withNodeMemory(max, reserve);
         }
         if (database != null) {
             DatabaseConfig db = answers.database();

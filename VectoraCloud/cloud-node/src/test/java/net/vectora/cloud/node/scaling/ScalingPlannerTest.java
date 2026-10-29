@@ -104,6 +104,18 @@ class ScalingPlannerTest {
     }
 
     @Test
+    void aMixedTaskFillsItsStaticServicesFirstAndTheRestOfMinServicesDynamically() {
+        Scenario s = new Scenario().task("lobby", "lobby", 1, 2, 4);
+        assertEquals(List.of(new Start("lobby", OptionalInt.of(1), Reason.MIN_SERVICES)), s.plan(), "static first");
+        s.running("lobby", 1, TaskMode.STATIC, 0);
+        assertEquals(List.of(new Start("lobby", OptionalInt.empty(), Reason.MIN_SERVICES)), s.plan(),
+                "the static quota is full, the second service is dynamic");
+        // Counter-check: with two static services both are static slots.
+        Scenario both = new Scenario().task("lobby", "lobby", 2, 2, 4).running("lobby", 1, TaskMode.STATIC, 0);
+        assertEquals(List.of(new Start("lobby", OptionalInt.of(2), Reason.MIN_SERVICES)), both.plan());
+    }
+
+    @Test
     void anUnwantedGroupATaskOfAnotherNodeAndAMissingGroupAreNeverScaled() {
         Scenario wanted = new Scenario().task("lobby", TaskMode.STATIC, 1, 1);
         assertEquals(List.of(new Start("lobby", OptionalInt.of(1), Reason.MIN_SERVICES)), wanted.plan());
@@ -117,8 +129,7 @@ class ScalingPlannerTest {
 
         Scenario elsewhere = new Scenario().task("lobby", TaskMode.STATIC, 1, 1);
         TaskConfig lobbyTask = elsewhere.tasks.get("lobby");
-        elsewhere.tasks.put("lobby", new TaskConfig(lobbyTask.schemaVersion(), lobbyTask.group(), lobbyTask.mode(),
-                lobbyTask.scaling(), List.of("node-2")));
+        elsewhere.tasks.put("lobby", lobbyTask.withNodes(List.of("node-2")));
         assertEquals(List.of(), elsewhere.plan(), "runs on node-2");
 
         Scenario noGroup = new Scenario().task("lobby", TaskMode.STATIC, 1, 1);
@@ -178,8 +189,13 @@ class ScalingPlannerTest {
 
     @Test
     void staticTasksAndProxiesNeverScaleUp() {
-        Scenario lobby = new Scenario().task("lobby", TaskMode.STATIC, 1, 4).running("lobby", 1, TaskMode.STATIC, 50);
+        // static = max: a full static task has no room for a dynamic service.
+        Scenario lobby = new Scenario().task("lobby", "lobby", 1, 1, 1).running("lobby", 1, TaskMode.STATIC, 50);
         assertEquals(List.of(), lobby.plan());
+
+        // Counter-check, mixed task (static 1, max 4): under load the overflow starts dynamically.
+        Scenario mixed = new Scenario().task("lobby", "lobby", 1, 1, 4).running("lobby", 1, TaskMode.STATIC, 50);
+        assertEquals(List.of(new Start("lobby", OptionalInt.empty(), Reason.PLAYERS)), mixed.plan());
 
         Scenario proxy = new Scenario().group("proxy", ServerKind.PROXY.templateFolder(), ServerSoftware.VELOCITY)
                 .task("proxy", "proxy", TaskMode.DYNAMIC, 1, 2).running("proxy", 1, TaskMode.DYNAMIC, 500);
@@ -291,10 +307,17 @@ class ScalingPlannerTest {
 
     @Test
     void staticServicesAreNeverScaledDown() {
-        Scenario s = new Scenario().task("lobby", TaskMode.STATIC, 0, 3)
+        // static-services lowered to 1 later: both static services stay although they are empty for a day.
+        Scenario s = new Scenario().task("lobby", "lobby", 1, 1, 3)
                 .running("lobby", 1, TaskMode.STATIC, 0).running("lobby", 2, TaskMode.STATIC, 0)
                 .emptySince("lobby-1", NOW.minus(Duration.ofDays(1))).emptySince("lobby-2", NOW.minus(Duration.ofDays(1)));
         assertEquals(List.of(), s.plan());
+
+        // Counter-check: the same empty service, dynamic, is stopped.
+        Scenario overflow = new Scenario().task("lobby", "lobby", 1, 1, 3)
+                .running("lobby", 1, TaskMode.STATIC, 0).running("lobby", 2, TaskMode.DYNAMIC, 0)
+                .emptySince("lobby-1", NOW.minus(Duration.ofDays(1))).emptySince("lobby-2", NOW.minus(Duration.ofDays(1)));
+        assertEquals(List.of(new Stop("lobby", new ServiceId("lobby-2"), Reason.EMPTY)), overflow.plan());
 
         // A static service in a task that was switched to dynamic later keeps its folder and stays.
         Scenario switched = new Scenario().task("lobby", TaskMode.DYNAMIC, 0, 3)
@@ -357,9 +380,15 @@ class ScalingPlannerTest {
             return task(name, name, mode, min, max);
         }
 
+        /** STATIC: every service static and never scaled, as a task file of schema-version 1 migrates. */
         Scenario task(String name, String group, TaskMode mode, int min, int max) {
-            tasks.put(name, new TaskConfig(TaskConfig.SCHEMA_VERSION, group, mode,
-                    new ScalingConfig(min, max, 50, 80, TimeSpan.parse("5m"), TimeSpan.parse("60s")), List.of()));
+            return task(name, group, mode == TaskMode.STATIC ? min : 0, min, mode == TaskMode.STATIC ? min : max);
+        }
+
+        Scenario task(String name, String group, int staticServices, int min, int max) {
+            tasks.put(name, new TaskConfig(TaskConfig.SCHEMA_VERSION, group,
+                    new ScalingConfig(staticServices, min, max, 50, 80, 50, TimeSpan.parse("5m"), TimeSpan.parse("60s")),
+                    List.of()));
             return this;
         }
 

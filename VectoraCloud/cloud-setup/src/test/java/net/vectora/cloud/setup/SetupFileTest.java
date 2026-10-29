@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
@@ -19,8 +20,11 @@ import net.vectora.cloud.config.error.ConfigException;
 import net.vectora.cloud.config.ConfigService;
 import net.vectora.cloud.config.model.DatabaseMode;
 import net.vectora.cloud.config.model.Language;
+import net.vectora.cloud.config.model.MemoryReserve;
 import net.vectora.cloud.config.model.MemorySize;
 import net.vectora.cloud.config.model.ServerKind;
+import net.vectora.cloud.config.model.TimeSpan;
+import net.vectora.cloud.config.operation.PutNode;
 import net.vectora.cloud.config.secret.SecretStore;
 import net.vectora.cloud.console.Console;
 import org.junit.jupiter.api.AfterEach;
@@ -149,6 +153,119 @@ class SetupFileTest {
         refused(docker, true);
         assertEquals(SetupResult.Status.COMPLETED, SetupWizard.nonInteractive(config, env(docker, false), null).status());
         assertEquals(DatabaseMode.DOCKER, config.snapshot().cloud().database().mode());
+    }
+
+    @Test
+    void serviceCountsComeFromTheFileOrTheSuggestion() throws Exception {
+        String file = """
+                schema-version: 1
+                eula: true
+                servers:
+                  legacy-proxy: true
+                  legacy-server: true
+                services:
+                  lobby: {static-services: 2, min-services: 2, max-services: 6}
+                  minigame: {max-services: 12}
+                """;
+        assertEquals(SetupResult.Status.COMPLETED, SetupWizard.nonInteractive(config, env(file, false), null).status());
+        var tasks = config.snapshot().tasks();
+        assertEquals(new ServiceCounts(2, 2, 6), ServiceCounts.of(tasks.get("lobby").scaling()));
+        assertEquals(new ServiceCounts(0, 1, 12), ServiceCounts.of(tasks.get("minigame").scaling()), "only max changed");
+        // Counter-check: the suggestions of every other server.
+        assertEquals(new ServiceCounts(1, 1, 1), ServiceCounts.of(tasks.get("survival").scaling()));
+        assertEquals(new ServiceCounts(1, 1, 3), ServiceCounts.of(tasks.get("legacy-server").scaling()));
+        assertEquals(new ServiceCounts(1, 1, 1), ServiceCounts.of(tasks.get("proxy").scaling()));
+        assertEquals(new ServiceCounts(1, 1, 1), ServiceCounts.of(tasks.get("legacy-proxy").scaling()));
+        assertEquals(75, tasks.get("lobby").scaling().scaleUpAt());
+        assertEquals(50, tasks.get("lobby").scaling().scaleDownBelow());
+        assertEquals(16, tasks.get("minigame").scaling().playersPerService());
+    }
+
+    @Test
+    void invalidOrUnknownServiceCountsAreRefused() throws Exception {
+        String above = refused("schema-version: 1\neula: true\nservices:\n  lobby: {static-services: 2}\n", false)
+                .describe(Language.EN);
+        assertTrue(above.contains("Services of lobby"), above);
+        refused("schema-version: 1\neula: true\nservices:\n  lobby: {max-services: 0}\n", false);
+        String unknown = refused("schema-version: 1\neula: true\nservices:\n  nonsense: {max-services: 2}\n", false)
+                .describe(Language.EN);
+        assertTrue(unknown.contains("nonsense"), unknown);
+        String proxy = refused("schema-version: 1\neula: true\nservices:\n  proxy: {max-services: 2}\n", false)
+                .describe(Language.EN);
+        assertTrue(proxy.contains("proxies always run one service"), proxy);
+        refused("schema-version: 1\neula: true\nservices:\n  lobby: {static: 1}\n", false);
+    }
+
+    @Test
+    void drainTimeoutIsOptionalPerGroup() throws Exception {
+        String file = "schema-version: 1\neula: true\ndrain-timeout:\n  lobby: 45s\n";
+        assertEquals(SetupResult.Status.COMPLETED, SetupWizard.nonInteractive(config, env(file, false), null).status());
+        var groups = config.snapshot().groups();
+        assertEquals(TimeSpan.parse("45s"), groups.get("lobby").drainTimeout());
+        assertEquals(null, groups.get("survival").drainTimeout(), "counter-check: other groups keep the default");
+        assertEquals(TimeSpan.parse("30s"), groups.get("survival").drainTimeoutOrDefault());
+    }
+
+    @Test
+    void drainTimeoutOfAnExistingGroupIsChangedAndCheckedLikeTheFile() throws Exception {
+        config.apply(new net.vectora.cloud.config.operation.PutGroup("survival",
+                SetupPlan.newGroup(NetworkServer.SURVIVAL, MemorySize.parse("2G")).withDrainTimeout(TimeSpan.parse("40s"))));
+        String range = refused("schema-version: 1\neula: true\ndrain-timeout:\n  survival: 11m\n", false).describe(Language.EN);
+        assertTrue(range.contains("drain-timeout") && range.contains("between 5s and 10m"), range);
+        String unknown = refused("schema-version: 1\neula: true\ndrain-timeout:\n  nonsense: 45s\n", false).describe(Language.EN);
+        assertTrue(unknown.contains("nonsense"), unknown);
+        refused("schema-version: 1\neula: true\ndrain-timeout:\n  survival: soon\n", false);
+        assertEquals(TimeSpan.parse("40s"), config.snapshot().groups().get("survival").drainTimeout(), "unchanged");
+        // Counter-check: a valid value replaces the one of the existing group.
+        String change = "schema-version: 1\neula: true\ndrain-timeout:\n  survival: 2m\n";
+        assertEquals(SetupResult.Status.COMPLETED, SetupWizard.nonInteractive(config, env(change, false), null).status());
+        assertEquals(TimeSpan.parse("2m"), config.snapshot().groups().get("survival").drainTimeout());
+    }
+
+    @Test
+    void nodeMemoryIsOptionalAndCheckedLikeNodesYml() throws Exception {
+        String low = refused("schema-version: 1\neula: true\nnode:\n  max-memory: 256M\n", false).describe(Language.EN);
+        assertTrue(low.contains("max-memory"), low);
+        String high = refused("schema-version: 1\neula: true\nnode:\n  memory-reserve:\n    database: 65G\n", false)
+                .describe(Language.EN);
+        assertTrue(high.contains("memory-reserve.database") && high.contains("between 1M and 64G"), high);
+        refused("schema-version: 1\neula: true\nnode:\n  memory-reserve:\n    sytem: 2G\n", false);
+        refused("schema-version: 1\neula: true\nnode:\n  max-memory: 8 GB\n", false);
+
+        String file = """
+                schema-version: 1
+                eula: true
+                node:
+                  max-memory: 8G
+                  memory-reserve:
+                    system: 2G
+                """;
+        assertEquals(SetupResult.Status.COMPLETED, SetupWizard.nonInteractive(config, env(file, false), null).status());
+        var node = config.snapshot().nodes().find(config.snapshot().cloud().nodeId()).orElseThrow();
+        assertEquals(MemorySize.parse("8G"), node.maxMemory());
+        assertEquals(new MemoryReserve(MemorySize.parse("2G"), null, null), node.reserve(), "only the given field is written");
+        assertEquals(MemorySize.parse("512M"), node.memoryReserve().database());
+    }
+
+    @Test
+    void maxMemoryAutoRemovesTheLimit() throws Exception {
+        var before = config.snapshot().nodes().nodes().getFirst();
+        config.apply(List.of(new PutNode(before.withMaxMemory(MemorySize.parse("8G")))));
+        String typo = refused("schema-version: 1\neula: true\nnode:\n  max-memory: lots\n", false).describe(Language.EN);
+        assertTrue(typo.contains("node.max-memory: write auto"), typo);
+        assertEquals(MemorySize.parse("8G"), config.snapshot().nodes().nodes().getFirst().maxMemory(), "refused: unchanged");
+
+        assertEquals(SetupResult.Status.COMPLETED, SetupWizard.nonInteractive(config,
+                env("schema-version: 1\neula: true\nnode:\n  max-memory: auto\n", false), null).status());
+        assertEquals(null, config.snapshot().nodes().nodes().getFirst().maxMemory());
+    }
+
+    @Test
+    void withoutNodeSectionNodesYmlStaysAsItIs() throws Exception {
+        byte[] before = Files.readAllBytes(root.resolve("nodes.yml"));
+        SetupWizard.nonInteractive(config, env("schema-version: 1\neula: true\n", false), null);
+        assertArrayEquals(before, Files.readAllBytes(root.resolve("nodes.yml")));
+        assertEquals(null, config.snapshot().nodes().nodes().getFirst().maxMemory());
     }
 
     @Test

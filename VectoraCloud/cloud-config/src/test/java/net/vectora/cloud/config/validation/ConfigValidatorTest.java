@@ -21,6 +21,7 @@ import net.vectora.cloud.config.model.GroupConfig;
 import net.vectora.cloud.config.model.HeapConfig;
 import net.vectora.cloud.config.model.Language;
 import net.vectora.cloud.config.model.LegacyProxyConfig;
+import net.vectora.cloud.config.model.MemoryReserve;
 import net.vectora.cloud.config.model.MemorySize;
 import net.vectora.cloud.config.model.NodeConfig;
 import net.vectora.cloud.config.model.NodesConfig;
@@ -69,6 +70,26 @@ class ConfigValidatorTest {
         List<String> many = java.util.Collections.nCopies(ProcessConfig.MAX_JVM_FLAGS + 1, "-XX:+UseG1GC");
         assertEquals(Set.of("groups/lobby.yml process.jvm-flags OUT_OF_RANGE"),
                 codes(valid.withGroup("lobby", lobby.withProcess(new ProcessConfig(many, null, null, null)))));
+    }
+
+    @Test
+    void drainTimeoutIsOptionalAndLimited() {
+        GroupConfig lobby = Samples.lobbyGroup();
+        assertEquals(GroupConfig.DEFAULT_DRAIN_TIMEOUT, lobby.drainTimeoutOrDefault(), "missing: 30s");
+        assertEquals(TimeSpan.parse("30s"), GroupConfig.DEFAULT_DRAIN_TIMEOUT);
+        for (String ok : List.of("5s", "45s", "10m")) {
+            assertEquals(Set.of(), codes(valid.withGroup("lobby", lobby.withDrainTimeout(TimeSpan.parse(ok)))), ok);
+        }
+        for (String bad : List.of("0s", "4s", "601s", "1h")) {
+            assertEquals(Set.of("groups/lobby.yml drain-timeout OUT_OF_RANGE"),
+                    codes(valid.withGroup("lobby", lobby.withDrainTimeout(TimeSpan.parse(bad)))), bad);
+        }
+        ConfigError error = ConfigValidator.validate(valid.withGroup("lobby", lobby.withDrainTimeout(TimeSpan.parse("1h"))))
+                .getFirst();
+        assertEquals("Must be between 5s and 10m.", error.message(Language.EN));
+        assertEquals(TimeSpan.parse("45s"), lobby.withDrainTimeout(TimeSpan.parse("45s")).drainTimeoutOrDefault());
+        assertEquals(GroupConfig.DEFAULT_DRAIN_TIMEOUT,
+                lobby.withDrainTimeout(TimeSpan.parse("45s")).withDrainTimeout(null).drainTimeoutOrDefault(), "null: default");
     }
 
     @Test
@@ -140,7 +161,7 @@ class ConfigValidatorTest {
         }
         TaskConfig lobby = Samples.lobbyTask();
         assertEquals(Set.of("tasks/lobby.yml group PATTERN_MISMATCH"), codes(valid.withTask("lobby",
-                new TaskConfig(lobby.schemaVersion(), "nul", lobby.mode(), lobby.scaling(), lobby.nodes()))));
+                new TaskConfig(lobby.schemaVersion(), "nul", lobby.scaling(), lobby.nodes()))));
         assertEquals(Set.of("cloud.yml network-name PATTERN_MISMATCH"),
                 codes(withCloud(valid.cloud().withNetworkName(" leading space"))));
         assertEquals(Set.of(), codes(withCloud(valid.cloud().withNetworkName("Vectora Netzwerk"))));
@@ -148,7 +169,7 @@ class ConfigValidatorTest {
 
     @Test
     void tasksMustReferToExistingGroupsAndNodes() {
-        TaskConfig task = new TaskConfig(1, "missing", Samples.lobbyTask().mode(), Samples.lobbyTask().scaling(),
+        TaskConfig task = new TaskConfig(TaskConfig.SCHEMA_VERSION, "missing", Samples.lobbyTask().scaling(),
                 List.of("node-1", "node-9", "node-1"));
         assertEquals(Set.of(
                 "tasks/lobby.yml group UNKNOWN_GROUP",
@@ -159,13 +180,102 @@ class ConfigValidatorTest {
 
     @Test
     void scalingLimits() {
-        ScalingConfig scaling = new ScalingConfig(5, 2, 0, 101, null, TimeSpan.parse("1m"));
+        ScalingConfig scaling = new ScalingConfig(0, 5, 2, 0, 101, 50, null, TimeSpan.parse("1m"));
         assertEquals(Set.of(
                 "tasks/lobby.yml scaling.min-services MIN_GREATER_THAN_MAX",
                 "tasks/lobby.yml scaling.players-per-service OUT_OF_RANGE",
                 "tasks/lobby.yml scaling.scale-up-at OUT_OF_RANGE",
                 "tasks/lobby.yml scaling.scale-down-after REQUIRED"),
                 codes(valid.withTask("lobby", Samples.lobbyTask().withScaling(scaling))));
+    }
+
+    @Test
+    void staticServicesMustNotExceedMinServices() {
+        ScalingConfig base = Samples.lobbyTask().scaling();
+        assertEquals(Set.of("tasks/lobby.yml scaling.static-services STATIC_ABOVE_MIN"),
+                codes(valid.withTask("lobby", Samples.lobbyTask().withScaling(base.withCounts(2, 1, 4)))));
+        assertEquals(Set.of("tasks/lobby.yml scaling.static-services OUT_OF_RANGE"),
+                codes(valid.withTask("lobby", Samples.lobbyTask().withScaling(base.withCounts(-1, 1, 4)))));
+        // Counter-checks: the pure and mixed forms are valid.
+        assertEquals(Set.of(), codes(valid.withTask("lobby", Samples.lobbyTask().withScaling(base.withCounts(3, 3, 3)))));
+        assertEquals(Set.of(), codes(valid.withTask("lobby", Samples.lobbyTask().withScaling(base.withCounts(0, 1, 8)))));
+        assertEquals(Set.of(), codes(valid.withTask("lobby", Samples.lobbyTask().withScaling(base.withCounts(1, 2, 4)))));
+        assertEquals(Set.of(), codes(valid.withTask("lobby", Samples.lobbyTask().withScaling(base.withCounts(0, 0, 1)))));
+    }
+
+    @Test
+    void scaleDownBelowMustBeBelowScaleUpAt() {
+        ScalingConfig base = Samples.lobbyTask().scaling().withScaleUpAt(75);
+        assertEquals(Set.of("tasks/lobby.yml scaling.scale-down-below SCALE_DOWN_NOT_BELOW_UP"),
+                codes(valid.withTask("lobby", Samples.lobbyTask().withScaling(base.withScaleDownBelow(75)))));
+        assertEquals(Set.of("tasks/lobby.yml scaling.scale-down-below OUT_OF_RANGE"),
+                codes(valid.withTask("lobby", Samples.lobbyTask().withScaling(base.withScaleDownBelow(100)))));
+        assertEquals(Set.of("tasks/lobby.yml scaling.scale-down-below OUT_OF_RANGE"),
+                codes(valid.withTask("lobby", Samples.lobbyTask().withScaling(base.withScaleDownBelow(-1)))));
+        // Counter-checks: just below, and 0.
+        assertEquals(Set.of(), codes(valid.withTask("lobby", Samples.lobbyTask().withScaling(base.withScaleDownBelow(74)))));
+        assertEquals(Set.of(), codes(valid.withTask("lobby", Samples.lobbyTask().withScaling(base.withScaleDownBelow(0)))));
+    }
+
+    @Test
+    void scaleDownBelowAndStaticAboveMinHaveGermanMessages() {
+        ConfigError error = ConfigError.of("tasks/lobby.yml", "scaling.static-services", ErrorCode.STATIC_ABOVE_MIN,
+                "scaling.min-services");
+        assertTrue(error.describe(Language.DE).contains("statische Dienste"), error.describe(Language.DE));
+        assertTrue(error.describe(Language.EN).contains("static services"), error.describe(Language.EN));
+        ConfigError down = ConfigError.of("tasks/lobby.yml", "scaling.scale-down-below", ErrorCode.SCALE_DOWN_NOT_BELOW_UP,
+                "scaling.scale-up-at");
+        assertTrue(down.describe(Language.DE).contains("kleiner"), down.describe(Language.DE));
+        assertEquals("scale-down-not-below-up", ErrorCode.SCALE_DOWN_NOT_BELOW_UP.code());
+    }
+
+    @Test
+    void nodeMaxMemoryIsOptionalAndHasALowerLimit() {
+        NodeConfig node = NodeConfig.defaults();
+        assertEquals(Set.of(), codes(valid.withNodes(new NodesConfig(1, List.of(node)))));
+        assertEquals(Set.of(), codes(valid.withNodes(new NodesConfig(1, List.of(node.withMaxMemory(MemorySize.parse("8G")))))));
+        assertEquals(Set.of("nodes.yml nodes[0].max-memory OUT_OF_RANGE"),
+                codes(valid.withNodes(new NodesConfig(1, List.of(node.withMaxMemory(MemorySize.parse("256M")))))));
+        assertEquals(Set.of(), codes(valid.withNodes(new NodesConfig(1, List.of(node.withMaxMemory(MemorySize.parse("512M")))))));
+    }
+
+    @Test
+    void memoryReserveIsOptionalAndLimitedPerField() {
+        NodeConfig node = NodeConfig.defaults();
+        assertEquals(MemoryReserve.defaults(), node.memoryReserve(), "missing: every default");
+        assertEquals(List.of(1024L, 256L, 512L), List.of(node.memoryReserve().system().megabytes(),
+                node.memoryReserve().nodeOverhead().megabytes(), node.memoryReserve().database().megabytes()));
+        MemoryReserve partial = new MemoryReserve(MemorySize.parse("2G"), null, null);
+        NodeConfig some = node.withMemoryReserve(partial);
+        assertEquals(new MemoryReserve(MemorySize.parse("2G"), MemorySize.parse("256M"), MemorySize.parse("512M")),
+                some.memoryReserve(), "missing fields keep their default");
+        assertEquals(Set.of(), codes(valid.withNodes(new NodesConfig(1, List.of(some)))));
+        MemoryReserve max = new MemoryReserve(MemorySize.parse("64G"), MemorySize.parse("64G"), MemorySize.parse("64G"));
+        assertEquals(Set.of(), codes(valid.withNodes(new NodesConfig(1, List.of(node.withMemoryReserve(max))))),
+                "counter-check: 64G is allowed");
+        MemoryReserve tooMuch = new MemoryReserve(MemorySize.parse("65G"), MemorySize.parse("1024G"), MemorySize.parse("1M"));
+        assertEquals(Set.of("nodes.yml nodes[0].memory-reserve.system OUT_OF_RANGE",
+                        "nodes.yml nodes[0].memory-reserve.node-overhead OUT_OF_RANGE"),
+                codes(valid.withNodes(new NodesConfig(1, List.of(node.withMemoryReserve(tooMuch))))));
+        ConfigError error = ConfigValidator.validate(valid.withNodes(new NodesConfig(1, List.of(node.withMemoryReserve(tooMuch)))))
+                .getFirst();
+        assertEquals("Must be between 1M and 64G.", error.message(Language.EN));
+        assertEquals(null, node.withMemoryReserve(new MemoryReserve(null, null, null)).reserve(), "an empty section is dropped");
+    }
+
+    @Test
+    void reserveCountsTheDatabaseOnlyWhenTheCloudRunsIt() {
+        var kind = net.vectora.cloud.config.model.ServerKind.DATABASE;
+        CloudConfig cloud = valid.cloud().withServers(valid.cloud().servers().with(kind, true));
+        MemoryReserve reserve = MemoryReserve.defaults();
+        assertEquals(1024 + 256 + 512, reserve.megabytes(true));
+        assertEquals(1024 + 256, reserve.megabytes(false));
+        assertEquals(true, MemoryReserve.countsDatabase(cloud.withDatabase(cloud.database().withMode(DatabaseMode.MANAGED))));
+        assertEquals(true, MemoryReserve.countsDatabase(cloud.withDatabase(cloud.database().withMode(DatabaseMode.DOCKER))));
+        assertEquals(false, MemoryReserve.countsDatabase(cloud.withServers(cloud.servers().with(kind, false))
+                .withDatabase(cloud.database().withMode(DatabaseMode.MANAGED))), "switched off");
+        assertEquals(false, MemoryReserve.countsDatabase(cloud.withDatabase(cloud.database().withMode(DatabaseMode.H2))));
+        assertEquals(false, MemoryReserve.countsDatabase(cloud.withDatabase(cloud.database().withMode(DatabaseMode.EXTERNAL))));
     }
 
     @Test

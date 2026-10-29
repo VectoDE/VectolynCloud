@@ -115,14 +115,16 @@ public final class ServicePlanner {
      * @param task  task name
      * @param group group name
      * @param index index within the group
+     * @param mode  static for the first {@code static-services} of the task, dynamic for the rest
      */
-    public record Planned(String task, String group, int index) {
+    public record Planned(String task, String group, int index, TaskMode mode) {
     }
 
     /**
      * The services that should run after the node starts: {@code min-services} of every task on
-     * this node whose group exists and is wanted. Indexes are counted per group, so two tasks of
-     * one group never share an id. Unwanted groups produce nothing at all.
+     * this node whose group exists and is wanted, the first {@code static-services} of them static.
+     * Indexes are counted per group, so two tasks of one group never share an id. Unwanted groups
+     * produce nothing at all.
      *
      * @param snapshot the configuration
      * @param node     id of this node
@@ -143,7 +145,8 @@ public final class ServicePlanner {
                 if (index > ServiceIds.MAX_INDEX) {
                     break;
                 }
-                result.add(new Planned(entry.getKey(), task.group(), index));
+                TaskMode mode = i < task.scaling().staticServices() ? TaskMode.STATIC : TaskMode.DYNAMIC;
+                result.add(new Planned(entry.getKey(), task.group(), index, mode));
             }
         }
         return result;
@@ -159,7 +162,7 @@ public final class ServicePlanner {
      *
      * @param home     the cloud home
      * @param group    the group
-     * @param mode     the task mode
+     * @param mode     the mode of this service
      * @param id       service id
      * @param index    index within the group
      * @return the absolute folder

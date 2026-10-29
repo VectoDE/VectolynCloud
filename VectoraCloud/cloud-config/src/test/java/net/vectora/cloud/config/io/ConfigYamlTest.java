@@ -127,8 +127,9 @@ class ConfigYamlTest {
                     backoff: 5s
                     max-backoff: 1m
                 """, ConfigFormat.GROUP);
-        assertEquals(ErrorCode.INVALID_VALUE, error.code());
-        assertTrue(error.path().startsWith("process.restart"), error.path());
+        // The missing on-crash is a missing required field.
+        assertEquals(ErrorCode.REQUIRED, error.code());
+        assertEquals("process.restart.on-crash", error.path());
     }
 
     @Test
@@ -364,6 +365,25 @@ class ConfigYamlTest {
         assertEquals(on, off.withWanted(true), "switching it on again removes the entry");
         assertEquals(on.withProcess(ProcessConfig.defaults()).withWanted(false).processOrDefaults(), ProcessConfig.defaults(),
                 "the switch keeps the process section");
+    }
+
+    @Test
+    void drainTimeoutIsOptionalInTheGroupFile() throws ConfigException {
+        GroupConfig plain = Samples.lobbyGroup();
+        String base = new String(ConfigYaml.write(plain), StandardCharsets.UTF_8);
+        assertFalse(base.contains("drain-timeout"), "not written when missing: " + base);
+        assertEquals(GroupConfig.DEFAULT_DRAIN_TIMEOUT, read(base, ConfigFormat.GROUP).drainTimeoutOrDefault());
+        GroupConfig set = read(base + "drain-timeout: 45s\n", ConfigFormat.GROUP);
+        assertEquals(TimeSpan.parse("45s"), set.drainTimeout());
+        String written = new String(ConfigYaml.write(set), StandardCharsets.UTF_8);
+        assertTrue(written.contains("drain-timeout: \"45s\""), written);
+        assertRoundTrip(set, ConfigFormat.GROUP);
+        assertEquals(set, plain.withDrainTimeout(TimeSpan.parse("45s")).withWanted(true), "the switch keeps it");
+        // Counter-check: a value in the wrong form is invalid-value with the expected form.
+        ConfigError bad = single(base + "drain-timeout: 45 seconds\n", ConfigFormat.GROUP);
+        assertEquals(ErrorCode.INVALID_VALUE, bad.code());
+        assertEquals("drain-timeout", bad.path());
+        assertEquals(List.of(TimeSpan.FORMAT), bad.args());
     }
 
     @Test

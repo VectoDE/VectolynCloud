@@ -54,9 +54,12 @@ final class GroupCommands {
     static final MemorySize DEFAULT_HEAP_MAX = MemorySize.ofMegabytes(1024);
 
     private static final List<String> GROUP_FIELDS = List.of("template", "software", "minecraft-version", "java",
-            "heap.min", "heap.max", "combat");
-    private static final List<String> TASK_FIELDS = List.of("group", "mode", "min-services", "max-services",
-            "players-per-service", "scale-up-at", "scale-down-after", "cooldown", "nodes");
+            "heap.min", "heap.max", "combat", "drain-timeout");
+    /** Value of {@code group set <name> drain-timeout} that removes the field, so the default applies. */
+    static final String DEFAULT_VALUE = "default";
+    private static final List<String> TASK_FIELDS = List.of("group", "mode", "static-services", "min-services",
+            "max-services", "players-per-service", "scale-up-at", "scale-down-below", "scale-down-after", "cooldown",
+            "nodes");
     private static final List<String> ON_OFF = List.of("on", "off");
     private static final List<String> YES_FLAGS = List.of("--yes", "-y");
 
@@ -158,14 +161,18 @@ final class GroupCommands {
                         .argument(Argument.required("name", Text.of("New task name", "Neuer Taskname")))
                         .argument(Argument.required("group", Text.of("Group it runs", "Gruppe, die er startet"))
                                 .suggest(previous -> List.copyOf(config.snapshot().groups().keySet())))
-                        .argument(Argument.optional("mode", Text.of("static (default) or dynamic", "static (Standard) oder dynamic"))
+                        .argument(Argument.optional("mode", Text.of(
+                                "static (default: one static service) or dynamic (one dynamic service)",
+                                "static (Standard: ein statischer Dienst) oder dynamic (ein dynamischer Dienst)"))
                                 .suggest(Values.names(TaskMode.class)))
                         .executes(context -> {
                             String task = context.argument("name");
                             TaskMode mode = context.optional("mode").isEmpty() ? TaskMode.STATIC
                                     : Values.enumValue(taskFile(task), "mode", context.argument("mode"), TaskMode.class);
-                            TaskConfig value = new TaskConfig(TaskConfig.SCHEMA_VERSION, context.argument("group"), mode,
-                                    ScalingConfig.single(), List.of());
+                            ScalingConfig scaling = mode == TaskMode.STATIC ? ScalingConfig.single()
+                                    : ScalingConfig.counts(0, 1, 1);
+                            TaskConfig value = new TaskConfig(TaskConfig.SCHEMA_VERSION, context.argument("group"),
+                                    scaling, List.of());
                             ConfigChanged change = config.apply(List.of(requireNewTask(task), new PutTask(task, value)));
                             BuiltinCommands.report(context.out(), change, CloudHome.taskFileName(task));
                         }))
@@ -272,6 +279,8 @@ final class GroupCommands {
             case "heap.min" -> g.withHeap(new HeapConfig(parse(file, field, MemorySize.FORMAT, () -> MemorySize.parse(value)), heap(g).max()));
             case "heap.max" -> g.withHeap(new HeapConfig(heap(g).min(), parse(file, field, MemorySize.FORMAT, () -> MemorySize.parse(value))));
             case "combat" -> g.withCombat(Values.enumValue(file, field, value, CombatSystem.class));
+            case "drain-timeout" -> g.withDrainTimeout(DEFAULT_VALUE.equals(value) ? null
+                    : parse(file, field, TimeSpan.FORMAT + ", or " + DEFAULT_VALUE, () -> TimeSpan.parse(value)));
             default -> throw unknownField(file, GROUP_FIELDS);
         };
     }
@@ -280,23 +289,31 @@ final class GroupCommands {
         String file = taskFile(name);
         ScalingConfig s = t.scaling() == null ? ScalingConfig.single() : t.scaling();
         return switch (field) {
-            case "group" -> new TaskConfig(t.schemaVersion(), value, t.mode(), t.scaling(), t.nodes());
-            case "mode" -> new TaskConfig(t.schemaVersion(), t.group(), Values.enumValue(file, field, value, TaskMode.class), t.scaling(), t.nodes());
-            case "min-services" -> t.withScaling(new ScalingConfig(Values.integer(file, "scaling." + field, value),
-                    s.maxServices(), s.playersPerService(), s.scaleUpAt(), s.scaleDownAfter(), s.cooldown()));
-            case "max-services" -> t.withScaling(new ScalingConfig(s.minServices(), Values.integer(file, "scaling." + field, value),
-                    s.playersPerService(), s.scaleUpAt(), s.scaleDownAfter(), s.cooldown()));
-            case "players-per-service" -> t.withScaling(new ScalingConfig(s.minServices(), s.maxServices(),
-                    Values.integer(file, "scaling." + field, value), s.scaleUpAt(), s.scaleDownAfter(), s.cooldown()));
-            case "scale-up-at" -> t.withScaling(new ScalingConfig(s.minServices(), s.maxServices(), s.playersPerService(),
-                    Values.integer(file, "scaling." + field, value), s.scaleDownAfter(), s.cooldown()));
-            case "scale-down-after" -> t.withScaling(new ScalingConfig(s.minServices(), s.maxServices(), s.playersPerService(),
-                    s.scaleUpAt(), parse(file, "scaling." + field, TimeSpan.FORMAT, () -> TimeSpan.parse(value)), s.cooldown()));
-            case "cooldown" -> t.withScaling(new ScalingConfig(s.minServices(), s.maxServices(), s.playersPerService(),
-                    s.scaleUpAt(), s.scaleDownAfter(), parse(file, "scaling." + field, TimeSpan.FORMAT, () -> TimeSpan.parse(value))));
-            case "nodes" -> new TaskConfig(t.schemaVersion(), t.group(), t.mode(), t.scaling(), nodes(value));
+            case "group" -> t.withGroup(value);
+            // Shorthand: static makes min-services (at least 1) static services and nothing above
+            // (static = min = max), like the migration of a version-1 file; dynamic makes none static.
+            case "mode" -> t.withScaling(Values.enumValue(file, field, value, TaskMode.class) == TaskMode.STATIC
+                    ? staticCounts(s)
+                    : s.withStaticServices(0));
+            case "static-services" -> t.withScaling(s.withStaticServices(Values.integer(file, "scaling." + field, value)));
+            case "min-services" -> t.withScaling(s.withMinServices(Values.integer(file, "scaling." + field, value)));
+            case "max-services" -> t.withScaling(s.withMaxServices(Values.integer(file, "scaling." + field, value)));
+            case "players-per-service" -> t.withScaling(s.withPlayersPerService(Values.integer(file, "scaling." + field, value)));
+            case "scale-up-at" -> t.withScaling(s.withScaleUpAt(Values.integer(file, "scaling." + field, value)));
+            case "scale-down-below" -> t.withScaling(s.withScaleDownBelow(Values.integer(file, "scaling." + field, value)));
+            case "scale-down-after" -> t.withScaling(s.withScaleDownAfter(
+                    parse(file, "scaling." + field, TimeSpan.FORMAT, () -> TimeSpan.parse(value))));
+            case "cooldown" -> t.withScaling(s.withCooldown(
+                    parse(file, "scaling." + field, TimeSpan.FORMAT, () -> TimeSpan.parse(value))));
+            case "nodes" -> t.withNodes(nodes(value));
             default -> throw unknownField(file, TASK_FIELDS);
         };
+    }
+
+    /** {@code mode static}: static = min = max = {@code min-services}, at least 1. */
+    static ScalingConfig staticCounts(ScalingConfig s) {
+        int count = Math.max(1, s.minServices());
+        return s.withCounts(count, count, count);
     }
 
     private static List<String> nodes(String value) {
@@ -409,6 +426,7 @@ final class GroupCommands {
         out.println("  heap.min          = " + heap(g).min());
         out.println("  heap.max          = " + heap(g).max());
         out.println("  combat            = " + (g.combat() == null ? "" : Values.name(g.combat())));
+        out.println("  drain-timeout     = " + g.drainTimeoutOrDefault() + (g.drainTimeout() == null ? " (default)" : ""));
         out.println("  catalog           = " + String.join(", ", g.catalog().stream().map(c -> c.id()).toList()));
         out.println("  wanted            = " + wantedLabel(snapshot, g, out));
     }
@@ -421,9 +439,17 @@ final class GroupCommands {
         int width = snapshot.tasks().keySet().stream().mapToInt(String::length).max().orElse(0);
         snapshot.tasks().forEach((name, t) -> {
             ScalingConfig s = t.scaling() == null ? ScalingConfig.single() : t.scaling();
-            out.println(BuiltinCommands.pad(name, width) + "  group " + t.group() + "  " + Values.name(t.mode())
+            out.println(BuiltinCommands.pad(name, width) + "  group " + t.group() + "  " + modeLabel(s)
                     + "  " + s.minServices() + ".." + s.maxServices());
         });
+    }
+
+    /** {@code static}, {@code dynamic} or {@code static N + dynamic} for the task list. */
+    static String modeLabel(ScalingConfig s) {
+        if (!s.allowsDynamic()) {
+            return "static";
+        }
+        return s.staticServices() == 0 ? "dynamic" : "static " + s.staticServices() + " + dynamic";
     }
 
     private static void showTask(ConsoleOutput out, ConfigSnapshot snapshot, String name) throws ConfigException {
@@ -431,11 +457,13 @@ final class GroupCommands {
         ScalingConfig s = t.scaling() == null ? ScalingConfig.single() : t.scaling();
         out.heading(CloudHome.taskFileName(name));
         out.println("  group               = " + t.group());
-        out.println("  mode                = " + Values.name(t.mode()));
+        out.println("  mode                = " + modeLabel(s));
+        out.println("  static-services     = " + s.staticServices());
         out.println("  min-services        = " + s.minServices());
         out.println("  max-services        = " + s.maxServices());
         out.println("  players-per-service = " + s.playersPerService());
         out.println("  scale-up-at         = " + s.scaleUpAt());
+        out.println("  scale-down-below    = " + s.scaleDownBelow());
         out.println("  scale-down-after    = " + s.scaleDownAfter());
         out.println("  cooldown            = " + s.cooldown());
         out.println("  nodes               = " + (t.nodes().isEmpty() ? "*" : String.join(",", t.nodes())));

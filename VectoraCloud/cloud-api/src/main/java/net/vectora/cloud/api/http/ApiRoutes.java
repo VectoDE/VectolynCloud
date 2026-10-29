@@ -17,19 +17,23 @@ import net.vectora.cloud.api.backend.ApiBackend;
 import net.vectora.cloud.api.backend.BackupAccess;
 import net.vectora.cloud.api.backend.BackupOrder;
 import net.vectora.cloud.api.backend.ServiceView;
+import net.vectora.cloud.config.CloudHome;
 import net.vectora.cloud.config.ConfigChanged;
 import net.vectora.cloud.config.ConfigService;
 import net.vectora.cloud.config.error.ConfigError;
 import net.vectora.cloud.config.error.ConfigException;
+import net.vectora.cloud.config.io.ConfigFormat;
 import net.vectora.cloud.config.model.CloudConfig;
 import net.vectora.cloud.config.model.ConfigSnapshot;
 import net.vectora.cloud.config.model.GroupConfig;
 import net.vectora.cloud.config.model.GroupRules;
 import net.vectora.cloud.config.model.Language;
+import net.vectora.cloud.config.model.NodeConfig;
 import net.vectora.cloud.config.model.ServerKind;
 import net.vectora.cloud.config.model.TaskConfig;
 import net.vectora.cloud.config.operation.ConfigOperation;
 import net.vectora.cloud.config.operation.PutGroup;
+import net.vectora.cloud.config.operation.PutNode;
 import net.vectora.cloud.config.operation.PutTask;
 import net.vectora.cloud.config.operation.RemoveGroup;
 import net.vectora.cloud.config.operation.RemoveTask;
@@ -135,6 +139,10 @@ public final class ApiRoutes {
             return setGroupWanted(task.group(), q);
         });
 
+        r.add("GET", PREFIX + "/nodes", Scope.CONFIG_READ, q -> ApiResponse.ok(config.snapshot().nodes().nodes()));
+        r.add("GET", PREFIX + "/nodes/{name}", Scope.CONFIG_READ, q -> ApiResponse.document(200, node(q.param("name"))));
+        r.add("PUT", PREFIX + "/nodes/{name}", Scope.CONFIG_WRITE, this::putNode);
+
         r.add("GET", PREFIX + "/servers", Scope.CONFIG_READ, q -> ApiResponse.ok(servers(config.snapshot())));
         r.add("PUT", PREFIX + "/servers/{kind}", Scope.CONFIG_WRITE, q -> setWanted(kind(q.param("kind")), q));
 
@@ -220,7 +228,7 @@ public final class ApiRoutes {
 
     private ApiResponse putGroup(ApiRequest q) throws Exception {
         String name = q.param("name");
-        GroupConfig next = q.json(GroupConfig.class);
+        GroupConfig next = ApiJson.readDocument(q.body(), CloudHome.groupFileName(name), ConfigFormat.GROUP);
         AtomicBoolean existed = new AtomicBoolean();
         ConfigSnapshot after = applyIfMatch(q, s -> {
             Optional<GroupConfig> current = Optional.ofNullable(s.groups().get(name));
@@ -232,7 +240,8 @@ public final class ApiRoutes {
 
     private ApiResponse putTask(ApiRequest q) throws Exception {
         String name = q.param("name");
-        TaskConfig next = q.json(TaskConfig.class);
+        // A body of schema-version 1 (with mode) runs through the migration of a task file.
+        TaskConfig next = ApiJson.readDocument(q.body(), CloudHome.taskFileName(name), ConfigFormat.TASK);
         AtomicBoolean existed = new AtomicBoolean();
         ConfigSnapshot after = applyIfMatch(q, s -> {
             Optional<TaskConfig> current = Optional.ofNullable(s.tasks().get(name));
@@ -240,6 +249,26 @@ public final class ApiRoutes {
             return current;
         }, new PutTask(name, next));
         return ApiResponse.document(existed.get() ? 200 : 201, after.tasks().get(name));
+    }
+
+    /**
+     * Creates or replaces one node of {@code nodes.yml}. The body is the whole node; its {@code id}
+     * may be left out and must otherwise be the id of the path.
+     */
+    private ApiResponse putNode(ApiRequest q) throws Exception {
+        String id = q.param("name");
+        NodeConfig body = q.json(NodeConfig.class);
+        if (body.id() != null && !body.id().equals(id)) {
+            throw ApiException.badRequest("invalid-value", "\"id\" must be left out or match the path.");
+        }
+        NodeConfig next = new NodeConfig(id, body.host(), body.port(), body.servicePorts(), body.maxMemory(), body.reserve());
+        AtomicBoolean existed = new AtomicBoolean();
+        ConfigSnapshot after = applyIfMatch(q, s -> {
+            Optional<NodeConfig> current = s.nodes().find(id);
+            existed.set(current.isPresent());
+            return current;
+        }, new PutNode(next));
+        return ApiResponse.document(existed.get() ? 200 : 201, after.nodes().find(id).orElseThrow());
     }
 
     private ApiResponse setWanted(ServerKind kind, ApiRequest q) throws Exception {
@@ -336,6 +365,10 @@ public final class ApiRoutes {
             throw ApiException.notFound("Group \"" + name + "\"");
         }
         return group;
+    }
+
+    private NodeConfig node(String id) throws ApiException {
+        return config.snapshot().nodes().find(id).orElseThrow(() -> ApiException.notFound("Node \"" + id + "\""));
     }
 
     private TaskConfig task(String name) throws ApiException {

@@ -97,7 +97,7 @@ Runs the setup assistant again. The current values are the defaults, and only wh
 | `group list` | Every group with template, software, version and whether its server kind is wanted. |
 | `group info <name>` | All fields of one group. |
 | `group create <name> <template> <software> <minecraft-version>` | New `groups/<name>.yml` with `java: auto`, heap 512M to 1G, combat `legacy` for `pandaspigot`, otherwise `modern`. Fails if the group exists. |
-| `group set <name> <field> <value>` | Fields: `template`, `software`, `minecraft-version`, `java`, `heap.min`, `heap.max`, `combat`. |
+| `group set <name> <field> <value>` | Fields: `template`, `software`, `minecraft-version`, `java`, `heap.min`, `heap.max`, `combat`, `drain-timeout` (5s to 10m, `default` removes it and 30s applies), for example `group set lobby drain-timeout 45s`. |
 | `group delete <name> [--yes]`, `group remove <name> [--yes]` | Deletes the file after asking. Fails while a task uses the group. |
 | `group wanted <name> <on\|off>` | Switches the server kind of the group in `cloud.yml` (`servers:`). |
 
@@ -105,10 +105,10 @@ Runs the setup assistant again. The current values are the defaults, and only wh
 
 | Subcommand | Effect |
 |---|---|
-| `task list` | Every task with group, mode and service range. |
+| `task list` | Every task with group, mode (`static`, `dynamic` or `static N + dynamic`) and service range. |
 | `task info <name>` | All fields of one task. |
-| `task create <name> <group> [static\|dynamic]` | New `tasks/<name>.yml` with one service on any node. The group must exist. |
-| `task set <name> <field> <value>` | Fields: `group`, `mode`, `min-services`, `max-services`, `players-per-service`, `scale-up-at`, `scale-down-after`, `cooldown`, `nodes` (comma list, `""` for any node). The [autoscaler](scaling.md) applies a change within one round. |
+| `task create <name> <group> [static\|dynamic]` | New `tasks/<name>.yml` on any node: `static` (default) one static service (1/1/1), `dynamic` one dynamic service (0/1/1). The group must exist. |
+| `task set <name> <field> <value>` | Fields: `group`, `static-services`, `min-services`, `max-services`, `players-per-service`, `scale-up-at`, `scale-down-below`, `scale-down-after`, `cooldown`, `nodes` (comma list, `""` for any node), and `mode` as a shortcut: `mode static` sets static, min and max to `min-services` (at least 1, as the migration of a version-1 task does), `mode dynamic` sets `static-services` to 0 and keeps min and max. Checked like the file (`static ≤ min ≤ max`, `scale-down-below` < `scale-up-at`). The [autoscaler](scaling.md) applies a change within one round. |
 | `task delete <name> [--yes]`, `task remove <name> [--yes]` | Deletes the file after asking. |
 | `task wanted <name> <on\|off>` | Switches the server kind of the task's group. |
 
@@ -119,6 +119,16 @@ Before deleting, the console checks the deletion with the same rules as `ConfigS
 The catalog of a group (plugins and mods) is edited in the file for now.
 
 Service commands (`start`, `stop`, `screen`, ...) come from cloud-node, which registers them in the same registry.
+
+### `node`
+
+| Subcommand | Effect |
+|---|---|
+| `node list` | Every node of `nodes.yml` with host, channel port, `max-memory` and which one is this node. |
+| `node info <id>` | All fields of one node, with the memory reserve; a field that is not set shows its default and `(default)`. |
+| `node set <id> <field> <value>` | Fields: `max-memory` (at least 512M, `auto` removes it and the node works it out), `memory-reserve.system`, `memory-reserve.node-overhead`, `memory-reserve.database` (each 1M to 64G, `default` removes it and the default applies: 1G, 256M, 512M). For example `node set node-1 memory-reserve.system 2G`. |
+
+Host, ports and adding or removing nodes stay in `nodes.yml`. See [config.md](config.md#nodesyml).
 
 ### `api`
 

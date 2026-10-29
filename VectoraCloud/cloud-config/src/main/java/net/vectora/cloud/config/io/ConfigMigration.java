@@ -17,4 +17,15 @@ public interface ConfigMigration {
 
     /** Changes {@code root} in place so that it matches version {@code fromVersion() + 1}. */
     void migrate(ObjectNode root);
+
+    /**
+     * Like {@link #migrate(ObjectNode)}, with the name of the file for messages of a migration that
+     * has to change a value and says so in the log. The default ignores the name.
+     *
+     * @param root content of the file, changed in place
+     * @param file file name relative to the cloud home, for example {@code tasks/lobby.yml}
+     */
+    default void migrate(ObjectNode root, String file) {
+        migrate(root);
+    }
 }

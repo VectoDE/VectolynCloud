@@ -15,7 +15,6 @@ import net.vectora.cloud.config.model.NodesConfig;
 import net.vectora.cloud.config.model.ScalingConfig;
 import net.vectora.cloud.config.model.ServerSoftware;
 import net.vectora.cloud.config.model.TaskConfig;
-import net.vectora.cloud.config.model.TaskMode;
 import net.vectora.cloud.config.model.TimeSpan;
 
 /** Valid example configuration shared by the tests. */
@@ -33,10 +32,10 @@ public final class Samples {
                 CombatSystem.MODERN);
     }
 
-    /** Dynamic lobby task with scaling. */
+    /** Lobby task: one static service, dynamic overflow up to four. */
     public static TaskConfig lobbyTask() {
-        return new TaskConfig(TaskConfig.SCHEMA_VERSION, "lobby", TaskMode.DYNAMIC,
-                new ScalingConfig(1, 4, 50, 80, TimeSpan.parse("5m"), TimeSpan.parse("60s")), List.of("node-1"));
+        return new TaskConfig(TaskConfig.SCHEMA_VERSION, "lobby",
+                new ScalingConfig(1, 1, 4, 50, 80, 50, TimeSpan.parse("5m"), TimeSpan.parse("60s")), List.of("node-1"));
     }
 
     /** Defaults plus the lobby group and task. */

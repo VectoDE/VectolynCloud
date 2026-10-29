@@ -8,7 +8,9 @@ import java.util.Optional;
 import java.util.TreeMap;
 import net.vectora.cloud.config.model.DatabaseConfig;
 import net.vectora.cloud.config.model.Language;
+import net.vectora.cloud.config.model.MemoryReserve;
 import net.vectora.cloud.config.model.MemorySize;
+import net.vectora.cloud.config.model.TimeSpan;
 import net.vectora.cloud.config.secret.Secret;
 
 /**
@@ -26,6 +28,13 @@ import net.vectora.cloud.config.secret.Secret;
  * @param bedrockPort      Bedrock port (Geyser) of the main proxy
  * @param legacyPort       Java port of the legacy proxy
  * @param heap             maximum heap per group name
+ * @param services         static, minimum and maximum services per task name (not for the proxies)
+ * @param drainTimeouts    {@code drain-timeout} per group name, only for groups that set one. The
+ *                         defaults hold every value the group files have, so an existing group
+ *                         without an entry gets the field removed (the default 30s applies)
+ * @param maxMemory        {@code max-memory} of this node in {@code nodes.yml}; null means automatic
+ * @param memoryReserve    {@code memory-reserve} of this node as written to the file; null means
+ *                         every default
  * @param database         database settings for {@code cloud.yml}
  * @param databasePassword a new password of an external database for {@code VECTORA_DB_PASSWORD};
  *                         empty keeps what {@code secrets/vectora.env} holds
@@ -33,7 +42,10 @@ import net.vectora.cloud.config.secret.Secret;
 public record SetupAnswers(Language language, boolean eulaAccepted, String networkName,
                            Map<NetworkServer, Boolean> servers, Map<String, Boolean> groupSwitches,
                            String bind, int javaPort, int bedrockPort, int legacyPort,
-                           Map<String, MemorySize> heap, DatabaseConfig database, Optional<Secret> databasePassword) {
+                           Map<String, MemorySize> heap, Map<String, ServiceCounts> services,
+                           Map<String, TimeSpan> drainTimeouts, MemorySize maxMemory, MemoryReserve memoryReserve,
+                           DatabaseConfig database,
+                           Optional<Secret> databasePassword) {
 
     /** Copies the maps; every server has a switch. */
     public SetupAnswers {
@@ -49,6 +61,8 @@ public record SetupAnswers(Language language, boolean eulaAccepted, String netwo
         servers = Collections.unmodifiableMap(copy);
         groupSwitches = Collections.unmodifiableSortedMap(new TreeMap<>(Objects.requireNonNull(groupSwitches, "groupSwitches")));
         heap = Collections.unmodifiableSortedMap(new TreeMap<>(Objects.requireNonNull(heap, "heap")));
+        services = Collections.unmodifiableSortedMap(new TreeMap<>(Objects.requireNonNull(services, "services")));
+        drainTimeouts = Collections.unmodifiableSortedMap(new TreeMap<>(Objects.requireNonNull(drainTimeouts, "drainTimeouts")));
     }
 
     /** Whether {@code server} is wanted. */
@@ -59,19 +73,19 @@ public record SetupAnswers(Language language, boolean eulaAccepted, String netwo
     /** A copy with another language. */
     public SetupAnswers withLanguage(Language value) {
         return new SetupAnswers(value, eulaAccepted, networkName, servers, groupSwitches, bind, javaPort, bedrockPort,
-                legacyPort, heap, database, databasePassword);
+                legacyPort, heap, services, drainTimeouts, maxMemory, memoryReserve, database, databasePassword);
     }
 
     /** A copy with the EULA answer. */
     public SetupAnswers withEula(boolean value) {
         return new SetupAnswers(language, value, networkName, servers, groupSwitches, bind, javaPort, bedrockPort,
-                legacyPort, heap, database, databasePassword);
+                legacyPort, heap, services, drainTimeouts, maxMemory, memoryReserve, database, databasePassword);
     }
 
     /** A copy with another network name. */
     public SetupAnswers withNetworkName(String value) {
         return new SetupAnswers(language, eulaAccepted, value, servers, groupSwitches, bind, javaPort, bedrockPort,
-                legacyPort, heap, database, databasePassword);
+                legacyPort, heap, services, drainTimeouts, maxMemory, memoryReserve, database, databasePassword);
     }
 
     /** A copy with one switch changed. */
@@ -79,7 +93,7 @@ public record SetupAnswers(Language language, boolean eulaAccepted, String netwo
         EnumMap<NetworkServer, Boolean> copy = new EnumMap<>(servers);
         copy.put(server, wanted);
         return new SetupAnswers(language, eulaAccepted, networkName, copy, groupSwitches, bind, javaPort, bedrockPort,
-                legacyPort, heap, database, databasePassword);
+                legacyPort, heap, services, drainTimeouts, maxMemory, memoryReserve, database, databasePassword);
     }
 
     /** A copy with the switch of one group changed. */
@@ -87,13 +101,13 @@ public record SetupAnswers(Language language, boolean eulaAccepted, String netwo
         Map<String, Boolean> copy = new TreeMap<>(groupSwitches);
         copy.put(group, wanted);
         return new SetupAnswers(language, eulaAccepted, networkName, servers, copy, bind, javaPort, bedrockPort,
-                legacyPort, heap, database, databasePassword);
+                legacyPort, heap, services, drainTimeouts, maxMemory, memoryReserve, database, databasePassword);
     }
 
     /** A copy with another listener. */
     public SetupAnswers withNetwork(String newBind, int newJavaPort, int newBedrockPort, int newLegacyPort) {
         return new SetupAnswers(language, eulaAccepted, networkName, servers, groupSwitches, newBind, newJavaPort,
-                newBedrockPort, newLegacyPort, heap, database, databasePassword);
+                newBedrockPort, newLegacyPort, heap, services, drainTimeouts, maxMemory, memoryReserve, database, databasePassword);
     }
 
     /** A copy with the heap of one group changed. */
@@ -101,13 +115,48 @@ public record SetupAnswers(Language language, boolean eulaAccepted, String netwo
         Map<String, MemorySize> copy = new TreeMap<>(heap);
         copy.put(group, max);
         return new SetupAnswers(language, eulaAccepted, networkName, servers, groupSwitches, bind, javaPort, bedrockPort,
-                legacyPort, copy, database, databasePassword);
+                legacyPort, copy, services, drainTimeouts, maxMemory, memoryReserve, database, databasePassword);
+    }
+
+    /** A copy with the service counts of one task changed. */
+    public SetupAnswers withServices(String task, ServiceCounts counts) {
+        Map<String, ServiceCounts> copy = new TreeMap<>(services);
+        copy.put(task, Objects.requireNonNull(counts, "counts"));
+        return new SetupAnswers(language, eulaAccepted, networkName, servers, groupSwitches, bind, javaPort, bedrockPort,
+                legacyPort, heap, copy, drainTimeouts, maxMemory, memoryReserve, database, databasePassword);
+    }
+
+    /** A copy with the {@code drain-timeout} of one group set. */
+    public SetupAnswers withDrainTimeout(String group, TimeSpan value) {
+        Map<String, TimeSpan> copy = new TreeMap<>(drainTimeouts);
+        copy.put(group, Objects.requireNonNull(value, "value"));
+        return new SetupAnswers(language, eulaAccepted, networkName, servers, groupSwitches, bind, javaPort, bedrockPort,
+                legacyPort, heap, services, copy, maxMemory, memoryReserve, database, databasePassword);
+    }
+
+    /** A copy without a {@code drain-timeout} for {@code group}, so the default 30s applies. */
+    public SetupAnswers withoutDrainTimeout(String group) {
+        Map<String, TimeSpan> copy = new TreeMap<>(drainTimeouts);
+        copy.remove(group);
+        return new SetupAnswers(language, eulaAccepted, networkName, servers, groupSwitches, bind, javaPort, bedrockPort,
+                legacyPort, heap, services, copy, maxMemory, memoryReserve, database, databasePassword);
     }
 
     /** A copy with other database settings. */
     public SetupAnswers withDatabase(DatabaseConfig value, Optional<Secret> password) {
         return new SetupAnswers(language, eulaAccepted, networkName, servers, groupSwitches, bind, javaPort, bedrockPort,
-                legacyPort, heap, value, password);
+                legacyPort, heap, services, drainTimeouts, maxMemory, memoryReserve, value, password);
+    }
+
+    /**
+     * A copy with other memory settings of this node.
+     *
+     * @param newMaxMemory    {@code max-memory}; null means automatic
+     * @param newReserve      {@code memory-reserve} as written to the file; null means every default
+     */
+    public SetupAnswers withNodeMemory(MemorySize newMaxMemory, MemoryReserve newReserve) {
+        return new SetupAnswers(language, eulaAccepted, networkName, servers, groupSwitches, bind, javaPort, bedrockPort,
+                legacyPort, heap, services, drainTimeouts, newMaxMemory, newReserve, database, databasePassword);
     }
 
     /** Never shows the password, only whether a new one is set. */
@@ -115,7 +164,9 @@ public record SetupAnswers(Language language, boolean eulaAccepted, String netwo
     public String toString() {
         return "SetupAnswers[language=" + language + ", eula=" + eulaAccepted + ", networkName=" + networkName
                 + ", servers=" + servers + ", groupSwitches=" + groupSwitches + ", bind=" + bind + ", javaPort=" + javaPort
-                + ", bedrockPort=" + bedrockPort + ", legacyPort=" + legacyPort + ", heap=" + heap + ", database=" + database
+                + ", bedrockPort=" + bedrockPort + ", legacyPort=" + legacyPort + ", heap=" + heap + ", services=" + services
+                + ", drainTimeouts=" + drainTimeouts + ", maxMemory=" + maxMemory + ", memoryReserve=" + memoryReserve
+                + ", database=" + database
                 + ", databasePassword=" + (databasePassword.isPresent() ? Secret.MASK : "unchanged") + "]";
     }
 }

@@ -20,9 +20,9 @@ import net.vectora.cloud.config.ConfigService;
 import net.vectora.cloud.config.model.CloudConfig;
 import net.vectora.cloud.config.model.DatabaseMode;
 import net.vectora.cloud.config.model.Language;
+import net.vectora.cloud.config.model.MemoryReserve;
 import net.vectora.cloud.config.model.MemorySize;
 import net.vectora.cloud.config.model.ServerKind;
-import net.vectora.cloud.config.model.TaskMode;
 import net.vectora.cloud.config.operation.PutGroup;
 import net.vectora.cloud.config.operation.PutTask;
 import net.vectora.cloud.config.secret.EnvFile;
@@ -42,8 +42,17 @@ class InteractiveSetupTest {
 
     /** Questions of a first run with the defaults: up to the legacy proxy, the 1.8.8 server is skipped. */
     private static final int SERVER_QUESTIONS = 8;
-    /** Memory questions with the default servers (all but the 1.8.8 part). */
-    private static final int MEMORY_QUESTIONS = 7;
+    /** Service-count questions with the default servers: every wanted one except the proxy. */
+    private static final int SERVICE_QUESTIONS = 6;
+    /** The yes/no question for the advanced settings, right after the service counts. */
+    private static final int ADVANCED_QUESTION = 1;
+    /**
+     * Memory questions with the default servers (all but the 1.8.8 part), followed directly by the
+     * service-count questions and the advanced-settings question, so these blocks are passed together.
+     */
+    private static final int MEMORY_QUESTIONS = 7 + SERVICE_QUESTIONS + ADVANCED_QUESTION;
+    /** Drain-timeout questions with the default servers: every wanted group. */
+    private static final int DRAIN_QUESTIONS = 7;
 
     @TempDir
     Path root;
@@ -97,7 +106,12 @@ class InteractiveSetupTest {
         assertFalse(cloud.legacyProxy().enabled());
         assertFalse(cloud.servers().isWanted(ServerKind.LEGACY_SERVER));
         assertEquals(Set.of("proxy", "lobby", "survival", "creative", "mod", "end", "minigame"), config.snapshot().groups().keySet());
-        assertEquals(TaskMode.DYNAMIC, config.snapshot().tasks().get("minigame").mode());
+        assertEquals(new ServiceCounts(0, 1, 8), ServiceCounts.of(config.snapshot().tasks().get("minigame").scaling()));
+        assertEquals(new ServiceCounts(1, 1, 4), ServiceCounts.of(config.snapshot().tasks().get("lobby").scaling()));
+        assertEquals(new ServiceCounts(1, 1, 1), ServiceCounts.of(config.snapshot().tasks().get("survival").scaling()));
+        assertEquals(new ServiceCounts(1, 1, 1), ServiceCounts.of(config.snapshot().tasks().get("proxy").scaling()));
+        assertEquals(75, config.snapshot().tasks().get("lobby").scaling().scaleUpAt());
+        assertEquals(50, config.snapshot().tasks().get("lobby").scaling().scaleDownBelow());
         assertEquals(MemorySize.parse("3G"), config.snapshot().groups().get("survival").heap().max());
         assertEquals(MemorySize.parse("512M"), config.snapshot().groups().get("survival").heap().min());
         assertTrue(result.files().contains("cloud.yml"));
@@ -247,14 +261,98 @@ class InteractiveSetupTest {
         start();
         terminal.enter(SERVER_QUESTIONS - 1).type("y", "y") // legacy proxy, then the 1.8.8 server
                 .enter(3).type("25577") // bind, java, bedrock, legacy port
-                .enter(MEMORY_QUESTIONS + 2).enter(1).enter(1);
+                .enter(MEMORY_QUESTIONS + 2 + 1).enter(1).enter(1); // two more heaps, one more count
         SetupResult result = SetupWizard.run(console, config, env(false, true));
         assertEquals(SetupResult.Status.COMPLETED, result.status(), terminal.output());
+        assertEquals(new ServiceCounts(1, 1, 3), ServiceCounts.of(config.snapshot().tasks().get("legacy-server").scaling()));
+        assertEquals(new ServiceCounts(1, 1, 1), ServiceCounts.of(config.snapshot().tasks().get("legacy-proxy").scaling()));
         assertTrue(config.snapshot().cloud().legacyProxy().enabled());
         assertEquals(25577, config.snapshot().cloud().legacyProxy().port());
         assertTrue(config.snapshot().cloud().servers().isWanted(ServerKind.LEGACY_SERVER));
         assertEquals("1.8.8", config.snapshot().groups().get("legacy-server").minecraftVersion());
         assertTrue(config.snapshot().groups().containsKey("legacy-proxy"));
+    }
+
+    @Test
+    void serviceCountsAreAskedPerServerAndCheckedWhereTheyAreTyped() throws Exception {
+        start();
+        // Servers, network, memory with defaults; then the lobby: two invalid answers, then 1/2/6.
+        terminal.enter(SERVER_QUESTIONS + 3 + 7)
+                .type("2/1/4", "1-1-4", "1/2/6")
+                .enter(SERVICE_QUESTIONS - 1 + ADVANCED_QUESTION + 1 + 1);
+        SetupResult result = SetupWizard.run(console, config, env(false, true));
+        assertEquals(SetupResult.Status.COMPLETED, result.status(), terminal.output());
+        assertEquals(0, terminal.pending(), "every scripted answer was used");
+        assertEquals(2, terminal.output().lines().filter(l -> l.startsWith("Write static/min/max")).count(),
+                terminal.output());
+        assertEquals(new ServiceCounts(1, 2, 6), ServiceCounts.of(config.snapshot().tasks().get("lobby").scaling()));
+        assertTrue(terminal.output().contains("lobby 1/2/6"), "the summary shows the counts: " + terminal.output());
+        // Counter-check: the other servers kept their suggestion.
+        assertEquals(new ServiceCounts(0, 1, 8), ServiceCounts.of(config.snapshot().tasks().get("minigame").scaling()));
+        assertEquals(new ServiceCounts(1, 1, 1), ServiceCounts.of(config.snapshot().tasks().get("end").scaling()));
+    }
+
+    @Test
+    void advancedSettingsAreSkippedByDefault() throws Exception {
+        start();
+        defaultsAndSave();
+        SetupResult result = SetupWizard.run(console, config, env(false, true));
+        assertEquals(SetupResult.Status.COMPLETED, result.status(), terminal.output());
+        List<String> prompts = terminal.reads().stream().map(ScriptedTerminal.Read::prompt).toList();
+        assertTrue(prompts.stream().anyMatch(p -> p.startsWith("Advanced settings") && p.contains("[y/N]")),
+                "asked once, default no: " + prompts);
+        assertFalse(prompts.stream().anyMatch(p -> p.startsWith("Drain time") || p.startsWith("Memory node")), prompts.toString());
+        var node = config.snapshot().nodes().nodes().getFirst();
+        assertEquals(null, node.maxMemory());
+        assertEquals(null, node.reserve());
+        config.snapshot().groups().values().forEach(g -> assertEquals(null, g.drainTimeout()));
+    }
+
+    @Test
+    void advancedSettingsAreCheckedWhereTheyAreTypedAndWritten() throws Exception {
+        start();
+        terminal.enter(SERVER_QUESTIONS + 3 + 7 + SERVICE_QUESTIONS).type("y")
+                .type("4s", "11m", "45s").enter(DRAIN_QUESTIONS - 1) // proxy, then the other groups keep 30s
+                .type("256M", "8G") // max-memory
+                .type("65G", "2G").enter(2) // reserve: system, then node-overhead and database keep the default
+                .enter(1 + 1); // database, save
+        SetupResult result = SetupWizard.run(console, config, env(false, true));
+
+        assertEquals(SetupResult.Status.COMPLETED, result.status(), terminal.output());
+        assertEquals(0, terminal.pending(), "every scripted answer was used");
+        assertEquals(2, terminal.output().lines().filter(l -> l.startsWith("Between 5s and 10m")).count(), terminal.output());
+        assertEquals(1, terminal.output().lines().filter(l -> l.startsWith("At least 512M, written like 8G")).count());
+        assertEquals(1, terminal.output().lines().filter(l -> l.startsWith("Between 1M and 64G")).count());
+        assertEquals("45s", config.snapshot().groups().get("proxy").drainTimeout().toString());
+        assertEquals(null, config.snapshot().groups().get("lobby").drainTimeout(), "Enter keeps the default, unwritten");
+        var node = config.snapshot().nodes().nodes().getFirst();
+        assertEquals(MemorySize.parse("8G"), node.maxMemory());
+        assertEquals(new MemoryReserve(MemorySize.parse("2G"), null, null), node.reserve());
+        assertTrue(result.files().contains("nodes.yml"), result.files().toString());
+
+        // Running again: "default" and "auto" remove what was set; Enter keeps the rest.
+        terminal.enter(1 + 1 + SERVER_QUESTIONS + 3 + 7 + SERVICE_QUESTIONS).type("y", "default").enter(DRAIN_QUESTIONS - 1)
+                .type("auto", "default").enter(2).enter(1 + 1);
+        SetupResult again = SetupWizard.run(console, config, env(false, true));
+        assertEquals(SetupResult.Status.CHANGED, again.status(), terminal.output());
+        assertEquals(Set.of("groups/proxy.yml", "nodes.yml"), again.files());
+        assertEquals(null, config.snapshot().groups().get("proxy").drainTimeout());
+        node = config.snapshot().nodes().nodes().getFirst();
+        assertEquals(null, node.maxMemory());
+        assertEquals(null, node.reserve());
+    }
+
+    @Test
+    void changedServiceCountsOfAnExistingTaskAreWrittenOnRunningAgain() throws Exception {
+        start();
+        defaultsAndSave();
+        SetupWizard.run(console, config, env(false, true));
+        terminal.enter(1 + 1 + SERVER_QUESTIONS + 3 + 7 + 1).type("1/1/2").enter(SERVICE_QUESTIONS - 2 + ADVANCED_QUESTION + 1).enter(1);
+        SetupResult again = SetupWizard.run(console, config, env(false, true));
+        assertEquals(SetupResult.Status.CHANGED, again.status(), terminal.output());
+        assertEquals(Set.of("tasks/survival.yml"), again.files());
+        assertEquals(new ServiceCounts(1, 1, 2), ServiceCounts.of(config.snapshot().tasks().get("survival").scaling()));
+        assertEquals(75, config.snapshot().tasks().get("survival").scaling().scaleUpAt(), "the rest of the scaling stays");
     }
 
     @Test

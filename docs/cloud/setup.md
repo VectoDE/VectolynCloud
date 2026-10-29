@@ -34,7 +34,18 @@ The assistant asks in this order. Every question shows its default in brackets; 
    | survival, mod | 3G |
 
    Values from 256M, in `M` or `G`. The minimum heap is set to 512M or the maximum, whichever is smaller. The assistant adds everything up and warns when the sum exceeds the memory of the machine or of the Pterodactyl server (`SERVER_MEMORY`).
-7. **Database.** `managed` (the cloud runs its own MariaDB), `docker`, `external` or `h2`. On Pterodactyl `docker` is left out, since the server already runs inside a container without access to Docker. Where MariaDB has no server build (anything except Windows x64 and Linux x86_64 with glibc), `managed` is marked as falling back to H2, and H2 is the default. After `managed` the assistant explains the switch behind it: `servers.database: true` in `cloud.yml` runs MariaDB, `false` uses H2 files per server. For `external` it asks for host, port (3306), database name, user and password.
+7. **Services.** For every wanted server except the proxies, the number of services as `static/min/max`, with these defaults:
+
+   | Server | Default |
+   |---|---|
+   | lobby | 1/1/4 |
+   | legacy-server (1.8.8) | 1/1/3 |
+   | minigame | 0/1/8 |
+   | survival, creative, mod, end | 1/1/1 |
+
+   Static services keep their worlds and always run; above them the cloud adds dynamic ones by player count, fresh from the template, up to max (see [scaling](scaling.md#static-and-dynamic-in-one-task)). `static ≤ min ≤ max` and max from 1 to 1000 are checked where you type them. The proxies always get 1/1/1. New tasks get `scale-up-at` 75 and `scale-down-below` 50; for an existing task only the three numbers are written, and only if they changed.
+8. **Advanced settings** (optional). One yes/no question, default no; with no, nothing of this is asked. With yes: the `drain-timeout` of every wanted group (5s to 10m, shown as 30s while unset), then for this node `max-memory` (at least 512M, `auto` lets the node work it out) and `memory-reserve.system`, `.node-overhead`, `.database` (1M to 64G each; defaults 1G, 256M, 512M). Enter keeps the value in brackets, `default` removes a set value so the default applies again. Each answer is checked where you type it, with the same limits as the [validator](config.md#validation-rules). See [scaling](scaling.md#node-settings-for-the-scaler).
+9. **Database.** `managed` (the cloud runs its own MariaDB), `docker`, `external` or `h2`. On Pterodactyl `docker` is left out, since the server already runs inside a container without access to Docker. Where MariaDB has no server build (anything except Windows x64 and Linux x86_64 with glibc), `managed` is marked as falling back to H2, and H2 is the default. After `managed` the assistant explains the switch behind it: `servers.database: true` in `cloud.yml` runs MariaDB, `false` uses H2 files per server. For `external` it asks for host, port (3306), database name, user and password.
 
 Then it prints a summary: every answer, the generated secrets (as "hidden"), and the files it would write. You choose `save`, `change` (all questions again, your answers are the new defaults) or `cancel`. Only `save` writes. If the checks find a problem, `save` is not offered until you change the answer.
 
@@ -88,6 +99,21 @@ network:
   legacy-port: 25564
 memory:                       # maximum heap per group
   survival: 4G
+services:                     # per task: any of the three numbers, the rest keeps its default
+  lobby:
+    static-services: 1
+    min-services: 2
+    max-services: 6
+  minigame:
+    max-services: 12
+drain-timeout:                # optional, per group, 5s to 10m; missing: the group keeps its value (new groups 30s)
+  lobby: 45s
+node:                         # optional, memory of this node in nodes.yml
+  max-memory: 8G              # at least 512M, or auto (the node works it out); missing: keeps its value
+  memory-reserve:             # each 1M to 64G; a field left out keeps its value or default
+    system: 2G                # default 1G
+    node-overhead: 256M       # default 256M
+    database: 512M            # default 512M, counted only for a managed or docker database
 database:
   mode: external              # managed, docker, external or h2
   host: db.example.org
@@ -102,14 +128,15 @@ Rules:
 
 - Everything except `schema-version` and `eula` may be left out and then keeps the default the assistant would offer.
 - The file is read as strictly as `cloud.yml`: unknown fields, duplicate keys, wrong types or a missing `eula: true` are errors. The file is checked with exactly the same rules as typed answers (ports, heap, legacy server only with legacy proxy, Docker not on Pterodactyl, the whole-configuration validation). On any error nothing is written and every problem is listed.
-- `memory` and `minigames` may only name groups that exist or that the setup creates.
+- `memory` and `minigames` may only name groups that exist or that the setup creates. `services` may only name tasks that exist or that the setup creates; the proxies are not among them, they always run one service. Each entry is checked like a typed answer (`static ≤ min ≤ max`, max from 1 to 1000). `drain-timeout` may only name groups that exist or that the setup creates; the console assistant asks for it under advanced settings, `group set <name> drain-timeout` changes it later.
+- `node` changes the node this cloud runs as (`node-id` in `cloud.yml`), checked like `nodes.yml`. The console assistant asks for it under advanced settings; `node set` changes it later. `max-memory: auto` removes the limit; any other text than a size is refused.
 - The file is used only while `setup-complete` is false. Once the setup is done, a file that stays mounted is ignored, so it cannot undo later changes made with `config set` or the dashboard.
 - The file holds no secret. The password of an external database comes from `secrets/vectora.env` (`VECTORA_DB_PASSWORD`) or from `database.password-file`: a regular file (a link to one is fine; a FIFO or device is refused) with the password on one line (a trailing line break is dropped), at most 4 KiB, UTF-8, relative to the home or absolute. That fits Docker and Kubernetes secrets.
 
 ### Why a file and not environment variables
 
 - The launcher already accepts `--setup-file`, and the file goes through the strict YAML reader the configuration files use. Errors come with path and line.
-- Maps and lists (memory per group, minigame switches) fit naturally into YAML. As variables they would need a naming scheme of their own.
+- Maps and lists (memory per group, services per task, minigame switches) fit naturally into YAML. As variables they would need a naming scheme of their own.
 - Environment variables are a poor place for secrets: they show up in `docker inspect`, in `/proc/<pid>/environ` and in the Pterodactyl panel, and every server process the cloud starts inherits them. The setup file holds no secret at all.
 - Both ways would need the same checks anyway. One format means one parser, one fuzz target, one set of tests.
 
@@ -171,7 +198,7 @@ Writing happens in three steps, so nothing ends up half done and marked complete
 2. only then the secrets: every missing generated secret, then the password of an external database, so a password never goes with a host and user that were not saved;
 3. last, `eula-accepted: true` and `setup-complete: true`.
 
-If step 2 or 3 fails, the configuration goes back to the state before (groups and tasks the setup created are removed again) and a password the setup wrote goes back to the one before. Generated secrets that were missing stay; they never replace a value. `setup-complete` stays false and the next start asks again. For every wanted server without a group, the assistant creates the group (template, software, Minecraft version, heap, `combat: legacy` for PandaSpigot) and a task: one static service, minigames dynamic from one to four. An unwanted server only gets its switch under `servers:` in `cloud.yml` turned off; an existing group stays as it is. Minigame groups switched off one by one get `wanted: false` in their group file. The download catalog of new groups starts empty and is filled by the server templates.
+If step 2 or 3 fails, the configuration goes back to the state before (groups and tasks the setup created are removed again) and a password the setup wrote goes back to the one before. Generated secrets that were missing stay; they never replace a value. `setup-complete` stays false and the next start asks again. For every wanted server without a group, the assistant creates the group (template, software, Minecraft version, heap, `combat: legacy` for PandaSpigot) and a task with the service counts from step 7 (proxies 1/1/1). An unwanted server only gets its switch under `servers:` in `cloud.yml` turned off; an existing group stays as it is. Minigame groups switched off one by one get `wanted: false` in their group file. The download catalog of new groups starts empty and is filled by the server templates.
 
 ## Tests
 

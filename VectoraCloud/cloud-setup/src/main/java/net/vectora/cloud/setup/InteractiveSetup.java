@@ -16,9 +16,13 @@ import net.vectora.cloud.config.error.ConfigException;
 import net.vectora.cloud.config.model.ConfigSnapshot;
 import net.vectora.cloud.config.model.DatabaseConfig;
 import net.vectora.cloud.config.model.DatabaseMode;
+import net.vectora.cloud.config.model.GroupConfig;
 import net.vectora.cloud.config.model.Language;
+import net.vectora.cloud.config.model.MemoryReserve;
 import net.vectora.cloud.config.model.MemorySize;
 import net.vectora.cloud.config.model.NodeConfig;
+import net.vectora.cloud.config.model.TimeSpan;
+import net.vectora.cloud.config.validation.ConfigValidator;
 import net.vectora.cloud.config.secret.EnvFile;
 import net.vectora.cloud.config.secret.EnvFormatException;
 import net.vectora.cloud.config.secret.GeneratedSecret;
@@ -43,6 +47,10 @@ import net.vectora.cloud.console.terminal.ConsoleTerminal;
  *       minigame group on its own once there are several;</li>
  *   <li>bind address, Java and Bedrock port (with the proxy), legacy port (with the legacy proxy);</li>
  *   <li>maximum heap of each wanted group, with the total;</li>
+ *   <li>static, minimum and maximum services of each wanted server except the proxies, with the
+ *       suggestion of {@link NetworkServer#defaultCounts()};</li>
+ *   <li>advanced settings, only on "yes" (default no): {@code drain-timeout} of every wanted group,
+ *       {@code max-memory} and {@code memory-reserve} of this node;</li>
  *   <li>database mode ({@code docker} hidden on Pterodactyl); for {@code external} host, port, name,
  *       user and password;</li>
  *   <li>summary with the files that change, then save, change or cancel.</li>
@@ -51,6 +59,9 @@ import net.vectora.cloud.console.terminal.ConsoleTerminal;
  * Nothing is written before "save". Cancelling at any question leaves every file as it was.
  */
 final class InteractiveSetup {
+
+    /** Answer that goes back to the default of an advanced setting. */
+    private static final String DEFAULT_WORD = "default";
 
     private final ConfigService config;
     private final SecretStore secrets;
@@ -200,7 +211,144 @@ final class InteractiveSetup {
         answers = servers(current, answers);
         answers = network(current, answers);
         answers = memory(current, answers);
+        answers = services(current, answers);
+        answers = advanced(current, answers);
         return database(current, answers);
+    }
+
+    /**
+     * Optional settings behind one yes/no question (default no): the {@code drain-timeout} of every
+     * wanted group and the memory settings of this node. Enter keeps the value in brackets, each
+     * answer is checked with the limits of the validator.
+     */
+    private SetupAnswers advanced(ConfigSnapshot current, SetupAnswers answers) throws PromptCancelledException {
+        if (!ask.ask(Question.yesNo(SetupMessages.ADVANCED).defaultValue(Boolean.FALSE))) {
+            return answers;
+        }
+        out.heading(SetupMessages.ADVANCED_HEADING.get(out.language()));
+        out.println(SetupMessages.ADVANCED_HELP);
+        for (NetworkServer server : NetworkServer.values()) {
+            if (!answers.wants(server)) {
+                continue;
+            }
+            for (String group : SetupPlan.heapGroups(current, server)) {
+                if (!answers.groupSwitches().getOrDefault(group, Boolean.TRUE)) {
+                    continue;
+                }
+                Optional<TimeSpan> drain = ask.ask(Question.custom(
+                                SetupMessages.fill(SetupMessages.DRAIN_TIMEOUT_OF, group),
+                                InteractiveSetup::drainTimeout,
+                                (Optional<TimeSpan> v) -> v.orElse(GroupConfig.DEFAULT_DRAIN_TIMEOUT).toString())
+                        .defaultValue(Optional.ofNullable(answers.drainTimeouts().get(group))));
+                answers = drain.isPresent() ? answers.withDrainTimeout(group, drain.get()) : answers.withoutDrainTimeout(group);
+            }
+        }
+        Optional<NodeConfig> node = node(current);
+        if (node.isEmpty()) {
+            return answers;
+        }
+        String id = node.get().id();
+        Optional<MemorySize> max = ask.ask(Question.custom(SetupMessages.fill(SetupMessages.MAX_MEMORY_OF, id),
+                        InteractiveSetup::maxMemory, (Optional<MemorySize> v) -> v.map(MemorySize::toString).orElse(SetupFile.Node.AUTO))
+                .defaultValue(Optional.ofNullable(answers.maxMemory())));
+        MemoryReserve raw = answers.memoryReserve() == null ? new MemoryReserve(null, null, null) : answers.memoryReserve();
+        MemorySize system = reserve(SetupMessages.RESERVE_SYSTEM_OF, id, raw.system(), MemoryReserve.DEFAULT_SYSTEM);
+        MemorySize overhead = reserve(SetupMessages.RESERVE_NODE_OVERHEAD_OF, id, raw.nodeOverhead(),
+                MemoryReserve.DEFAULT_NODE_OVERHEAD);
+        MemorySize database = reserve(SetupMessages.RESERVE_DATABASE_OF, id, raw.database(), MemoryReserve.DEFAULT_DATABASE);
+        MemoryReserve reserve = new MemoryReserve(system, overhead, database);
+        return answers.withNodeMemory(max.orElse(null), reserve.noneSet() ? null : reserve);
+    }
+
+    /** One field of {@code memory-reserve}; null means the default. */
+    private MemorySize reserve(Text prompt, String node, MemorySize current, MemorySize fallback)
+            throws PromptCancelledException {
+        return ask.ask(Question.custom(SetupMessages.fill(prompt, node), InteractiveSetup::reserveSize,
+                        (Optional<MemorySize> v) -> v.orElse(fallback).toString())
+                .defaultValue(Optional.ofNullable(current))).orElse(null);
+    }
+
+    private static Optional<TimeSpan> drainTimeout(String text) throws InvalidAnswerException {
+        if (DEFAULT_WORD.equalsIgnoreCase(text)) {
+            return Optional.empty();
+        }
+        try {
+            TimeSpan value = TimeSpan.parse(text);
+            long seconds = value.duration().getSeconds();
+            if (seconds >= GroupConfig.MIN_DRAIN_TIMEOUT_SECONDS && seconds <= GroupConfig.MAX_DRAIN_TIMEOUT_SECONDS) {
+                return Optional.of(value);
+            }
+        } catch (IllegalArgumentException e) {
+            // answered below
+        }
+        throw new InvalidAnswerException(SetupMessages.CHECK_DRAIN_TIMEOUT);
+    }
+
+    private static Optional<MemorySize> maxMemory(String text) throws InvalidAnswerException {
+        if (SetupFile.Node.AUTO.equalsIgnoreCase(text)) {
+            return Optional.empty();
+        }
+        try {
+            MemorySize value = MemorySize.parse(text);
+            if (value.megabytes() >= ConfigValidator.MIN_NODE_MEMORY_MEGABYTES) {
+                return Optional.of(value);
+            }
+        } catch (IllegalArgumentException e) {
+            // answered below
+        }
+        throw new InvalidAnswerException(SetupMessages.CHECK_MAX_MEMORY);
+    }
+
+    private static Optional<MemorySize> reserveSize(String text) throws InvalidAnswerException {
+        if (DEFAULT_WORD.equalsIgnoreCase(text)) {
+            return Optional.empty();
+        }
+        try {
+            MemorySize value = MemorySize.parse(text);
+            if (value.megabytes() <= MemoryReserve.MAX_MEGABYTES) {
+                return Optional.of(value);
+            }
+        } catch (IllegalArgumentException e) {
+            // answered below
+        }
+        throw new InvalidAnswerException(SetupMessages.CHECK_RESERVE);
+    }
+
+    /** Static, minimum and maximum services of every wanted server except the proxies. */
+    private SetupAnswers services(ConfigSnapshot current, SetupAnswers answers) throws PromptCancelledException {
+        out.heading(SetupMessages.SERVICES.get(out.language()));
+        out.println(SetupMessages.SERVICES_HELP);
+        for (NetworkServer server : NetworkServer.values()) {
+            if (!answers.wants(server) || server.isProxy()) {
+                continue;
+            }
+            for (String task : SetupPlan.serviceTasks(current, server)) {
+                if (!answers.groupSwitches().getOrDefault(groupOf(current, task), Boolean.TRUE)) {
+                    continue;
+                }
+                ServiceCounts fallback = answers.services().getOrDefault(task, server.defaultCounts());
+                ServiceCounts counts = ask.ask(Question.custom(
+                                SetupMessages.fill(SetupMessages.SERVICES_OF, label(server.shortName()), task),
+                                InteractiveSetup::serviceCounts, ServiceCounts::toString)
+                        .defaultValue(fallback).validate(ServiceCounts::problem));
+                answers = answers.withServices(task, counts);
+            }
+        }
+        return answers;
+    }
+
+    /** The group of an existing task, or the task name for one the assistant creates (same name). */
+    private static String groupOf(ConfigSnapshot current, String task) {
+        var existing = current.tasks().get(task);
+        return existing == null ? task : existing.group();
+    }
+
+    private static ServiceCounts serviceCounts(String text) throws InvalidAnswerException {
+        ServiceCounts counts = ServiceCounts.parse(text);
+        if (counts == null) {
+            throw new InvalidAnswerException(SetupMessages.CHECK_SERVICES);
+        }
+        return counts;
     }
 
     private SetupAnswers servers(ConfigSnapshot current, SetupAnswers answers) throws PromptCancelledException {
@@ -479,6 +627,17 @@ final class InteractiveSetup {
             }
         }
         long total = totalHeap(current, answers);
+        List<String> counts = new ArrayList<>();
+        for (NetworkServer server : NetworkServer.values()) {
+            if (!answers.wants(server) || server.isProxy()) {
+                continue;
+            }
+            for (String task : SetupPlan.serviceTasks(current, server)) {
+                if (answers.groupSwitches().getOrDefault(groupOf(current, task), Boolean.TRUE)) {
+                    counts.add(task + " " + answers.services().getOrDefault(task, server.defaultCounts()));
+                }
+            }
+        }
         DatabaseConfig db = answers.database();
         String endpoint = db.host() + ":" + db.port();
         String database = switch (db.mode()) {
@@ -500,6 +659,8 @@ final class InteractiveSetup {
         rows.put(SetupMessages.S_PORTS, ports.isEmpty() ? SetupMessages.S_NONE.get(lang) : String.join(", ", ports));
         rows.put(SetupMessages.S_MEMORY, memory.isEmpty() ? SetupMessages.S_NONE.get(lang)
                 : String.join(", ", memory) + " (" + size(total) + ")");
+        rows.put(SetupMessages.S_SERVICES, counts.isEmpty() ? SetupMessages.S_NONE.get(lang)
+                : String.join(", ", counts) + " " + SetupMessages.S_SERVICES_FORM.get(lang));
         rows.put(SetupMessages.S_DATABASE, database);
         rows.put(SetupMessages.S_SECRETS, secretsLine);
         rows.put(SetupMessages.S_FILES, files.isEmpty() ? SetupMessages.S_NONE.get(lang) : String.join(", ", files));

@@ -9,7 +9,6 @@ import net.vectora.cloud.config.model.MemorySize;
 import net.vectora.cloud.config.model.ScalingConfig;
 import net.vectora.cloud.config.model.ServerSoftware;
 import net.vectora.cloud.config.model.TaskConfig;
-import net.vectora.cloud.config.model.TaskMode;
 import net.vectora.cloud.config.model.TimeSpan;
 
 /** A valid lobby group and task for the tests. */
@@ -24,7 +23,7 @@ final class ApiSamples {
     }
 
     static TaskConfig lobbyTask() {
-        return new TaskConfig(TaskConfig.SCHEMA_VERSION, "lobby", TaskMode.STATIC,
-                new ScalingConfig(1, 1, 50, 80, TimeSpan.parse("5m"), TimeSpan.parse("60s")), List.of());
+        return new TaskConfig(TaskConfig.SCHEMA_VERSION, "lobby",
+                new ScalingConfig(1, 1, 1, 50, 80, 50, TimeSpan.parse("5m"), TimeSpan.parse("60s")), List.of());
     }
 }

@@ -280,8 +280,8 @@ class NodeWiringTest {
         NodeFixture fixture = NodeFixture.create(dir, true, List.of(
                 new PutGroup("minigame", NodeFixture.group(ServerKind.MINIGAME.templateFolder(), ServerSoftware.PAPER,
                         "-Dfake.cloud=true")),
-                new PutTask("minigame", new TaskConfig(TaskConfig.SCHEMA_VERSION, "minigame", TaskMode.DYNAMIC,
-                        new ScalingConfig(1, 2, 2, 50, TimeSpan.parse("0s"), TimeSpan.parse("0s")), List.of()))));
+                new PutTask("minigame", new TaskConfig(TaskConfig.SCHEMA_VERSION, "minigame",
+                        new ScalingConfig(0, 1, 2, 2, 50, 25, TimeSpan.parse("0s"), TimeSpan.parse("0s")), List.of()))));
         fixture.file("monitor.yml", "schema-version: 1\nsample-interval: 1s\n");
         ServiceId lobby = new ServiceId("lobby-1");
         ServiceId first = new ServiceId("minigame-1");

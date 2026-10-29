@@ -224,6 +224,84 @@ class ApiServerTest {
     }
 
     @Test
+    void nodesAreReadAndTheirMemorySettingsWritten() throws Exception {
+        try (TestApi api = new TestApi(home)) {
+            HttpResponse<String> list = api.get("/api/v1/nodes", api.admin);
+            assertEquals(200, list.statusCode(), list.body());
+            assertTrue(list.body().startsWith("[") && list.body().contains("\"id\":\"node-1\""), list.body());
+            HttpResponse<String> one = api.get("/api/v1/nodes/node-1", api.admin);
+            assertEquals(200, one.statusCode());
+            String etag = one.headers().firstValue("ETag").orElseThrow();
+            assertEquals(404, api.get("/api/v1/nodes/node-9", api.admin).statusCode());
+
+            String limited = one.body().replace("\"service-ports\"",
+                    "\"max-memory\":\"8G\",\"memory-reserve\":{\"system\":\"2G\"},\"service-ports\"");
+            HttpResponse<String> put = api.send(HttpRequest.newBuilder(api.uri("/api/v1/nodes/node-1"))
+                    .header("Authorization", "Bearer " + api.admin).header("Content-Type", "application/json")
+                    .header("If-Match", etag).PUT(HttpRequest.BodyPublishers.ofString(limited)).build());
+            assertEquals(200, put.statusCode(), put.body());
+            var node = api.config.snapshot().nodes().find("node-1").orElseThrow();
+            assertEquals("8G", node.maxMemory().toString());
+            assertEquals("2G", node.memoryReserve().system().toString());
+            assertEquals("256M", node.memoryReserve().nodeOverhead().toString(), "missing field: default");
+            assertTrue(Files.readString(home.resolve("nodes.yml")).contains("memory-reserve:"));
+            // The old ETag no longer fits.
+            assertEquals(412, api.send(HttpRequest.newBuilder(api.uri("/api/v1/nodes/node-1"))
+                    .header("Authorization", "Bearer " + api.admin).header("Content-Type", "application/json")
+                    .header("If-Match", etag).PUT(HttpRequest.BodyPublishers.ofString(one.body())).build()).statusCode());
+
+            // Refused: below 512M, a reserve field above 64G, another id, a wrong form, an unknown field.
+            HttpResponse<String> small = api.send("PUT", "/api/v1/nodes/node-1", api.admin, limited.replace("8G", "256M"));
+            assertEquals(422, small.statusCode(), small.body());
+            assertTrue(small.body().contains("nodes[0].max-memory"), small.body());
+            HttpResponse<String> big = api.send("PUT", "/api/v1/nodes/node-1", api.admin,
+                    limited.replace("\"system\":\"2G\"", "\"database\":\"65G\""));
+            assertEquals(422, big.statusCode(), big.body());
+            assertTrue(big.body().contains("nodes[0].memory-reserve.database"), big.body());
+            assertEquals(400, api.send("PUT", "/api/v1/nodes/node-1", api.admin, limited.replace("\"node-1\"", "\"node-2\""))
+                    .statusCode());
+            assertEquals(400, api.send("PUT", "/api/v1/nodes/node-1", api.admin, limited.replace("\"2G\"", "\"2 GB\""))
+                    .statusCode());
+            assertEquals(400, api.send("PUT", "/api/v1/nodes/node-1", api.admin, limited.replace("\"system\"", "\"sytem\""))
+                    .statusCode());
+            assertEquals("8G", api.config.snapshot().nodes().find("node-1").orElseThrow().maxMemory().toString(), "unchanged");
+
+            // A reader may look but not write.
+            String reader = api.token("reader", Scope.CONFIG_READ);
+            assertEquals(200, api.get("/api/v1/nodes", reader).statusCode());
+            assertEquals(403, api.send("PUT", "/api/v1/nodes/node-1", reader, one.body()).statusCode());
+
+            // Counter-check: the original body puts the node back as it was.
+            HttpResponse<String> back = api.send("PUT", "/api/v1/nodes/node-1", api.admin, one.body());
+            assertEquals(200, back.statusCode(), back.body());
+            assertEquals(net.vectora.cloud.config.model.NodeConfig.defaults(), api.config.snapshot().nodes().find("node-1")
+                    .orElseThrow());
+        }
+    }
+
+    @Test
+    void groupDrainTimeoutIsTakenAndChecked() throws Exception {
+        try (TestApi api = new TestApi(home)) {
+            String drain = GROUP.replace("\"catalog\":[]", "\"catalog\":[],\"drain-timeout\":\"45s\"");
+            HttpResponse<String> created = api.send("PUT", "/api/v1/groups/lobby", api.admin, drain);
+            assertEquals(201, created.statusCode(), created.body());
+            assertTrue(created.body().contains("\"drain-timeout\":\"45s\""), created.body());
+            assertEquals("45s", api.config.snapshot().groups().get("lobby").drainTimeout().toString());
+            HttpResponse<String> tooLong = api.send("PUT", "/api/v1/groups/lobby", api.admin, drain.replace("45s", "11m"));
+            assertEquals(422, tooLong.statusCode(), tooLong.body());
+            assertTrue(tooLong.body().contains("\"path\":\"drain-timeout\"") && tooLong.body().contains("out-of-range"),
+                    tooLong.body());
+            assertEquals(400, api.send("PUT", "/api/v1/groups/lobby", api.admin, drain.replace("45s", "45")).statusCode());
+            assertEquals("45s", api.config.snapshot().groups().get("lobby").drainTimeout().toString(), "unchanged");
+            // Counter-check: without the field the default applies and nothing is written.
+            HttpResponse<String> plain = api.send("PUT", "/api/v1/groups/lobby", api.admin, GROUP);
+            assertEquals(200, plain.statusCode(), plain.body());
+            assertFalse(plain.body().contains("drain-timeout"), plain.body());
+            assertEquals("30s", api.config.snapshot().groups().get("lobby").drainTimeoutOrDefault().toString());
+        }
+    }
+
+    @Test
     void groupsTasksAndConfigGoThroughConfigService() throws Exception {
         try (TestApi api = new TestApi(home)) {
             assertEquals(201, api.send("PUT", "/api/v1/groups/lobby", api.admin, GROUP).statusCode());
@@ -241,10 +319,67 @@ class ApiServerTest {
             assertEquals("1G", api.config.snapshot().groups().get("lobby").heap().max().toString());
 
             String task = """
-                    {"schema-version":1,"group":"lobby","mode":"static","scaling":{"min-services":1,"max-services":1,
-                     "players-per-service":50,"scale-up-at":80,"scale-down-after":"5m","cooldown":"60s"},"nodes":[]}""";
+                    {"schema-version":2,"group":"lobby","scaling":{"static-services":1,"min-services":1,"max-services":3,
+                     "players-per-service":50,"scale-up-at":75,"scale-down-below":40,"scale-down-after":"5m",
+                     "cooldown":"60s"},"nodes":[]}""";
             assertEquals(201, api.send("PUT", "/api/v1/tasks/lobby", api.admin, task).statusCode());
+            assertEquals(1, api.config.snapshot().tasks().get("lobby").scaling().staticServices());
+            assertEquals(40, api.config.snapshot().tasks().get("lobby").scaling().scaleDownBelow());
             assertEquals(422, api.send("PUT", "/api/v1/tasks/other", api.admin, task.replace("\"lobby\"", "\"nope\""))
+                    .statusCode());
+            // The same validator as for the file: static above min, scale-down-below not below scale-up-at.
+            HttpResponse<String> tooStatic = api.send("PUT", "/api/v1/tasks/lobby", api.admin,
+                    task.replace("\"static-services\":1", "\"static-services\":2"));
+            assertEquals(422, tooStatic.statusCode());
+            assertTrue(tooStatic.body().contains("static-above-min"), tooStatic.body());
+            HttpResponse<String> overlap = api.send("PUT", "/api/v1/tasks/lobby", api.admin,
+                    task.replace("\"scale-down-below\":40", "\"scale-down-below\":75"));
+            assertEquals(422, overlap.statusCode());
+            assertTrue(overlap.body().contains("scale-down-not-below-up"), overlap.body());
+            // Without static-services the body is refused with required at the field.
+            HttpResponse<String> noStatic = api.send("PUT", "/api/v1/tasks/lobby", api.admin,
+                    task.replace("\"static-services\":1,", ""));
+            assertEquals(400, noStatic.statusCode(), noStatic.body());
+            assertTrue(noStatic.body().contains("\"path\":\"scaling.static-services\"")
+                    && noStatic.body().contains("\"code\":\"required\""), noStatic.body());
+            // Counter-check: a wrong type there is invalid-value.
+            HttpResponse<String> wrongStatic = api.send("PUT", "/api/v1/tasks/lobby", api.admin,
+                    task.replace("\"static-services\":1", "\"static-services\":\"1\""));
+            assertEquals(400, wrongStatic.statusCode(), wrongStatic.body());
+            assertTrue(wrongStatic.body().contains("\"code\":\"invalid-value\""), wrongStatic.body());
+            // Without scale-down-below the default applies.
+            assertEquals(200, api.send("PUT", "/api/v1/tasks/lobby", api.admin,
+                    task.replace(",\"scale-down-below\":40", "")).statusCode());
+            assertEquals(50, api.config.snapshot().tasks().get("lobby").scaling().scaleDownBelow());
+            // A body of schema-version 1 with mode is migrated like a file and stored as version 2.
+            String v1 = """
+                    {"schema-version":1,"group":"lobby","mode":"static","scaling":{"min-services":2,"max-services":5,
+                     "players-per-service":50,"scale-up-at":50,"scale-down-after":"5m","cooldown":"60s"},"nodes":[]}""";
+            HttpResponse<String> migrated = api.send("PUT", "/api/v1/tasks/lobby", api.admin, v1);
+            assertEquals(200, migrated.statusCode(), migrated.body());
+            assertTrue(migrated.body().contains("\"schema-version\":2") && !migrated.body().contains("\"mode\""),
+                    migrated.body());
+            var stored = api.config.snapshot().tasks().get("lobby").scaling();
+            assertEquals(List.of(2, 2, 2, 25), List.of(stored.staticServices(), stored.minServices(), stored.maxServices(),
+                    stored.scaleDownBelow()), "static = min = max, scale-down-below = min(50, 50 / 2)");
+            String file = Files.readString(home.resolve("tasks/lobby.yml"));
+            assertTrue(file.contains("schema-version: 2") && file.contains("static-services: 2") && !file.contains("mode"), file);
+            HttpResponse<String> dynamic = api.send("PUT", "/api/v1/tasks/fresh", api.admin,
+                    v1.replace("\"static\"", "\"dynamic\""));
+            assertEquals(201, dynamic.statusCode(), dynamic.body());
+            assertEquals(0, api.config.snapshot().tasks().get("fresh").scaling().staticServices());
+            assertEquals(5, api.config.snapshot().tasks().get("fresh").scaling().maxServices());
+            assertEquals(204, api.send("DELETE", "/api/v1/tasks/fresh?confirm=fresh", api.admin, null).statusCode());
+            // Counter-check: a version-1 body with an invalid mode is refused at the field, nothing changes.
+            HttpResponse<String> badMode = api.send("PUT", "/api/v1/tasks/lobby", api.admin,
+                    v1.replace("\"static\"", "\"elastic\"").replace("\"min-services\":2", "\"min-services\":1"));
+            assertEquals(400, badMode.statusCode(), badMode.body());
+            assertTrue(badMode.body().contains("\"path\":\"mode\"") && badMode.body().contains("\"code\":\"invalid-value\""),
+                    badMode.body());
+            assertFalse(badMode.body().contains("elastic"), "the value is not echoed");
+            assertEquals(2, api.config.snapshot().tasks().get("lobby").scaling().maxServices(), "unchanged");
+            assertEquals(400, api.send("PUT", "/api/v1/tasks/lobby", api.admin, "{\"schema-version\":1,").statusCode());
+            assertEquals(400, api.send("PUT", "/api/v1/tasks/lobby", api.admin, v1.replace("\"mode\"", "\"mood\""))
                     .statusCode());
 
             // Wanted: the group's own switch; the switch of its server kind stays as it is.

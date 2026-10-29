@@ -18,7 +18,7 @@ import net.vectora.cloud.console.terminal.ConsoleTerminal;
 
 /**
  * The basic commands: {@code help}, {@code shutdown} (alias {@code exit}), {@code clear},
- * {@code config}, {@code group} and {@code task}. Service commands come from cloud-node.
+ * {@code config}, {@code group}, {@code task} and {@code node}. Service commands come from cloud-node.
  */
 public final class BuiltinCommands {
 
@@ -44,6 +44,7 @@ public final class BuiltinCommands {
         registry.register(config(config));
         registry.register(GroupCommands.group(config));
         registry.register(GroupCommands.task(config));
+        registry.register(NodeCommands.node(config));
     }
 
     /** {@code help [command...]}. */

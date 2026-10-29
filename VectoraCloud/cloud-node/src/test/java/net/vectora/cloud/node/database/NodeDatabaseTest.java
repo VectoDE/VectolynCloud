@@ -28,7 +28,6 @@ import net.vectora.cloud.config.model.ScalingConfig;
 import net.vectora.cloud.config.model.ServerKind;
 import net.vectora.cloud.config.model.ServerSoftware;
 import net.vectora.cloud.config.model.TaskConfig;
-import net.vectora.cloud.config.model.TaskMode;
 import net.vectora.cloud.config.model.TimeSpan;
 import net.vectora.cloud.config.operation.ConfigOperation;
 import net.vectora.cloud.config.operation.PutGroup;
@@ -109,8 +108,8 @@ class NodeDatabaseTest {
     }
 
     private static PutTask task(String name, int max) {
-        return new PutTask(name, new TaskConfig(TaskConfig.SCHEMA_VERSION, name, TaskMode.DYNAMIC,
-                new ScalingConfig(1, max, 50, 80, TimeSpan.parse("5m"), TimeSpan.parse("60s")), List.of()));
+        return new PutTask(name, new TaskConfig(TaskConfig.SCHEMA_VERSION, name,
+                new ScalingConfig(0, 1, max, 50, 80, 50, TimeSpan.parse("5m"), TimeSpan.parse("60s")), List.of()));
     }
 
     @Test

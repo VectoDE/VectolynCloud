@@ -255,7 +255,7 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
             if (decision instanceof Start start) {
                 ServiceInfo info = start.index().isPresent()
                         ? target.start(start.task(), start.index().getAsInt())
-                        : target.start(start.task());
+                        : target.startDynamic(start.task());
                 LOG.log(System.Logger.Level.INFO, "Scaling: {0} of task {1} is started ({2})", info.id(),
                         start.task(), describe(start.reason(), snapshot.tasks().get(start.task())));
             } else if (decision instanceof Stop stop) {

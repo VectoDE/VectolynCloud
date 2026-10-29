@@ -75,7 +75,7 @@ class ConfigOperationsTest {
 
     @Test
     void taskOperations() throws ConfigException {
-        ScalingConfig scaling = new ScalingConfig(2, 10, 16, 75, TimeSpan.parse("10m"), TimeSpan.parse("30s"));
+        ScalingConfig scaling = new ScalingConfig(1, 2, 10, 16, 75, 50, TimeSpan.parse("10m"), TimeSpan.parse("30s"));
         assertEquals(scaling, new SetTaskScaling("lobby", scaling).apply(base).tasks().get("lobby").scaling());
         assertTrue(new PutTask("lobby-2", Samples.lobbyTask()).apply(base).tasks().containsKey("lobby-2"));
         assertFalse(new RemoveTask("lobby").apply(base).tasks().containsKey("lobby"));

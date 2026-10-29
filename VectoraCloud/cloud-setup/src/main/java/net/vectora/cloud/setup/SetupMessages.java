@@ -95,6 +95,50 @@ public final class SetupMessages {
     public static final Text MEMORY_ABOVE_PTERODACTYL = Text.of(
             "That is more than the %1$s this Pterodactyl server may use. Raise the limit in the panel or lower the values.",
             "Das ist mehr als die %1$s, die dieser Pterodactyl-Server nutzen darf. Erhöh das Limit im Panel oder senk die Werte.");
+    /** Services heading. */
+    public static final Text SERVICES = Text.of(
+            "Services per server, as static/min/max. Static services keep their worlds and always run;"
+                    + " above them the cloud adds dynamic ones by player count, fresh from the template, up to max.",
+            "Dienste pro Server, als statisch/min/max. Statische Dienste behalten ihre Welten und laufen immer;"
+                    + " darüber startet die Cloud nach Spielerzahl dynamische, frisch aus dem Template, bis max.");
+    /** Services example. */
+    public static final Text SERVICES_HELP = Text.of(
+            "1/1/1: one static server, never scaled. 1/1/4: one static, up to 3 more dynamic ones."
+                    + " 0/1/8: only dynamic, one always ready, at most 8.",
+            "1/1/1: ein statischer Server, nie skaliert. 1/1/4: einer statisch, bis zu 3 weitere dynamisch."
+                    + " 0/1/8: nur dynamisch, einer immer bereit, höchstens 8.");
+    /** Services question; %1$s is the server, %2$s the task. */
+    public static final Text SERVICES_OF = Text.of("%1$s (task %2$s), static/min/max", "%1$s (Task %2$s), statisch/min/max");
+    /** Advanced settings question. */
+    public static final Text ADVANCED = Text.of(
+            "Advanced settings (drain time per group, memory of this node)?",
+            "Erweiterte Einstellungen (Abbauzeit pro Gruppe, Speicher dieses Nodes)?");
+    /** Advanced settings heading. */
+    public static final Text ADVANCED_HEADING = Text.of("Advanced settings", "Erweiterte Einstellungen");
+    /** Advanced settings: how Enter works. */
+    public static final Text ADVANCED_HELP = Text.of(
+            "Enter keeps the value in brackets. \"default\" goes back to the default, \"auto\" lets the node work out its memory.",
+            "Enter übernimmt den Wert in Klammern. \"default\" stellt den Standard wieder her, \"auto\" lässt den Node seinen Speicher selbst bestimmen.");
+    /** Drain timeout question; %1$s the group. */
+    public static final Text DRAIN_TIMEOUT_OF = Text.of(
+            "Drain time of %1$s (5s to 10m, players move before the scaler stops a service)",
+            "Abbauzeit von %1$s (5s bis 10m, so lange wechseln Spieler, bevor der Scaler einen Dienst stoppt)");
+    /** Max memory question; %1$s the node. */
+    public static final Text MAX_MEMORY_OF = Text.of(
+            "Memory node %1$s may give its services (at least 512M, or auto)",
+            "Speicher, den Node %1$s seinen Diensten geben darf (mindestens 512M, oder auto)");
+    /** Reserve for the system; %1$s the node. */
+    public static final Text RESERVE_SYSTEM_OF = Text.of(
+            "Memory node %1$s keeps for the system (1M to 64G)",
+            "Speicher, den Node %1$s für das System freihält (1M bis 64G)");
+    /** Reserve for the node itself; %1$s the node. */
+    public static final Text RESERVE_NODE_OVERHEAD_OF = Text.of(
+            "Memory node %1$s keeps for itself (1M to 64G)",
+            "Speicher, den Node %1$s für sich selbst freihält (1M bis 64G)");
+    /** Reserve for the database; %1$s the node. */
+    public static final Text RESERVE_DATABASE_OF = Text.of(
+            "Memory node %1$s keeps for the database it runs (1M to 64G)",
+            "Speicher, den Node %1$s für die eigene Datenbank freihält (1M bis 64G)");
     /** Database heading. */
     public static final Text DATABASE = Text.of("Database (LuckPerms, later the Vectora plugin)",
             "Datenbank (LuckPerms, später das Vectora-Plugin)");
@@ -184,6 +228,10 @@ public final class SetupMessages {
     public static final Text S_PORTS = Text.of("Ports", "Ports");
     /** Label. */
     public static final Text S_MEMORY = Text.of("Memory", "Arbeitsspeicher");
+    /** Label. */
+    public static final Text S_SERVICES = Text.of("Services", "Dienste");
+    /** After the counts in the summary. */
+    public static final Text S_SERVICES_FORM = Text.of("(static/min/max)", "(statisch/min/max)");
     /** Label. */
     public static final Text S_DATABASE = Text.of("Database", "Datenbank");
     /** Managed; %1$s host:port. */
@@ -316,6 +364,17 @@ public final class SetupMessages {
     public static final Text FILE_UNKNOWN_MEMORY_GROUP = Text.of(
             "memory: %1$s is neither an existing group nor a group the setup creates.",
             "memory: %1$s ist weder eine vorhandene Gruppe noch eine, die die Einrichtung anlegt.");
+    /** Unknown group under drain-timeout; %1$s the group. */
+    public static final Text FILE_UNKNOWN_DRAIN_GROUP = Text.of(
+            "drain-timeout: %1$s is neither an existing group nor a group the setup creates.",
+            "drain-timeout: %1$s ist weder eine vorhandene Gruppe noch eine, die die Einrichtung anlegt.");
+    /** node.max-memory that is neither auto nor a size. */
+    public static final Text FILE_NODE_MAX_MEMORY = Text.of(
+            "node.max-memory: write auto or a size like 8G.", "node.max-memory: schreib auto oder eine Größe wie 8G.");
+    /** Unknown task under services; %1$s the task. */
+    public static final Text FILE_UNKNOWN_SERVICES_TASK = Text.of(
+            "services: %1$s is neither an existing task nor one the setup creates (the proxies always run one service).",
+            "services: %1$s ist weder ein vorhandener Task noch einer, den die Einrichtung anlegt (die Proxys laufen immer mit einem Dienst).");
     /** A minigame entry without value; %1$s the group. */
     public static final Text FILE_MINIGAME_VALUE = Text.of(
             "minigames: %1$s needs true or false.", "minigames: %1$s braucht true oder false.");
@@ -355,6 +414,14 @@ public final class SetupMessages {
     public static final Text CHECK_HEAP = Text.of("At least 256M, written like 512M or 2G.", "Mindestens 256M, geschrieben wie 512M oder 2G.");
     /** Heap rule for one group; %1$s the group. */
     public static final Text CHECK_HEAP_OF = Text.of("Memory of %1$s: at least 256M.", "Arbeitsspeicher von %1$s: mindestens 256M.");
+    /** Service count rule. */
+    public static final Text CHECK_SERVICES = Text.of(
+            "Write static/min/max, for example 1/1/4: static at most min, min at most max, max from 1 to 1000.",
+            "Schreib statisch/min/max, zum Beispiel 1/1/4: statisch höchstens min, min höchstens max, max von 1 bis 1000.");
+    /** Service count rule for one task; %1$s the task. */
+    public static final Text CHECK_SERVICES_OF = Text.of(
+            "Services of %1$s: static at most min, min at most max, max from 1 to 1000.",
+            "Dienste von %1$s: statisch höchstens min, min höchstens max, max von 1 bis 1000.");
     /** Unknown group under minigames; %1$s the group. */
     public static final Text CHECK_UNKNOWN_GROUP = Text.of(
             "minigames: %1$s is no existing group.", "minigames: %1$s ist keine vorhandene Gruppe.");
@@ -372,6 +439,17 @@ public final class SetupMessages {
     public static final Text CHECK_PASSWORD_FORM = Text.of(
             "The password must be one line without spaces at either end.",
             "Das Passwort muss eine Zeile ohne Leerzeichen am Anfang oder Ende sein.");
+
+    /** Drain timeout rule. */
+    public static final Text CHECK_DRAIN_TIMEOUT = Text.of(
+            "Between 5s and 10m, written like 45s or 2m.", "Zwischen 5s und 10m, geschrieben wie 45s oder 2m.");
+    /** Max memory rule. */
+    public static final Text CHECK_MAX_MEMORY = Text.of(
+            "At least 512M, written like 8G, or auto.", "Mindestens 512M, geschrieben wie 8G, oder auto.");
+    /** Reserve rule. */
+    public static final Text CHECK_RESERVE = Text.of(
+            "Between 1M and 64G, written like 512M or 2G, or default.",
+            "Zwischen 1M und 64G, geschrieben wie 512M oder 2G, oder default.");
 
     /** {@code text} with its placeholders filled, in both languages. */
     public static Text fill(Text text, Object... args) {

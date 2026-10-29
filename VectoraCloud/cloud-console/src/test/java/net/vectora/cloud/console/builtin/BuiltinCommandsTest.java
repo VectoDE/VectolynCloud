@@ -12,9 +12,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import net.vectora.cloud.config.CloudHome;
 import net.vectora.cloud.config.ConfigService;
 import net.vectora.cloud.config.model.Language;
+import net.vectora.cloud.config.model.MemoryReserve;
+import net.vectora.cloud.config.model.MemorySize;
 import net.vectora.cloud.config.model.ServerKind;
 import net.vectora.cloud.config.model.ServerSoftware;
-import net.vectora.cloud.config.model.TaskMode;
 import net.vectora.cloud.console.Console;
 import net.vectora.cloud.console.FakeTerminal;
 import net.vectora.cloud.console.command.CommandDispatcher;
@@ -173,6 +174,68 @@ class BuiltinCommandsTest {
     }
 
     @Test
+    void groupSetDrainTimeout() throws Exception {
+        run("group create lobby Lobby-Server paper 26.3");
+        assertEquals(Outcome.DONE, run("group info lobby"));
+        assertTrue(terminal.output().contains("drain-timeout     = 30s (default)"), terminal.output());
+        assertEquals(Outcome.DONE, run("group set lobby drain-timeout 45s"));
+        assertEquals(net.vectora.cloud.config.model.TimeSpan.parse("45s"), config.snapshot().groups().get("lobby").drainTimeout());
+        assertTrue(Files.readString(home.resolve("groups/lobby.yml")).contains("drain-timeout: \"45s\""));
+        // Out of range and wrong form are refused, the value stays.
+        assertEquals(Outcome.FAILED, run("group set lobby drain-timeout 4s"));
+        assertTrue(terminal.output().contains("Must be between 5s and 10m."), terminal.output());
+        assertEquals(Outcome.FAILED, run("group set lobby drain-timeout 11m"));
+        assertEquals(Outcome.FAILED, run("group set lobby drain-timeout soon"));
+        assertEquals(net.vectora.cloud.config.model.TimeSpan.parse("45s"), config.snapshot().groups().get("lobby").drainTimeout());
+        // Counter-check: the limits themselves are accepted, and default removes the field.
+        assertEquals(Outcome.DONE, run("group set lobby drain-timeout 10m"));
+        assertEquals(Outcome.DONE, run("group set lobby drain-timeout 5s"));
+        assertEquals(Outcome.DONE, run("group set lobby drain-timeout default"));
+        assertEquals(null, config.snapshot().groups().get("lobby").drainTimeout());
+        assertFalse(Files.readString(home.resolve("groups/lobby.yml")).contains("drain-timeout"));
+    }
+
+    @Test
+    void nodeListInfoAndMemorySettings() throws Exception {
+        assertEquals(Outcome.DONE, run("node list"));
+        assertTrue(terminal.output().contains("node-1  127.0.0.1:7010  max-memory auto  (this node)"), terminal.output());
+        assertEquals(Outcome.DONE, run("node info node-1"));
+        assertTrue(terminal.output().contains("memory-reserve.system        = 1G (default)"), terminal.output());
+        assertTrue(terminal.output().contains("memory-reserve.node-overhead = 256M (default)"), terminal.output());
+        assertTrue(terminal.output().contains("memory-reserve.database      = 512M (default)"), terminal.output());
+
+        assertEquals(Outcome.DONE, run("node set node-1 max-memory 8G"));
+        assertEquals(MemorySize.parse("8G"), node().maxMemory());
+        assertEquals(Outcome.DONE, run("node set node-1 memory-reserve.system 2G"));
+        assertEquals(Outcome.DONE, run("node set node-1 memory-reserve.database 1G"));
+        assertEquals(new MemoryReserve(MemorySize.parse("2G"), null, MemorySize.parse("1G")), node().reserve());
+        assertEquals(MemorySize.parse("256M"), node().memoryReserve().nodeOverhead());
+        String file = Files.readString(home.resolve("nodes.yml"));
+        assertTrue(file.contains("memory-reserve:") && file.contains("max-memory: \"8G\""), file);
+
+        // Refused like a hand edit: below 512M, above 64G, wrong form, unknown node or field.
+        assertEquals(Outcome.FAILED, run("node set node-1 max-memory 256M"));
+        assertEquals(Outcome.FAILED, run("node set node-1 memory-reserve.node-overhead 65G"));
+        assertTrue(terminal.output().contains("Must be between 1M and 64G."), terminal.output());
+        assertEquals(Outcome.FAILED, run("node set node-1 memory-reserve.system lots"));
+        assertEquals(Outcome.FAILED, run("node set node-9 max-memory 8G"));
+        assertTrue(terminal.output().contains("Node \"node-9\" does not exist."), terminal.output());
+        assertEquals(Outcome.FAILED, run("node set node-1 port 7011"), "only memory fields");
+        assertEquals(MemorySize.parse("8G"), node().maxMemory(), "unchanged after the errors");
+
+        // Counter-check: auto and default remove the values again, the file is as before.
+        assertEquals(Outcome.DONE, run("node set node-1 max-memory auto"));
+        assertEquals(Outcome.DONE, run("node set node-1 memory-reserve.system default"));
+        assertEquals(Outcome.DONE, run("node set node-1 memory-reserve.database default"));
+        assertEquals(net.vectora.cloud.config.model.NodeConfig.defaults(), node());
+        assertFalse(Files.readString(home.resolve("nodes.yml")).contains("memory"));
+    }
+
+    private net.vectora.cloud.config.model.NodeConfig node() {
+        return config.snapshot().nodes().nodes().getFirst();
+    }
+
+    @Test
     void deleteAsksFirstAndEnterOrNoKeepsTheFile() throws Exception {
         run("group create lobby Lobby-Server paper 26.3");
         run("task create lobby lobby");
@@ -245,16 +308,61 @@ class BuiltinCommandsTest {
         assertTrue(terminal.output().contains("no wanted switch"));
     }
 
+    private List<Integer> counts(String task) {
+        var s = config.snapshot().tasks().get(task).scaling();
+        return List.of(s.staticServices(), s.minServices(), s.maxServices());
+    }
+
+    @Test
+    void modeStaticTakesMinServicesAndAtLeastOne() throws Exception {
+        run("group create lobby Lobby-Server paper 26.3");
+        run("task create lobby lobby dynamic");
+        run("task set lobby max-services 6");
+        run("task set lobby min-services 3");
+        assertEquals(List.of(0, 3, 6), counts("lobby"));
+        assertEquals(Outcome.DONE, run("task set lobby mode static"));
+        assertEquals(List.of(3, 3, 3), counts("lobby"), "min-services, not max-services");
+
+        // Counter-check: dynamic only clears static-services and keeps min and max.
+        run("task set lobby max-services 6");
+        assertEquals(Outcome.DONE, run("task set lobby mode dynamic"));
+        assertEquals(List.of(0, 3, 6), counts("lobby"));
+
+        run("task set lobby min-services 0");
+        assertEquals(List.of(0, 0, 6), counts("lobby"));
+        assertEquals(Outcome.DONE, run("task set lobby mode static"));
+        assertEquals(List.of(1, 1, 1), counts("lobby"), "min-services 0 becomes one static service, like the migration");
+    }
+
     @Test
     void taskLifecycleAndReferences() throws Exception {
         assertEquals(Outcome.FAILED, run("task create lobby lobby"), "the group must exist");
         assertTrue(terminal.output().contains("Group \"lobby\" does not exist."), terminal.output());
         run("group create lobby Lobby-Server paper 26.3");
         assertEquals(Outcome.DONE, run("task create lobby lobby dynamic"));
-        assertEquals(TaskMode.DYNAMIC, config.snapshot().tasks().get("lobby").mode());
+        assertEquals(0, config.snapshot().tasks().get("lobby").scaling().staticServices(), "dynamic: no static service");
         assertEquals(Outcome.FAILED, run("task create lobby lobby"));
 
         assertEquals(Outcome.DONE, run("task set lobby max-services 4"));
+        assertEquals(Outcome.DONE, run("task set lobby static-services 1"));
+        assertEquals(1, config.snapshot().tasks().get("lobby").scaling().staticServices());
+        assertEquals(Outcome.FAILED, run("task set lobby static-services 2"), "static above min-services");
+        assertTrue(terminal.output().contains("static services always run"), terminal.output());
+        assertEquals(1, config.snapshot().tasks().get("lobby").scaling().staticServices(), "unchanged after the error");
+        assertEquals(Outcome.DONE, run("task set lobby scale-down-below 40"));
+        assertEquals(40, config.snapshot().tasks().get("lobby").scaling().scaleDownBelow());
+        assertEquals(Outcome.FAILED, run("task set lobby scale-down-below 80"), "not below scale-up-at");
+        assertEquals(Outcome.DONE, run("task set lobby scale-up-at 90"));
+        assertEquals(Outcome.DONE, run("task set lobby scale-down-below 80"), "counter-check: below the new scale-up-at");
+        assertEquals(Outcome.DONE, run("task set lobby mode static"));
+        assertEquals(List.of(1, 1, 1), counts("lobby"), "static: static = min = max = min-services");
+        assertEquals(Outcome.DONE, run("task info lobby"));
+        assertTrue(terminal.output().contains("static-services     = 1"), terminal.output());
+        assertTrue(terminal.output().contains("scale-down-below    = 80"), terminal.output());
+        assertEquals(Outcome.DONE, run("task set lobby mode dynamic"));
+        assertEquals(0, config.snapshot().tasks().get("lobby").scaling().staticServices());
+        assertEquals(Outcome.FAILED, run("task set lobby mode elastic"));
+        assertEquals(Outcome.DONE, run("task set lobby min-services 1"));
         assertEquals(Outcome.FAILED, run("task set lobby min-services 5"), "min above max");
         assertEquals(Outcome.DONE, run("task set lobby scale-down-after 10m"));
         assertEquals(Outcome.FAILED, run("task set lobby cooldown 10d"));

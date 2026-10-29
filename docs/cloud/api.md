@@ -77,6 +77,9 @@ All paths start with `/api/v1`. Bodies are `application/json` in UTF-8, with the
 | `DELETE /groups/{name}?confirm={name}` | config:write | `204` |
 | `PUT /groups/{name}/wanted` `{"wanted": false}` | config:write | the group's switch and whether it runs |
 | `GET /tasks`, `GET/PUT /tasks/{name}`, `DELETE /tasks/{name}?confirm={name}`, `PUT /tasks/{name}/wanted` | as for groups | as for groups |
+| `GET /nodes` | config:read | every node of `nodes.yml` |
+| `GET /nodes/{name}` | config:read | the node, with `ETag` |
+| `PUT /nodes/{name}` | config:write | `201` created or `200` replaced, with `ETag` |
 | `GET /servers` | config:read | `{"proxy": true, "lobby": true, ...}` |
 | `PUT /servers/{kind}` `{"wanted": true}` | config:write | the server switches |
 | `GET /config` | config:read | `cloud.yml`, with `ETag` |
@@ -97,6 +100,12 @@ Every write goes through `ConfigService.apply`: the whole configuration is valid
 **Delete.** `DELETE` needs the name repeated as `?confirm=<name>`, otherwise `400 confirmation-required`. That stops a script from deleting the wrong thing with one typo.
 
 **Concurrent edits.** `GET` of a group, task or `cloud.yml` returns an `ETag`. Send it back as `If-Match` with `PUT` or `DELETE`; if the document changed in between, the answer is `412 precondition-failed` and nothing is written. The check runs together with the write, so of several writers with the same `ETag` exactly one gets through. `If-Match: *` only requires the document to exist. Without `If-Match` the write is unconditional.
+
+**Tasks.** `PUT /tasks/{name}` takes the whole task in the current format (`schema-version: 2`), for example `{"schema-version": 2, "group": "lobby", "scaling": {"static-services": 1, "min-services": 1, "max-services": 4, "players-per-service": 50, "scale-up-at": 75, "scale-down-below": 50, "scale-down-after": "5m", "cooldown": "60s"}, "nodes": []}`. `static-services` is required, `scale-down-below` defaults to 50. The same validator as for the file answers `422` with `static-above-min` (static above min) or `scale-down-not-below-up` (`scale-down-below` not lower than `scale-up-at`). A body of `schema-version: 1` (with `mode`) is migrated exactly like a file (see [config](config.md#from-schema-version-1)) and stored as version 2; the answer shows the migrated task. A body the reader refuses (unknown field, wrong type, missing required field, invalid `mode`) answers `400` with `errors` naming the field and a code such as `required` or `invalid-value`. `POST /services` with a task starts the task's lowest static service that is stopped, else a new static one while the task has fewer than `static-services`, else a dynamic one. See [scaling](scaling.md#static-and-dynamic-in-one-task).
+
+**Nodes.** `PUT /nodes/{name}` takes the whole node as in `nodes.yml`, for example `{"host": "127.0.0.1", "port": 7010, "service-ports": {"first": 30000, "last": 30999}, "max-memory": "8G", "memory-reserve": {"system": "2G"}}`. `id` may be left out; if it is set, it must match the path, otherwise `400 invalid-value`. `max-memory` (at least 512M) and every field of `memory-reserve` (1M to 64G; defaults `system` 1G, `node-overhead` 256M, `database` 512M) are optional; a field left out is removed from the file and its default applies. The same validator as for the file answers `422` (for example `out-of-range` at `nodes[0].memory-reserve.system`). `ETag` and `If-Match` work as for groups. There is no `DELETE`; removing a node stays in the file.
+
+**Groups.** `drain-timeout` is optional (5s to 10m, default 30s), for example `"drain-timeout": "45s"`; outside the range the answer is `422 out-of-range`.
 
 **Shutdown.** While the node shuts down, start, restart, reload and backup creation answer `503 shutting-down`. Reads and stops still work.
 

@@ -85,6 +85,11 @@ public final class SetupChecks {
                 problems.add(SetupMessages.fill(SetupMessages.CHECK_HEAP_OF, group));
             }
         });
+        answers.services().forEach((task, counts) -> {
+            if (counts.problem() != null) {
+                problems.add(SetupMessages.fill(SetupMessages.CHECK_SERVICES_OF, ConfigNames.safeArgument(task)));
+            }
+        });
         answers.groupSwitches().keySet().forEach(group -> {
             if (!current.groups().containsKey(group)) {
                 problems.add(SetupMessages.fill(SetupMessages.CHECK_UNKNOWN_GROUP, ConfigNames.safeArgument(group)));

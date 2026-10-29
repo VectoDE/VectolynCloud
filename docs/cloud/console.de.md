@@ -74,7 +74,7 @@ Startet den Einrichtungsassistenten erneut. Die aktuellen Werte sind die Vorschl
 | `group list` | Alle Gruppen mit Template, Software, Version und ob ihre Serverart gewünscht ist. |
 | `group info <Name>` | Alle Felder einer Gruppe. |
 | `group create <Name> <Template> <Software> <Minecraft-Version>` | Neue `groups/<Name>.yml` mit `java: auto`, Heap 512M bis 1G, Kampfsystem `legacy` bei `pandaspigot`, sonst `modern`. Scheitert, wenn es die Gruppe schon gibt. |
-| `group set <Name> <Feld> <Wert>` | Felder: `template`, `software`, `minecraft-version`, `java`, `heap.min`, `heap.max`, `combat`. |
+| `group set <Name> <Feld> <Wert>` | Felder: `template`, `software`, `minecraft-version`, `java`, `heap.min`, `heap.max`, `combat`, `drain-timeout` (5s bis 10m, `default` entfernt den Wert, dann gelten 30s), zum Beispiel `group set lobby drain-timeout 45s`. |
 | `group delete <Name> [--yes]`, `group remove <Name> [--yes]` | Löscht die Datei nach Rückfrage. Scheitert, solange ein Task die Gruppe nutzt. |
 | `group wanted <Name> <on\|off>` | Schaltet die Serverart der Gruppe in `cloud.yml` (`servers:`) ein oder aus. |
 
@@ -82,10 +82,10 @@ Startet den Einrichtungsassistenten erneut. Die aktuellen Werte sind die Vorschl
 
 | Unterbefehl | Wirkung |
 |---|---|
-| `task list` | Alle Tasks mit Gruppe, Modus und Dienst-Bereich. |
+| `task list` | Alle Tasks mit Gruppe, Modus (`static`, `dynamic` oder `static N + dynamic`) und Dienst-Bereich. |
 | `task info <Name>` | Alle Felder eines Tasks. |
-| `task create <Name> <Gruppe> [static\|dynamic]` | Neue `tasks/<Name>.yml` mit einem Dienst auf beliebigem Node. Die Gruppe muss existieren. |
-| `task set <Name> <Feld> <Wert>` | Felder: `group`, `mode`, `min-services`, `max-services`, `players-per-service`, `scale-up-at`, `scale-down-after`, `cooldown`, `nodes` (Liste mit Kommas, `""` für beliebigen Node). Der [Autoscaler](scaling.de.md) übernimmt eine Änderung innerhalb einer Runde. |
+| `task create <Name> <Gruppe> [static\|dynamic]` | Neue `tasks/<Name>.yml` auf beliebigem Node: `static` (Standard) mit einem statischen Dienst (1/1/1), `dynamic` mit einem dynamischen (0/1/1). Die Gruppe muss existieren. |
+| `task set <Name> <Feld> <Wert>` | Felder: `group`, `static-services`, `min-services`, `max-services`, `players-per-service`, `scale-up-at`, `scale-down-below`, `scale-down-after`, `cooldown`, `nodes` (Liste mit Kommas, `""` für beliebigen Node) und `mode` als Abkürzung: `mode static` setzt statisch, min und max auf `min-services` (mindestens 1, wie die Migration eines Tasks der Version 1), `mode dynamic` setzt `static-services` auf 0 und lässt min und max stehen. Geprüft wird wie in der Datei (`static ≤ min ≤ max`, `scale-down-below` < `scale-up-at`). Der [Autoscaler](scaling.de.md) übernimmt eine Änderung innerhalb einer Runde. |
 | `task delete <Name> [--yes]`, `task remove <Name> [--yes]` | Löscht die Datei nach Rückfrage. |
 | `task wanted <Name> <on\|off>` | Schaltet die Serverart der Gruppe des Tasks ein oder aus. |
 
@@ -94,6 +94,16 @@ Vor dem Löschen prüft die Konsole, ob es nach denselben Regeln wie `ConfigServ
 `wanted` gilt je Serverart, nicht je Gruppe. Eine Gruppe gehört zu der Serverart, deren Template-Ordner sie nutzt (`Lobby-Server` ist `lobby`). Der Schalter wirkt also auf alle Gruppen mit diesem Template. Für eine Gruppe mit anderem Template gibt es keinen Schalter, der Befehl meldet das.
 
 Den Katalog einer Gruppe (Plugins und Mods) ändert man vorerst in der Datei. Befehle für Dienste (`start`, `stop`, `screen` usw.) bringt cloud-node mit.
+
+### `node`
+
+| Unterbefehl | Wirkung |
+|---|---|
+| `node list` | Alle Nodes aus `nodes.yml` mit Host, Kanal-Port, `max-memory` und dem Hinweis, welcher Node dieser ist. |
+| `node info <ID>` | Alle Felder eines Nodes samt Speicherreserve. Ein nicht gesetztes Feld zeigt seinen Default und `(default)`. |
+| `node set <ID> <Feld> <Wert>` | Felder: `max-memory` (mindestens 512M, `auto` entfernt den Wert, dann rechnet der Node selbst), `memory-reserve.system`, `memory-reserve.node-overhead`, `memory-reserve.database` (je 1M bis 64G, `default` entfernt den Wert, dann gilt der Default: 1G, 256M, 512M). Zum Beispiel `node set node-1 memory-reserve.system 2G`. |
+
+Host, Ports sowie neue oder entfernte Nodes ändert man weiter in `nodes.yml`. Siehe [config.md](config.md#nodesyml).
 
 ### `api`
 

@@ -92,9 +92,16 @@ final class TestNetwork implements AutoCloseable {
         config.apply(new PutGroup(name, group));
     }
 
+    /** A task; {@code STATIC} makes the {@code min} services static, {@code DYNAMIC} none. */
     void task(String name, String group, TaskMode mode, int min, int max) throws Exception {
-        config.apply(new PutTask(name, new TaskConfig(TaskConfig.SCHEMA_VERSION, group, mode,
-                new ScalingConfig(min, max, 50, 80, TimeSpan.parse("5m"), TimeSpan.parse("60s")), List.of())));
+        task(name, group, mode == TaskMode.STATIC ? min : 0, min, max);
+    }
+
+    /** A task with {@code staticServices} static services. */
+    void task(String name, String group, int staticServices, int min, int max) throws Exception {
+        config.apply(new PutTask(name, new TaskConfig(TaskConfig.SCHEMA_VERSION, group,
+                new ScalingConfig(staticServices, min, max, 50, 80, 50, TimeSpan.parse("5m"), TimeSpan.parse("60s")),
+                List.of())));
     }
 
     void unwanted(ServerKind kind) throws Exception {

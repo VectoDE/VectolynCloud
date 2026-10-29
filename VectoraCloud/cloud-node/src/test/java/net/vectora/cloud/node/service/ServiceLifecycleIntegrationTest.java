@@ -159,7 +159,11 @@ class ServiceLifecycleIntegrationTest {
                 assertThrows(ServiceException.class, () -> manager.start("nope"));
                 ServiceId lobby2 = new ServiceId("lobby-2");
                 TestNetwork.await("lobby-2 running", WAIT, () -> state(manager, lobby2) == ServiceState.RUNNING);
-                assertTrue(Files.isDirectory(net.home.resolve("Lobby-Server/runtime-2")));
+                // Mixed task (static 1, max 2): the overflow service is dynamic and lives in temp/services.
+                Path lobby2Dir = net.home.resolve("temp/services/lobby-2");
+                assertEquals(TaskMode.DYNAMIC, manager.find(lobby2).orElseThrow().mode());
+                assertTrue(Files.isDirectory(lobby2Dir));
+                assertFalse(Files.exists(net.home.resolve("Lobby-Server/runtime-2")), "overflow is not static");
 
                 // Clean stop through stdin: static keeps its folder and world, dynamic is deleted.
                 ServiceInfo stopped = manager.stop(lobby);
@@ -176,6 +180,10 @@ class ServiceLifecycleIntegrationTest {
                 manager.stop(minigame);
                 TestNetwork.await("dynamic folder deleted", WAIT, () -> !Files.exists(minigameDir));
                 assertTrue(manager.find(minigame).isEmpty(), "a stopped dynamic service is forgotten");
+                // The overflow folder of the mixed task goes, the static folder of the same task stays.
+                manager.stop(lobby2);
+                TestNetwork.await("overflow folder deleted", WAIT, () -> !Files.exists(lobby2Dir));
+                assertTrue(Files.isRegularFile(lobbyDir.resolve("world/level.dat")), "static world must stay");
 
                 // A static service starts again in the same folder, with its world and a new token.
                 ServiceInfo again = manager.start("lobby");
@@ -287,7 +295,7 @@ class ServiceLifecycleIntegrationTest {
     void aStartWaitingAtTheGateIsRefusedOnceTheEulaIsTakenBack() throws Exception {
         try (TestNetwork net = TestNetwork.create(dir)) {
             net.group("lobby", ServerKind.LOBBY, ServerSoftware.PAPER, TestNetwork.process("normal", "20s", null));
-            net.task("lobby", "lobby", TaskMode.STATIC, 0, 1);
+            net.task("lobby", "lobby", 1, 1, 1);
             java.util.concurrent.Semaphore entered = new java.util.concurrent.Semaphore(0);
             java.util.concurrent.Semaphore release = new java.util.concurrent.Semaphore(0);
             Recorder recorder = new Recorder();
@@ -382,7 +390,7 @@ class ServiceLifecycleIntegrationTest {
     void aStaticServiceStartsAtAGivenIndexInItsOwnFolderWithinTheLimits() throws Exception {
         try (TestNetwork net = TestNetwork.create(dir)) {
             net.group("survival", ServerKind.SURVIVAL, ServerSoftware.PAPER, TestNetwork.process("normal", "20s", null));
-            net.task("survival", "survival", TaskMode.STATIC, 1, 2);
+            net.task("survival", "survival", 2, 2, 2);
             try (ServiceManager manager = net.manager().build()) {
                 for (int bad : List.of(0, -1, ServiceIds.MAX_INDEX + 1)) {
                     assertThrows(ServiceException.class, () -> manager.start("survival", bad), "index " + bad);
@@ -395,6 +403,8 @@ class ServiceLifecycleIntegrationTest {
                 TestNetwork.await("survival-3 running", WAIT, () -> state(manager, third.id()) == ServiceState.RUNNING);
                 assertThrows(ServiceException.class, () -> manager.start("survival", 3), "already running");
                 manager.start("survival", 1);
+                ServiceException noDynamic = assertThrows(ServiceException.class, () -> manager.startDynamic("survival"));
+                assertTrue(noDynamic.getMessage().contains("max-services"), noDynamic.getMessage());
                 // Counter-check of the limit: max-services is 2, so a third index is refused.
                 ServiceException full = assertThrows(ServiceException.class, () -> manager.start("survival", 2));
                 assertTrue(full.getMessage().contains("max-services"), full.getMessage());
@@ -402,6 +412,33 @@ class ServiceLifecycleIntegrationTest {
                 manager.stopUnwanted();
                 TestNetwork.await("survival stopped", WAIT, () -> state(manager, third.id()) == ServiceState.STOPPED);
                 assertThrows(ServiceException.class, () -> manager.start("survival", 3), "not wanted");
+            }
+        }
+    }
+
+    @Test
+    void aMixedTaskKeepsItsStaticQuotaAndAllTaskHasNoDynamicServices() throws Exception {
+        try (TestNetwork net = TestNetwork.create(dir)) {
+            net.group("lobby", ServerKind.LOBBY, ServerSoftware.PAPER, TestNetwork.process("normal", "20s", null));
+            net.task("lobby", "lobby", 1, 1, 3);
+            net.group("survival", ServerKind.SURVIVAL, ServerSoftware.PAPER, TestNetwork.process("normal", "20s", null));
+            net.task("survival", "survival", 1, 1, 1);
+            try (ServiceManager manager = net.manager().build()) {
+                // static = max: there is no room for a dynamic service.
+                ServiceException none = assertThrows(ServiceException.class, () -> manager.startDynamic("survival"));
+                assertTrue(none.getMessage().contains("no dynamic services"), none.getMessage());
+                // Counter-check: the plain start takes the static service.
+                assertEquals(TaskMode.STATIC, manager.start("survival").mode());
+
+                // static 1 of max 3: the first start is static, the next one dynamic.
+                assertEquals(TaskMode.STATIC, manager.start("lobby").mode());
+                ServiceInfo overflow = manager.start("lobby");
+                assertEquals(TaskMode.DYNAMIC, overflow.mode());
+                // A static start at a new index would make a second static service.
+                ServiceException quota = assertThrows(ServiceException.class, () -> manager.start("lobby", 3));
+                assertTrue(quota.getMessage().contains("static-services"), quota.getMessage());
+                // Counter-check: a dynamic start still has room.
+                assertEquals(TaskMode.DYNAMIC, manager.startDynamic("lobby").mode());
             }
         }
     }
