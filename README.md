@@ -8,16 +8,18 @@
 
 **English** · [Deutsch](README.de.md)
 
-Vectora is a Minecraft network where Java players (1.8 to 26.3) and Bedrock players play together. The whole network is open source under GPL-3.0, so you can also use it as a kit for your own network.
+Vectora is an open-source kit (GPL-3.0) for running your own Minecraft network, on which Java players (1.8 to 26.3) and Bedrock players play together.
 
-The long-term goal: you run `java -jar VectoraCloud.jar` on Windows, Linux, macOS, in Docker or on Pterodactyl, answer a setup wizard, and the complete network comes up with database, proxy, lobby, game modes and minigames.
+We do not run a network ourselves: there is no official server, domain, hosted website, Discord bot or store. The website, Discord bot and store are code in this repository. You configure them with your own bot token and your own Stripe account and host them yourself.
+
+The long-term goal: you run `java -jar VectoraCloud.jar` on Windows, Linux, macOS, in Docker or on Pterodactyl, answer a setup wizard, and the complete network comes up with database, proxy, lobby, game modes and minigames. A release will contain `VectoraCloud.jar`, start scripts for Windows, Linux and macOS, and a Docker image on GHCR. The Dockerfile, the compose file and the Pterodactyl egg live in this repository.
 
 ## Status
 
-**Stage 1 of 8: Foundation.** We are moving the existing servers into this repository, taking secrets out, fixing known config problems and setting up the Gradle build. There is no public server and no release yet. Most of what this README describes under *Architecture* is the plan, not working code.
+**Stage 2 of 8: VectoraCloud core.** Stage 1, the foundation, is finished and out as the signed pre-release [v0.1.0](https://github.com/VectoDE/Vectora-Network/releases/tag/v0.1.0). Stage 2 builds the cloud module by module; the task list is in [#11](https://github.com/VectoDE/Vectora-Network/issues/11), the overall plan on the roadmap. There is no usable cloud release yet, v0.1.0 only contains the foundation. Much of the *Architecture* section is still the plan, not working code.
 
 - Roadmap and progress: [Vectora Roadmap](https://github.com/users/VectoDE/projects/11)
-- Current stage: [#1 Stage 1: Foundation](https://github.com/VectoDE/Vectora-Network/issues/1)
+- Current stage: [#11 Stage 2: VectoraCloud core](https://github.com/VectoDE/Vectora-Network/issues/11)
 
 | Stage | Content |
 |---|---|

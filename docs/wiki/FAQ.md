@@ -2,8 +2,8 @@
 
 [Deutsch](FAQ-DE)
 
-**Is there a server I can join?**
-Not yet. The project is in stage 1 of 8. The address will be announced in [Discussions → Announcements](https://github.com/VectoDE/Vectora-Network/discussions/categories/announcements).
+**Is there an official Vectora server I can join?**
+No, and there won't be one. Vectora is a kit: we publish the code and releases, and every operator runs their own network. The project is in stage 2 of 8 (see [Roadmap](Roadmap)); releases are announced in [Discussions → Announcements](https://github.com/VectoDE/Vectora-Network/discussions/categories/announcements).
 
 **Which Minecraft versions can play?**
 The goal is Java 1.8 to 26.3 plus Bedrock. See [Crossplay](Crossplay) for what works today.
@@ -24,10 +24,10 @@ To run the servers: Java 25, because Paper 26.3 requires it. To build: Gradle st
 Vectora wants one plugin per platform that works the same on every server and knows about Bedrock. The plan replaces LuckPerms, TAB, WorldEdit, WorldGuard, PlaceholderAPI, ProxyPortal and Chunky with its own modules. Until those exist, the current servers still use some of them.
 
 **Can I use the code for my own network?**
-Yes, under GPL-3.0. If you distribute a modified version, you have to publish the source of your changes under the same license.
+Yes, that is what it is for, within the terms of GPL-3.0. If you distribute a modified version, you have to publish the source of your changes under the same license.
 
 **Will there be pay-to-win?**
-No. The planned store sells cosmetics only and follows the Minecraft EULA. Payments stay in test mode until the legal side has been checked.
+No. The planned store sells cosmetics only and follows the Minecraft EULA. We develop it against Stripe test mode. Each operator connects their own Stripe account and is responsible for the legal side of taking real payments.
 
 **Where do I report a security problem?**
 Privately, see [SECURITY.md](https://github.com/VectoDE/Vectora-Network/blob/main/SECURITY.md).
