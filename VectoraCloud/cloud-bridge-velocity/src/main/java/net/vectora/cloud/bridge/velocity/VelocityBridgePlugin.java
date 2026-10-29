@@ -39,8 +39,9 @@ import net.vectora.cloud.client.CloudClientSettings;
  *   <li>Status: every {@link #STATUS_PERIOD} with players and the shown player limit.</li>
  *   <li>Player events: join on the first backend, switch, quit, checked against the reported
  *       state ({@code PlayerTracker}).</li>
- *   <li>Kicks: a player whose server stopped, crashed or is full goes to another server of the
- *       group or to the lobby ({@code ProxyBridge.kicked}).</li>
+ *   <li>Kicks: a kicked player goes to another server of the group or to the fallback group,
+ *       except after a ban, the whitelist or a kick marked by our moderation
+ *       ({@code ProxyBridge.kicked}).</li>
  *   <li>Closed servers: a server the cloud is emptying takes no player who switches to it, except
  *       with the bypass permission ({@code ProxyBridge.mayConnect}).</li>
  * </ul>
@@ -112,13 +113,14 @@ public final class VelocityBridgePlugin {
      * A backend kicked the player or refused the connect.
      *
      * <ul>
-     *   <li>A stop, crash, lost connection, timeout or full server ({@code ProxyBridge.kicked}):
-     *       the player goes to another server of the group, else to the lobby, else is
-     *       disconnected with the original reason. A player who still is on another server only
-     *       moves inside the group and otherwise stays.</li>
-     *   <li>Any other kick (ban, whitelist, a kick someone meant) stays as the proxy decided; only a
-     *       redirect into a group goes to its emptiest server, never back to the one that
-     *       kicked.</li>
+     *   <li>Every kick except a ban, the whitelist and a kick marked by our moderation
+     *       ({@code ProxyBridge.kicked}): the player goes to another server of the group, else to
+     *       the fallback group, else is disconnected with the original reason. A player who still
+     *       is on another server only moves inside the group and otherwise stays. After a kick
+     *       with a reason of its own (not a stop, crash or full server) the player reads that
+     *       reason as a chat line once moved.</li>
+     *   <li>A ban, the whitelist and a marked kick stay as the proxy decided; only a redirect into
+     *       a group goes to its emptiest server, never back to one already tried.</li>
      * </ul>
      */
     @Subscribe
@@ -137,8 +139,10 @@ public final class VelocityBridgePlugin {
             case MOVE -> {
                 Optional<RegisteredServer> server = proxy.getServer(outcome.server());
                 if (server.isPresent()) {
-                    event.setResult(KickedFromServerEvent.RedirectPlayer.create(server.get(),
-                            Component.text(outcome.message(), NamedTextColor.YELLOW)));
+                    Component notice = Component.text(outcome.message(), NamedTextColor.YELLOW);
+                    // Velocity sends the redirect's message as a chat line once the move succeeded.
+                    Component message = outcome.showReason() ? event.getServerKickReason().orElse(notice) : notice;
+                    event.setResult(KickedFromServerEvent.RedirectPlayer.create(server.get(), message));
                 } else {
                     disconnectWithReason(event, outcome);
                 }

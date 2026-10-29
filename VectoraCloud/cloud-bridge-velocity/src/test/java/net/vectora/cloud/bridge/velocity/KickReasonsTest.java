@@ -37,6 +37,18 @@ class KickReasonsTest {
         assertFalse(KickClassifier.rescues(KickReasons.of(Optional.of(Component.text("Server closed")
                 .append(Component.translatable("multiplayer.disconnect.banned"))))));
         assertFalse(KickClassifier.rescues(KickReasons.of(Optional.of(
-                Component.translatable("disconnect.genericReason", Component.text("You were kicked"))))));
+                Component.translatable("disconnect.genericReason", Component.text("You were banned"))))));
+    }
+
+    @Test
+    void theModerationMarkerIsFoundAsTheModuleSetsIt() {
+        Component reason = Component.text("Please behave");
+        Component marked = Component.translatable().key(KickClassifier.MODERATION_KEY + ".kick").fallback("%s")
+                .arguments(reason).build();
+        assertEquals(KickClassifier.Verdict.NOT_CAUGHT, KickClassifier.classify(KickReasons.of(Optional.of(marked))));
+        assertEquals(KickClassifier.Verdict.NOT_CAUGHT, KickClassifier.classify(KickReasons.of(Optional.of(
+                Component.text("Moderation: ").append(marked)))), "as a child");
+        // Counter-check: the same words without the marker are caught and shown.
+        assertEquals(KickClassifier.Verdict.OTHER_REASON, KickClassifier.classify(KickReasons.of(Optional.of(reason))));
     }
 }

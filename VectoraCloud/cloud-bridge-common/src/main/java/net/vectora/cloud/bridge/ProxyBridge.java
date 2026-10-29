@@ -163,7 +163,9 @@ public final class ProxyBridge implements CloudClientListener {
      * ({@link KickClassifier}), the player goes to the emptiest other server of the same group,
      * otherwise to the emptiest server of the {@linkplain #FALLBACK_GROUP fallback group}; servers
      * already tried in this incident are skipped ({@link KickGuard}). A player who still is on
-     * another server (a refused switch) is only moved inside the group and otherwise stays.
+     * another server (a refused switch) is only moved inside the group and otherwise stays. For a
+     * kick with a reason of its own ({@link KickClassifier.Verdict#OTHER_REASON}) the player reads
+     * that reason after the move instead of the bridge's notice.
      *
      * @param player         the player
      * @param kickedFrom     the backend that kicked
@@ -172,7 +174,8 @@ public final class ProxyBridge implements CloudClientListener {
      * @return keep the proxy's result, move the player, or disconnect them with the original reason
      */
     public KickOutcome kicked(UUID player, String kickedFrom, KickReason reason, boolean staysConnected) {
-        if (!KickClassifier.rescues(reason)) {
+        KickClassifier.Verdict verdict = KickClassifier.classify(reason);
+        if (verdict == KickClassifier.Verdict.NOT_CAUGHT) {
             return KickOutcome.keep();
         }
         Locale locale = players.locale(player);
@@ -192,7 +195,9 @@ public final class ProxyBridge implements CloudClientListener {
             return giveUp;
         }
         guard.rescued(player, kickedFrom, target.get());
-        return KickOutcome.move(target.get(), TransferMessages.rescued(locale));
+        return verdict == KickClassifier.Verdict.OTHER_REASON
+                ? KickOutcome.moveShowingReason(target.get(), TransferMessages.rescued(locale))
+                : KickOutcome.move(target.get(), TransferMessages.rescued(locale));
     }
 
     /**

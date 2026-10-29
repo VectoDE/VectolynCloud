@@ -6,20 +6,48 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * Whether the proxy catches a kick and sends the player to another server: only when the backend
- * went away (stop, crash, lost connection, timeout, error) or is full, never for a ban, the
- * whitelist or a kick someone meant.
+ * Whether the proxy catches a kick and sends the player to another server. Every kick is caught
+ * except a ban, the whitelist and a kick our own moderation marks ({@link #MODERATION_KEY}).
  *
  * <ol>
- *   <li>A ban, whitelist or kick anywhere in the reason (key or word) is never caught.</li>
- *   <li>No reason at all is a lost connection: caught.</li>
+ *   <li>The {@linkplain #MODERATION_KEY moderation marker}, a ban or the whitelist anywhere in the
+ *       reason (key or word) is never caught: {@link Verdict#NOT_CAUGHT}.</li>
+ *   <li>No reason at all is a lost connection, and an empty one tells nothing either:
+ *       {@link Verdict#SERVER_GONE}.</li>
  *   <li>A known key ({@link #RESCUED_KEYS}) or a known text ({@link #RESCUED_TEXTS}, case and
- *       colour codes ignored, or starting with {@code Internal Exception:}) is caught.</li>
- *   <li>Anything else is not caught. Admins and plugins kick with their own words, so an unknown
- *       text counts as meant.</li>
+ *       colour codes ignored, or starting with {@code Internal Exception:}) means the server
+ *       stopped, broke or is full: {@link Verdict#SERVER_GONE}.</li>
+ *   <li>Anything else, a plugin's or an admin's own words or a vanilla key such as
+ *       {@code multiplayer.disconnect.kicked}, is caught as well, and the player reads the
+ *       original reason after the move: {@link Verdict#OTHER_REASON}.</li>
  * </ol>
  */
 public final class KickClassifier {
+
+    /**
+     * The marker of a kick by VectoraCloud's own moderation: a translation key in the kick
+     * reason that is this text or starts with it and a dot ({@code vectora.moderation.kick},
+     * {@code vectora.moderation.mute-kick}). The proxy never catches such a kick; the player is
+     * disconnected with the reason as it is.
+     *
+     * <p>The key is reserved for the moderation module; no other plugin may use it. The module
+     * puts it anywhere in the reason component, as the component itself or as a child or an
+     * argument. So that the player still reads the reason, it uses the fallback text {@code %s}
+     * with the visible reason as the only argument, in Adventure:
+     * {@code Component.translatable().key(MODERATION_KEY + ".kick").fallback("%s").arguments(reason)}.
+     * Clients that know no translation for the key show the fallback, that is the reason.
+     */
+    public static final String MODERATION_KEY = "vectora.moderation";
+
+    /** How a kick is handled. */
+    public enum Verdict {
+        /** A ban, the whitelist or a kick our moderation marked: the proxy leaves it alone. */
+        NOT_CAUGHT,
+        /** The server stopped, broke, lost the connection or is full: caught with a short notice. */
+        SERVER_GONE,
+        /** Any other reason: caught, and the player reads the original reason after the move. */
+        OTHER_REASON
+    }
 
     /** Vanilla keys of a stop, a lost or broken connection and a full server. */
     public static final Set<String> RESCUED_KEYS = Set.of(
@@ -32,11 +60,10 @@ public final class KickClassifier {
             "disconnect.endOfStream",
             "disconnect.overflow");
 
-    /** Key prefixes that are never caught: bans, whitelist, kicks. */
+    /** Key prefixes that are never caught: bans and the whitelist. */
     public static final Set<String> NEVER_KEY_PREFIXES = Set.of(
             "multiplayer.disconnect.banned",
-            "multiplayer.disconnect.not_whitelisted",
-            "multiplayer.disconnect.kicked");
+            "multiplayer.disconnect.not_whitelisted");
 
     /**
      * Texts of Paper, Spigot and 1.8.8 for a stop, a restart, a timeout and a full server, in lower
@@ -53,10 +80,41 @@ public final class KickClassifier {
     private static final String INTERNAL_EXCEPTION = "internal exception:";
 
     private static final Pattern NEVER_WORDS = Pattern.compile(
-            "\\b(ban|bans|banned|bann|gebannt|gesperrt|kick|kicked|gekickt|whitelist|whitelisted|white-listed)\\b");
+            "\\b(ban|bans|banned|bann|gebannt|gesperrt|whitelist|whitelisted|white-listed)\\b");
     private static final Pattern COLOUR_CODES = Pattern.compile("§.");
 
     private KickClassifier() {
+    }
+
+    /**
+     * How the kick is handled.
+     *
+     * @param reason the reason of the kick
+     * @return the verdict
+     */
+    public static Verdict classify(KickReason reason) {
+        Objects.requireNonNull(reason, "reason");
+        if (!reason.present()) {
+            return Verdict.SERVER_GONE;
+        }
+        for (String key : reason.keys()) {
+            if (isModerationKey(key) || NEVER_KEY_PREFIXES.stream().anyMatch(key::startsWith)) {
+                return Verdict.NOT_CAUGHT;
+            }
+        }
+        String text = COLOUR_CODES.matcher(reason.text()).replaceAll("").trim().toLowerCase(Locale.ROOT);
+        if (NEVER_WORDS.matcher(text).find()) {
+            return Verdict.NOT_CAUGHT;
+        }
+        if (reason.keys().stream().anyMatch(RESCUED_KEYS::contains)) {
+            return Verdict.SERVER_GONE;
+        }
+        String bare = text.replaceAll("[.!]+$", "");
+        if (RESCUED_TEXTS.contains(bare) || text.startsWith(INTERNAL_EXCEPTION)
+                || (text.isEmpty() && reason.keys().isEmpty())) {
+            return Verdict.SERVER_GONE;
+        }
+        return Verdict.OTHER_REASON;
     }
 
     /**
@@ -66,23 +124,16 @@ public final class KickClassifier {
      * @return {@code true} to send the player to another server
      */
     public static boolean rescues(KickReason reason) {
-        Objects.requireNonNull(reason, "reason");
-        if (!reason.present()) {
-            return true;
-        }
-        String text = COLOUR_CODES.matcher(reason.text()).replaceAll("").trim().toLowerCase(Locale.ROOT);
-        for (String key : reason.keys()) {
-            if (NEVER_KEY_PREFIXES.stream().anyMatch(key::startsWith)) {
-                return false;
-            }
-        }
-        if (NEVER_WORDS.matcher(text).find()) {
-            return false;
-        }
-        if (reason.keys().stream().anyMatch(RESCUED_KEYS::contains)) {
-            return true;
-        }
-        String bare = text.replaceAll("[.!]+$", "");
-        return RESCUED_TEXTS.contains(bare) || text.startsWith(INTERNAL_EXCEPTION);
+        return classify(reason) != Verdict.NOT_CAUGHT;
+    }
+
+    /**
+     * Whether a translation key is the {@linkplain #MODERATION_KEY moderation marker}.
+     *
+     * @param key a translation key
+     * @return whether it is {@value #MODERATION_KEY} or starts with it and a dot
+     */
+    public static boolean isModerationKey(String key) {
+        return key.equals(MODERATION_KEY) || key.startsWith(MODERATION_KEY + ".");
     }
 }

@@ -1,73 +1,103 @@
 package net.vectora.cloud.bridge;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import net.vectora.cloud.bridge.KickClassifier.Verdict;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 class KickClassifierTest {
 
-    private static boolean key(String key) {
-        return KickClassifier.rescues(KickReason.of(List.of(key), ""));
+    private static Verdict key(String key) {
+        return KickClassifier.classify(KickReason.of(List.of(key), ""));
     }
 
-    private static boolean text(String text) {
-        return KickClassifier.rescues(KickReason.of(List.of(), text));
+    private static Verdict text(String text) {
+        return KickClassifier.classify(KickReason.of(List.of(), text));
     }
 
     @Test
-    void aMissingReasonIsALostConnection() {
-        assertTrue(KickClassifier.rescues(KickReason.missing()));
-        // Counter-check: an empty reason the server did send is not a lost connection.
-        assertFalse(KickClassifier.rescues(KickReason.of(List.of(), "")));
+    void aMissingOrEmptyReasonIsALostConnection() {
+        assertEquals(Verdict.SERVER_GONE, KickClassifier.classify(KickReason.missing()));
+        assertEquals(Verdict.SERVER_GONE, KickClassifier.classify(KickReason.of(List.of(), "")));
+        assertEquals(Verdict.SERVER_GONE, text("  §c "));
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"multiplayer.disconnect.server_shutdown", "multiplayer.disconnect.server_full",
             "disconnect.timeout", "disconnect.genericReason", "disconnect.closed", "disconnect.lost",
             "disconnect.endOfStream", "disconnect.overflow"})
-    void shutdownTimeoutErrorAndFullKeysAreRescued(String key) {
-        assertTrue(key(key), key);
+    void shutdownTimeoutErrorAndFullKeysAreCaughtWithTheNotice(String key) {
+        assertEquals(Verdict.SERVER_GONE, key(key), key);
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"multiplayer.disconnect.banned", "multiplayer.disconnect.banned.reason",
             "multiplayer.disconnect.banned.expiration", "multiplayer.disconnect.banned_ip.reason",
-            "multiplayer.disconnect.not_whitelisted", "multiplayer.disconnect.kicked",
-            "multiplayer.disconnect.duplicate_login", "multiplayer.disconnect.idling", "multiplayer.disconnect.flying",
-            "some.plugin.key"})
-    void banWhitelistKickAndUnknownKeysAreNotRescued(String key) {
-        assertFalse(key(key), key);
+            "multiplayer.disconnect.not_whitelisted", "vectora.moderation", "vectora.moderation.kick",
+            "vectora.moderation.mute-kick"})
+    void banWhitelistAndModerationKeysAreNotCaught(String key) {
+        assertEquals(Verdict.NOT_CAUGHT, key(key), key);
+        assertFalse(KickClassifier.rescues(KickReason.of(List.of(key), "")), key);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"multiplayer.disconnect.kicked", "multiplayer.disconnect.duplicate_login",
+            "multiplayer.disconnect.idling", "multiplayer.disconnect.flying", "some.plugin.key",
+            "vectora.moderationx", "vectora.moderation-kick", "xvectora.moderation.kick"})
+    void otherKeysAreCaughtWithTheReason(String key) {
+        // Counter-check of the marker: only the key itself or with a dot behind it counts.
+        assertEquals(Verdict.OTHER_REASON, key(key), key);
+        assertTrue(KickClassifier.rescues(KickReason.of(List.of(key), "")), key);
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"Server closed", "server closed.", "Server is restarting", "Server restarting",
             "Timed out", "The server is full!", "Server is full", "Internal Exception: java.io.IOException: reset",
             "§cServer closed", "  Server closed  "})
-    void shutdownTimeoutErrorAndFullTextsAreRescued(String text) {
-        assertTrue(text(text), text);
+    void shutdownTimeoutErrorAndFullTextsAreCaughtWithTheNotice(String text) {
+        assertEquals(Verdict.SERVER_GONE, text(text), text);
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"You are banned from this server!", "You are not white-listed on this server!",
-            "Kicked by an operator.", "Du wurdest gebannt", "Du wurdest gekickt", "Hacking is not allowed",
-            "Spam", "Wartungsarbeiten"})
-    void banKickAndUnknownTextsAreNotRescued(String text) {
-        assertFalse(text(text), text);
+            "Du wurdest gebannt", "Du bist gesperrt", "§cBanned: Cheating", "You are not whitelisted"})
+    void banAndWhitelistTextsAreNotCaught(String text) {
+        assertEquals(Verdict.NOT_CAUGHT, text(text), text);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"Kicked by an operator.", "Du wurdest gekickt", "Hacking is not allowed", "Spam",
+            "Wartungsarbeiten", "Banana"})
+    void unknownTextsAreCaughtWithTheReason(String text) {
+        assertEquals(Verdict.OTHER_REASON, text(text), text);
     }
 
     @Test
-    void aBanOrKickAnywhereInTheReasonWins() {
-        // Each pair: the rescuable reason alone, then with a ban or kick part.
-        assertTrue(KickClassifier.rescues(KickReason.of(List.of("disconnect.genericReason"), "Connection reset")));
-        assertFalse(KickClassifier.rescues(KickReason.of(List.of("disconnect.genericReason"), "You were kicked")));
-        assertTrue(KickClassifier.rescues(KickReason.of(List.of("multiplayer.disconnect.server_shutdown"), "")));
-        assertFalse(KickClassifier.rescues(
+    void aBanOrTheMarkerAnywhereInTheReasonWins() {
+        // Each pair: the caught reason alone, then with a ban or the marker in it.
+        assertEquals(Verdict.SERVER_GONE, KickClassifier.classify(
+                KickReason.of(List.of("disconnect.genericReason"), "Connection reset")));
+        assertEquals(Verdict.NOT_CAUGHT, KickClassifier.classify(
+                KickReason.of(List.of("disconnect.genericReason"), "You were banned")));
+        assertEquals(Verdict.SERVER_GONE, key("multiplayer.disconnect.server_shutdown"));
+        assertEquals(Verdict.NOT_CAUGHT, KickClassifier.classify(
                 KickReason.of(List.of("multiplayer.disconnect.server_shutdown", "multiplayer.disconnect.banned"), "")));
-        assertTrue(text("Internal Exception: timeout"));
-        assertFalse(text("Internal Exception: banned"));
+        assertEquals(Verdict.OTHER_REASON, text("Please behave"));
+        assertEquals(Verdict.NOT_CAUGHT, KickClassifier.classify(
+                KickReason.of(List.of("vectora.moderation.kick"), "Please behave")));
+        assertEquals(Verdict.SERVER_GONE, text("Internal Exception: timeout"));
+        assertEquals(Verdict.NOT_CAUGHT, text("Internal Exception: banned"));
+    }
+
+    @Test
+    void theMarkerIsReservedUnderVectora() {
+        assertEquals("vectora.moderation", KickClassifier.MODERATION_KEY);
+        assertTrue(KickClassifier.isModerationKey(KickClassifier.MODERATION_KEY + ".kick"));
+        assertFalse(KickClassifier.isModerationKey("vectora.moderations.kick"));
     }
 }

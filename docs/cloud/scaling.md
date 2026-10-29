@@ -102,7 +102,7 @@ The proxy sends a player to the server of the group with the lowest load in perc
 - the first server on join (Velocity's `try` list only decides the group);
 - a redirect into a group, for example the fallback to the lobby after a kick;
 - the moves of an emptied server (the node plans them with the same rule, `TransferPlanner`);
-- a player whose server stopped, crashed, lost the connection or is full: another server of the same group, else the lobby, else the player is disconnected with the original reason. Bans, the whitelist and kicks someone meant are never caught; each server is tried once per incident, and at most 3 kicks per player are caught within 60 seconds. A redirect into a group after a kick counts towards that limit and skips the servers already tried, so a player never bounces between two lobbies (details in [bridges.md](bridges.md#catching-kicks)).
+- a kicked player, whether the server stopped, crashed, lost the connection or is full or kicked with its own words: another server of the same group, else the lobby, else the player is disconnected with the original reason. After a kick with its own words the player reads that reason once moved. Bans, the whitelist and kicks marked by VectoraCloud's moderation are never caught; each server is tried once per incident, and at most 3 kicks per player are caught within 60 seconds. A redirect into a group after a kick counts towards that limit and skips the servers already tried, so a player never bounces between two lobbies (details in [bridges.md](bridges.md#catching-kicks)).
 
 The main proxy and the legacy proxy work the same way. The node tells the proxies the slots of each backend and whether it is open with `ServerCapacity` (see [protocol.md](protocol.md)); a backend that is being emptied is closed. The proxies then refuse every switch to it, `/server` included, except for players with the permission `vectora.server.bypass-closed`; only the first server of a login is let through (see [bridges.md](bridges.md#closed-servers)). A backend without slots (sent by an older node) is chosen the way Velocity would.
 
@@ -191,7 +191,7 @@ A scaled service is an ordinary service of the service core ([node.md](node.md#i
 | `NodeWiringTest.theGroupsOwnSwitchStopsItOnReloadAndSwitchingItOnBringsItBack` | a static service stopped by a switch comes back at its own index |
 | `ServiceLifecycleIntegrationTest.aStaticServiceStartsAtAGivenIndexInItsOwnFolderWithinTheLimits` | `ServiceManager.start(task, index)`: range, folder, running index, `max-services`, unwanted group |
 | `ServerLoadsTest`, `ProxyBridgeTest` (cloud-bridge-common) | the proxy's choice of the emptiest server, pending players, closed servers, transfers only inside the group to an open listed server, caught kicks to the group, then the lobby, closed servers refused except with `vectora.server.bypass-closed` |
-| `KickClassifierTest`, `KickGuardTest` (cloud-bridge-common) | which kicks are caught, each server once per incident, at most 3 caught kicks in 60 s |
+| `KickClassifierTest`, `KickGuardTest` (cloud-bridge-common) | which kicks are caught (all but bans, whitelist and the moderation marker), each server once per incident, at most 3 caught kicks in 60 s |
 
 ## Limits today
 
