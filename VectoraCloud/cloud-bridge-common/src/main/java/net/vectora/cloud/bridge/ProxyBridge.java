@@ -6,11 +6,13 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.UnaryOperator;
 import net.vectora.cloud.client.CloudClientEvent;
 import net.vectora.cloud.client.CloudClientListener;
 import net.vectora.protocol.GroupName;
 import net.vectora.protocol.ServiceEnvironment;
+import net.vectora.protocol.message.NetworkKick;
 import net.vectora.protocol.message.RegisterServer;
 import net.vectora.protocol.message.ServerCapacity;
 import net.vectora.protocol.message.TransferPlayer;
@@ -19,7 +21,8 @@ import net.vectora.protocol.message.UnregisterServer;
 /**
  * Proxy side of a bridge, without any Velocity type. The Velocity plugin passes the proxy's events
  * in; this class keeps the server list in step with the cloud, reports checked player events,
- * picks the backend a player who enters a group goes to, and moves players the cloud asks for.
+ * picks the backend a player who enters a group goes to, moves players the cloud asks for and takes
+ * players off the network whom a backend kicked as a punishment ({@code NetworkKick}).
  *
  * <p>Messages from the cloud arrive on the client's event thread ({@link #onEvent}). Player events
  * arrive on proxy threads and only touch memory; the network part goes through the
@@ -36,6 +39,7 @@ public final class ProxyBridge implements CloudClientListener {
     private final PlayerTracker tracker;
     private final ServerLoads loads;
     private final KickGuard guard;
+    private final KickMarks marks;
     private final String fallbackGroup;
 
     /**
@@ -56,7 +60,7 @@ public final class ProxyBridge implements CloudClientListener {
      */
     public ProxyBridge(BridgeSender sender, ProxyServers servers, ProxyPlayers players, ProxyRole role,
                        String fallbackGroup) {
-        this(sender, servers, players, role, new ServerLoads(), new KickGuard(), fallbackGroup);
+        this(sender, servers, players, role, new ServerLoads(), new KickGuard(), new KickMarks(), fallbackGroup);
     }
 
     /**
@@ -81,9 +85,9 @@ public final class ProxyBridge implements CloudClientListener {
         }
     }
 
-    /** As above, with the load directory, the kick guard and the fallback group given (tests). */
+    /** As above, with the load directory, the kick guard, the marks and the fallback group given (tests). */
     ProxyBridge(BridgeSender sender, ProxyServers servers, ProxyPlayers players, ProxyRole role, ServerLoads loads,
-                KickGuard guard, String fallbackGroup) {
+                KickGuard guard, KickMarks marks, String fallbackGroup) {
         this.sender = Objects.requireNonNull(sender, "sender");
         this.servers = Objects.requireNonNull(servers, "servers");
         this.players = Objects.requireNonNull(players, "players");
@@ -91,6 +95,7 @@ public final class ProxyBridge implements CloudClientListener {
         this.tracker = new PlayerTracker(servers::exists);
         this.loads = Objects.requireNonNull(loads, "loads");
         this.guard = Objects.requireNonNull(guard, "guard");
+        this.marks = Objects.requireNonNull(marks, "marks");
         this.fallbackGroup = Objects.requireNonNull(fallbackGroup, "fallbackGroup");
     }
 
@@ -120,6 +125,7 @@ public final class ProxyBridge implements CloudClientListener {
                 }
             }
             case TransferPlayer transfer -> transfer(transfer);
+            case NetworkKick kick -> networkKick(kick);
             default -> {
                 // Everything else is for the client itself.
             }
@@ -142,6 +148,36 @@ public final class ProxyBridge implements CloudClientListener {
             return;
         }
         players.move(transfer.uuid(), target, TransferMessages.text(transfer.reason(), players.locale(transfer.uuid())));
+    }
+
+    /**
+     * A backend took a player off the network ({@code NetworkKick}, passed on by the cloud, which
+     * only does so for a backend it registered). Accepted only for a server the cloud listed and
+     * only if the player is on it or was kicked from it within {@link KickMarks#WINDOW}. A kick of
+     * the player that waits for the mark ({@link #kickedOrMarked}) disconnects them; otherwise the
+     * proxy disconnects them now, also if their kick was already caught and they were moved.
+     */
+    private void networkKick(NetworkKick kick) {
+        String server = kick.server().value();
+        if (loads.groupOf(server).isEmpty()) {
+            LOG.log(Level.WARNING, "Network kick from {0} ignored: the cloud did not list that server", server);
+            return;
+        }
+        if (!marks.concerns(kick.uuid(), server, players.currentServer(kick.uuid()))) {
+            LOG.log(Level.DEBUG, "Network kick from {0} ignored: the player is not on that server here", server);
+            return;
+        }
+        if (marks.mark(kick.uuid(), kick.reason())) {
+            return;
+        }
+        if (players.disconnect(kick.uuid(), networkKickText(kick.uuid(), kick.reason()))) {
+            LOG.log(Level.INFO, "A player was kicked off the network by {0}", server);
+        }
+    }
+
+    /** The reason of a network kick, or the bridge's own line when the backend gave the vanilla text. */
+    private String networkKickText(UUID player, String reason) {
+        return reason.isBlank() ? TransferMessages.kicked(players.locale(player)) : reason;
     }
 
     /**
@@ -194,7 +230,9 @@ public final class ProxyBridge implements CloudClientListener {
      * already tried in this incident are skipped ({@link KickGuard}). A player who still is on
      * another server (a refused switch) is only moved inside the group and otherwise stays. For a
      * kick with a reason of its own ({@link KickClassifier.Verdict#OTHER_REASON}) the player reads
-     * that reason after the move instead of the bridge's notice.
+     * that reason after the move instead of the bridge's notice. A kick the backend marked as a
+     * network kick ({@code NetworkKick}, within {@link KickMarks#WINDOW}) is never caught: the
+     * player is disconnected.
      *
      * @param player         the player
      * @param kickedFrom     the backend that kicked
@@ -203,6 +241,11 @@ public final class ProxyBridge implements CloudClientListener {
      * @return keep the proxy's result, move the player, or disconnect them with the original reason
      */
     public KickOutcome kicked(UUID player, String kickedFrom, KickReason reason, boolean staysConnected) {
+        marks.kickedFrom(player, kickedFrom);
+        Optional<String> marked = marks.find(player);
+        if (marked.isPresent()) {
+            return networkKicked(player, marked.get());
+        }
         KickClassifier.Verdict verdict = KickClassifier.classify(reason);
         if (verdict == KickClassifier.Verdict.NOT_CAUGHT) {
             return KickOutcome.keep();
@@ -227,6 +270,35 @@ public final class ProxyBridge implements CloudClientListener {
         return verdict == KickClassifier.Verdict.OTHER_REASON
                 ? KickOutcome.moveShowingReason(target.get(), TransferMessages.rescued(locale))
                 : KickOutcome.move(target.get(), TransferMessages.rescued(locale));
+    }
+
+    /**
+     * Like {@link #kicked}, but a kick that may be a {@code /kick} first waits up to
+     * {@link KickMarks#WAIT} for the backend's network kick, which travels over the cloud and may
+     * come a moment after the kick. With the mark (before, during or without the wait) the player
+     * is disconnected with the backend's reason; without it the kick is handled as by
+     * {@link #kicked}. Only a kick with words of its own or the vanilla kick text waits
+     * ({@link KickClassifier#awaitsMark}); a stop, a crash, a full server, a ban, the whitelist, a
+     * kick with the moderation marker and a refused switch of a player who stays on his server
+     * are decided at once.
+     *
+     * @return the outcome; already complete unless the kick waits
+     */
+    public CompletableFuture<KickOutcome> kickedOrMarked(UUID player, String kickedFrom, KickReason reason,
+                                                         boolean staysConnected) {
+        marks.kickedFrom(player, kickedFrom);
+        if (staysConnected || marks.find(player).isPresent() || !KickClassifier.awaitsMark(reason)) {
+            return CompletableFuture.completedFuture(kicked(player, kickedFrom, reason, staysConnected));
+        }
+        return marks.await(player, KickMarks.WAIT).thenApply(marked -> marked
+                .map(why -> networkKicked(player, why))
+                .orElseGet(() -> kicked(player, kickedFrom, reason, false)));
+    }
+
+    /** A kick the backend marked: the player leaves the network. */
+    private KickOutcome networkKicked(UUID player, String reason) {
+        LOG.log(Level.INFO, "A kick was marked as a network kick: the player leaves the network");
+        return KickOutcome.disconnect(networkKickText(player, reason));
     }
 
     /**
@@ -272,6 +344,7 @@ public final class ProxyBridge implements CloudClientListener {
     public void playerDisconnected(Object session, UUID uuid) {
         loads.arrived(uuid);
         guard.forget(uuid);
+        marks.forget(uuid);
         synchronized (tracker) {
             tracker.disconnected(session, uuid).ifPresent(sender::send);
         }

@@ -1,6 +1,7 @@
 package net.vectora.cloud.bridge.velocity;
 
 import com.google.inject.Inject;
+import com.velocitypowered.api.event.EventTask;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
 import com.velocitypowered.api.event.player.KickedFromServerEvent;
@@ -16,6 +17,7 @@ import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.scheduler.ScheduledTask;
 import java.time.Duration;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.vectora.cloud.bridge.BridgeConnection;
@@ -40,8 +42,10 @@ import net.vectora.cloud.client.CloudClientSettings;
  *   <li>Player events: join on the first backend, switch, quit, checked against the reported
  *       state ({@code PlayerTracker}).</li>
  *   <li>Kicks: a kicked player goes to another server of the group or to the fallback group,
- *       except after a ban, the whitelist or a kick marked by our moderation
- *       ({@code ProxyBridge.kicked}).</li>
+ *       except after a ban, the whitelist, a kick marked by our moderation or a network kick a
+ *       backend reported ({@code ProxyBridge.kickedOrMarked}).</li>
+ *   <li>Network kicks: a backend's {@code NetworkKick} disconnects the player
+ *       ({@code ProxyBridge.onEvent}).</li>
  *   <li>Closed servers: a server the cloud is emptying takes no player who switches to it, except
  *       with the bypass permission ({@code ProxyBridge.mayConnect}).</li>
  * </ul>
@@ -121,20 +125,41 @@ public final class VelocityBridgePlugin {
      *       reason as a chat line once moved.</li>
      *   <li>A ban, the whitelist and a marked kick stay as the proxy decided; only a redirect into
      *       a group goes to its emptiest server, never back to one already tried.</li>
+     *   <li>A kick the backend reported as a network kick ({@code NetworkKick}: a {@code /kick} of
+     *       an entitled sender or a kick of the moderation) disconnects the player from the
+     *       network. A kick that may be such a {@code /kick} waits up to 300 ms for the report
+     *       ({@code ProxyBridge.kickedOrMarked}).</li>
      * </ul>
      */
     @Subscribe
-    public void onKickedFromServer(KickedFromServerEvent event) {
+    public EventTask onKickedFromServer(KickedFromServerEvent event) {
         ProxyBridge target = bridge;
         if (target == null) {
-            return;
+            return null;
         }
         Player player = event.getPlayer();
         String kickedFrom = event.getServer().getServerInfo().getName();
         boolean staysConnected = player.getCurrentServer()
                 .map(current -> !current.getServerInfo().getName().equals(kickedFrom)).orElse(false);
-        KickOutcome outcome = target.kicked(player.getUniqueId(), kickedFrom,
+        CompletableFuture<KickOutcome> outcome = target.kickedOrMarked(player.getUniqueId(), kickedFrom,
                 KickReasons.of(event.getServerKickReason()), staysConnected);
+        if (outcome.isDone()) {
+            apply(event, target, kickedFrom, outcome.join());
+            return null;
+        }
+        // A possible /kick waits briefly for the backend's network kick; Velocity holds the event.
+        return EventTask.resumeWhenComplete(outcome.handle((result, error) -> {
+            if (error != null) {
+                LOG.log(System.Logger.Level.WARNING, "A kick could not be handled: {0}", error.toString());
+            } else {
+                apply(event, target, kickedFrom, result);
+            }
+            return null;
+        }));
+    }
+
+    /** Carries out what the bridge decided for a kick. */
+    private void apply(KickedFromServerEvent event, ProxyBridge target, String kickedFrom, KickOutcome outcome) {
         switch (outcome.action()) {
             case MOVE -> {
                 Optional<RegisteredServer> server = proxy.getServer(outcome.server());

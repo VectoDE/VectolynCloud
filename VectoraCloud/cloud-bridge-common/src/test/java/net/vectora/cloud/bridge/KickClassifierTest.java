@@ -103,6 +103,25 @@ class KickClassifierTest {
         assertEquals(Verdict.NOT_CAUGHT, text("Internal Exception: banned"));
     }
 
+    /** A kick that may be a /kick waits for the backend's network kick; the rest is decided at once. */
+    @Test
+    void onlyKicksThatMayBeAKickCommandWaitForTheNetworkKick() {
+        assertTrue(KickClassifier.awaitsMark(KickReason.of(List.of(), "Spam")), "/kick with a reason");
+        assertTrue(KickClassifier.awaitsMark(KickReason.of(List.of("multiplayer.disconnect.kicked"), "")));
+        assertTrue(KickClassifier.awaitsMark(KickReason.of(List.of(), "§cKicked by an operator.")), "1.8.8 text");
+        assertTrue(KickClassifier.awaitsMark(KickReason.of(List.of("multiplayer.disconnect.idling"), "")),
+                "any other key with the reason shown");
+        // Counter-checks: a stop, a lost connection, a ban, the whitelist and the moderation marker.
+        assertFalse(KickClassifier.awaitsMark(KickReason.of(List.of("multiplayer.disconnect.server_shutdown"), "")));
+        assertFalse(KickClassifier.awaitsMark(KickReason.missing()));
+        assertFalse(KickClassifier.awaitsMark(KickReason.of(List.of("multiplayer.disconnect.banned"), "")));
+        assertFalse(KickClassifier.awaitsMark(KickReason.of(List.of(), "You are banned")));
+        assertFalse(KickClassifier.awaitsMark(KickReason.of(List.of("multiplayer.disconnect.not_whitelisted"), "")));
+        assertFalse(KickClassifier.awaitsMark(KickReason.of(List.of("vectora.moderation.kick"), "Spam")));
+        assertFalse(KickClassifier.awaitsMark(
+                KickReason.of(List.of("multiplayer.disconnect.kicked", "vectora.moderation.kick"), "")));
+    }
+
     @Test
     void theMarkerIsReservedUnderVectora() {
         assertEquals("vectora.moderation", KickClassifier.MODERATION_KEY);

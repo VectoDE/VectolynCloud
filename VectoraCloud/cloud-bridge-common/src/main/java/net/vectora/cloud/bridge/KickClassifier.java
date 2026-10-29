@@ -74,6 +74,9 @@ public final class KickClassifier {
             "multiplayer.disconnect.not_whitelisted",
             "multiplayer.disconnect.kicked");
 
+    /** The key of the vanilla {@code /kick} without a reason of its own (Paper and Spigot since 1.13). */
+    public static final String VANILLA_KICK_KEY = "multiplayer.disconnect.kicked";
+
     /**
      * Texts that are never caught, in lower case without the closing punctuation: the plain text of
      * the vanilla {@code /kick} without a reason of its own on 1.8.8 (Spigot, PandaSpigot).
@@ -140,6 +143,32 @@ public final class KickClassifier {
             end--;
         }
         return text.substring(0, end);
+    }
+
+    /**
+     * Whether the kick may be a {@code /kick} whose network kick ({@code NetworkKick}) is still on
+     * its way over the cloud, so the proxy waits a moment for it: a kick with words of its own
+     * ({@link Verdict#OTHER_REASON}, that is how {@code /kick <player> <reason>} arrives) and the
+     * vanilla {@code /kick} without a reason (the key {@code multiplayer.disconnect.kicked} or, on
+     * 1.8.8, {@code Kicked by an operator.}). A stop, a crash, a full server, a ban, the whitelist
+     * and the moderation marker are decided at once.
+     *
+     * @param reason the reason of the kick
+     * @return whether to wait for a network kick
+     */
+    public static boolean awaitsMark(KickReason reason) {
+        Verdict verdict = classify(reason);
+        if (verdict == Verdict.OTHER_REASON) {
+            return true;
+        }
+        if (verdict == Verdict.SERVER_GONE) {
+            return false;
+        }
+        String text = COLOUR_CODES.matcher(reason.text()).replaceAll("").trim().toLowerCase(Locale.ROOT);
+        boolean vanillaKey = !reason.keys().isEmpty()
+                && reason.keys().stream().allMatch(key -> key.startsWith(VANILLA_KICK_KEY));
+        boolean vanillaText = reason.keys().isEmpty() && NEVER_TEXTS.contains(withoutClosingPunctuation(text));
+        return (vanillaKey || vanillaText) && !NEVER_WORDS.matcher(text).find();
     }
 
     /**

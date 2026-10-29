@@ -5,7 +5,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * The players of the proxy, as {@link ProxyBridge} needs them to carry out a transfer. The
+ * The players of the proxy, as {@link ProxyBridge} needs them to carry out a transfer or a network
+ * kick. The
  * Velocity bridge implements it on {@code ProxyServer}.
  */
 public interface ProxyPlayers {
@@ -34,4 +35,13 @@ public interface ProxyPlayers {
      * @param message the line to show first
      */
     void move(UUID player, String server, String message);
+
+    /**
+     * Disconnects the player from the proxy, and so from the network. Must not block.
+     *
+     * @param player the player
+     * @param reason the plain text the player reads
+     * @return whether the player was online
+     */
+    boolean disconnect(UUID player, String reason);
 }

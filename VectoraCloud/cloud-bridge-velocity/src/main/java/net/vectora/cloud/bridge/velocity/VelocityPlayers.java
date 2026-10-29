@@ -47,4 +47,11 @@ final class VelocityPlayers implements ProxyPlayers {
             return false;
         });
     }
+
+    @Override
+    public boolean disconnect(UUID player, String reason) {
+        Optional<Player> online = proxy.getPlayer(player);
+        online.ifPresent(found -> found.disconnect(Component.text(reason)));
+        return online.isPresent();
+    }
 }

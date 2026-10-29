@@ -14,10 +14,13 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import net.vectora.cloud.client.CloudClientEvent;
 import net.vectora.protocol.GroupName;
 import net.vectora.protocol.ServiceId;
 import net.vectora.protocol.message.Disconnect;
+import net.vectora.protocol.message.NetworkKick;
 import net.vectora.protocol.message.RegisterServer;
 import net.vectora.protocol.message.ServerCapacity;
 import net.vectora.protocol.message.TransferPlayer;
@@ -54,6 +57,18 @@ class ProxyBridgeTest {
         @Override
         public void move(UUID player, String server, String message) {
             moves.add(server + ": " + message);
+        }
+
+        final List<String> disconnects = new ArrayList<>();
+
+        @Override
+        public boolean disconnect(UUID player, String reason) {
+            if (!on.containsKey(player)) {
+                return false;
+            }
+            disconnects.add(reason);
+            on.remove(player);
+            return true;
         }
     }
 
@@ -222,6 +237,93 @@ class ProxyBridgeTest {
                 KickReason.of(List.of(KickClassifier.MODERATION_KEY + ".kick"), "Please behave"), false));
         // Counter-check: the same kick from a shutdown is caught.
         assertEquals(move("bedwars-2", null), bridge.kicked(alex, "bedwars-1", SHUTDOWN, false));
+        sender.close(Duration.ofSeconds(5));
+    }
+
+    private static final KickReason SPAM = KickReason.of(List.of(), "Spam");
+
+    private NetworkKick networkKick(UUID player, String server, String reason) {
+        return new NetworkKick(player, new ServiceId(server), reason);
+    }
+
+    @Test
+    void aNetworkKickBeforeTheKickDisconnectsAtOnceAndTheKickIsNotCaught() {
+        lobbies();
+        bedwars2();
+        UUID alex = UUID.randomUUID();
+        players.on.put(alex, "bedwars-1");
+        receive(networkKick(alex, "bedwars-1", "Spam"));
+        assertEquals(List.of("Spam"), players.disconnects, "off the network with the backend's reason");
+        // The backend's kick arrives afterwards: a punishment, not caught.
+        assertEquals(KickOutcome.disconnect("Spam"), bridge.kicked(alex, "bedwars-1", SPAM, false));
+        assertTrue(bridge.kickedOrMarked(alex, "bedwars-1", SPAM, false).isDone(), "no wait with a mark");
+        assertTrue(players.moves.isEmpty(), players.moves.toString());
+        sender.close(Duration.ofSeconds(5));
+    }
+
+    @Test
+    void aNetworkKickShortlyAfterTheKickEndsTheWaitWithADisconnect() throws Exception {
+        lobbies();
+        bedwars2();
+        UUID alex = UUID.randomUUID();
+        CompletableFuture<KickOutcome> outcome = bridge.kickedOrMarked(alex, "bedwars-1", SPAM, false);
+        assertFalse(outcome.isDone(), "a kick with own words waits for a mark");
+        // The player is between the servers; the mark comes over the cloud a moment later.
+        receive(networkKick(alex, "bedwars-1", "Spam"));
+        assertEquals(KickOutcome.disconnect("Spam"), outcome.get(5, TimeUnit.SECONDS));
+        assertTrue(players.disconnects.isEmpty(), "the waiting kick disconnects, not a second time");
+        sender.close(Duration.ofSeconds(5));
+    }
+
+    @Test
+    void aNetworkKickAfterTheWaitStillTakesTheMovedPlayerOffTheNetwork() throws Exception {
+        lobbies();
+        bedwars2();
+        UUID alex = UUID.randomUUID();
+        players.locales.put(alex, Locale.GERMANY);
+        assertEquals(KickOutcome.moveShowingReason("bedwars-2", TransferMessages.rescued(Locale.GERMANY)),
+                bridge.kickedOrMarked(alex, "bedwars-1", SPAM, false).get(5, TimeUnit.SECONDS),
+                "no mark within the wait: caught like a plugin's kick");
+        players.on.put(alex, "bedwars-2");
+        bridge.playerConnected(new Object(), alex, "Alex", "bedwars-2");
+        // A slow cloud: the mark comes after the move.
+        receive(networkKick(alex, "bedwars-1", ""));
+        assertEquals(List.of(TransferMessages.kicked(Locale.GERMANY)), players.disconnects,
+                "empty reason (vanilla text): the bridge's own line");
+        sender.close(Duration.ofSeconds(5));
+    }
+
+    @Test
+    void aPluginKickWithoutANetworkKickIsCaught() throws Exception {
+        lobbies();
+        bedwars2();
+        UUID alex = UUID.randomUUID();
+        assertEquals(KickOutcome.moveShowingReason("bedwars-2", TransferMessages.rescued(null)),
+                bridge.kickedOrMarked(alex, "bedwars-1", SPAM, false).get(5, TimeUnit.SECONDS));
+        assertTrue(bridge.kickedOrMarked(UUID.randomUUID(), "bedwars-1", SHUTDOWN, false).isDone(),
+                "a stop does not wait");
+        assertTrue(bridge.kickedOrMarked(UUID.randomUUID(), "bedwars-1", BANNED, false).isDone(),
+                "a ban does not wait");
+        assertTrue(players.disconnects.isEmpty());
+        sender.close(Duration.ofSeconds(5));
+    }
+
+    @Test
+    void aNetworkKickIsIgnoredForAnUnlistedServerOrAPlayerWhoIsNotOnIt() {
+        lobbies();
+        bedwars2();
+        UUID alex = UUID.randomUUID();
+        players.on.put(alex, "bedwars-2");
+        receive(networkKick(alex, "bedwars-9", "Spam"));   // not listed by the cloud
+        receive(networkKick(alex, "bedwars-1", "Spam"));   // the player is on bedwars-2 and was not kicked
+        receive(networkKick(UUID.randomUUID(), "bedwars-2", "Spam")); // not online here
+        assertTrue(players.disconnects.isEmpty(), players.disconnects.toString());
+        assertEquals(move("bedwars-1", null), bridge.kicked(alex, "bedwars-2", SHUTDOWN, false),
+                "an ignored mark does not turn the next kick into a punishment");
+        // Counter-check: from the server the player is on, the mark takes effect.
+        players.on.put(alex, "bedwars-2");
+        receive(networkKick(alex, "bedwars-2", "Spam"));
+        assertEquals(List.of("Spam"), players.disconnects);
         sender.close(Duration.ofSeconds(5));
     }
 

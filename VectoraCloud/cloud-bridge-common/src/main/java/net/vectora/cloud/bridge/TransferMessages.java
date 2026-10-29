@@ -56,6 +56,19 @@ public final class TransferMessages {
     }
 
     /**
+     * The disconnect text of a network kick whose backend gave no reason of its own (the vanilla
+     * {@code /kick} without a reason).
+     *
+     * @param locale the client's language, or {@code null} if unknown
+     * @return plain text without formatting codes
+     */
+    public static String kicked(Locale locale) {
+        return german(locale)
+                ? "Du wurdest vom Netzwerk geworfen."
+                : "You were kicked from the network.";
+    }
+
+    /**
      * The message for a player who wants onto a server the cloud is emptying.
      *
      * @param locale the client's language, or {@code null} if unknown
