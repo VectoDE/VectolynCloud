@@ -406,6 +406,30 @@ public final class ServiceManager implements AutoCloseable {
     }
 
     /**
+     * Starts the service of a task with a given index, for the scaler: a static service that
+     * stopped because its group was switched off comes back in its own folder, and a new static
+     * slot gets an index no service of the group has used yet, so the folder of a server the
+     * operator stopped by hand is not touched. Same gate and limits as {@link #start(String)}.
+     *
+     * @param task  task name
+     * @param index index within the group, 1 to {@value ServiceIds#MAX_INDEX}
+     * @return the started service
+     * @throws ServiceException for the reasons of {@link #start(String)}, if the index is out of
+     *                          range, or if a service with this index is active
+     */
+    public ServiceInfo start(String task, int index) throws ServiceException {
+        if (index < 1 || index > ServiceIds.MAX_INDEX) {
+            throw new ServiceException("a service index is between 1 and " + ServiceIds.MAX_INDEX);
+        }
+        ConfigSnapshot snapshot = config.get();
+        checkStartAllowed(snapshot.cloud());
+        startGate.beforeStart();
+        Service service = prepare(snapshot, task, OptionalInt.of(index));
+        launch(service, snapshot);
+        return service.info();
+    }
+
+    /**
      * Stops a service and starts it again. A static service comes back with the same id, folder
      * and (if still free) port; a dynamic one gets a fresh folder and the lowest free index of its
      * group, because its old folder is being deleted.

@@ -85,7 +85,7 @@ Startet den Einrichtungsassistenten erneut. Die aktuellen Werte sind die Vorschl
 | `task list` | Alle Tasks mit Gruppe, Modus und Dienst-Bereich. |
 | `task info <Name>` | Alle Felder eines Tasks. |
 | `task create <Name> <Gruppe> [static\|dynamic]` | Neue `tasks/<Name>.yml` mit einem Dienst auf beliebigem Node. Die Gruppe muss existieren. |
-| `task set <Name> <Feld> <Wert>` | Felder: `group`, `mode`, `min-services`, `max-services`, `players-per-service`, `scale-up-at`, `scale-down-after`, `cooldown`, `nodes` (Liste mit Kommas, `""` für beliebigen Node). |
+| `task set <Name> <Feld> <Wert>` | Felder: `group`, `mode`, `min-services`, `max-services`, `players-per-service`, `scale-up-at`, `scale-down-after`, `cooldown`, `nodes` (Liste mit Kommas, `""` für beliebigen Node). Der [Autoscaler](scaling.de.md) übernimmt eine Änderung innerhalb einer Runde. |
 | `task delete <Name> [--yes]`, `task remove <Name> [--yes]` | Löscht die Datei nach Rückfrage. |
 | `task wanted <Name> <on\|off>` | Schaltet die Serverart der Gruppe des Tasks ein oder aus. |
 

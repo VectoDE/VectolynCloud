@@ -1,12 +1,14 @@
 package net.vectora.cloud.monitor.metric;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -113,5 +115,19 @@ class ResidentMemoryProbeTest {
         String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
         assertThrows(ResidentMemoryProbe.ExitCodeException.class,
                 () -> ResidentMemoryProbe.runCommand(List.of(java, "-XX:+NoSuchOption")));
+    }
+
+    @Test
+    void aHelperProgramThatRunsOutOfTimeIsATimeOutAndNoExitCode(@TempDir Path dir) throws Exception {
+        // Killed by the time limit, the program has an exit code (1 on Windows, 137 on Unix). It must
+        // not pass for a program that failed on its own: the ps probe skips those as "pid gone".
+        Path sleeper = dir.resolve("Sleeper.java");
+        Files.writeString(sleeper, "class Sleeper { public static void main(String[] a) throws Exception {"
+                + " Thread.sleep(120_000); } }");
+        String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
+        IOException e = assertThrows(IOException.class, () -> ResidentMemoryProbe.runCommand(
+                List.of(java, sleeper.toString()), Duration.ofSeconds(1)));
+        assertFalse(e instanceof ResidentMemoryProbe.ExitCodeException, e.toString());
+        assertTrue(e.getMessage().contains("took longer than 1 s"), e.getMessage());
     }
 }

@@ -379,6 +379,34 @@ class ServiceLifecycleIntegrationTest {
     }
 
     @Test
+    void aStaticServiceStartsAtAGivenIndexInItsOwnFolderWithinTheLimits() throws Exception {
+        try (TestNetwork net = TestNetwork.create(dir)) {
+            net.group("survival", ServerKind.SURVIVAL, ServerSoftware.PAPER, TestNetwork.process("normal", "20s", null));
+            net.task("survival", "survival", TaskMode.STATIC, 1, 2);
+            try (ServiceManager manager = net.manager().build()) {
+                for (int bad : List.of(0, -1, ServiceIds.MAX_INDEX + 1)) {
+                    assertThrows(ServiceException.class, () -> manager.start("survival", bad), "index " + bad);
+                }
+                assertThrows(ServiceException.class, () -> manager.start("nether", 1), "unknown task");
+                ServiceInfo third = manager.start("survival", 3);
+                assertEquals(new ServiceId("survival-3"), third.id());
+                assertEquals(net.home.resolve("Survival-Server/runtime-3").toAbsolutePath().normalize(),
+                        third.workDirectory());
+                TestNetwork.await("survival-3 running", WAIT, () -> state(manager, third.id()) == ServiceState.RUNNING);
+                assertThrows(ServiceException.class, () -> manager.start("survival", 3), "already running");
+                manager.start("survival", 1);
+                // Counter-check of the limit: max-services is 2, so a third index is refused.
+                ServiceException full = assertThrows(ServiceException.class, () -> manager.start("survival", 2));
+                assertTrue(full.getMessage().contains("max-services"), full.getMessage());
+                net.unwanted(ServerKind.SURVIVAL);
+                manager.stopUnwanted();
+                TestNetwork.await("survival stopped", WAIT, () -> state(manager, third.id()) == ServiceState.STOPPED);
+                assertThrows(ServiceException.class, () -> manager.start("survival", 3), "not wanted");
+            }
+        }
+    }
+
+    @Test
     void aDynamicIdIsNotReusedWhileItsOldFolderIsStillBeingDeleted() throws Exception {
         try (TestNetwork net = TestNetwork.create(dir)) {
             net.group("minigame", ServerKind.MINIGAME, ServerSoftware.PAPER, TestNetwork.process("normal", "20s", null));

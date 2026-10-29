@@ -1,0 +1,349 @@
+package net.vectora.cloud.node.scaling;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.nio.file.Path;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.OptionalInt;
+import java.util.OptionalLong;
+import java.util.concurrent.Executor;
+import net.vectora.cloud.config.model.CloudConfig;
+import net.vectora.cloud.config.model.CombatSystem;
+import net.vectora.cloud.config.model.ConfigSnapshot;
+import net.vectora.cloud.config.model.GroupConfig;
+import net.vectora.cloud.config.model.HeapConfig;
+import net.vectora.cloud.config.model.JavaSelection;
+import net.vectora.cloud.config.model.MemorySize;
+import net.vectora.cloud.config.model.NodesConfig;
+import net.vectora.cloud.config.model.ScalingConfig;
+import net.vectora.cloud.config.model.ServerKind;
+import net.vectora.cloud.config.model.ServerSoftware;
+import net.vectora.cloud.config.model.TaskConfig;
+import net.vectora.cloud.config.model.TaskMode;
+import net.vectora.cloud.config.model.TimeSpan;
+import net.vectora.cloud.config.model.WantedServers;
+import net.vectora.cloud.node.scaling.ScalingPlanner.Decision;
+import net.vectora.cloud.node.scaling.ScalingPlanner.Hold;
+import net.vectora.cloud.node.scaling.ScalingPlanner.Held;
+import net.vectora.cloud.node.scaling.ScalingPlanner.Memory;
+import net.vectora.cloud.node.scaling.ScalingPlanner.Reason;
+import net.vectora.cloud.node.scaling.ScalingPlanner.Start;
+import net.vectora.cloud.node.scaling.ScalingPlanner.Stop;
+import net.vectora.cloud.node.service.ServiceException;
+import net.vectora.cloud.node.service.ServiceInfo;
+import net.vectora.cloud.node.service.ServiceState;
+import net.vectora.protocol.ServiceId;
+import org.junit.jupiter.api.Test;
+
+/** The rounds of the autoscaler on a fake service core: what it remembers, when it waits, and when it does nothing. */
+class AutoscalerTest {
+
+    private static final Instant T0 = Instant.parse("2026-10-29T12:00:00Z");
+    private static final Optional<Memory> ROOMY = Optional.of(new Memory(0, 64L * 1024 * 1024 * 1024));
+
+    @Test
+    void nothingHappensBeforeTheSetupIsDoneWhileSuspendedAndAfterClose() {
+        Fixture f = new Fixture().task("minigame", TaskMode.DYNAMIC, 1, 3);
+        f.cloud = f.cloud.withEulaAccepted(false);
+        assertEquals(List.of(), f.scaler.tick(), "no EULA");
+        f.cloud = f.cloud.withEulaAccepted(true).withSetupComplete(false);
+        assertEquals(List.of(), f.scaler.tick(), "setup not complete");
+        f.cloud = f.cloud.withSetupComplete(true);
+        f.scaler.suspend(true);
+        assertEquals(List.of(), f.scaler.tick(), "suspended");
+        f.scaler.suspend(false);
+
+        // Counter-check: once everything is in place, the minimum is started.
+        assertEquals(List.of(new Start("minigame", OptionalInt.empty(), Reason.MIN_SERVICES)), f.scaler.tick());
+        assertEquals(List.of("start minigame"), f.target.calls);
+
+        f.scaler.close();
+        f.target.services.clear();
+        assertEquals(List.of(), f.scaler.tick(), "closed");
+    }
+
+    @Test
+    void scalesUpOnPlayersAndDownAfterTheEmptyTimeWithTheCooldownInBetween() {
+        Fixture f = new Fixture().task("minigame", TaskMode.DYNAMIC, 1, 3);
+        f.target.add("minigame", 1, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.players.put(new ServiceId("minigame-1"), 40);
+        assertEquals(List.of(new Start("minigame", OptionalInt.empty(), Reason.PLAYERS)), f.scaler.tick());
+        f.target.setState("minigame-2", ServiceState.RUNNING);
+        f.players.put(new ServiceId("minigame-1"), 10);
+        f.players.put(new ServiceId("minigame-2"), 0);
+
+        // minigame-2 is empty from now on; the cooldown (60 s) and scale-down-after (5 min) both count.
+        f.advance(Duration.ofSeconds(30));
+        assertEquals(List.of(), f.scaler.tick(), "cooldown");
+        f.advance(Duration.ofMinutes(5).minusSeconds(1));
+        assertEquals(List.of(), f.scaler.tick(), "empty for 4:59");
+        f.advance(Duration.ofSeconds(1));
+        assertEquals(List.of(new Stop("minigame", new ServiceId("minigame-2"), Reason.EMPTY)), f.scaler.tick());
+        assertEquals(List.of("start minigame", "stop minigame-2"), f.target.calls);
+    }
+
+    @Test
+    void aPlayerJoiningResetsTheEmptyTime() {
+        Fixture f = new Fixture().task("minigame", TaskMode.DYNAMIC, 1, 3);
+        f.target.add("minigame", 1, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.target.add("minigame", 2, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.players.put(new ServiceId("minigame-1"), 10);
+        f.players.put(new ServiceId("minigame-2"), 0);
+        assertEquals(List.of(), f.scaler.tick());
+        f.advance(Duration.ofMinutes(4));
+        f.players.put(new ServiceId("minigame-2"), 1);
+        assertEquals(List.of(), f.scaler.tick());
+        f.players.put(new ServiceId("minigame-2"), 0);
+        assertEquals(List.of(), f.scaler.tick(), "empty again from now on");
+        f.advance(Duration.ofMinutes(4));
+        assertEquals(List.of(), f.scaler.tick(), "empty again for 4 minutes only, 8 minutes after the first time");
+        f.advance(Duration.ofMinutes(1));
+        assertEquals(List.of(new Stop("minigame", new ServiceId("minigame-2"), Reason.EMPTY)), f.scaler.tick());
+    }
+
+    @Test
+    void threeFailedStartsPauseTheTaskUntilThePauseEndsOrItsFileChanges() {
+        Fixture f = new Fixture().task("minigame", TaskMode.DYNAMIC, 1, 3);
+        f.target.failStarts = true;
+        for (int i = 0; i < Autoscaler.FAILURE_LIMIT; i++) {
+            assertEquals(List.of(new Start("minigame", OptionalInt.empty(), Reason.MIN_SERVICES)), f.scaler.tick());
+            f.advance(Duration.ofSeconds(60));
+        }
+        assertEquals(List.of(new Held("minigame", Hold.PAUSED)), f.scaler.tick());
+        // Paused at T0 + 120 s, now T0 + 180 s: one second before the end of the pause.
+        f.advance(Autoscaler.FAILURE_PAUSE.minusSeconds(61));
+        assertEquals(List.of(new Held("minigame", Hold.PAUSED)), f.scaler.tick(), "still paused");
+        f.advance(Duration.ofSeconds(1));
+        assertEquals(List.of(new Start("minigame", OptionalInt.empty(), Reason.MIN_SERVICES)), f.scaler.tick(),
+                "ten minutes after the third failure");
+
+        // Paused again; this time the operator changes the task file, which ends the pause.
+        for (int i = 0; i < Autoscaler.FAILURE_LIMIT - 1; i++) {
+            f.advance(Duration.ofSeconds(60));
+            f.scaler.tick();
+        }
+        f.advance(Duration.ofSeconds(60));
+        assertEquals(List.of(new Held("minigame", Hold.PAUSED)), f.scaler.tick());
+        f.target.failStarts = false;
+        f.task("minigame", TaskMode.DYNAMIC, 1, 4);
+        assertEquals(List.of(new Start("minigame", OptionalInt.empty(), Reason.MIN_SERVICES)), f.scaler.tick());
+    }
+
+    @Test
+    void aStartThatFailsAfterItsServiceWasPreparedCountsOnce() {
+        // As the service core does it: PREPARED -> CRASHED reaches the listener, then start() throws.
+        Fixture f = new Fixture().task("minigame", TaskMode.DYNAMIC, 1, 3);
+        f.target.failStarts = true;
+        f.target.crashEvent = true;
+        for (int i = 0; i < Autoscaler.FAILURE_LIMIT; i++) {
+            assertEquals(List.of(new Start("minigame", OptionalInt.empty(), Reason.MIN_SERVICES)), f.scaler.tick(),
+                    "start " + (i + 1));
+            f.advance(Duration.ofSeconds(60));
+        }
+        assertEquals(List.of(new Held("minigame", Hold.PAUSED)), f.scaler.tick(), "paused after the third");
+    }
+
+    @Test
+    void crashesCountAsFailuresAndAServiceThatRanFiveMinutesClearsThem() {
+        Fixture f = new Fixture().task("minigame", TaskMode.DYNAMIC, 1, 3);
+        f.target.add("minigame", 1, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.players.put(new ServiceId("minigame-1"), 10);
+        ServiceInfo crashed = f.target.info("minigame", 9, TaskMode.DYNAMIC, ServiceState.CRASHED, T0);
+        f.scaler.stateChanged(crashed, ServiceState.STARTING);
+        f.scaler.stateChanged(crashed, ServiceState.STARTING);
+        // minigame-1 started at T0 - 1 h: it ran stable, so the two crashes are forgotten.
+        assertEquals(List.of(), f.scaler.tick());
+        f.scaler.stateChanged(crashed, ServiceState.STARTING);
+        f.scaler.stateChanged(crashed, ServiceState.STARTING);
+        f.players.put(new ServiceId("minigame-1"), 40);
+        List<Decision> after = f.scaler.tick();
+        assertEquals(1, after.size());
+        assertTrue(after.getFirst() instanceof Start, "two crashes after the reset do not pause: " + after);
+
+        // Counter-check: without a stable service three crashes pause the task.
+        Fixture g = new Fixture().task("minigame", TaskMode.DYNAMIC, 1, 3);
+        g.target.services.put(new ServiceId("minigame-1"),
+                g.target.info("minigame", 1, TaskMode.DYNAMIC, ServiceState.RUNNING, T0.minusSeconds(299)));
+        g.players.put(new ServiceId("minigame-1"), 40);
+        for (int i = 0; i < Autoscaler.FAILURE_LIMIT; i++) {
+            g.scaler.stateChanged(crashed, ServiceState.STARTING);
+        }
+        assertEquals(List.of(new Held("minigame", Hold.PAUSED)), g.scaler.tick());
+    }
+
+    @Test
+    void aStaticServiceComesBackOnlyIfItsGroupHadBeenSwitchedOff() {
+        Fixture f = new Fixture().task("lobby", TaskMode.STATIC, 1, 1);
+        f.target.add("lobby", 1, TaskMode.STATIC, ServiceState.STOPPED);
+        f.scaler.stateChanged(f.target.services.get(new ServiceId("lobby-1")), ServiceState.STOPPING);
+        assertEquals(List.of(), f.scaler.tick(), "stopped by hand while wanted");
+
+        f.cloud = f.cloud.withServers(WantedServers.all().with(ServerKind.LOBBY, false));
+        f.scaler.stateChanged(f.target.services.get(new ServiceId("lobby-1")), ServiceState.STOPPING);
+        assertEquals(List.of(), f.scaler.tick(), "switched off");
+        f.cloud = f.cloud.withServers(WantedServers.all());
+        assertEquals(List.of(new Start("lobby", OptionalInt.of(1), Reason.MIN_SERVICES)), f.scaler.tick());
+        assertEquals(List.of("start lobby 1"), f.target.calls);
+    }
+
+    @Test
+    void aTaskWithAStartUnderWayGetsNoSecondDecision() {
+        Fixture f = new Fixture().task("minigame", TaskMode.DYNAMIC, 2, 3);
+        List<Runnable> queued = new ArrayList<>();
+        Autoscaler scaler = Autoscaler.create(f.target, f::snapshot, f::signals, f.clock(), queued::add);
+        assertEquals(1, scaler.tick().size());
+        f.advance(Duration.ofMinutes(5));
+        assertEquals(List.of(), scaler.tick(), "the first start has not run yet");
+        queued.forEach(Runnable::run);
+        assertEquals(1, scaler.tick().size(), "the second service once the first start is done");
+    }
+
+    @Test
+    void aMemoryHoldIsReportedAndScalesUpOnceMemoryIsFree() {
+        Fixture f = new Fixture().task("minigame", TaskMode.DYNAMIC, 1, 3);
+        f.target.add("minigame", 1, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.players.put(new ServiceId("minigame-1"), 50);
+        f.memory = Optional.empty();
+        assertEquals(List.of(new Held("minigame", Hold.MEMORY_UNKNOWN)), f.scaler.tick());
+        assertEquals(List.of(), f.target.calls);
+        f.memory = ROOMY;
+        assertEquals(List.of(new Start("minigame", OptionalInt.empty(), Reason.PLAYERS)), f.scaler.tick(),
+                "a hold is no decision: no cooldown");
+    }
+
+    // ---------------------------------------------------------------- fixture
+
+    private static final class Fixture {
+        final Map<String, GroupConfig> groups = new HashMap<>();
+        final Map<String, TaskConfig> tasks = new HashMap<>();
+        final Map<ServiceId, Integer> players = new HashMap<>();
+        final FakeTarget target = new FakeTarget();
+        CloudConfig cloud = CloudConfig.defaults().withServers(WantedServers.all()).withEulaAccepted(true)
+                .withSetupComplete(true);
+        Optional<Memory> memory = ROOMY;
+        Instant now = T0;
+        final Autoscaler scaler;
+
+        Fixture() {
+            for (ServerKind kind : List.of(ServerKind.LOBBY, ServerKind.MINIGAME)) {
+                groups.put(kind.key(), new GroupConfig(GroupConfig.SCHEMA_VERSION, kind.templateFolder(),
+                        ServerSoftware.PAPER, "26.3", JavaSelection.AUTO,
+                        new HeapConfig(MemorySize.parse("256M"), MemorySize.parse("1G")), List.of(), CombatSystem.MODERN));
+            }
+            target.fixture = this;
+            Executor direct = Runnable::run;
+            scaler = Autoscaler.create(target, this::snapshot, this::signals, clock(), direct);
+        }
+
+        Fixture task(String name, TaskMode mode, int min, int max) {
+            tasks.put(name, new TaskConfig(TaskConfig.SCHEMA_VERSION, name, mode,
+                    new ScalingConfig(min, max, 50, 80, TimeSpan.parse("5m"), TimeSpan.parse("60s")), List.of()));
+            return this;
+        }
+
+        ConfigSnapshot snapshot() {
+            return ConfigSnapshot.of(cloud, NodesConfig.defaults(), groups, tasks);
+        }
+
+        ScalingPlanner.Signals signals() {
+            return new ScalingPlanner.Signals(players, memory);
+        }
+
+        void advance(Duration by) {
+            now = now.plus(by);
+        }
+
+        Clock clock() {
+            return new Clock() {
+                @Override
+                public java.time.ZoneId getZone() {
+                    return ZoneOffset.UTC;
+                }
+
+                @Override
+                public Clock withZone(java.time.ZoneId zone) {
+                    return this;
+                }
+
+                @Override
+                public Instant instant() {
+                    return now;
+                }
+            };
+        }
+    }
+
+    /** Records every call; a start adds a PREPARED service at the lowest free index, a stop marks it STOPPED. */
+    private static final class FakeTarget implements ScalingTarget {
+        final Map<ServiceId, ServiceInfo> services = new LinkedHashMap<>();
+        final List<String> calls = new ArrayList<>();
+        boolean failStarts;
+        boolean crashEvent;
+        Fixture fixture;
+
+        ServiceInfo info(String task, int index, TaskMode mode, ServiceState state, Instant startedAt) {
+            ServiceId id = new ServiceId(task + "-" + index);
+            return new ServiceInfo(id, task, task, index, mode, state, 30000 + index, Path.of("x"),
+                    state.hasProcess() ? OptionalLong.of(index) : OptionalLong.empty(), Optional.of(startedAt),
+                    OptionalInt.empty(), 0);
+        }
+
+        void add(String task, int index, TaskMode mode, ServiceState state) {
+            services.put(new ServiceId(task + "-" + index), info(task, index, mode, state, T0.minusSeconds(3600)));
+        }
+
+        void setState(String id, ServiceState state) {
+            ServiceInfo old = services.get(new ServiceId(id));
+            services.put(old.id(), info(old.task(), old.index(), old.mode(), state, old.startedAt().orElseThrow()));
+        }
+
+        @Override
+        public List<ServiceInfo> services() {
+            return List.copyOf(services.values());
+        }
+
+        @Override
+        public ServiceInfo start(String task) throws ServiceException {
+            calls.add("start " + task);
+            if (failStarts && crashEvent) {
+                fixture.scaler.stateChanged(info(task, 1, TaskMode.DYNAMIC, ServiceState.CRASHED, fixture.now),
+                        ServiceState.PREPARED);
+            }
+            if (failStarts) {
+                throw new ServiceException("download failed");
+            }
+            int index = 1;
+            while (services.containsKey(new ServiceId(task + "-" + index))) {
+                index++;
+            }
+            ServiceInfo info = info(task, index, fixture.tasks.get(task).mode(), ServiceState.PREPARED, fixture.now);
+            services.put(info.id(), info);
+            return info;
+        }
+
+        @Override
+        public ServiceInfo start(String task, int index) throws ServiceException {
+            calls.add("start " + task + " " + index);
+            ServiceInfo info = info(task, index, TaskMode.STATIC, ServiceState.PREPARED, fixture.now);
+            services.put(info.id(), info);
+            return info;
+        }
+
+        @Override
+        public ServiceInfo stop(ServiceId service) {
+            calls.add("stop " + service.value());
+            setState(service.value(), ServiceState.STOPPED);
+            return services.get(service);
+        }
+    }
+}

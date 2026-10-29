@@ -3,6 +3,7 @@ package net.vectora.cloud.node;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -66,6 +67,9 @@ import net.vectora.cloud.node.console.ServiceCommands;
 import net.vectora.cloud.node.database.NodeDatabase;
 import net.vectora.cloud.node.database.NodeDatabaseProcesses;
 import net.vectora.cloud.node.jre.ManagedJavaRuntimes;
+import net.vectora.cloud.node.scaling.Autoscaler;
+import net.vectora.cloud.node.scaling.ScalingSignals;
+import net.vectora.cloud.node.scaling.ScalingTarget;
 import net.vectora.cloud.node.service.ServiceManager;
 import net.vectora.cloud.node.software.ArtifactSource;
 import net.vectora.cloud.node.software.BridgePlugins;
@@ -97,8 +101,9 @@ import net.vectora.cloud.setup.SetupWizard;
  *   <li>start the cloud channel ({@code nodes.yml}: host and port of this node);</li>
  *   <li>start the console (log output above the prompt, built-in and service commands);</li>
  *   <li>end processes left over from the previous run ({@link ServiceManager#recoverOrphans()});</li>
- *   <li>if the setup is complete and the EULA accepted: set up the database, then start the
- *       configured services. Otherwise a warning says how to finish the setup.</li>
+ *   <li>if the setup is complete and the EULA accepted: set up the database, start the configured
+ *       services, then the autoscaler ({@code docs/cloud/scaling.md}). Otherwise a warning says how
+ *       to finish the setup.</li>
  * </ol>
  * {@link #close()} reverses it: every service stops, then the database, the channel, the
  * configuration, the console, and the home lock is released.
@@ -333,9 +338,10 @@ public final class CloudNode implements AutoCloseable {
      * @param backups    the backups
      * @param api        the node behind the API
      * @param apiServer  the API server, or null while {@code api.enabled} is off or it cannot be prepared
+     * @param scaler     the autoscaler, started once the configured servers have started
      */
     private record Ops(ApiTokens tokens, MonitorRuntime monitoring, BackupService backups, NodeApi api,
-                       ApiServer apiServer) {
+                       ApiServer apiServer, Autoscaler scaler) {
     }
 
     private static Ops buildOps(NodeSettings settings, CloudHome home, ConfigService config, SecretStore secrets,
@@ -364,7 +370,13 @@ public final class CloudNode implements AutoCloseable {
                 redactor::redact, Optional.of(new BackupServiceAccess(backups)));
         services.addListener(api);
         channel.playerListener(api);
-        return new Ops(tokens, monitoring, backups, api, apiServer(home, config, secrets, api, tokens));
+
+        // Player counts of the bridges and proxies, memory of the node from the monitor
+        // (docs/cloud/scaling.md); the configuration is the same one the console and the API change.
+        Autoscaler scaler = Autoscaler.create(ScalingTarget.of(services), config::snapshot,
+                ScalingSignals.of(monitoring.monitor(), channel.players(), Clock.systemUTC()));
+        services.addListener(scaler);
+        return new Ops(tokens, monitoring, backups, api, apiServer(home, config, secrets, api, tokens), scaler);
     }
 
     /** The API server when {@code api.enabled}; a problem leaves the node running without it. */
@@ -502,6 +514,8 @@ public final class CloudNode implements AutoCloseable {
                     + "so no server is started. See docs/cloud/node.md.");
         } else {
             services.startConfigured();
+            // Only now: a round must not race the configured starts for the same index.
+            ops.scaler().start();
         }
         Thread keepAlive = new Thread(() -> {
             try {
@@ -532,7 +546,10 @@ public final class CloudNode implements AutoCloseable {
         }
         services.stopUnwanted();
         if (setupJustFinished(previous, current)) {
-            Thread.ofPlatform().daemon().name("vectora-start-after-setup").start(services::startConfigured);
+            Thread.ofPlatform().daemon().name("vectora-start-after-setup").start(() -> {
+                services.startConfigured();
+                ops.scaler().start();
+            });
         }
     }
 
@@ -568,6 +585,7 @@ public final class CloudNode implements AutoCloseable {
         public void started() {
             beforeSetup = config.snapshot();
             setupRunning = true;
+            ops.scaler().suspend(true);
         }
 
         @Override
@@ -575,8 +593,12 @@ public final class CloudNode implements AutoCloseable {
             setupRunning = false;
             ConfigSnapshot before = beforeSetup;
             beforeSetup = null;
-            if (before != null) {
-                reconcile(before, config.snapshot());
+            try {
+                if (before != null) {
+                    reconcile(before, config.snapshot());
+                }
+            } finally {
+                ops.scaler().suspend(false);
             }
         }
     };
@@ -791,6 +813,8 @@ public final class CloudNode implements AutoCloseable {
                 backupScheduler.close();
             }
         });
+        // Before the services: no round may start a server while they stop.
+        step(errors, "stopping the scaling", ops.scaler()::close);
         step(errors, "stopping the services", services::close);
         // After the last service: writes the history file and sends what is queued.
         step(errors, "closing the monitoring", ops.monitoring()::close);
