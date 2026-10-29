@@ -9,8 +9,14 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 class KickGuardTest {
@@ -69,6 +75,65 @@ class KickGuardTest {
         assertFalse(guard.mayRescue(alex), "the first is 59 s old");
         now = now.plusSeconds(1);
         assertTrue(guard.mayRescue(alex), "the first is 60 s old");
+    }
+
+    @Test
+    void aRescueChecksPlansAndRecordsInOneStep() {
+        KickGuard.Attempt<String> first = guard.rescue(alex, "bedwars-1", exclude -> {
+            assertEquals(Set.of("bedwars-1"), exclude, "the kicking server is skipped");
+            return Optional.of("bedwars-2");
+        }, server -> server);
+        assertEquals(new KickGuard.Attempt<>(false, Optional.of("bedwars-2")), first);
+        KickGuard.Attempt<String> none = guard.rescue(alex, "bedwars-2", exclude -> {
+            assertEquals(Set.of("bedwars-1", "bedwars-2"), exclude, "and every server tried before");
+            return Optional.empty();
+        }, server -> server);
+        assertEquals(new KickGuard.Attempt<>(false, Optional.<String>empty()), none);
+        assertEquals(Set.of("bedwars-1", "bedwars-2"), guard.tried(alex), "nothing planned, nothing recorded");
+        guard.rescue(alex, "bedwars-2", exclude -> Optional.of("lobby"), server -> server);
+        guard.rescue(alex, "lobby", exclude -> Optional.of("lobby-2"), server -> server);
+        AtomicInteger planned = new AtomicInteger();
+        KickGuard.Attempt<String> limited = guard.rescue(alex, "lobby-2", exclude -> {
+            planned.incrementAndGet();
+            return Optional.of("lobby-3");
+        }, server -> server);
+        assertEquals(new KickGuard.Attempt<>(true, Optional.<String>empty()), limited, "the fourth");
+        assertEquals(0, planned.get(), "no plan once the limit is reached");
+    }
+
+    @Test
+    void kicksOnSeveralThreadsAtOnceNeverCatchMoreThanTheLimit() throws InterruptedException {
+        int threads = 16;
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        CountDownLatch start = new CountDownLatch(1);
+        AtomicInteger caught = new AtomicInteger();
+        try {
+            for (int i = 0; i < threads; i++) {
+                String from = "server-" + i;
+                pool.execute(() -> {
+                    try {
+                        start.await();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        return;
+                    }
+                    KickGuard.Attempt<String> attempt = guard.rescue(alex, from, exclude -> {
+                        // Widen the gap between check and record that a split guard would leave open.
+                        Thread.onSpinWait();
+                        return Optional.of(from + "-target");
+                    }, server -> server);
+                    if (attempt.result().isPresent()) {
+                        caught.incrementAndGet();
+                    }
+                });
+            }
+            start.countDown();
+        } finally {
+            pool.shutdown();
+            assertTrue(pool.awaitTermination(10, TimeUnit.SECONDS));
+        }
+        assertEquals(KickGuard.MAX_RESCUES, caught.get());
+        assertFalse(guard.mayRescue(alex));
     }
 
     @Test

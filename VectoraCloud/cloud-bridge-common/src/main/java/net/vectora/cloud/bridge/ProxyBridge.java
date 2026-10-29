@@ -1,7 +1,6 @@
 package net.vectora.cloud.bridge;
 
 import java.lang.System.Logger.Level;
-import java.util.HashSet;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
@@ -174,23 +173,18 @@ public final class ProxyBridge implements CloudClientListener {
      */
     public KickOutcome redirect(UUID player, String kickedFrom, String target) {
         KickOutcome giveUp = KickOutcome.disconnect(TransferMessages.lost(players.locale(player)));
-        if (!guard.mayRescue(player)) {
+        KickGuard.Attempt<KickOutcome> attempt = guard.rescue(player, kickedFrom, exclude -> {
+            Optional<String> chosen = enter(player, target, exclude);
+            if (chosen.isPresent()) {
+                return Optional.of(KickOutcome.move(chosen.get(), ""));
+            }
+            return exclude.contains(target) ? Optional.empty() : Optional.of(KickOutcome.keep());
+        }, outcome -> outcome.action() == KickOutcome.Action.MOVE ? outcome.server() : target);
+        if (attempt.limited()) {
             LOG.log(Level.INFO, "Redirect after a kick from {0} refused: the player was moved too often in a short time",
                     kickedFrom);
-            return giveUp;
         }
-        Set<String> exclude = new HashSet<>(guard.tried(player));
-        exclude.add(kickedFrom);
-        Optional<String> chosen = enter(player, target, exclude);
-        if (chosen.isPresent()) {
-            guard.rescued(player, kickedFrom, chosen.get());
-            return KickOutcome.move(chosen.get(), "");
-        }
-        if (exclude.contains(target)) {
-            return giveUp;
-        }
-        guard.rescued(player, kickedFrom, target);
-        return KickOutcome.keep();
+        return attempt.result().orElse(giveUp);
     }
 
     /**
@@ -215,21 +209,21 @@ public final class ProxyBridge implements CloudClientListener {
         }
         Locale locale = players.locale(player);
         KickOutcome giveUp = staysConnected ? KickOutcome.keep() : KickOutcome.disconnect(TransferMessages.lost(locale));
-        if (!guard.mayRescue(player)) {
+        KickGuard.Attempt<String> attempt = guard.rescue(player, kickedFrom, exclude -> {
+            Optional<String> chosen = loads.groupOf(kickedFrom)
+                    .flatMap(group -> loads.choose(player, group, exclude, servers::exists, servers::playersOn));
+            if (chosen.isEmpty() && !staysConnected) {
+                chosen = loads.choose(player, fallbackGroup, exclude, servers::exists, servers::playersOn);
+            }
+            return chosen;
+        }, server -> server);
+        if (attempt.limited()) {
             LOG.log(Level.INFO, "Kick from {0} not caught: the player was moved too often in a short time", kickedFrom);
-            return giveUp;
         }
-        Set<String> exclude = new HashSet<>(guard.tried(player));
-        exclude.add(kickedFrom);
-        Optional<String> target = loads.groupOf(kickedFrom)
-                .flatMap(group -> loads.choose(player, group, exclude, servers::exists, servers::playersOn));
-        if (target.isEmpty() && !staysConnected) {
-            target = loads.choose(player, fallbackGroup, exclude, servers::exists, servers::playersOn);
-        }
+        Optional<String> target = attempt.result();
         if (target.isEmpty()) {
             return giveUp;
         }
-        guard.rescued(player, kickedFrom, target.get());
         return verdict == KickClassifier.Verdict.OTHER_REASON
                 ? KickOutcome.moveShowingReason(target.get(), TransferMessages.rescued(locale))
                 : KickOutcome.move(target.get(), TransferMessages.rescued(locale));
