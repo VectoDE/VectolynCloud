@@ -1,7 +1,7 @@
 name: Operations
 
 # Dry run of everything the release ships, without publishing anything:
-# start scripts on Linux, macOS and Windows, the release archives (VectoraCloud/dist/package.sh,
+# start scripts on Linux, macOS and Windows, the release archives (cloud/dist/package.sh,
 # the same script release.yml runs), the systemd unit on a real systemd, the container image
 # (built from source and through the release path with the jar as named context, both without
 # push), compose.yml and the Pterodactyl egg. Nothing here has write permissions or secrets.
@@ -10,9 +10,10 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - 'VectoraCloud/**'
-      - 'Vectora-Protocol/**'
-      - 'Vectora-CloudClient/**'
+      - 'cloud/**'
+      - 'plugins/bridge/**'
+      - 'common/protocol/**'
+      - 'common/client/**'
       - 'build-logic/**'
       - 'gradle/**'
       - '*.gradle.kts'
@@ -25,9 +26,10 @@ on:
   push:
     branches: [main]
     paths:
-      - 'VectoraCloud/**'
-      - 'Vectora-Protocol/**'
-      - 'Vectora-CloudClient/**'
+      - 'cloud/**'
+      - 'plugins/bridge/**'
+      - 'common/protocol/**'
+      - 'common/client/**'
       - 'build-logic/**'
       - 'gradle/**'
       - '*.gradle.kts'
@@ -67,12 +69,12 @@ jobs:
       - name: Line endings
         run: |
           set -euo pipefail
-          for f in VectoraCloud/dist/start.bat VectoraCloud/dist/start.ps1; do
+          for f in cloud/dist/start.bat cloud/dist/start.ps1; do
             if [ "$(grep -c $'\r$' "$f" || true)" -ne "$(wc -l < "$f")" ]; then
               echo "::error file=$f::needs CRLF line ends (.gitattributes)"; exit 1
             fi
           done
-          for f in VectoraCloud/dist/start.sh VectoraCloud/dist/package.sh .github/scripts/smoke-start-unix.sh gradle/update-verification-metadata.sh; do
+          for f in cloud/dist/start.sh cloud/dist/package.sh .github/scripts/smoke-start-unix.sh gradle/update-verification-metadata.sh; do
             if grep -q $'\r' "$f"; then
               echo "::error file=$f::needs LF line ends (.gitattributes)"; exit 1
             fi
@@ -83,15 +85,15 @@ jobs:
         run: |
           set -euo pipefail
           shellcheck --version
-          shellcheck VectoraCloud/dist/start.sh VectoraCloud/dist/package.sh .github/scripts/smoke-start-unix.sh \
+          shellcheck cloud/dist/start.sh cloud/dist/package.sh .github/scripts/smoke-start-unix.sh \
             gradle/update-verification-metadata.sh
           # The installer script inside the egg (runs with ash in ghcr.io/pterodactyl/installers:alpine).
-          jq -r '.scripts.installation.script' VectoraCloud/dist/pterodactyl/egg-vectora-cloud.json \
+          jq -r '.scripts.installation.script' cloud/dist/pterodactyl/egg-vectora-cloud.json \
             | shellcheck --shell=sh -
           echo "ShellCheck OK."
 
       - name: Pterodactyl egg
-        run: python3 -I .github/scripts/check-egg.py VectoraCloud/dist/pterodactyl/egg-vectora-cloud.json
+        run: python3 -I .github/scripts/check-egg.py cloud/dist/pterodactyl/egg-vectora-cloud.json
 
       # The official image pinned by digest (it brings ShellCheck for the run: blocks), instead of
       # an unpinned "go install" or a downloaded binary.
@@ -100,7 +102,7 @@ jobs:
           docker run --rm --volume "$PWD:/repo:ro" --workdir /repo "$ACTIONLINT_IMAGE" -color
 
       - name: Compose file
-        working-directory: VectoraCloud/dist/docker
+        working-directory: cloud/dist/docker
         run: |
           set -euo pipefail
           mkdir -p secrets
@@ -136,14 +138,14 @@ jobs:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
       - name: Build VectoraCloud.jar
-        run: bash ./gradlew :VectoraCloud:cloud-launcher:cloudJar --no-daemon --stacktrace
+        run: bash ./gradlew :cloud:launcher:cloudJar --no-daemon --stacktrace
 
       # Same call as in release.yml, with a dummy version.
       - name: Package (dry run)
         run: |
           set -euo pipefail
-          bash VectoraCloud/dist/package.sh 0.0.0-ci \
-            VectoraCloud/cloud-launcher/build/cloud/VectoraCloud.jar ops-dist
+          bash cloud/dist/package.sh 0.0.0-ci \
+            cloud/launcher/build/cloud/VectoraCloud.jar ops-dist
           (cd ops-dist && sha256sum -- *.jar *.zip *.tar.gz | tee SHA256SUMS)
           tar -tzvf ops-dist/VectoraCloud-0.0.0-ci-linux-macos.tar.gz
           unzip -l ops-dist/VectoraCloud-0.0.0-ci-windows.zip
@@ -152,8 +154,8 @@ jobs:
       - name: Package again and compare
         run: |
           set -euo pipefail
-          bash VectoraCloud/dist/package.sh 0.0.0-ci \
-            VectoraCloud/cloud-launcher/build/cloud/VectoraCloud.jar "$RUNNER_TEMP/again"
+          bash cloud/dist/package.sh 0.0.0-ci \
+            cloud/launcher/build/cloud/VectoraCloud.jar "$RUNNER_TEMP/again"
           (cd "$RUNNER_TEMP/again" && sha256sum -- *.jar *.zip *.tar.gz) | diff - <(cd ops-dist && sha256sum -- *.jar *.zip *.tar.gz)
           echo "Archives are reproducible."
 
@@ -217,7 +219,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $results = @('VectoraCloud/dist/start.ps1', '.github/scripts/smoke-start-windows.ps1') |
+          $results = @('cloud/dist/start.ps1', '.github/scripts/smoke-start-windows.ps1') |
             ForEach-Object { Invoke-ScriptAnalyzer -Path $_ -Severity Warning, Error }
           if ($results) {
             $results | Format-Table -AutoSize | Out-String -Width 200 | Write-Output
@@ -271,8 +273,8 @@ jobs:
           set -euo pipefail
           sudo useradd --system --user-group --home-dir /opt/vectora --create-home --shell /usr/sbin/nologin vectora
           sudo install -o vectora -g vectora -m 0644 ops-dist/VectoraCloud.jar /opt/vectora/VectoraCloud.jar
-          sudo install -o vectora -g vectora -m 0755 VectoraCloud/dist/start.sh /opt/vectora/start.sh
-          sudo install -o root -g root -m 0644 VectoraCloud/dist/systemd/vectora-cloud.service /etc/systemd/system/vectora-cloud.service
+          sudo install -o vectora -g vectora -m 0755 cloud/dist/start.sh /opt/vectora/start.sh
+          sudo install -o root -g root -m 0644 cloud/dist/systemd/vectora-cloud.service /etc/systemd/system/vectora-cloud.service
           sudo mkdir -p /etc/systemd/system/vectora-cloud.service.d
           printf '[Service]\nEnvironment=JAVA_HOME=%s\n' "$JAVA_DIR" \
             | sudo tee /etc/systemd/system/vectora-cloud.service.d/java.conf
@@ -343,7 +345,7 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          file: VectoraCloud/dist/docker/Dockerfile
+          file: cloud/dist/docker/Dockerfile
           platforms: linux/amd64
           push: false
           load: true
@@ -359,7 +361,7 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          file: VectoraCloud/dist/docker/Dockerfile
+          file: cloud/dist/docker/Dockerfile
           build-contexts: jar=jar-context
           platforms: linux/amd64,linux/arm64
           push: false
@@ -369,7 +371,7 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          file: VectoraCloud/dist/docker/Dockerfile
+          file: cloud/dist/docker/Dockerfile
           build-contexts: jar=jar-context
           platforms: linux/amd64
           push: false

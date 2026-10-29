@@ -4,7 +4,7 @@ English: [operations.md](operations.md)
 
 Diese Seite beschreibt, wie du `VectoraCloud.jar` unter Windows, Linux (VPS oder eigener Server, mit systemd), macOS, Docker und Pterodactyl betreibst und wie du prüfst, dass ein Download wirklich aus diesem Repository stammt. Wir hosten nichts: Jedes Netzwerk, das mit Vectora gebaut wird, läuft auf dem Rechner seines Betreibers.
 
-Die Dateien liegen in [`VectoraCloud/dist/`](../../VectoraCloud/dist):
+Die Dateien liegen in [`cloud/dist/`](../../cloud/dist):
 
 | Datei | Zweck |
 |---|---|
@@ -192,15 +192,15 @@ Das Image:
 Selbst bauen aus einem Checkout (der Build-Kontext ist das Repository-Wurzelverzeichnis):
 
 ```sh
-docker build -f VectoraCloud/dist/docker/Dockerfile -t vectora-cloud .
+docker build -f cloud/dist/docker/Dockerfile -t vectora-cloud .
 ```
 
 ### Docker Compose mit MariaDB
 
-[`compose.yml`](../../VectoraCloud/dist/docker/compose.yml) startet die Cloud und MariaDB 11.8 als externe Datenbank:
+[`compose.yml`](../../cloud/dist/docker/compose.yml) startet die Cloud und MariaDB 11.8 als externe Datenbank:
 
 ```sh
-cd VectoraCloud/dist/docker
+cd cloud/dist/docker
 cp setup.example.yml setup.yml          # eula: true setzen, wenn du die Minecraft-EULA akzeptierst
 mkdir -p secrets
 openssl rand -base64 32 | tr -d '\n' > secrets/db_password
@@ -218,7 +218,7 @@ docker compose logs -f cloud
 
 ## Pterodactyl
 
-1. Im Admin-Bereich unter Nests [`egg-vectora-cloud.json`](../../VectoraCloud/dist/pterodactyl/egg-vectora-cloud.json) importieren (PTDL_v2).
+1. Im Admin-Bereich unter Nests [`egg-vectora-cloud.json`](../../cloud/dist/pterodactyl/egg-vectora-cloud.json) importieren (PTDL_v2).
 2. Einen Server mit dem Egg anlegen. Er braucht **eine Allocation pro Port**: Die primäre Allocation ist der Java-Port, dazu eine für Bedrock (UDP) und, falls eingeschaltet, eine für den Legacy-Proxy. Diese Ports in die Variablen eintragen.
 3. „Accept the Minecraft EULA“ auf `true` setzen, wenn du die EULA akzeptierst, dann den Server starten.
 

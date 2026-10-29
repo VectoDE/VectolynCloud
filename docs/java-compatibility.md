@@ -2,7 +2,7 @@
 
 ## Policy
 
-- Bytecode target for every Vectora module is **Java 21** (`--release 21`). The compiler always runs on a Java 25 toolchain. The one exception is the class `Bootstrap` in `cloud-launcher`, which is built with `--release 8` (see below).
+- Bytecode target for every Vectora module is **Java 21** (`--release 21`). The compiler always runs on a Java 25 toolchain. The one exception is the class `Bootstrap` in `cloud/launcher`, which is built with `--release 8` (see below).
 - A module may only raise its release target when a dependency makes 21 impossible. Such a module is marked with a comment in its `build.gradle.kts` and listed in the table below.
 - Code that needs Java 25 at runtime is annotated with `@RequiresJava25`, checks the running version, and always has a Java 21 path. The annotation arrives with the core module in stage 3; no current code needs Java 25 APIs.
 
@@ -15,7 +15,7 @@ The convention plugins in `build-logic/` set the defaults (toolchain 25, release
 | `Build (JDK 25, ubuntu-latest)`, `Build (JDK 25, windows-latest)` | JDK 25, `--release 21` | Java 25 | Full build and every test, on Linux and Windows. Java 25 is the runtime the plugins ship for, because Paper 26.3 needs it. |
 | `Tests on Java 21` | JDK 25, `--release 21` | Java 21 (`-PtestJava=21`) | The compiled code and its resources load and pass their tests on a Java 21 runtime. |
 
-On Java 21 the tests tagged `requires-java25` are skipped. They load paper-api or velocity-api classes (class file version 69), which a Java 21 JVM cannot load. Today these are `PluginDescriptorTest.mainClassIsAJavaPlugin` in both plugin modules and in `cloud-bridge-paper`, `PortalBridgeTest` (its class under test extends `JavaPlugin`), `VelocityBridgePluginTest.velocityCanCreateAndWireThePlugin` and `VelocityServersTest`. A test class that needs such an API keeps its classes out of field, parameter and return types: JUnit reads the declared methods of every test class during discovery, also on Java 21. The bridge logic itself sits in `cloud-bridge-common`, and `cloud-bridge-legacy` compiles against pandaspigot-api with Java 8 class files, so all of their tests run on both runtimes. Every module has a `BytecodeLevelTest` that runs on both: it reads a class file without loading it and checks major version 65. The Jazzer fuzz tests in `Vectora-Protocol`, `Vectora-CloudClient`, `cloud-config`, `cloud-template`, `cloud-download`, `cloud-network`, `cloud-database`, `cloud-node`, `cloud-console`, `cloud-setup`, `cloud-backup`, `cloud-bridge-common` and `cloud-monitor` run in regression mode on both runtimes, and so do the loopback tests of the cloud channel.
+On Java 21 the tests tagged `requires-java25` are skipped. They load paper-api or velocity-api classes (class file version 69), which a Java 21 JVM cannot load. Today these are `PluginDescriptorTest.mainClassIsAJavaPlugin` in both plugin modules and in `plugins/bridge/paper`, `PortalBridgeTest` (its class under test extends `JavaPlugin`), `VelocityBridgePluginTest.velocityCanCreateAndWireThePlugin` and `VelocityServersTest`. A test class that needs such an API keeps its classes out of field, parameter and return types: JUnit reads the declared methods of every test class during discovery, also on Java 21. The bridge logic itself sits in `plugins/bridge/common`, and `plugins/bridge/legacy` compiles against pandaspigot-api with Java 8 class files, so all of their tests run on both runtimes. Every module has a `BytecodeLevelTest` that runs on both: it reads a class file without loading it and checks major version 65. The Jazzer fuzz tests in `common/protocol`, `common/client`, `cloud/config`, `cloud/template`, `cloud/download`, `cloud/network`, `cloud/database`, `cloud/node`, `cloud/console`, `cloud/setup`, `cloud/backup`, `plugins/bridge/common` and `cloud/monitor` run in regression mode on both runtimes, and so do the loopback tests of the cloud channel.
 
 Every run uploads the JUnit XML of its tests as an artifact (`junit-xml-ubuntu-latest`, `junit-xml-windows-latest`, `junit-xml-java21`). That shows which tests ran on which runner, including the ones that need POSIX permissions or symlinks and are skipped on Windows.
 
@@ -32,20 +32,20 @@ Locally:
 
 | Module | Release target | Compiles against | Runtime needs | Notes |
 |---|---|---|---|---|
-| `Vectora-Lobby` | 21 | paper-api 26.3 (class files for Java 25) | Java 25 (Paper 26.3) | uses `disableAutoTargetJvm()`, see below |
-| `Vectora-PortalBridge` | 21 | paper-api 26.3 (class files for Java 25) | Java 25 (Paper 26.3) | uses `disableAutoTargetJvm()`, see below |
-| `Vectora-Protocol` | 21 | JDK only | Java 21 | no dependencies |
-| `Vectora-CloudClient` | 21 | Vectora-Protocol | Java 21 | runs inside proxies and servers; JDK sockets only, no Netty (see [network.md](cloud/network.md)) |
-| `VectoraCloud/cloud-config`, `cloud-template`, `cloud-download`, `cloud-network`, `cloud-database`, `cloud-launcher` | 21 (`Bootstrap` in `cloud-launcher`: 8) | Jackson 3, Netty 4.2, MariaDB Connector/J 4 (all Java 17 or lower) | Java 21 | |
-| `VectoraCloud/cloud-console` | 21 | cloud-config, JLine 3 | Java 21 | JLine `ffm` provider only on Java 22+, see below |
-| `VectoraCloud/cloud-backup` | 21 | cloud-config, cloud-console, cloud-download | Java 21 | Starts `mariadb-dump` and, for H2, the Java runtime it runs on |
-| `VectoraCloud/cloud-monitor` | 21 | cloud-config, cloud-console, Vectora-Protocol | Java 21 | Prometheus endpoint uses the JDK module `jdk.httpserver` |
-| `VectoraCloud/cloud-node` | 21 | as above, plus cloud-console (brings JLine 3) | Java 21 | |
-| `VectoraCloud/cloud-setup` | 21 | cloud-console, cloud-database | Java 21 | |
-| `VectoraCloud/cloud-bridge-common` | 21 | Vectora-CloudClient | Java 21 | no platform API; the logic of all three bridges |
-| `VectoraCloud/cloud-bridge-velocity` | 21 | velocity-api 4.3.1 (class files for Java 25) | Java 25 (Velocity 4.3) | uses `disableAutoTargetJvm()` |
-| `VectoraCloud/cloud-bridge-paper` | 21 | paper-api 26.3 (class files for Java 25) | Java 25 (Paper 26.3) | uses `disableAutoTargetJvm()` |
-| `VectoraCloud/cloud-bridge-legacy` | 21 | pandaspigot-api 1.8.8 (class files for Java 8) | Java 21 (PandaSpigot on JRE 21) | no `disableAutoTargetJvm()` needed |
+| `plugins/lobby/paper` | 21 | paper-api 26.3 (class files for Java 25) | Java 25 (Paper 26.3) | uses `disableAutoTargetJvm()`, see below |
+| `plugins/portal/paper` | 21 | paper-api 26.3 (class files for Java 25) | Java 25 (Paper 26.3) | uses `disableAutoTargetJvm()`, see below |
+| `common/protocol` | 21 | JDK only | Java 21 | no dependencies |
+| `common/client` | 21 | common/protocol | Java 21 | runs inside proxies and servers; JDK sockets only, no Netty (see [network.md](cloud/network.md)) |
+| `cloud/config`, `cloud/template`, `cloud/download`, `cloud/network`, `cloud/database`, `cloud/launcher` | 21 (`Bootstrap` in `cloud/launcher`: 8) | Jackson 3, Netty 4.2, MariaDB Connector/J 4 (all Java 17 or lower) | Java 21 | |
+| `cloud/console` | 21 | cloud-config, JLine 3 | Java 21 | JLine `ffm` provider only on Java 22+, see below |
+| `cloud/backup` | 21 | cloud-config, cloud-console, cloud-download | Java 21 | Starts `mariadb-dump` and, for H2, the Java runtime it runs on |
+| `cloud/monitor` | 21 | cloud-config, cloud-console, common/protocol | Java 21 | Prometheus endpoint uses the JDK module `jdk.httpserver` |
+| `cloud/node` | 21 | as above, plus cloud-console (brings JLine 3) | Java 21 | |
+| `cloud/setup` | 21 | cloud-console, cloud-database | Java 21 | |
+| `plugins/bridge/common` | 21 | common/client | Java 21 | no platform API; the logic of all three bridges |
+| `plugins/bridge/velocity` | 21 | velocity-api 4.3.1 (class files for Java 25) | Java 25 (Velocity 4.3) | uses `disableAutoTargetJvm()` |
+| `plugins/bridge/paper` | 21 | paper-api 26.3 (class files for Java 25) | Java 25 (Paper 26.3) | uses `disableAutoTargetJvm()` |
+| `plugins/bridge/legacy` | 21 | pandaspigot-api 1.8.8 (class files for Java 8) | Java 21 (PandaSpigot on JRE 21) | no `disableAutoTargetJvm()` needed |
 
 No module currently needs release 25.
 
@@ -61,7 +61,7 @@ VectoraCloud itself (`java -jar VectoraCloud.jar`) runs on Java 21. The servers 
 
 ## JREs for the servers
 
-Each server group runs on its own Java runtime, chosen by `JavaRequirement` in `cloud-download` ([JRE management](cloud/download.md#jre-management)):
+Each server group runs on its own Java runtime, chosen by `JavaRequirement` in `cloud/download` ([JRE management](cloud/download.md#jre-management)):
 
 | Group | Software | Minimum from the source | Java |
 |---|---|---|---|
@@ -76,7 +76,7 @@ An installed system Java is used if its feature version is exactly the chosen on
 
 ## Marked Java 22+ spot: JLine terminal provider `ffm`
 
-JLine 3 talks to the terminal through a provider. `jline-terminal-ffm` uses the Foreign Function & Memory API, which is final only since Java 22; its classes cannot load on Java 21. `cloud-console` ships both `jline-terminal-ffm` and `jline-terminal-jni` and picks one at start (`TerminalSelector`):
+JLine 3 talks to the terminal through a provider. `jline-terminal-ffm` uses the Foreign Function & Memory API, which is final only since Java 22; its classes cannot load on Java 21. `cloud/console` ships both `jline-terminal-ffm` and `jline-terminal-jni` and picks one at start (`TerminalSelector`):
 
 - **Java 22+:** `ffm` first. The choice is a check of the running version (`Runtime.version().feature() >= 22`), never class-path order, so the ffm classes are not even touched on Java 21.
 - **Java 21 path:** `jni` (native helper bundled for Windows, Linux and macOS). If no native provider loads, JLine's `dumb` terminal. Without a terminal at all (Docker without TTY, Pterodactyl, systemd) the console reads stdin line by line.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Smoke test of VectoraCloud/dist/start.sh and the linux-macos archive (operations.yml).
+# Smoke test of cloud/dist/start.sh and the linux-macos archive (operations.yml).
 #
 #   .github/scripts/smoke-start-unix.sh <folder with VectoraCloud.jar and the archives>
 #
@@ -19,7 +19,7 @@ trap 'rm -rf -- "${work}"' EXIT
 dir="${work}/vectora home (\$test)"
 mkdir -p -- "${dir}"
 cp -- "${dist}/VectoraCloud.jar" "${dir}/"
-cp -- "${repo}/VectoraCloud/dist/start.sh" "${dir}/"
+cp -- "${repo}/cloud/dist/start.sh" "${dir}/"
 chmod 0755 "${dir}/start.sh"
 
 # A PATH without any java, for the "no Java" case.

@@ -10,7 +10,7 @@ VectoraCloud hat einen Startpunkt: `java -jar VectoraCloud.jar`. Solange in `clo
 | Setup-Datei | Docker, Pterodactyl, CI, jeder Start ohne jemanden an der Tastatur | `--setup-file setup.yml` |
 | Dateien und Befehle | jederzeit danach | `cloud.yml`, `groups/`, `tasks/` bearbeiten oder `config set`, `group`, `task` (siehe [Konsole](console.de.md)) |
 
-Das Dashboard kommt später als vierter Weg dazu und nutzt dieselbe Schicht. Der Code liegt in `VectoraCloud/cloud-setup` (`net.vectora.cloud.setup`).
+Das Dashboard kommt später als vierter Weg dazu und nutzt dieselbe Schicht. Der Code liegt in `cloud/setup` (`net.vectora.cloud.setup`).
 
 ## Die Fragen
 

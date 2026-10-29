@@ -2,25 +2,48 @@
 .local-backup/
 
 # --- Server runtime (worlds, jars, logs, real secrets) -------------------------
-# Only Server-Network/<Server>/template/ is tracked. runtime/ is rendered from it.
-Server-Network/*/runtime/
-# Further static services (runtime-2, runtime-3, ...) and what the node writes at run time.
-Server-Network/*/runtime-*/
-Server-Network/temp/
-Server-Network/state/
-Server-Network/cache/
-# Backup archives of cloud-backup (worlds, configs, database dumps).
-Server-Network/backups/
+# Only templates/<Server>/ is tracked. runtime/ folders, secrets and everything else the cloud
+# writes belong in the cloud home outside the repository.
+# Checkouts from before the layout change may still hold a Server-Network/ folder with runtime
+# data and secrets; it stays ignored as a whole so none of it can be committed by accident.
+Server-Network/
+# Runtime folders of a cloud home that was put inside the checkout by mistake.
+**/runtime/
+**/runtime-*/
+# A cloud home started in the repository root (working directory = checkout). The home belongs
+# outside the repository; these root-anchored entries only keep its files out of commits.
+/cloud.yml
+/nodes.yml
+/software.lock.yml
+/backup.yml
+/monitor.yml
+/groups/
+/tasks/
+/backups/
+/state/
+/cache/
+/temp/
+/jre/
+/Proxy/
+/Legacy-Proxy/
+/Lobby-Server/
+/Survival-Server/
+/Creative-Server/
+/Mod-Server/
+/End-Server/
+/Minigame-Server/
+/Legacy-Server/
+/Database/
 
 # --- Secrets -------------------------------------------------------------------
-Server-Network/secrets/*
-!Server-Network/secrets/*.example
+**/secrets/*
+!**/secrets/*.example
 .env
 .env.*
 !.env.example
-# Docker Compose (VectoraCloud/dist/docker): password files and the filled-in setup file.
-VectoraCloud/dist/docker/secrets/
-VectoraCloud/dist/docker/setup.yml
+# Docker Compose (cloud/dist/docker): password files and the filled-in setup file.
+cloud/dist/docker/secrets/
+cloud/dist/docker/setup.yml
 *.secret
 key.pem
 *.key

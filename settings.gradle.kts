@@ -23,7 +23,7 @@ dependencyResolutionManagement {
                 includeGroupAndSubgroups("com.velocitypowered")
             }
         }
-        // PandaSpigot API (1.8.8 fork, GPL-3.0) for cloud-bridge-legacy, compile only. The repository
+        // PandaSpigot API (1.8.8 fork, GPL-3.0) for plugins/bridge/legacy, compile only. The repository
         // is used for this group only and the group is never looked up anywhere else.
         exclusiveContent {
             forRepository {
@@ -36,28 +36,35 @@ dependencyResolutionManagement {
     }
 }
 
-// Plugin modules (stage 1, merged into Vectora-Paper/Velocity/Fabric.jar in stage 3).
-include("Vectora-Lobby", "Vectora-PortalBridge")
+// Repository layout (docs/cloud/architecture.md): the cloud in cloud/, code shared by the cloud
+// and its servers in common/, one module per plugin feature and platform in plugins/.
+// The jar names stay those of the old module names (archivesName in each build file).
 
 // Shared between the cloud and the servers it manages.
-include("Vectora-Protocol", "Vectora-CloudClient")
+include("common:protocol", "common:client")
 
 // VectoraCloud, module graph in docs/cloud/architecture.md.
 include(
-    "VectoraCloud:cloud-launcher",
-    "VectoraCloud:cloud-config",
-    "VectoraCloud:cloud-template",
-    "VectoraCloud:cloud-download",
-    "VectoraCloud:cloud-network",
-    "VectoraCloud:cloud-console",
-    "VectoraCloud:cloud-database",
-    "VectoraCloud:cloud-setup",
-    "VectoraCloud:cloud-api",
-    "VectoraCloud:cloud-node",
-    "VectoraCloud:cloud-backup",
-    "VectoraCloud:cloud-monitor",
-    "VectoraCloud:cloud-bridge-common",
-    "VectoraCloud:cloud-bridge-velocity",
-    "VectoraCloud:cloud-bridge-paper",
-    "VectoraCloud:cloud-bridge-legacy",
+    "cloud:launcher",
+    "cloud:config",
+    "cloud:template",
+    "cloud:download",
+    "cloud:network",
+    "cloud:console",
+    "cloud:database",
+    "cloud:setup",
+    "cloud:api",
+    "cloud:node",
+    "cloud:backup",
+    "cloud:monitor",
+)
+
+// Plugins: plugins/<feature>/<platform>, shared logic of a feature in plugins/<feature>/common.
+include(
+    "plugins:bridge:common",
+    "plugins:bridge:velocity",
+    "plugins:bridge:paper",
+    "plugins:bridge:legacy",
+    "plugins:lobby:paper",
+    "plugins:portal:paper",
 )

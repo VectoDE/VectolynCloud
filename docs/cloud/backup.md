@@ -1,8 +1,8 @@
 # Backups
 
-`VectoraCloud/cloud-backup` (`net.vectora.cloud.backup`) backs up the static services (worlds and configs from their `runtime/` folder) and the database into zip archives under `backups/`. It writes a manifest with a SHA-256 hash per file, prunes old archives, runs on a schedule and restores a single stopped service. It also defines the `backup` console command.
+`cloud/backup` (`net.vectora.cloud.backup`) backs up the static services (worlds and configs from their `runtime/` folder) and the database into zip archives under `backups/`. It writes a manifest with a SHA-256 hash per file, prunes old archives, runs on a schedule and restores a single stopped service. It also defines the `backup` console command.
 
-The module does not start or stop services. `cloud-node` hands it the static services and their control through three small interfaces (see [What cloud-node provides](#what-cloud-node-provides)). `cloud-node` implements them in `ops.NodeBackups` and wires the module in `CloudNode`: `recoverInterruptedOperations()` before the first start, the schedule, and the `backup` command (see [node.md](node.md#start-order)). The hold of a stopped service is `ServiceManager.holdStopped`, checked under the lock that guards every start. With `database.mode: managed` the dump tool comes from the installed MariaDB under `Database/runtime/`.
+The module does not start or stop services. `cloud/node` hands it the static services and their control through three small interfaces (see [What cloud-node provides](#what-cloud-node-provides)). `cloud/node` implements them in `ops.NodeBackups` and wires the module in `CloudNode`: `recoverInterruptedOperations()` before the first start, the schedule, and the `backup` command (see [node.md](node.md#start-order)). The hold of a stopped service is `ServiceManager.holdStopped`, checked under the lock that guards every start. With `database.mode: managed` the dump tool comes from the installed MariaDB under `Database/runtime/`.
 
 ## Packages
 
@@ -78,7 +78,7 @@ The password is never a process argument. The cloud writes an option file (`[cli
 Hint for Docker (the password stays a variable inside the container):
 
 ```bash
-cd Server-Network/Database/runtime
+cd <home>/Database/runtime
 docker compose --env-file ../../secrets/vectora.env -f compose.database.yml exec -T vectora-database \
   sh -c 'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" exec mariadb-dump -uroot --single-transaction --routines --events --triggers --databases luckperms' \
   > luckperms.sql
@@ -222,4 +222,4 @@ The node then builds one `BackupService`, calls `recoverInterruptedOperations()`
 - Negative tests: path traversal and other unsafe paths in the archive, a manipulated manifest, hash and size mismatch, extra and missing files, a wrong manifest id, restore while the service runs or starts, wrong passwords, a dump without the final line, a database name that looks like an option.
 - `ManifestCodecFuzzTest` with seed inputs under `src/test/resources`.
 - `CronExpressionFuzzTest`: `schedule.cron` comes from a hand-edited file, so the parser may only fail with `IllegalArgumentException`, and every accepted expression must fire again and again, strictly later each time, also across a daylight saving change in Berlin. Fixed inputs run as a parameterised test as well.
-- `ManagedMariaDbBackupIT` (tag `mariadb`) downloads MariaDB, sets up a throwaway server on a free port in a temp folder, dumps it with the real `mariadb-dump` and checks the dump, that the password is not on the command line or in the archive, and that the option file is gone. It runs with `./gradlew :VectoraCloud:cloud-backup:mariadbTest`, weekly and on pull requests through `.github/workflows/managed-mariadb.yml`, on Linux and Windows with Java 21 and 25.
+- `ManagedMariaDbBackupIT` (tag `mariadb`) downloads MariaDB, sets up a throwaway server on a free port in a temp folder, dumps it with the real `mariadb-dump` and checks the dump, that the password is not on the command line or in the archive, and that the option file is gone. It runs with `./gradlew :cloud:backup:mariadbTest`, weekly and on pull requests through `.github/workflows/managed-mariadb.yml`, on Linux and Windows with Java 21 and 25.

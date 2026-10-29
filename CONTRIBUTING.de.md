@@ -50,7 +50,7 @@ Vergessen? `git commit --amend -s` für den letzten Commit, `git rebase --signof
 - Jede Abhängigkeit und jedes Plugin wird gegen SHA-256-Prüfsummen in `gradle/verification-metadata.xml` geprüft. Wenn du eine hinzufügst, entfernst oder aktualisierst, führe `bash gradle/update-verification-metadata.sh` aus, prüfe den Diff und committe ihn mit deiner Änderung. Siehe [docs/dependency-verification.de.md](docs/dependency-verification.de.md).
 - Keine neuen Fremd-Plugins. Die erlaubte Basis steht im README, alles andere entsteht in diesem Repository.
 - Jeder Spielmodus muss für Bedrock-Spieler funktionieren. Menüs sind Inventar-Menüs, keine Bedrock-Formulare.
-- Nie Secrets, IPs, Spielerdaten, Welten oder Server-Jars committen. Die Ordner unter `Server-Network/` enthalten nur Templates.
+- Nie Secrets, IPs, Spielerdaten, Welten oder Server-Jars committen. `templates/` enthält nur Vorlagen; Server-Laufzeiten liegen im Cloud-Home außerhalb des Repositorys.
 
 ## Sprachen
 

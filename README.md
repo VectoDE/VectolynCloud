@@ -56,7 +56,7 @@ The long-term goal: you run `java -jar VectoraCloud.jar` on Windows, Linux, macO
 
 - **Proxy:** Velocity is the single entry point. Geyser and Floodgate let Bedrock clients in, the Via plugins translate older Java versions. Backends run the newest Minecraft version.
 - **Backends:** Paper for Lobby, Survival, Creative, End and (later) Minigames. Fabric for the mod server.
-- **VectoraCloud** (planned, stage 2): a Java node with console and setup wizard. It downloads and verifies server software, manages JREs and the database, generates secrets, scales minigame servers and offers a REST/WebSocket API. Setup works like CloudNet: a console wizard on first start, then config files and console commands (stage 2). The web dashboard will cover everything as well, first-time setup included (stage 8). In the wizard, the config or later the dashboard you mark each of the seven servers and each minigame group as wanted or not. The cloud only builds wanted servers: it copies `Server-Network/<Server>/template/` to `runtime/`, downloads the software, fills in the secrets and starts them. Servers you do not want are never created, and neither the proxy nor the lobby refers to them.
+- **VectoraCloud** (planned, stage 2): a Java node with console and setup wizard. It downloads and verifies server software, manages JREs and the database, generates secrets, scales minigame servers and offers a REST/WebSocket API. Setup works like CloudNet: a console wizard on first start, then config files and console commands (stage 2). The web dashboard will cover everything as well, first-time setup included (stage 8). In the wizard, the config or later the dashboard you mark each of the seven servers and each minigame group as wanted or not. The cloud only builds wanted servers: it copies the server's template (`templates/<Server>/` in this repository) to `runtime/`, downloads the software, fills in the secrets and starts them. Servers you do not want are never created, and neither the proxy nor the lobby refers to them.
 - **One Vectora plugin** (planned, stage 3): several Gradle modules (core, permissions, social, moderation, stats, economy, lobby, portals and more) bundled into one jar per platform: `Vectora-Paper.jar`, `Vectora-Velocity.jar`, `Vectora-Fabric.jar`. It will replace LuckPerms, TAB, WorldEdit, WorldGuard, PlaceholderAPI, ProxyPortal and Chunky.
 
 Third-party software is limited to a necessary base: Paper, Velocity, Fabric and Fabric API, Geyser, Floodgate, ViaVersion, ViaBackwards, ViaRewind, the performance mods Lithium, FerriteCore, ServerCore and FabricProxy-Lite, and MariaDB/MySQL.
@@ -67,31 +67,39 @@ More detail: [Architecture in the wiki](https://github.com/VectoDE/Vectora-Netwo
 
 ```
 Vectora-Network/
-  Server-Network/
-    Proxy/ Lobby-Server/ Survival-Server/ Creative-Server/ Mod-Server/ End-Server/ Database/
-      template/           configs with placeholders, tracked in git
-      runtime/            jars, worlds, logs; local only, gitignored
-    secrets/              local secrets, gitignored except vectora.env.example
-  Vectora-Lobby/          plugin module: lobby
-  Vectora-PortalBridge/   plugin module: portals and End
+  cloud/                  VectoraCloud, one Gradle module per part: launcher, node, config, api,
+                          console, setup, database, download, template, network, backup, monitor
+    dist/                 start scripts, Docker, Pterodactyl egg, systemd unit, vectora.env.example
+  common/
+    protocol/             wire format of the cloud channel
+    client/               client the plugins use to talk to the cloud
+  plugins/<feature>/<platform>/
+                          one module and one jar per feature and platform
+    bridge/               cloud bridge: common, paper, legacy, velocity
+    lobby/paper/          lobby
+    portal/paper/         portals and End
+  templates/<Server>/     server configs with placeholders, tracked in git
+  services/               dashboard, website, Discord bot, store (planned)
+  resourcepack/           Vectora resource pack (planned)
   docs/                   project docs; docs/wiki/ is mirrored into the GitHub wiki
+  build-logic/, gradle/   Gradle conventions, version catalog, dependency verification
   .github/                workflows, issue forms, Dependabot
 ```
 
-Planned: `VectoraCloud/`, more plugin modules, `Website/`, `Resourcepack/`.
+Server runtimes (jars, worlds, logs) and secrets are not part of the repository. They live in the cloud home, the folder VectoraCloud runs in.
 
 ## Quick start (transitional, until VectoraCloud exists)
 
-Until stage 2 the servers run on Windows from `Server-Network/<Server>/runtime/` through start scripts. Picking which servers you want only becomes possible with VectoraCloud; today's launcher starts all of them. You need Java 25 on the `PATH` (Paper 26.3 requires it) and the portable MariaDB 11.8.9 for Windows.
+Until stage 2 the servers run on Windows from a network folder outside the repository (for example `C:\Vectora`, the later cloud home) through start scripts. Picking which servers you want only becomes possible with VectoraCloud; today's launcher starts all of them. You need Java 25 on the `PATH` (Paper 26.3 requires it) and the portable MariaDB 11.8.9 for Windows.
 
 1. Clone the repository.
-2. Copy each `Server-Network/<Server>/template/` to `Server-Network/<Server>/runtime/`.
-3. Copy `Server-Network/secrets/vectora.env.example` to `Server-Network/secrets/vectora.env` and fill in your own values. Never commit this file.
-4. Replace every `{{VECTORA_…}}` placeholder in the `runtime/` folders with your values and create the generated files (`forwarding.secret`, Floodgate `key.pem`, `eula.txt`). [`Server-Network/placeholders.md`](Server-Network/placeholders.md) lists every placeholder. VectoraCloud will do this step for you.
+2. Copy each `templates/<Server>/` to `<network folder>\<Server>\runtime\`.
+3. Copy `cloud/dist/secrets/vectora.env.example` to `<network folder>\secrets\vectora.env` and fill in your own values. Never commit this file.
+4. Replace every `{{VECTORA_…}}` placeholder in the `runtime/` folders with your values and create the generated files (`forwarding.secret`, Floodgate `key.pem`, `eula.txt`). [`templates/placeholders.md`](templates/placeholders.md) lists every placeholder. VectoraCloud will do this step for you.
 5. Put the server software into each `runtime/` folder. The repository ships no jars. The start scripts expect `velocity.jar`, `paper.jar` and `fabric-server.jar`; exact versions and plugin files are listed in [Getting Started](docs/wiki/Getting-Started.md).
-6. Run `Server-Network\start-network.bat` and choose:
+6. Copy `start-network.bat` and `start-vectora-database.cmd` from `cloud/dist/manual/` into the network folder, run `start-network.bat` there and choose:
    - `1` everything: database, then proxy and all five backends
-   - `2` database only (same as `Server-Network\start-vectora-database.cmd`)
+   - `2` database only (same as `start-vectora-database.cmd`)
    - `3` proxy only
    - `4` backends only (Lobby, Survival, Mod, Creative, End)
    - `5` quit

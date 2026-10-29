@@ -1,6 +1,6 @@
 # VectoraCloud-REST-API
 
-Modul `VectoraCloud/cloud-api`. Eine JSON-API über HTTP/1.1 und ein WebSocket für Live-Events, gedacht für das Dashboard (Etappe 8) und für Skripte. Die maschinenlesbare Beschreibung steht in [`api.openapi.yaml`](api.openapi.yaml), die ausführliche englische Seite in [api.md](api.md).
+Modul `cloud/api`. Eine JSON-API über HTTP/1.1 und ein WebSocket für Live-Events, gedacht für das Dashboard (Etappe 8) und für Skripte. Die maschinenlesbare Beschreibung steht in [`api.openapi.yaml`](api.openapi.yaml), die ausführliche englische Seite in [api.md](api.md).
 
 Die API ist standardmäßig aus. Sie startet mit dem Node, wenn in `cloud.yml` `api.enabled: true` steht:
 
@@ -155,4 +155,4 @@ Gruppen lassen sich über die API schreiben. Darum gibt es für `process.jvm-fla
 
 ## Einbindung in cloud-node
 
-`cloud-api` hängt nicht von `cloud-node` ab. Der Node liefert ein `ApiBackend` und startet den Server. Die einzelnen Schritte stehen in [api.md](api.md#wiring-in-cloud-node): Tokens öffnen und den Befehl `api` registrieren, bei `api.enabled` TLS vorbereiten und `ApiServer` starten, Dienst-Events weiterreichen, `beginShutdown()` zu Beginn und `close()` am Ende von `CloudNode.close()`. Das macht `CloudNode` mit `ops.NodeApi`. Eine Ablehnung des Dienstkerns geht nur an den Client, wenn sie einer seiner eigenen kurzen Gründe ist und nichts enthält, das wie ein Pfad aussieht. Alles andere bleibt im Log des Nodes, der Client bekommt einen kurzen Text. `ApiSettings.of` lehnt `api.tls.enabled` ohne Schlüsselmaterial ab, ebenso Schlüsselmaterial bei ausgeschaltetem TLS. `runs` in den Wanted-Endpunkten ist `GroupRules.isWanted` aus cloud-config, also dieselbe Regel, nach der der Node plant.
+`cloud/api` hängt nicht von `cloud/node` ab. Der Node liefert ein `ApiBackend` und startet den Server. Die einzelnen Schritte stehen in [api.md](api.md#wiring-in-cloud-node): Tokens öffnen und den Befehl `api` registrieren, bei `api.enabled` TLS vorbereiten und `ApiServer` starten, Dienst-Events weiterreichen, `beginShutdown()` zu Beginn und `close()` am Ende von `CloudNode.close()`. Das macht `CloudNode` mit `ops.NodeApi`. Eine Ablehnung des Dienstkerns geht nur an den Client, wenn sie einer seiner eigenen kurzen Gründe ist und nichts enthält, das wie ein Pfad aussieht. Alles andere bleibt im Log des Nodes, der Client bekommt einen kurzen Text. `ApiSettings.of` lehnt `api.tls.enabled` ohne Schlüsselmaterial ab, ebenso Schlüsselmaterial bei ausgeschaltetem TLS. `runs` in den Wanted-Endpunkten ist `GroupRules.isWanted` aus cloud-config, also dieselbe Regel, nach der der Node plant.

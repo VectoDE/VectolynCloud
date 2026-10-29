@@ -14,7 +14,7 @@ on:
     branches: [main]
     paths:
       - .github/workflows/network-smoke.yml
-      - VectoraCloud/cloud-download/src/test/java/net/vectora/cloud/download/LiveSmokeTest.java
+      - cloud/download/src/test/java/net/vectora/cloud/download/LiveSmokeTest.java
 
 permissions:
   contents: read
@@ -51,12 +51,12 @@ jobs:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
       - name: Run networkTest
-        run: bash ./gradlew :VectoraCloud:cloud-download:networkTest --no-daemon --stacktrace
+        run: bash ./gradlew :cloud:download:networkTest --no-daemon --stacktrace
 
       - name: Summary
         if: always()
         run: |
-          report=VectoraCloud/cloud-download/build/network-smoke.txt
+          report=cloud/download/build/network-smoke.txt
           {
             echo "### Download smoke test"
             echo
@@ -75,7 +75,7 @@ jobs:
         with:
           name: network-smoke
           path: |
-            VectoraCloud/cloud-download/build/network-smoke.txt
-            VectoraCloud/cloud-download/build/test-results/networkTest/*.xml
+            cloud/download/build/network-smoke.txt
+            cloud/download/build/test-results/networkTest/*.xml
           if-no-files-found: ignore
           retention-days: 14

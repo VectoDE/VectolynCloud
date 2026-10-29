@@ -36,10 +36,10 @@ Paper for Lobby, Survival, Creative and End; Fabric for the mod server. Backends
 
 ## Templates and runtime (stage 1)
 
-Each server under `Server-Network/` has two parts:
+Each server has two parts:
 
-- `template/`: configs with placeholders, tracked in git
-- `runtime/`: jars, worlds, logs and generated files, local only and gitignored
+- its template: configs with placeholders, tracked in git under `templates/<Server>/`
+- `runtime/`: jars, worlds, logs and generated files, in the network folder (the cloud home) outside the repository, `<home>/<Server>/runtime/`
 
 Until stage 2 the existing servers run locally from `runtime/` via the Windows start scripts.
 
@@ -48,7 +48,7 @@ Until stage 2 the existing servers run locally from `runtime/` via the Windows s
 A Java node with a console (JLine) and a setup wizard.
 
 - **Setup and configuration:** like CloudNet. On first start a setup wizard runs in the console; after that you configure the cloud through config files and console commands (stage 2). Later the web dashboard can do all of it too, including the first-time setup and the choice of servers (stage 8). Both use the same configuration layer, which stage 2 builds.
-- **Choosing servers:** in the wizard or the cloud config you mark each of the seven servers and each minigame group as wanted or not. The cloud only builds wanted servers: it copies `Server-Network/<Server>/template/` to `runtime/`, downloads the software, fills in the secrets and starts the server. Unwanted servers are never created, and neither the proxy nor the lobby refers to them.
+- **Choosing servers:** in the wizard or the cloud config you mark each of the seven servers and each minigame group as wanted or not. The cloud only builds wanted servers: it copies the server's template (`templates/<Server>/` in the repository) to `runtime/`, downloads the software, fills in the secrets and starts the server. Unwanted servers are never created, and neither the proxy nor the lobby refers to them.
 - **Services:** groups and tasks, static and dynamic services, autoscaling by player count, multiple nodes in a cluster over TLS.
 - **Downloads:** Paper and Velocity via the PaperMC API, Fabric meta, the Geyser and Floodgate download API, Hangar and Modrinth for the Via plugins and performance mods. Checksums are verified and versions pinned; updates run a test start and roll back on failure.
 - **Java runtimes:** JREs from the Adoptium API, per server group matching the Minecraft version (8, 17, 21 or 25).
@@ -70,7 +70,7 @@ Several Gradle modules (core, permissions, social, moderation, stats, economy, s
 
 The cloud config decides which modules a server group enables, and the cloud ships the matching jar. Version adapters cover Minecraft 1.8.8 to 26.3. The plugin replaces LuckPerms, TAB, WorldEdit, WorldGuard, PlaceholderAPI, ProxyPortal and Chunky.
 
-Today the repository contains two early modules, `Vectora-Lobby` and `Vectora-PortalBridge`, which the Gradle build compiles.
+Today the repository contains two early modules, `plugins/lobby/paper` and `plugins/portal/paper`, which the Gradle build compiles.
 
 ## Build
 

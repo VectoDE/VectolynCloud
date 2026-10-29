@@ -3,7 +3,7 @@ name: Managed MariaDB
 # Integration test of the managed database mode (cloud-database, see docs/cloud/database.md):
 # downloads the real MariaDB server, initialises a throwaway data directory in a temp folder,
 # starts it on a free port, sets up root, the application database and user, checks bind address,
-# rights and shutdown, then deletes everything. It never touches Server-Network/*/runtime/.
+# rights and shutdown, then deletes everything. It never touches a cloud home.
 # cloud-backup reuses such a throwaway server to dump it with the real mariadb-dump
 # (see docs/cloud/backup.md). Last, VectoraCloud.jar runs with mode: managed and fake servers
 # (docs/cloud/node.md#end-to-end-test).
@@ -19,10 +19,10 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - 'VectoraCloud/cloud-database/**'
-      - 'VectoraCloud/cloud-backup/**'
-      - 'VectoraCloud/cloud-download/src/main/java/net/vectora/cloud/download/provider/MariaDbProvider.java'
-      - 'VectoraCloud/cloud-node/src/main/java/net/vectora/cloud/node/database/**'
+      - 'cloud/database/**'
+      - 'cloud/backup/**'
+      - 'cloud/download/src/main/java/net/vectora/cloud/download/provider/MariaDbProvider.java'
+      - 'cloud/node/src/main/java/net/vectora/cloud/node/database/**'
       - '.github/workflows/managed-mariadb.yml'
 
 permissions:
@@ -83,7 +83,7 @@ jobs:
         env:
           TEST_JAVA: ${{ matrix.java }}
         run: >-
-          bash ./gradlew :VectoraCloud:cloud-database:mariadbTest --no-daemon --stacktrace
+          bash ./gradlew :cloud:database:mariadbTest --no-daemon --stacktrace
           -PtestJava="$TEST_JAVA"
           -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64,JAVA_HOME_25_X64
 
@@ -92,7 +92,7 @@ jobs:
         env:
           TEST_JAVA: ${{ matrix.java }}
         run: >-
-          bash ./gradlew :VectoraCloud:cloud-backup:mariadbTest --no-daemon --stacktrace
+          bash ./gradlew :cloud:backup:mariadbTest --no-daemon --stacktrace
           -PtestJava="$TEST_JAVA"
           -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64,JAVA_HOME_25_X64
 
@@ -106,7 +106,7 @@ jobs:
         env:
           ALLOW_ROOT: ${{ runner.os == 'Windows' }}
         run: >-
-          bash ./gradlew :VectoraCloud:cloud-node:e2eTest --no-daemon --stacktrace
+          bash ./gradlew :cloud:node:e2eTest --no-daemon --stacktrace
           -Pe2eDatabase=managed
           -Pe2eAllowRoot="$ALLOW_ROOT"
           -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64,JAVA_HOME_25_X64
@@ -117,7 +117,7 @@ jobs:
         with:
           name: managed-mariadb-${{ matrix.os }}-java${{ matrix.java }}
           path: |
-            VectoraCloud/cloud-database/build/reports/tests/
-            VectoraCloud/cloud-backup/build/reports/tests/
-            VectoraCloud/cloud-node/build/reports/tests/e2eTest/
+            cloud/database/build/reports/tests/
+            cloud/backup/build/reports/tests/
+            cloud/node/build/reports/tests/e2eTest/
           retention-days: 7

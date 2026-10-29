@@ -1,10 +1,10 @@
 [versions]
-# Keep in step with the Paper build that runs on the backends (Server-Network/*/runtime/paper.jar).
+# Keep in step with the Paper build that runs on the backends (<home>/<Server>/runtime/paper.jar).
 paper-api = "26.3.build.226-stable"
-# API of the Velocity 4.3.x proxy (Server-Network/Proxy). compileOnly in cloud-bridge-velocity.
+# API of the Velocity 4.3.x proxy (templates/Proxy). compileOnly in plugins/bridge/velocity.
 velocity-api = "4.3.1"
-# API of PandaSpigot 1.8.8 (Server-Network/Legacy-Server). Only a snapshot is published, so the build
-# pins one unique snapshot instead of the moving 1.8.8-R0.1-SNAPSHOT. compileOnly in cloud-bridge-legacy.
+# API of PandaSpigot 1.8.8 (templates/Legacy-Server). Only a snapshot is published, so the build
+# pins one unique snapshot instead of the moving 1.8.8-R0.1-SNAPSHOT. compileOnly in plugins/bridge/legacy.
 pandaspigot-api = "1.8.8-R0.1-20251003.170525-12"
 # Adventure as declared by that pandaspigot-api; javac needs its types to resolve Bukkit's overloads.
 pandaspigot-adventure = "4.24.0"

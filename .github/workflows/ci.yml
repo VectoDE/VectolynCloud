@@ -218,7 +218,7 @@ jobs:
           HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           # Build setup counts too: dependency versions, verification metadata, conventions.
-          pattern='^((VectoraCloud|Server-Network|Vectora-Protocol|Vectora-CloudClient|gradle|build-logic)/|settings[.]gradle[.]kts$|gradle[.]properties$)'
+          pattern='^((cloud|common|plugins/bridge|templates|gradle|build-logic)/|settings[.]gradle[.]kts$|gradle[.]properties$)'
           if [ "$EVENT" = schedule ] || [ "$EVENT" = workflow_dispatch ]; then
             cloud=true
             echo "Event $EVENT: integration always runs."
@@ -261,7 +261,7 @@ jobs:
 
       - name: No cloud-related changes
         if: needs.changes.outputs.cloud != 'true'
-        run: echo "Nothing under VectoraCloud/, Server-Network/, Vectora-Protocol/, Vectora-CloudClient/ or the build setup changed. Integration is not needed."
+        run: echo "Nothing under cloud/, common/, plugins/bridge/, templates/ or the build setup changed. Integration is not needed."
 
       # VectoraCloud.jar in an empty folder, as its own process, without network: setup file,
       # built-in templates, every default server (fake server jars that log in like a bridge),
@@ -292,7 +292,7 @@ jobs:
       - name: End-to-end test of VectoraCloud.jar
         if: needs.changes.outputs.cloud == 'true'
         run: >-
-          bash ./gradlew :VectoraCloud:cloud-node:e2eTest --no-daemon --stacktrace
+          bash ./gradlew :cloud:node:e2eTest --no-daemon --stacktrace
           -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64,JAVA_HOME_25_X64
 
       - name: Upload test report
@@ -300,5 +300,5 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: integration-e2e
-          path: VectoraCloud/cloud-node/build/reports/tests/e2eTest/
+          path: cloud/node/build/reports/tests/e2eTest/
           retention-days: 7

@@ -12,7 +12,7 @@ VectoraCloud has one entry point: `java -jar VectoraCloud.jar`. As long as `clou
 
 The dashboard will be a fourth way later and will use the same layer.
 
-The code is in `VectoraCloud/cloud-setup` (`net.vectora.cloud.setup`).
+The code is in `cloud/setup` (`net.vectora.cloud.setup`).
 
 ## The questions
 
@@ -202,4 +202,4 @@ If step 2 or 3 fails, the configuration goes back to the state before (groups an
 
 ## Tests
 
-`VectoraCloud/cloud-setup/src/test`: the questions through a scripted terminal (order, defaults, cancel at any point, EOF, Ctrl+C, declined EULA, Pterodactyl, masked and visible password input, reserved ports, `change`, rerun with no and with one change, changes through the API or console while the questions run, German texts, the `setup` command), the setup file (every rule above, `ensureComplete`, only regular files up to the limit), the writer (`SetupApplierTest`: declined EULA, rollback after a failed secret write, no secret after a failed configuration write), password files (also FIFOs and devices), the Administrators group, the environment, and a check that no text opens with "No" or "Not", including the `setup` command's description, the labels of the port hint and the problems of cloud-config that the setup passes on. Jazzer fuzz tests: `SetupFileFuzzTest.setupFileFailsOnlyWithReadableProblems` and `SetupFileFuzzTest.passwordFileGivesASecretOrAProblem`, seeds in `src/test/resources/net/vectora/cloud/setup/SetupFileFuzzTestInputs/`.
+`cloud/setup/src/test`: the questions through a scripted terminal (order, defaults, cancel at any point, EOF, Ctrl+C, declined EULA, Pterodactyl, masked and visible password input, reserved ports, `change`, rerun with no and with one change, changes through the API or console while the questions run, German texts, the `setup` command), the setup file (every rule above, `ensureComplete`, only regular files up to the limit), the writer (`SetupApplierTest`: declined EULA, rollback after a failed secret write, no secret after a failed configuration write), password files (also FIFOs and devices), the Administrators group, the environment, and a check that no text opens with "No" or "Not", including the `setup` command's description, the labels of the port hint and the problems of cloud-config that the setup passes on. Jazzer fuzz tests: `SetupFileFuzzTest.setupFileFailsOnlyWithReadableProblems` and `SetupFileFuzzTest.passwordFileGivesASecretOrAProblem`, seeds in `src/test/resources/net/vectora/cloud/setup/SetupFileFuzzTestInputs/`.

@@ -1,6 +1,6 @@
 # VectoraCloud REST API
 
-Module `VectoraCloud/cloud-api`. A JSON API over HTTP/1.1 plus a WebSocket for live events, for the dashboard (stage 8) and for scripts. The machine-readable description is [`api.openapi.yaml`](api.openapi.yaml). German: [api.de.md](api.de.md).
+Module `cloud/api`. A JSON API over HTTP/1.1 plus a WebSocket for live events, for the dashboard (stage 8) and for scripts. The machine-readable description is [`api.openapi.yaml`](api.openapi.yaml). German: [api.de.md](api.de.md).
 
 The API is off by default. It starts with the node when `api.enabled: true` is set in `cloud.yml`:
 
@@ -220,7 +220,7 @@ Groups can be written through the API, so `process.jvm-flags` has an allowlist: 
 
 ## Wiring in cloud-node
 
-`cloud-api` does not depend on `cloud-node`. The node provides an `ApiBackend` (`ops.NodeApi`) and starts the server. `CloudNode` follows these steps; player events come from the channel's `NetworkPlayers`. A refusal of the service core reaches the client only if it is one of its own short reasons and holds nothing like a path; any other message stays in the node log and the client gets a short text. `ApiSettings.of` refuses `api.tls.enabled` without key material and key material with TLS off. `runs` in the wanted endpoints is `GroupRules.isWanted` of cloud-config, the rule the node itself plans by.
+`cloud/api` does not depend on `cloud/node`. The node provides an `ApiBackend` (`ops.NodeApi`) and starts the server. `CloudNode` follows these steps; player events come from the channel's `NetworkPlayers`. A refusal of the service core reaches the client only if it is one of its own short reasons and holds nothing like a path; any other message stays in the node log and the client gets a short text. `ApiSettings.of` refuses `api.tls.enabled` without key material and key material with TLS off. `runs` in the wanted endpoints is `GroupRules.isWanted` of cloud-config, the rule the node itself plans by.
 
 1. At start, after `ConfigService.open`: `ApiTokens tokens = ApiTokens.open(home)` and register `new ApiCommands(tokens).command()` in the console registry, so tokens can be created even while the API is off.
 2. If `api.enabled`:
@@ -251,5 +251,5 @@ Groups can be written through the API, so `process.jvm-flags` has an allowlist: 
 - `ApiJsonFuzzTest.readFailsOnlyWithBadRequest`: any body becomes a value or fails with a `400` whose message has no control characters.
 
 ```sh
-./gradlew :VectoraCloud:cloud-api:test --tests 'net.vectora.cloud.api.http.RouterFuzzTest.resolveNeverThrowsAndOnlyPassesCleanValues' -Pfuzz -PfuzzMaxDuration=5m
+./gradlew :cloud:api:test --tests 'net.vectora.cloud.api.http.RouterFuzzTest.resolveNeverThrowsAndOnlyPassesCleanValues' -Pfuzz -PfuzzMaxDuration=5m
 ```

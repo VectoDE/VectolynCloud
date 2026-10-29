@@ -36,10 +36,10 @@ Paper für Lobby, Survival, Creative und End, Fabric für den Mod-Server. Die Ba
 
 ## Template und Runtime (Etappe 1)
 
-Jeder Server unter `Server-Network/` besteht aus zwei Teilen:
+Jeder Server besteht aus zwei Teilen:
 
-- `template/`: Configs mit Platzhaltern, in Git
-- `runtime/`: Jars, Welten, Logs und erzeugte Dateien, nur lokal und per `.gitignore` ausgeschlossen
+- seiner Vorlage: Configs mit Platzhaltern, in Git unter `templates/<Server>/`
+- `runtime/`: Jars, Welten, Logs und erzeugte Dateien, im Netzwerk-Ordner (dem Cloud-Home) außerhalb des Repositorys, `<Home>/<Server>/runtime/`
 
 Bis Etappe 2 laufen die vorhandenen Server lokal aus `runtime/` über die Windows-Startskripte.
 
@@ -48,7 +48,7 @@ Bis Etappe 2 laufen die vorhandenen Server lokal aus `runtime/` über die Window
 Ein Java-Node mit Konsole (JLine) und Einrichtungsassistent.
 
 - **Einrichtung und Konfiguration:** wie bei CloudNet. Beim ersten Start läuft ein Einrichtungsassistent in der Konsole, danach konfigurierst du die Cloud über Konfigurationsdateien und Konsolenbefehle (Etappe 2). Später kann das Web-Dashboard all das auch, einschließlich Ersteinrichtung und Server-Auswahl (Etappe 8). Beide nutzen dieselbe Konfigurationsschicht, die Etappe 2 baut.
-- **Server auswählen:** Im Assistenten oder in der Cloud-Konfiguration markierst du jeden der sieben Server und jede Minigame-Gruppe als gewollt oder nicht. Die Cloud baut nur gewollte Server: Sie kopiert `Server-Network/<Server>/template/` nach `runtime/`, lädt die Software, setzt die Secrets ein und startet den Server. Nicht gewollte Server legt sie gar nicht an, und weder Proxy noch Lobby verweisen auf sie.
+- **Server auswählen:** Im Assistenten oder in der Cloud-Konfiguration markierst du jeden der sieben Server und jede Minigame-Gruppe als gewollt oder nicht. Die Cloud baut nur gewollte Server: Sie kopiert die Vorlage des Servers (`templates/<Server>/` im Repository) nach `runtime/`, lädt die Software, setzt die Secrets ein und startet den Server. Nicht gewollte Server legt sie gar nicht an, und weder Proxy noch Lobby verweisen auf sie.
 - **Dienste:** Gruppen und Tasks, statische und dynamische Dienste, Autoskalierung nach Spielerzahl, mehrere Nodes im Cluster über TLS.
 - **Downloads:** Paper und Velocity über die PaperMC-API, Fabric-Meta, Download-API von Geyser und Floodgate, Hangar und Modrinth für die Via-Plugins und Performance-Mods. Die Cloud gleicht Prüfsummen ab und trägt Versionen fest ein; Updates laufen mit Teststart und Rollback.
 - **Java-Laufzeiten:** JREs über die Adoptium-API, pro Server-Gruppe passend zur Minecraft-Version (8, 17, 21 oder 25).
@@ -70,7 +70,7 @@ Mehrere Gradle-Module (Core, Rechte, Soziales, Moderation, Statistiken, Economy,
 
 Welche Module eine Server-Gruppe aktiviert, steht in der Cloud-Konfiguration; die Cloud verteilt die passende Jar. Versionsadapter decken Minecraft 1.8.8 bis 26.3 ab. Das Plugin ersetzt LuckPerms, TAB, WorldEdit, WorldGuard, PlaceholderAPI, ProxyPortal und Chunky.
 
-Heute enthält das Repository zwei frühe Module, `Vectora-Lobby` und `Vectora-PortalBridge`, die der Gradle-Build kompiliert.
+Heute enthält das Repository zwei frühe Module, `plugins/lobby/paper` und `plugins/portal/paper`, die der Gradle-Build kompiliert.
 
 ## Build
 

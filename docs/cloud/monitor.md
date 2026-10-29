@@ -1,10 +1,10 @@
 # VectoraCloud monitoring
 
-Module `VectoraCloud/cloud-monitor`, package `net.vectora.cloud.monitor`. It samples every service and the node at a fixed interval, keeps a history, evaluates alert rules with hysteresis and debounce, and reports alerts to the log, to listeners and, if the operator switches it on, to a webhook. An optional Prometheus endpoint exposes the same values on loopback.
+Module `cloud/monitor`, package `net.vectora.cloud.monitor`. It samples every service and the node at a fixed interval, keeps a history, evaluates alert rules with hysteresis and debounce, and reports alerts to the log, to listeners and, if the operator switches it on, to a webhook. An optional Prometheus endpoint exposes the same values on loopback.
 
 Nothing is sent anywhere by default. Notifications and the Prometheus endpoint are off until the operator enables them in `monitor.yml` and enters the webhook URL in `secrets/vectora.env`.
 
-The module does not depend on `cloud-node`. The node plugs it in through a small interface and two calls (see [Hooking it into the node](#hooking-it-into-the-node)); `cloud-node` does that in `CloudNode` with `ops.NodeMonitoring` (service list and state changes) and the channel's status reports, and registers `monitor` and `alerts`. The origin of notifications is the node id; `MonitorRuntime.open` refuses anything that is not a valid node id.
+The module does not depend on `cloud/node`. The node plugs it in through a small interface and two calls (see [Hooking it into the node](#hooking-it-into-the-node)); `cloud/node` does that in `CloudNode` with `ops.NodeMonitoring` (service list and state changes) and the channel's status reports, and registers `monitor` and `alerts`. The origin of notifications is the node id; `MonitorRuntime.open` refuses anything that is not a valid node id.
 
 ## Metrics
 
@@ -29,11 +29,11 @@ A value that cannot be measured is shown as `-` and counts as missing for the ru
 
 ### Protocol: no change needed
 
-`ServiceStatus` (protocol 1.0, message `0x11`) already carries players online and maximum, TPS, MSPT, heap used and heap maximum (`-1` for unknown). Everything the monitor needs from a server is in it, so `Vectora-Protocol` and `Vectora-CloudClient` stay as they are. CPU and memory of the process come from the node, which knows the pid.
+`ServiceStatus` (protocol 1.0, message `0x11`) already carries players online and maximum, TPS, MSPT, heap used and heap maximum (`-1` for unknown). Everything the monitor needs from a server is in it, so `common/protocol` and `common/client` stay as they are. CPU and memory of the process come from the node, which knows the pid.
 
 ### What the bridges report, and what the monitor expects
 
-The bridges (`cloud-bridge-paper`, `cloud-bridge-legacy`, `cloud-bridge-velocity`) already do all of this; the list is the contract for any later client such as the Vectora plugin.
+The bridges (`plugins/bridge/paper`, `plugins/bridge/legacy`, `plugins/bridge/velocity`) already do all of this; the list is the contract for any later client such as the Vectora plugin.
 
 - `CloudClient.reportStatus(online, max, tps, mspt)` at least once per `sample-interval` (default 10 s). The bridges report every 5 s. A report older than `stale-after` (default 60 s) counts as missing.
 - Paper and PandaSpigot report on the main thread every 100 ticks. On a lagging server that takes longer than 5 s: at 3.3 TPS it is 30 s, which is why `stale-after` defaults to 60 s (covers down to about 1.7 TPS). A server that hardly ticks at all stops reporting; its TPS then counts as missing. A `low-tps` alert that already fires stays active, because missing values never clear an alert.
@@ -201,7 +201,7 @@ With `prometheus.enabled: true` the cloud serves `GET /metrics` in the Prometheu
 
 ## Hooking it into the node
 
-`MonitorRuntime.open(home, directory, secrets, RedactingFilter::redact, nodeId)` reads `monitor.yml`, builds the monitor on `SystemMetricSource`, the webhook, the history file and the Prometheus endpoint, and offers the console commands. `cloud-node` wires it in `CloudNode`; the module itself needs no change to `cloud-node`:
+`MonitorRuntime.open(home, directory, secrets, RedactingFilter::redact, nodeId)` reads `monitor.yml`, builds the monitor on `SystemMetricSource`, the webhook, the history file and the Prometheus endpoint, and offers the console commands. `cloud/node` wires it in `CloudNode`; the module itself needs no change to `cloud/node`:
 
 | Step | Where in the node | Code |
 |---|---|---|
@@ -215,7 +215,7 @@ With `prometheus.enabled: true` the cloud serves `GET /metrics` in the Prometheu
 | Autoscaler | `CloudNode.buildOps` | `ScalingSignals.of(monitoring.monitor(), channel.players(), channel::proxyWatches, clock)`: `players` of the newest sample (at most what the proxies see on the backend while one is connected) and `node-memory` decide scaling ([scaling.md](scaling.md#signals)) |
 | API (PR 15) | | `monitoring.monitor().addListener(...)` for alert events; `services()`, `history(id)`, `node()`, `activeAlerts()` for reads; `PrometheusFormat.render(...)` for `/metrics` |
 
-`ServicePhase` has the same names as `ServiceState` in `cloud-node`, so the mapping is `valueOf(state.name())`. The calls return at once and are safe from Netty and node threads.
+`ServicePhase` has the same names as `ServiceState` in `cloud/node`, so the mapping is `valueOf(state.name())`. The calls return at once and are safe from Netty and node threads.
 
 Sampling runs on the daemon thread `vectora-monitor`, notifications on `vectora-monitor-notify`, the endpoint on `vectora-monitor-prometheus`. A change to `monitor.yml` takes effect at the next start of the cloud; `Monitor.replaceRules` is there for a reload hook later.
 
@@ -249,7 +249,7 @@ Helper programs run by absolute path, without a shell and without the node's `VE
 They run on Java 25 and, with `-PtestJava=21`, on Java 21, on Linux and Windows in CI.
 
 ```sh
-./gradlew :VectoraCloud:cloud-monitor:test --tests 'net.vectora.cloud.monitor.alert.RuleParserFuzzTest.parseFailsOnlyWithSyntaxErrorsAndRoundTrips' -Pfuzz -PfuzzMaxDuration=5m
+./gradlew :cloud:monitor:test --tests 'net.vectora.cloud.monitor.alert.RuleParserFuzzTest.parseFailsOnlyWithSyntaxErrorsAndRoundTrips' -Pfuzz -PfuzzMaxDuration=5m
 ```
 
 ## Limits today

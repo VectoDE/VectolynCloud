@@ -1,6 +1,6 @@
 # VectoraCloud launcher
 
-`VectoraCloud/cloud-launcher` is the entry point of `java -jar VectoraCloud.jar`. It runs a few checks, unpacks the node and its libraries, and hands over to the node. It has no third-party dependencies and never references a node class at compile time.
+`cloud/launcher` is the entry point of `java -jar VectoraCloud.jar`. It runs a few checks, unpacks the node and its libraries, and hands over to the node. It has no third-party dependencies and never references a node class at compile time.
 
 ## Start order
 
@@ -67,7 +67,7 @@ All reads go through the `SystemAccess` interface. The tests replace it and repl
 
 ## Embedded libraries
 
-`VectoraCloud.jar` is assembled by the task `:VectoraCloud:cloud-launcher:cloudJar` (part of `assemble`, output `VectoraCloud/cloud-launcher/build/cloud/VectoraCloud.jar`):
+`VectoraCloud.jar` is assembled by the task `:cloud:launcher:cloudJar` (part of `assemble`, output `cloud/launcher/build/cloud/VectoraCloud.jar`):
 
 ```
 net/vectora/cloud/launcher/...         launcher classes (release 21) and Bootstrap (release 8)
@@ -101,7 +101,7 @@ The usual way is a fat jar built with the Shadow plugin, which merges all classe
 - **Verifiable.** Each library keeps its published bytes, so its SHA-256 can be compared with Maven Central and is checked on every start. A merged jar can only be checked as a whole.
 - **Nothing to merge.** No conflicts between `META-INF/services` files, `module-info.class`, multi-release `META-INF/versions/` trees, license and notice files, or signature files of signed jars. Shadow needs transformer rules for each of these and fails silently when one is missing.
 - **Checks before loading.** The launcher classes are the only code on the application class path. Nothing of the node or its libraries is loaded before the Java, root and argument checks have passed.
-- **No third-party build plugin.** One supply-chain dependency less in the build; the packing is a few lines in `cloud-launcher/build.gradle.kts`.
+- **No third-party build plugin.** One supply-chain dependency less in the build; the packing is a few lines in `cloud/launcher/build.gradle.kts`.
 
 The cost: the first start of each version writes the libraries to `cache/libs/<version>` (about 7 MB with the stage-2 scaffold), and code that relies on the system class loader instead of the context class loader does not see the node's classes.
 
