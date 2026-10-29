@@ -100,4 +100,37 @@ class SecretStoreTest {
         assertFalse(store.toString().contains(password));
         assertFalse(store.load().toString().contains(password));
     }
+
+    @Test
+    void putReplacesAChosenValueInPlaceAndKeepsTheRest() throws Exception {
+        Path env = root.resolve("secrets/vectora.env");
+        Files.createDirectories(env.getParent());
+        Files.writeString(env, """
+                # note
+                VECTORA_DB_PASSWORD=old-password-value
+                VECTORA_FORWARDING_SECRET=keep-this-one-as-it-is
+                """);
+        SecretStore store = new SecretStore(env);
+
+        assertTrue(store.put("VECTORA_DB_PASSWORD", Secret.of("new-password-value"), "ignored for an existing key"));
+
+        assertEquals(List.of("# note", "VECTORA_DB_PASSWORD=new-password-value", "VECTORA_FORWARDING_SECRET=keep-this-one-as-it-is"),
+                Files.readString(env).lines().toList());
+        assertFalse(store.put("VECTORA_DB_PASSWORD", Secret.of("new-password-value"), null), "the same value writes nothing");
+        assertTrue(store.put("VECTORA_EXTRA", Secret.of("appended-value"), "Extra key"));
+        assertTrue(Files.readString(env).endsWith("# Extra key\nVECTORA_EXTRA=appended-value\n"), Files.readString(env));
+    }
+
+    @Test
+    void putRefusesValuesThatDoNotFitOnOneLineWithoutWriting() throws Exception {
+        SecretStore store = new SecretStore(CloudHome.of(root));
+        for (String bad : List.of(" padded", "padded ", "two\nlines", "nul\u0000zero")) {
+            assertFalse(SecretStore.isStorable(Secret.of(bad)));
+            IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                    () -> store.put("VECTORA_DB_PASSWORD", Secret.of(bad), null));
+            assertFalse(e.getMessage().contains(bad.strip()), "the message never repeats the value");
+        }
+        assertFalse(Files.exists(store.file()), "nothing was written");
+        assertTrue(SecretStore.isStorable(Secret.of("a-normal-password")));
+    }
 }

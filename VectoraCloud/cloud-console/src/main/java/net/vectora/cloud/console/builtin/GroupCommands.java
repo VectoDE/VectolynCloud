@@ -265,12 +265,10 @@ final class GroupCommands {
     static GroupConfig changeGroup(String name, GroupConfig g, String field, String value) throws ConfigException {
         String file = groupFile(name);
         return switch (field) {
-            case "template" -> new GroupConfig(g.schemaVersion(), value, g.software(), g.minecraftVersion(), g.java(), g.heap(), g.catalog(), g.combat());
-            case "software" -> new GroupConfig(g.schemaVersion(), g.template(),
-                    Values.enumValue(file, field, value, ServerSoftware.class), g.minecraftVersion(), g.java(), g.heap(), g.catalog(), g.combat());
-            case "minecraft-version" -> new GroupConfig(g.schemaVersion(), g.template(), g.software(), value, g.java(), g.heap(), g.catalog(), g.combat());
-            case "java" -> new GroupConfig(g.schemaVersion(), g.template(), g.software(), g.minecraftVersion(),
-                    parse(file, field, JavaSelection.FORMAT, () -> JavaSelection.parse(value)), g.heap(), g.catalog(), g.combat());
+            case "template" -> g.withTemplate(value);
+            case "software" -> g.withSoftware(Values.enumValue(file, field, value, ServerSoftware.class));
+            case "minecraft-version" -> g.withMinecraftVersion(value);
+            case "java" -> g.withJava(parse(file, field, JavaSelection.FORMAT, () -> JavaSelection.parse(value)));
             case "heap.min" -> g.withHeap(new HeapConfig(parse(file, field, MemorySize.FORMAT, () -> MemorySize.parse(value)), heap(g).max()));
             case "heap.max" -> g.withHeap(new HeapConfig(heap(g).min(), parse(file, field, MemorySize.FORMAT, () -> MemorySize.parse(value))));
             case "combat" -> g.withCombat(Values.enumValue(file, field, value, CombatSystem.class));

@@ -106,6 +106,34 @@ public final class SecretStore {
         return true;
     }
 
+    /**
+     * Sets {@code key} to {@code value}, replacing a value it already has. Writes nothing if the
+     * value is already the same. Meant for values the operator chooses, such as the password of an
+     * external database; generated secrets go through {@link #ensureGenerated} and are never
+     * replaced.
+     *
+     * @return whether the file was written
+     * @throws IllegalArgumentException if the key or value cannot be stored (message without the value)
+     */
+    public synchronized boolean put(String key, Secret value, String comment) throws IOException, EnvFormatException {
+        EnvFile content = load();
+        if (content.get(key).map(value::equals).orElse(false)) {
+            return false;
+        }
+        write(content.withValue(key, value, comment));
+        return true;
+    }
+
+    /** Whether {@code value} can be stored as one line of the file (no control characters, no surrounding whitespace). */
+    public static boolean isStorable(Secret value) {
+        try {
+            EnvFileParser.checkValue(value.reveal());
+            return true;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
     /** A {@link RedactingFilter} for every value in the file. */
     public RedactingFilter redactingFilter() throws IOException, EnvFormatException {
         return RedactingFilter.of(load());

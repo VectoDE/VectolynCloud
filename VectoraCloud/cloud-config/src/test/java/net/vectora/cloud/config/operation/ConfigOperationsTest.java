@@ -99,4 +99,14 @@ class ConfigOperationsTest {
         assertEquals(new SetServerWanted(ServerKind.END, true), new SetServerWanted(ServerKind.END, true));
         assertThrows(NullPointerException.class, () -> new SetLanguage(null));
     }
+
+    @Test
+    void groupSwitch() throws ConfigException {
+        ConfigSnapshot off = new SetGroupWanted("lobby", false).apply(base);
+        assertFalse(off.groups().get("lobby").wantedOrDefault());
+        assertEquals(base.groups().get("lobby"), new SetGroupWanted("lobby", true).apply(off).groups().get("lobby"));
+        assertEquals(ErrorCode.UNKNOWN_GROUP, assertThrows(ConfigException.class,
+                () -> new SetGroupWanted("nope", false).apply(base)).errors().getFirst().code());
+        assertTrue(new SetServerWanted(ServerKind.LEGACY_SERVER, true).apply(base).cloud().servers().legacyServer());
+    }
 }

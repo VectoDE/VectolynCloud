@@ -1,0 +1,6 @@
+schema-version: 1
+eula: true
+minigames:
+  bedwars: null
+memory:
+  nonsense: 1G

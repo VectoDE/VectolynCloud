@@ -1,8 +1,12 @@
 package net.vectora.cloud.config.model;
 
 /**
- * The eight server kinds of the network. Each has a template folder in the cloud home
+ * The nine server kinds of the network. Each has a template folder in the cloud home
  * ({@code Server-Network/<folder>/template/}) and a "wanted" switch in {@code cloud.yml}.
+ *
+ * <p>The legacy proxy (template {@code Legacy-Proxy}) is no kind of its own: its switch is
+ * {@code legacy-proxy.enabled}, because it also carries the port. The 1.8.8 servers behind it are
+ * {@link #LEGACY_SERVER}; they only run while the legacy proxy is enabled.
  */
 public enum ServerKind {
     /** Velocity proxy with Geyser, Floodgate and Via*. */
@@ -20,7 +24,9 @@ public enum ServerKind {
     /** MariaDB, managed by the cloud. */
     DATABASE("database", "Database"),
     /** Generic minigame template (Paper), until stage 6 brings the individual games. */
-    MINIGAME("minigame", "Minigame-Server");
+    MINIGAME("minigame", "Minigame-Server"),
+    /** 1.8.8 servers (PandaSpigot) behind the legacy proxy. */
+    LEGACY_SERVER("legacy-server", "Legacy-Server");
 
     private final String key;
     private final String templateFolder;

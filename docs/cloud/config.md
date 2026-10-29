@@ -38,6 +38,7 @@ servers:                     # the "wanted" switch per server; a missing entry c
   end: true
   database: true
   minigame: true
+  legacy-server: false       # the 1.8.8 server, runs only with legacy-proxy.enabled
 proxy:
   bind: 0.0.0.0
   port: 25565
@@ -75,6 +76,7 @@ heap:
   min: 256M                  # M or G
   max: 768M
 combat: modern               # legacy (1.8 style) or modern
+wanted: false                # optional; only written when off. Switches one group off, for example one of several minigames
 catalog:                     # plugins and mods from the download catalog
   - id: luckperms
     kind: transitional       # plugin, mod or transitional
@@ -194,7 +196,7 @@ try (ConfigService config = ConfigService.open(CloudHome.of(Path.of("Server-Netw
 
 `apply` runs the operations in order, validates the result as a whole, writes the changed files and then tells the listeners (`ConfigChanged` with the old and new snapshot, the files and the operations). If validation fails, it throws `ConfigException` with every error, writes nothing and keeps the current snapshot. Several operations in one call count as one change, so a new group and its task can be added together.
 
-Operations in `net.vectora.cloud.config.operation`: `SetLanguage`, `SetNetworkName`, `AcceptEula`, `CompleteSetup`, `SetServerWanted`, `SetDatabaseMode`, `SetDatabase`, `SetProxy`, `SetLegacyProxy`, `SetApi`, `PutGroup`, `RemoveGroup`, `SetGroupHeap`, `PutTask`, `RemoveTask`, `SetTaskScaling`, `PutNode`, `RemoveNode`. `ConfigOperation` is a plain interface; other modules add their own operations by implementing it.
+Operations in `net.vectora.cloud.config.operation`: `SetLanguage`, `SetNetworkName`, `AcceptEula`, `CompleteSetup`, `SetServerWanted`, `SetDatabaseMode`, `SetDatabase`, `SetProxy`, `SetLegacyProxy`, `SetApi`, `PutGroup`, `RemoveGroup`, `SetGroupHeap`, `SetGroupWanted`, `PutTask`, `RemoveTask`, `SetTaskScaling`, `PutNode`, `RemoveNode`. `ConfigOperation` is a plain interface; other modules add their own operations by implementing it.
 
 The service is thread-safe. `snapshot()` never blocks; changes and reloads run one at a time. Listeners are called in order while the service holds its lock, so they see changes in the order they happened. They may read the snapshot and call `apply` again, but must return quickly. Such a nested `apply` returns its result at once; its event is queued and delivered after every listener has seen the change that triggered it, so no listener sees the second change before the first. An exception in a listener is logged and does not stop the others.
 
@@ -268,6 +270,7 @@ Rules of the store:
 - The file is replaced atomically. The temporary file is restricted to the owner before the secrets are written into it.
 - Permissions: on Linux and macOS the folder is `700` and the file `600`. On Windows the access list of folder and file is replaced by one entry that gives the owner full control, inherited by new files in the folder, and is then marked protected (`icacls /inheritance:d`, called by its full path in `System32`; Java's ACL API cannot set the flag). Entries an administrator later adds to a parent folder are therefore not inherited. Explicitly replacing the list (for example `icacls /reset` or "Replace all child object permissions") still overrides it, as it overrides any protected list. File systems without either model (FAT, some network shares) cannot be restricted.
 - A malformed file is not touched; the error is reported.
+- `SecretStore.put` sets one value the operator chose (the password of an external database) and replaces an existing entry in place. Values that do not fit on one line are refused before anything is written.
 
 ### Redaction
 
