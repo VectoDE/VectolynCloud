@@ -78,8 +78,9 @@ Every 5 seconds the scaler looks at each task once. After a decision by load (ru
    - it is always **closed** on the proxies first, so no new player gets there;
    - every player on it is moved to the other services of the group (static ones included). The node reads the players again on every check, so someone who joined in between is moved too. A player who is still on it 2 seconds after his move was sent gets it again, then after 4 and every 8 seconds, in case a proxy lost or refused the first one. Each player gets a short message in their client language (German for `de`, English otherwise);
    - it stops only when it is empty: the proxies list nobody on it **and** its own bridge reports 0 players. Here the higher of both counts decides, so a proxy that has not seen a join yet cannot get a server stopped under a player;
-   - if players are still on it after the group's `drain-timeout` (default 30 seconds; a move failed, the proxy is gone), it keeps running and is opened again. Nobody is kicked. The task then waits `scale-down-after` again before the next try;
-   - if the stop itself fails after it was emptied, it is opened again too.
+   - if players are still on it after the group's `drain-timeout` (default 30 seconds; a move failed, the proxy is gone), it keeps running and is opened again. If no other open server of the group can take its players, this happens at once, without waiting for the `drain-timeout`. Nobody is kicked. The task then waits `scale-down-after` again before the next try;
+   - if the stop itself fails after it was emptied, it is opened again too;
+   - while it is being emptied it counts neither for `min-services` nor for the load, and the task is not blocked: if another service of the task crashes meanwhile, its replacement starts in the next round.
 
    Of equally empty services the one with the highest index goes. Example with 50 slots and 50 %: 20 and 4 players on two services, 24 of 50 without the second one (48 %), so the second one is emptied. With 20 and 5 it is exactly 50 % and both stay.
 
@@ -152,7 +153,11 @@ Scaling: minigame-3 of task minigame is started (the load of the group has reach
 Scaling: minigame-3 of task minigame is stopped (with one service fewer the load stays below 50 %, for 5m)
 Scaling: the players of minigame-2 of task minigame are moved to other servers (with one service fewer the load stays below 50 %, for 5m)
 Scaling: minigame-2 keeps running: players are still on it after 30 s, a move did not work
+Scaling: minigame-2 keeps running: no other open server of its group can take its players
+Scaling: minigame-2 keeps running: moving its players was interrupted
 ```
+
+The last three lines say why a service was not emptied: the time ran out, no other open server of the group was there, or the wait was interrupted (the node is shutting down).
 
 ## Ids, folders and proxies
 
@@ -163,7 +168,7 @@ A scaled service is an ordinary service of the service core ([node.md](node.md#i
 | Class | Does |
 |---|---|
 | `ScalingPlanner` | The rules above as a pure function of configuration, services, signals and what earlier rounds remember. No I/O, no clock. |
-| `Autoscaler` | The rounds on the thread `vectora-scaling`; starts, stops and drains on `vectora-scaling-action` (at most one per task at a time); the memory of the rounds (cooldown, low load since, services being emptied, switched-off static services, failures). Registered as `ServiceListener`. |
+| `Autoscaler` | The rounds on the thread `vectora-scaling`; starts, stops and drains on `vectora-scaling-action` (the starts of a task one after the other; a drain does not hold its task, so a crashed service is replaced while another one is emptied); the memory of the rounds (cooldown, low load since, services being emptied, switched-off static services, failures). Registered as `ServiceListener`. |
 | `ScalingSignals` | Player counts and node memory from the monitor and the proxies' player events; `merge` is the pure rule. |
 | `ScalingTarget` | What the scaler starts, stops and empties: `ServiceManager.startDynamic(task)`, `start(task, index)`, `stop(id)` and `ChannelBridge.drain(id, timeout)`. |
 | `ChannelBridge.drain` | Closes a backend on the proxies (`ServerCapacity`), sends `TransferPlayer` for each player on it (again after 2, 4 and every 8 s while the player is still there), waits until the proxies report it empty, and opens it again if not. |
@@ -177,7 +182,8 @@ A scaled service is an ordinary service of the service core ([node.md](node.md#i
 |---|---|
 | `ScalingPlannerTest` | every rule with its boundary (39 and 40 of 50 at 80 %, 10 + 70 and 10 + 69 of 100 for the group, 24 and 25 of 50 below 50 %, 4:59 and 5:00 low load, 59 s and 60 s cooldown, memory exactly enough and 1 byte or 1 MB short, `max-memory` and the reserve with and without a database), unknown counts, starting and draining services, static services taking players, proxies, unwanted groups and other nodes, each with a counter-check |
 | `ScalingSignalsTest` | `stale-after` to the second (a version without the check fails), `min(online, max)`, the lower count while a proxy watches and the bridge's count without one, node memory fresh, stale or not measured |
-| `AutoscalerTest` | the rounds on a fake service core and clock: setup and EULA, suspend and close, low load reset by a rise, a drain that empties and one that does not (no stop, the time starts again), one decision per task while a drain runs, released static services judged by the configuration at the stop, pause after three failures and its end by time or by a changed task file, crashes and the reset by a stable service, one start per task at a time, memory holds |
+| `AutoscalerTest` | the rounds on a fake service core and clock: setup and EULA, suspend and close, low load reset by a rise, a drain that empties and one that does not (no stop, the time starts again, the log names timeout, no target or interrupt), a service being emptied never chosen twice, a crash during a drain replaced in the next round, released static services judged by the configuration at the stop, pause after three failures and its end by time or by a changed task file, crashes and the reset by a stable service, one start per task at a time, memory holds |
+| `ChannelBridgeDrainTest` | `ChannelBridge.drain` on a fake service core, channel and clock: a newcomer during the poll gets a move of his own, a move that did not happen is sent again after 2, 4 and 8 s, the timeout, no target and an interrupt open the backend again, empty only when both lists say so |
 | `TransferPlannerTest` | lowest load first, counting the players already sent, then fewer players, then name |
 | `NodeWiringTest.theScalerFollowsThePlayerCountsOfTheBridgesAndNeverStopsAStaticServer` | the whole node with fake servers: a reported player starts `minigame-2`, low load stops it again, `minigame-1` and the static lobby stay, a lobby stopped by hand stays down |
 | `NodeWiringTest.aSurplusServiceWithPlayersIsEmptiedThroughTheProxyBeforeItStops` | with a fake proxy: `minigame-2` is closed (`ServerCapacity open=false`), its player gets a `TransferPlayer` to `minigame-1`, the server runs until the proxy reports the move, then stops |

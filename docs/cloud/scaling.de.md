@@ -78,8 +78,9 @@ Alle 5 Sekunden prüft der Scaler jeden Task einmal. Nach einer Entscheidung nac
    - er wird immer zuerst auf den Proxys **geschlossen**, damit kein neuer Spieler mehr hinkommt;
    - alle Spieler darauf werden auf die anderen Dienste der Gruppe umgezogen (statische eingeschlossen). Die Node liest die Spieler bei jeder Prüfung neu, also wird auch umgezogen, wer zwischendurch dazukam. Wer 2 Sekunden nach seinem Umzugsbefehl noch darauf ist, bekommt ihn noch einmal, dann nach 4 und danach alle 8 Sekunden, falls ein Proxy den ersten verloren oder abgelehnt hat. Jeder Spieler bekommt eine kurze Nachricht in der Sprache seines Clients (Deutsch bei `de`, sonst Englisch);
    - er stoppt erst, wenn er leer ist: Die Proxys führen niemanden mehr darauf **und** seine eigene Bridge meldet 0 Spieler. Hier entscheidet die höhere der beiden Zahlen, damit ein Proxy, der einen Beitritt noch nicht gesehen hat, keinen Server unter einem Spieler stoppen lässt;
-   - sind nach der `drain-timeout` der Gruppe (Standard 30 Sekunden) noch Spieler darauf (ein Umzug ging schief, der Proxy ist weg), läuft er weiter und wird wieder geöffnet. Niemand wird gekickt. Der Task wartet dann wieder `scale-down-after` bis zum nächsten Versuch;
-   - schlägt der Stopp selbst fehl, nachdem er geleert wurde, wird er ebenfalls wieder geöffnet.
+   - sind nach der `drain-timeout` der Gruppe (Standard 30 Sekunden) noch Spieler darauf (ein Umzug ging schief, der Proxy ist weg), läuft er weiter und wird wieder geöffnet. Gibt es keinen anderen offenen Server der Gruppe, der die Spieler aufnehmen kann, passiert das sofort, ohne die `drain-timeout` abzuwarten. Niemand wird gekickt. Der Task wartet dann wieder `scale-down-after` bis zum nächsten Versuch;
+   - schlägt der Stopp selbst fehl, nachdem er geleert wurde, wird er ebenfalls wieder geöffnet;
+   - solange er geleert wird, zählt er weder zu `min-services` noch zur Last, und der Task ist nicht blockiert: Stürzt in der Zeit ein anderer Dienst des Tasks ab, startet sein Ersatz in der nächsten Runde.
 
    Von gleich leeren Diensten geht der mit dem höchsten Index. Beispiel mit 50 Plätzen und 50 %: 20 und 4 Spieler auf zwei Diensten, ohne den zweiten 24 von 50 (48 %), also wird der zweite geleert. Bei 20 und 5 sind es genau 50 %, beide bleiben.
 
@@ -152,7 +153,11 @@ Scaling: minigame-3 of task minigame is started (the load of the group has reach
 Scaling: minigame-3 of task minigame is stopped (with one service fewer the load stays below 50 %, for 5m)
 Scaling: the players of minigame-2 of task minigame are moved to other servers (with one service fewer the load stays below 50 %, for 5m)
 Scaling: minigame-2 keeps running: players are still on it after 30 s, a move did not work
+Scaling: minigame-2 keeps running: no other open server of its group can take its players
+Scaling: minigame-2 keeps running: moving its players was interrupted
 ```
+
+Die letzten drei Zeilen nennen, warum ein Dienst nicht geleert wurde: Zeit abgelaufen, kein anderer offener Server der Gruppe, oder das Warten wurde unterbrochen (die Node fährt herunter).
 
 ## IDs, Ordner und Proxys
 
