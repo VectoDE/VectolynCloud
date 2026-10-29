@@ -27,6 +27,21 @@ class MonitorRuntimeTest {
     }
 
     @Test
+    void theOriginMustBeANodeId(@TempDir Path home) throws Exception {
+        SecretStore secrets = new SecretStore(home.resolve("secrets").resolve("vectora.env"));
+        for (String bad : new String[] {"", "Node-1", "node 1", "node-1\n**pwned**", "con", "a".repeat(33)}) {
+            IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> MonitorRuntime.open(home,
+                    new Fakes.Directory(), secrets, UnaryOperator.identity(), bad, new Fakes.Source()), bad);
+            assertFalse(e.getMessage().contains("pwned"), "the bad value is not repeated: " + e.getMessage());
+        }
+        // Counter-check: a valid id opens.
+        try (MonitorRuntime runtime = MonitorRuntime.open(home, new Fakes.Directory(), secrets,
+                UnaryOperator.identity(), "node-1", new Fakes.Source())) {
+            assertFalse(runtime.notifying());
+        }
+    }
+
+    @Test
     void notificationsAreOffByDefault(@TempDir Path home) throws Exception {
         try (MonitorRuntime runtime = open(home)) {
             assertFalse(runtime.notifying());

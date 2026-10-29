@@ -35,6 +35,7 @@ vectora> api scopes
 - Die Prüfung vergleicht den Hash in konstanter Zeit (`MessageDigest.isEqual`) mit allen gespeicherten Hashes und bricht beim ersten Treffer nicht ab.
 - Ein Widerruf wirkt sofort. Die nächste Anfrage scheitert, offene WebSockets dieses Tokens werden mit Code `1008` geschlossen.
 - Höchstens 100 Tokens. Namen folgen der Regel für Gruppennamen `[a-z0-9][a-z0-9_-]{0,31}`.
+- Wo das angezeigte Token landet: Der Befehl schreibt auf die Konsole, nicht ins Log. Logdateien und Journal bekommen es also nicht. Unter systemd hat die Cloud gar keine Konsole, lege Tokens dann in einer `tmux`- oder `screen`-Sitzung an ([Betrieb](operations.de.md)). In Docker ist die Konsole eines angehängten Containers (`docker attach`) seine Standardausgabe, `docker logs` behält das Token also. Leere oder rotiere diese Logs, oder widerrufe das Token und lege ein neues an, wenn die Logs geteilt werden.
 
 Das Token geht als `Authorization: Bearer vct_...` mit. Browser können am WebSocket keine Header setzen. Deshalb nimmt der Event-Stream das Token auch als Subprotokoll `vectora.bearer.<token>` neben `vectora.v1` an. Der Server antwortet nur mit `vectora.v1` und gibt das Token nie zurück. Bietet ein Upgrade Subprotokolle an, aber nicht `vectora.v1`, kommt `400 subprotocol-required`.
 
@@ -145,4 +146,4 @@ Gruppen lassen sich über die API schreiben. Darum gibt es für `process.jvm-fla
 
 ## Einbindung in cloud-node
 
-`cloud-api` hängt nicht von `cloud-node` ab. Der Node liefert ein `ApiBackend` und startet den Server. Die einzelnen Schritte stehen in [api.md](api.md#wiring-in-cloud-node): Tokens öffnen und den Befehl `api` registrieren, bei `api.enabled` TLS vorbereiten und `ApiServer` starten, Dienst-Events weiterreichen, `beginShutdown()` zu Beginn und `close()` am Ende von `CloudNode.close()`.
+`cloud-api` hängt nicht von `cloud-node` ab. Der Node liefert ein `ApiBackend` und startet den Server. Die einzelnen Schritte stehen in [api.md](api.md#wiring-in-cloud-node): Tokens öffnen und den Befehl `api` registrieren, bei `api.enabled` TLS vorbereiten und `ApiServer` starten, Dienst-Events weiterreichen, `beginShutdown()` zu Beginn und `close()` am Ende von `CloudNode.close()`. Das macht `CloudNode` mit `ops.NodeApi`. Eine Ablehnung des Dienstkerns geht nur an den Client, wenn sie einer seiner eigenen kurzen Gründe ist und nichts enthält, das wie ein Pfad aussieht. Alles andere bleibt im Log des Nodes, der Client bekommt einen kurzen Text. `ApiSettings.of` lehnt `api.tls.enabled` ohne Schlüsselmaterial ab, ebenso Schlüsselmaterial bei ausgeschaltetem TLS. `runs` in den Wanted-Endpunkten ist `GroupRules.isWanted` aus cloud-config, also dieselbe Regel, nach der der Node plant.

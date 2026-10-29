@@ -4,7 +4,7 @@ Module `VectoraCloud/cloud-monitor`, package `net.vectora.cloud.monitor`. It sam
 
 Nothing is sent anywhere by default. Notifications and the Prometheus endpoint are off until the operator enables them in `monitor.yml` and enters the webhook URL in `secrets/vectora.env`.
 
-The module does not depend on `cloud-node`. The node plugs it in through a small interface and two calls (see [Hooking it into the node](#hooking-it-into-the-node)); until then the classes are tested on their own.
+The module does not depend on `cloud-node`. The node plugs it in through a small interface and two calls (see [Hooking it into the node](#hooking-it-into-the-node)); `cloud-node` does that in `CloudNode` with `ops.NodeMonitoring` (service list and state changes) and the channel's status reports, and registers `monitor` and `alerts`. The origin of notifications is the node id; `MonitorRuntime.open` refuses anything that is not a valid node id.
 
 ## Metrics
 

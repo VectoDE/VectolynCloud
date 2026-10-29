@@ -24,9 +24,9 @@ import net.vectora.cloud.config.error.ConfigException;
 import net.vectora.cloud.config.model.CloudConfig;
 import net.vectora.cloud.config.model.ConfigSnapshot;
 import net.vectora.cloud.config.model.GroupConfig;
+import net.vectora.cloud.config.model.GroupRules;
 import net.vectora.cloud.config.model.Language;
 import net.vectora.cloud.config.model.ServerKind;
-import net.vectora.cloud.config.model.ServerSoftware;
 import net.vectora.cloud.config.model.TaskConfig;
 import net.vectora.cloud.config.operation.ConfigOperation;
 import net.vectora.cloud.config.operation.PutGroup;
@@ -51,8 +51,6 @@ public final class ApiRoutes {
     public static final String EVENTS = PREFIX + "/events";
     /** Longest console command sent to a service. */
     public static final int MAX_COMMAND_LENGTH = 1024;
-    /** Template of the legacy proxy, as {@code ServicePlanner.LEGACY_PROXY_TEMPLATE} in cloud-node. */
-    static final String LEGACY_PROXY_TEMPLATE = "Legacy-Proxy";
 
     /** One endpoint. */
     @FunctionalInterface
@@ -275,36 +273,19 @@ public final class ApiRoutes {
     }
 
     /**
-     * Whether services of a group may run. The same rule as {@code ServicePlanner.isWanted(GroupConfig,
-     * CloudConfig)} in cloud-node, which this module cannot see: the group's own switch, the switch of
-     * its server kind ({@link #switchOf}; the database template never runs as a service), and for the
-     * 1.8.8 part of the network (PandaSpigot, the {@code Legacy-Proxy} and {@code Legacy-Server}
-     * templates) also {@code legacy-proxy.enabled}.
+     * Whether services of a group may run: {@link GroupRules#isWanted(GroupConfig, CloudConfig)},
+     * the very rule the node plans and starts by.
      *
      * @param group the group
      * @param cloud {@code cloud.yml}
      * @return whether it runs
      */
     static boolean runs(GroupConfig group, CloudConfig cloud) {
-        boolean legacy = group.software() == ServerSoftware.PANDASPIGOT || LEGACY_PROXY_TEMPLATE.equals(group.template())
-                || kindOfTemplate(group.template()).orElse(null) == ServerKind.LEGACY_SERVER;
-        if (legacy && (cloud.legacyProxy() == null || !cloud.legacyProxy().enabled())) {
-            return false;
-        }
-        if (!group.wantedOrDefault()) {
-            return false;
-        }
-        Optional<ServerKind> kind = switchOf(group);
-        return kind.isEmpty() || (kind.get() != ServerKind.DATABASE && kindSwitch(cloud, kind.get()));
+        return GroupRules.isWanted(group, cloud);
     }
 
-    /** The server kind whose switch a group follows; PandaSpigot on a template of its own is a legacy server. */
     private static Optional<ServerKind> switchOf(GroupConfig group) {
-        Optional<ServerKind> kind = kindOfTemplate(group.template());
-        if (kind.isEmpty() && group.software() == ServerSoftware.PANDASPIGOT) {
-            return Optional.of(ServerKind.LEGACY_SERVER);
-        }
-        return kind;
+        return GroupRules.switchOf(group);
     }
 
     private static boolean kindSwitch(CloudConfig cloud, ServerKind kind) {
@@ -379,14 +360,6 @@ public final class ApiRoutes {
         throw ApiException.notFound("Server kind \"" + key + "\"");
     }
 
-    private static Optional<ServerKind> kindOfTemplate(String template) {
-        for (ServerKind kind : ServerKind.values()) {
-            if (kind.templateFolder().equals(template)) {
-                return Optional.of(kind);
-            }
-        }
-        return Optional.empty();
-    }
 
     private static Map<String, Boolean> servers(ConfigSnapshot snapshot) {
         Map<String, Boolean> result = new LinkedHashMap<>();

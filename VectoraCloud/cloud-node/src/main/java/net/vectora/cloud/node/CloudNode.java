@@ -3,6 +3,7 @@ package net.vectora.cloud.node;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -13,7 +14,22 @@ import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
 import java.util.logging.Handler;
 import java.util.logging.Logger;
+import net.vectora.cloud.api.ApiServer;
+import net.vectora.cloud.api.ApiSettings;
+import net.vectora.cloud.api.ApiTls;
+import net.vectora.cloud.api.auth.ApiTokens;
+import net.vectora.cloud.api.backend.BackupServiceAccess;
+import net.vectora.cloud.api.console.ApiCommands;
+import net.vectora.cloud.backup.BackupException;
+import net.vectora.cloud.backup.BackupService;
+import net.vectora.cloud.backup.command.BackupCommands;
+import net.vectora.cloud.backup.schedule.BackupScheduler;
 import net.vectora.cloud.config.CloudHome;
+import net.vectora.cloud.config.model.ApiConfig;
+import net.vectora.cloud.monitor.MonitorRuntime;
+import net.vectora.cloud.node.ops.NodeApi;
+import net.vectora.cloud.node.ops.NodeBackups;
+import net.vectora.cloud.node.ops.NodeMonitoring;
 import net.vectora.cloud.config.ConfigChanged;
 import net.vectora.cloud.config.ConfigListener;
 import net.vectora.cloud.config.ConfigService;
@@ -100,9 +116,15 @@ public final class CloudNode implements AutoCloseable {
     private final ChannelBridge channel;
     private final Console console;
     private final SetupEnvironment setupEnvironment;
+    /** Monitoring, backups and the API. */
+    private final Ops ops;
+    private BackupScheduler backupScheduler;
     private volatile SetupResult.Status setupStatus;
     /** Set once start() has given up on the setup; a later first completion then starts the servers. */
     private volatile boolean startedWithoutSetup;
+    /** Set while the {@code setup} command runs; its config changes are reconciled once it ends. */
+    private volatile boolean setupRunning;
+    private volatile ConfigSnapshot beforeSetup;
     private final CountDownLatch closed = new CountDownLatch(1);
     private final CountDownLatch closeDone = new CountDownLatch(1);
     private final Object closeLock = new Object();
@@ -115,7 +137,8 @@ public final class CloudNode implements AutoCloseable {
 
     private CloudNode(NodeSettings settings, HomeLock homeLock, ConfigService config, SecretStore secrets,
                       ServiceManager services, NodeDatabase database, CloudNetworkServer network,
-                      ChannelBridge channel, Console console, SetupEnvironment setupEnvironment) {
+                      ChannelBridge channel, Console console, SetupEnvironment setupEnvironment, Ops ops) {
+        this.ops = ops;
         this.settings = settings;
         this.setupEnvironment = setupEnvironment;
         this.homeLock = homeLock;
@@ -278,6 +301,7 @@ public final class CloudNode implements AutoCloseable {
                     .listener(channel)
                     .build();
             channel.attach(network);
+            Ops ops = buildOps(settings, home, configService, secrets, services, channel, databaseHome);
             Console console = options.noConsole ? null : options.console != null ? options.console
                     : Console.builder()
                             .home(home)
@@ -285,7 +309,8 @@ public final class CloudNode implements AutoCloseable {
                             .historyFilter(line -> !containsSecret(secrets, line))
                             .build();
             SetupEnvironment setup = SetupEnvironment.of(settings.toMap(), options.environment);
-            return new CloudNode(settings, lock, config, secrets, services, database, network, channel, console, setup);
+            return new CloudNode(settings, lock, config, secrets, services, database, network, channel, console, setup,
+                    ops);
         } catch (IOException | ConfigException | EnvFormatException | RuntimeException e) {
             if (config != null) {
                 try {
@@ -296,6 +321,70 @@ public final class CloudNode implements AutoCloseable {
             }
             lock.close();
             throw e;
+        }
+    }
+
+    /**
+     * Monitoring, backups and the API of the node, built in {@link #open} and run by {@link #start}.
+     *
+     * @param tokens     API tokens; {@code api token} works even while the API is off
+     * @param monitoring the monitor
+     * @param backups    the backups
+     * @param api        the node behind the API
+     * @param apiServer  the API server, or null while {@code api.enabled} is off or it cannot be prepared
+     */
+    private record Ops(ApiTokens tokens, MonitorRuntime monitoring, BackupService backups, NodeApi api,
+                       ApiServer apiServer) {
+    }
+
+    private static Ops buildOps(NodeSettings settings, CloudHome home, ConfigService config, SecretStore secrets,
+                                ServiceManager services, ChannelBridge channel, Path databaseHome)
+            throws IOException, ConfigException, EnvFormatException {
+        String nodeId = config.snapshot().cloud().nodeId();
+        RedactingFilter redactor = secrets.redactingFilter();
+        ApiTokens tokens = ApiTokens.open(home);
+
+        NodeMonitoring directory = new NodeMonitoring(services, config::snapshot);
+        // An invalid monitor.yml fails here with every error, like the other configuration files.
+        MonitorRuntime monitoring = MonitorRuntime.open(home.root(), directory, secrets, redactor::redact, nodeId);
+        directory.attach(monitoring.monitor());
+        services.addListener(directory);
+        channel.statusListener(monitoring.monitor()::statusReported);
+
+        NodeBackups parts = new NodeBackups(home.root(), services, config::snapshot, secrets, databaseHome);
+        BackupService backups = BackupService.builder(home.root())
+                .targets(parts)
+                .control(parts)
+                .database(parts)
+                .cloudVersion(settings.launcherVersion())
+                .build();
+
+        NodeApi api = new NodeApi(services, channel, nodeId, settings.launcherVersion(), Instant.now(),
+                redactor::redact, Optional.of(new BackupServiceAccess(backups)));
+        services.addListener(api);
+        channel.playerListener(api);
+        return new Ops(tokens, monitoring, backups, api, apiServer(home, config, secrets, api, tokens));
+    }
+
+    /** The API server when {@code api.enabled}; a problem leaves the node running without it. */
+    private static ApiServer apiServer(CloudHome home, ConfigService config, SecretStore secrets, NodeApi api,
+                                       ApiTokens tokens) {
+        ApiConfig settings = config.snapshot().cloud().api();
+        if (settings == null || !settings.enabled()) {
+            return null;
+        }
+        try {
+            Optional<ApiTls.Material> tls = settings.tls() != null && settings.tls().enabled()
+                    ? Optional.of(ApiTls.prepare(home, settings.tls(), settings.bind(),
+                            secrets.load().get(ApiTls.PASSWORD_KEY)))
+                    : Optional.empty();
+            ApiServer server = ApiServer.builder(config, api, tokens).settings(ApiSettings.of(settings, tls)).build();
+            api.attach(server);
+            return server;
+        } catch (IOException | EnvFormatException | RuntimeException e) {
+            LOG.log(System.Logger.Level.ERROR, "The API is switched on in cloud.yml but cannot be prepared ({0});"
+                    + " the node runs without it. See docs/cloud/api.md.", e.getMessage());
+            return null;
         }
     }
 
@@ -343,11 +432,9 @@ public final class CloudNode implements AutoCloseable {
         reconcile = new ConfigListener() {
             @Override
             public void configChanged(ConfigChanged change) {
-                services.stopUnwanted();
-                if (setupJustFinished(change)) {
-                    // The "setup" command finished the first setup after this start had to wait
-                    // for it: start what is configured now, off the listener thread.
-                    Thread.ofPlatform().daemon().name("vectora-start-after-setup").start(services::startConfigured);
+                // While "setup" runs, its steps may still be rolled back; it reconciles once at the end.
+                if (!setupRunning) {
+                    reconcile(change.previous(), change.current());
                 }
             }
         };
@@ -355,11 +442,40 @@ public final class CloudNode implements AutoCloseable {
         InetSocketAddress channelAddress = network.start();
         services.channelAddress(channelAddress.getAddress().getHostAddress(), channelAddress.getPort());
         requireOpen();
+        // After the channel, before the first service: the monitor sees every start, and a backup
+        // or restore that a crash interrupted is put right before a start renders into its folder.
+        ops.monitoring().start();
         prepareConsole();
         ServiceManager.Recovery recovery = services.recoverOrphans();
         if (!recovery.terminated().isEmpty() || !recovery.unverifiable().isEmpty()) {
             LOG.log(System.Logger.Level.WARNING, "Left over from the previous run: ended {0}, not verifiable {1}",
                     recovery.terminated(), recovery.unverifiable());
+        }
+        // Only once the orphans are gone: a scheduled backup, a restore or a start through the API
+        // must not copy or render into a folder a server of the previous run still writes to.
+        try {
+            List<String> recovered = ops.backups().recoverInterruptedOperations();
+            if (!recovered.isEmpty()) {
+                LOG.log(System.Logger.Level.WARNING, "Backups: put right after an interrupted run: {0}", recovered);
+            }
+        } catch (BackupException e) {
+            LOG.log(System.Logger.Level.ERROR, "Backups: an interrupted run could not be put right: {0}", e.getMessage());
+        }
+        // Under the close lock: a close() that has begun either sees the schedule or none is made.
+        synchronized (closeLock) {
+            if (closing) {
+                throw new IllegalStateException("the node is closing");
+            }
+            backupScheduler = new BackupScheduler(ops.backups());
+            backupScheduler.start();
+        }
+        if (ops.apiServer() != null) {
+            try {
+                InetSocketAddress api = ops.apiServer().start();
+                LOG.log(System.Logger.Level.INFO, "API listens on {0}:{1,number,#}", api.getHostString(), api.getPort());
+            } catch (IOException e) {
+                LOG.log(System.Logger.Level.ERROR, "The API cannot start ({0}); the node runs without it.", e.getMessage());
+            }
         }
         // The questions read the terminal on this thread, so the console's own read loop starts
         // only afterwards.
@@ -392,15 +508,71 @@ public final class CloudNode implements AutoCloseable {
     }
 
     /**
+     * Brings the services in line with a changed configuration:
+     * <ul>
+     *   <li>{@code eula-accepted} taken back: every server is stopped, in the background, since
+     *       none may run without the operator's consent;</li>
+     *   <li>otherwise the services that are no longer wanted stop;</li>
+     *   <li>and if the change finished the first setup after this start had to wait for it, what is
+     *       configured now starts, off the listener thread.</li>
+     * </ul>
+     */
+    void reconcile(ConfigSnapshot previous, ConfigSnapshot current) {
+        if (previous.cloud().eulaAccepted() && !current.cloud().eulaAccepted()) {
+            LOG.log(System.Logger.Level.WARNING, "cloud.yml: eula-accepted was taken back, so every server stops");
+            Thread.ofPlatform().daemon().name("vectora-stop-without-eula").start(services::stopAll);
+            return;
+        }
+        services.stopUnwanted();
+        if (setupJustFinished(previous, current)) {
+            Thread.ofPlatform().daemon().name("vectora-start-after-setup").start(services::startConfigured);
+        }
+    }
+
+    /**
      * Whether a change finished the first setup while the node was already running: before it,
      * {@code setup-complete} or {@code eula-accepted} was false, now both are true, and the setup
      * assistant in {@link #start()} has already given up (so its own save does not count twice).
      */
-    private boolean setupJustFinished(ConfigChanged change) {
-        boolean before = change.previous().cloud().setupComplete() && change.previous().cloud().eulaAccepted();
-        boolean now = change.current().cloud().setupComplete() && change.current().cloud().eulaAccepted();
+    private boolean setupJustFinished(ConfigSnapshot previous, ConfigSnapshot current) {
+        boolean before = previous.cloud().setupComplete() && previous.cloud().eulaAccepted();
+        boolean now = current.cloud().setupComplete() && current.cloud().eulaAccepted();
         return !before && now && startedWithoutSetup;
     }
+
+    /** The backups of the node; for tests. */
+    BackupService backups() {
+        return ops.backups();
+    }
+
+    /** The node behind the API, also while the API is off; for tests. */
+    NodeApi apiBackend() {
+        return ops.api();
+    }
+
+    /** The hooks the {@code setup} command calls, for tests. */
+    SetupWizard.CommandHooks setupHooks() {
+        return setupHooks;
+    }
+
+    /** The {@code setup} command: no reconcile while it saves, one against its start afterwards. */
+    private final SetupWizard.CommandHooks setupHooks = new SetupWizard.CommandHooks() {
+        @Override
+        public void started() {
+            beforeSetup = config.snapshot();
+            setupRunning = true;
+        }
+
+        @Override
+        public void finished() {
+            setupRunning = false;
+            ConfigSnapshot before = beforeSetup;
+            beforeSetup = null;
+            if (before != null) {
+                reconcile(before, config.snapshot());
+            }
+        }
+    };
 
     /** A close() from the shutdown hook or the console may run while start() is still busy. */
     private void requireOpen() {
@@ -487,7 +659,12 @@ public final class CloudNode implements AutoCloseable {
         serviceCommands = new ServiceCommands(services, config, channel::status, console.output());
         services.addListener(serviceCommands);
         console.commands().register(serviceCommands.command());
-        SetupWizard.registerCommand(console, config, setupEnvironment);
+        SetupWizard.registerCommand(console, config, setupEnvironment, setupHooks);
+        console.commands().register(ops.monitoring().commands().monitor());
+        console.commands().register(ops.monitoring().commands().alerts());
+        BackupCommands.register(console.commands(), ops.backups());
+        // Tokens can be made before the API is switched on.
+        console.commands().register(new ApiCommands(ops.tokens()).command());
     }
 
     /**
@@ -585,6 +762,13 @@ public final class CloudNode implements AutoCloseable {
         // (they hold connections to it); the channel outlives both, so a bridge can still say
         // goodbye while its server shuts down.
         List<Error> errors = new ArrayList<>();
+        // First: the API refuses starts, reloads and backups from now on; reads and stops still work.
+        step(errors, "marking the API as shutting down", () -> {
+            ops.api().beginShutdown();
+            if (ops.apiServer() != null) {
+                ops.apiServer().beginShutdown();
+            }
+        });
         step(errors, "stopping the console", () -> {
             if (console != null) {
                 console.stop();
@@ -595,11 +779,24 @@ public final class CloudNode implements AutoCloseable {
                 config.removeListener(reconcile);
             }
         });
+        step(errors, "stopping the backup schedule", () -> {
+            if (backupScheduler != null) {
+                backupScheduler.close();
+            }
+        });
         step(errors, "stopping the services", services::close);
+        // After the last service: writes the history file and sends what is queued.
+        step(errors, "closing the monitoring", ops.monitoring()::close);
         step(errors, "stopping the database", database::shutdown);
         step(errors, "closing the cloud channel", network::close);
         step(errors, "closing the configuration", config::close);
         step(errors, "closing the console", this::closeConsole);
+        // Last: event streams get 1001, then the sockets close.
+        step(errors, "closing the API", () -> {
+            if (ops.apiServer() != null) {
+                ops.apiServer().close();
+            }
+        });
         step(errors, "releasing the home lock", homeLock::close);
         closed.countDown();
         closeDone.countDown();

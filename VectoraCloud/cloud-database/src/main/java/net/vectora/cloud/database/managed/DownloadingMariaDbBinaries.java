@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.UUID;
 import net.vectora.cloud.database.DatabaseException;
@@ -109,6 +110,38 @@ public final class DownloadingMariaDbBinaries implements MariaDbBinaries {
         } finally {
             deleteIfEmptyTree(unpack);
         }
+    }
+
+    /**
+     * The server folder an earlier install recorded below {@code home}, without any download or
+     * version check, for tools that need the installed binaries (the backup's {@code mariadb-dump}).
+     *
+     * @param home   the database home, {@code Server-Network/Database/runtime}
+     * @param system the platform
+     * @return the folder with {@code bin/}, or empty if nothing usable is installed or the platform
+     *         has no managed MariaDB
+     */
+    public static Optional<Path> installed(Path home, TargetPlatform system) {
+        try {
+            ManagedPlatform platform = ManagedPlatform.of(system);
+            DownloadingMariaDbBinaries reader = new DownloadingMariaDbBinaries(home);
+            return Optional.ofNullable(reader.recordedFolder(platform));
+        } catch (DatabaseException | IOException | RuntimeException e) {
+            return Optional.empty();
+        }
+    }
+
+    /** Only for {@link #installed}: reads the marker, never downloads. */
+    private DownloadingMariaDbBinaries(Path home) {
+        this.provider = null;
+        this.downloader = null;
+        this.extractor = null;
+        this.home = Objects.requireNonNull(home, "home").toAbsolutePath().normalize();
+        this.version = null;
+    }
+
+    private Path recordedFolder(ManagedPlatform platform) throws IOException {
+        return installedFolder(platform);
     }
 
     /** Returns the recorded install if it is still usable for the wanted version, else null. */

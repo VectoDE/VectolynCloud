@@ -160,6 +160,8 @@ public final class ServiceManager implements AutoCloseable {
     private final Map<String, ServiceRecord> blocked = new LinkedHashMap<>();
     /** Folders of dynamic services whose deletion is queued or running; never handed out meanwhile. */
     private final Set<Path> cleaning = new HashSet<>();
+    /** Services a backup or restore keeps from starting ({@link #holdStopped}); guarded by {@code lock}. */
+    private final Set<ServiceId> held = new HashSet<>();
     private final List<ServiceListener> listeners = new CopyOnWriteArrayList<>();
     private final ExecutorService events;
     private final ExecutorService workers;
@@ -472,6 +474,45 @@ public final class ServiceManager implements AutoCloseable {
         return List.copyOf(unwanted);
     }
 
+    /** Keeps a stopped service from starting until it is closed; see {@link #holdStopped}. */
+    public interface Hold extends AutoCloseable {
+        /** Allows starts again. Safe to call more than once. */
+        @Override
+        void close();
+    }
+
+    /**
+     * Keeps a service that has no process from starting, for a backup that copies its folder or a
+     * restore that replaces it. Checked under the lock that guards every start, so no start slips in
+     * between. A start while the hold lasts fails with a message that says why.
+     *
+     * @param id the service; one that was never started can be held as well
+     * @return the hold
+     * @throws ServiceException if the service is running, starting, stopping or about to restart, or
+     *                          is already held
+     */
+    public Hold holdStopped(ServiceId id) throws ServiceException {
+        Objects.requireNonNull(id, "id");
+        synchronized (lock) {
+            Service service = services.get(id);
+            if (service != null && service.isActive()) {
+                throw new ServiceException(id + " is " + (service.state == ServiceState.RUNNING ? "running" : "busy")
+                        + "; stop it first");
+            }
+            if (!held.add(id)) {
+                throw new ServiceException(id + " is already held by another backup or restore");
+            }
+        }
+        java.util.concurrent.atomic.AtomicBoolean open = new java.util.concurrent.atomic.AtomicBoolean(true);
+        return () -> {
+            if (open.compareAndSet(true, false)) {
+                synchronized (lock) {
+                    held.remove(id);
+                }
+            }
+        };
+    }
+
     /** Refuses a start before the setup is done and after {@link #close()} has begun, before the start gate runs. */
     private void checkStartAllowed(CloudConfig cloud) throws ServiceException {
         synchronized (lock) {
@@ -520,6 +561,9 @@ public final class ServiceManager implements AutoCloseable {
             Service existing = services.get(id);
             if (existing != null && existing.isActive()) {
                 throw new ServiceException(id + " is already " + existing.state.name().toLowerCase(java.util.Locale.ROOT));
+            }
+            if (held.contains(id)) {
+                throw new ServiceException(id + " is held by a backup or restore; it starts once that is done");
             }
             Path workDirectory = ServicePlanner.workDirectory(home, group, task.mode(), id.value(), index);
             if (cleaning.contains(workDirectory)) {
@@ -636,6 +680,15 @@ public final class ServiceManager implements AutoCloseable {
             synchronized (lock) {
                 if (service.stopRequested || closing) {
                     throw new ServiceException("stopped before it was started");
+                }
+                // The snapshot of this start may be older than a reload that took eula-accepted back
+                // while the start waited (start gate, download). The node's stopAll() for that reload
+                // only sees services with a process, so the current file decides here, under the
+                // same lock as that stopAll() reads the services.
+                CloudConfig now = config.get().cloud();
+                if (!now.setupComplete() || !now.eulaAccepted()) {
+                    throw new ServiceException("the setup is not complete (cloud.yml: setup-complete and "
+                            + "eula-accepted must be true), so no server may start");
                 }
                 process = processes.start(command, spec.workDirectory(), environment);
                 service.process = process;
@@ -1027,6 +1080,27 @@ public final class ServiceManager implements AutoCloseable {
     private void restart(ServiceId id, String task, int index) {
         ConfigSnapshot snapshot = config.get();
         try {
+            synchronized (lock) {
+                Service service = services.get(id);
+                if (service == null || closing || service.state != ServiceState.CRASHED
+                        || service.pendingRestart == null) {
+                    return;
+                }
+            }
+            // The same start gate as every other start (the database must be up), outside the lock
+            // because it may wait. A refusal gives the restart up like a failed prepare.
+            try {
+                startGate.beforeStart();
+            } catch (ServiceException e) {
+                synchronized (lock) {
+                    Service service = services.get(id);
+                    if (service != null && service.state == ServiceState.CRASHED && service.pendingRestart != null) {
+                        service.pendingRestart = null;
+                        giveUpRestart(service);
+                    }
+                }
+                throw e;
+            }
             Service next;
             synchronized (lock) {
                 Service service = services.get(id);
@@ -1045,12 +1119,7 @@ public final class ServiceManager implements AutoCloseable {
                     checkStartAllowed(snapshot.cloud());
                     next = prepare(snapshot, task, OptionalInt.of(index));
                 } catch (ServiceException e) {
-                    // It stays CRASHED; a dynamic one is forgotten like after its last attempt.
-                    if (!service.spec.isStatic()) {
-                        services.remove(id);
-                        cleanupLater(service.spec.workDirectory());
-                    }
-                    persist();
+                    giveUpRestart(service);
                     throw e;
                 }
             }
@@ -1058,6 +1127,15 @@ public final class ServiceManager implements AutoCloseable {
         } catch (ServiceException e) {
             LOG.log(System.Logger.Level.ERROR, "Restart of {0} failed: {1}", id, e.getMessage());
         }
+    }
+
+    /** It stays CRASHED; a dynamic one is forgotten like after its last attempt. Holds {@code lock}. */
+    private void giveUpRestart(Service service) {
+        if (!service.spec.isStatic()) {
+            services.remove(service.spec.id());
+            cleanupLater(service.spec.workDirectory());
+        }
+        persist();
     }
 
     // ------------------------------------------------------------------ stop

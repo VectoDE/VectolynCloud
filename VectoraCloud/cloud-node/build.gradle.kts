@@ -21,6 +21,10 @@ dependencies {
     api(project(":VectoraCloud:cloud-console"))
     // The setup assistant runs before the first server starts, and "setup" is a console command.
     implementation(project(":VectoraCloud:cloud-setup"))
+    // Wired in CloudNode (docs/cloud/backup.md, monitor.md, api.md): none of them knows the node.
+    implementation(project(":VectoraCloud:cloud-backup"))
+    implementation(project(":VectoraCloud:cloud-monitor"))
+    implementation(project(":VectoraCloud:cloud-api"))
 
     // End-to-end test: the fake server connects with the real client.
     testImplementation(project(":Vectora-CloudClient"))

@@ -271,6 +271,85 @@ class NodeWiringTest {
     }
 
     @Test
+    void aBackupOfAStoppedServiceHoldsItAndTheApiBackendSeesTheServices() throws Exception {
+        NodeFixture fixture = NodeFixture.create(dir, true, List.of());
+        ServiceId lobby = new ServiceId("lobby-1");
+        CloudNode node = CloudNode.open(fixture.settings(), fixture.options());
+        try {
+            node.start();
+            NodeFixture.await("lobby-1 running", () -> NodeEndToEndTest.state(node, lobby) == ServiceState.RUNNING);
+            var api = node.apiBackend();
+            assertEquals("running", api.services().find("lobby-1").orElseThrow().state());
+            assertTrue(api.services().find("../etc").isEmpty(), "not a service id");
+            var missing = assertThrows(net.vectora.cloud.api.backend.ApiBackendException.class,
+                    () -> api.services().stop("lobby-9"));
+            assertEquals(net.vectora.cloud.api.backend.ApiBackendException.Reason.NOT_FOUND, missing.reason());
+
+            node.services().stop(lobby);
+            // Without the database: the fixture's managed MariaDB is a stand-in without binaries.
+            var backup = node.backups().create(new net.vectora.cloud.backup.BackupRequest(
+                    net.vectora.cloud.backup.BackupReason.MANUAL, false, java.util.Set.of("lobby-1"), false, null));
+            assertTrue(Files.isRegularFile(backup.file()), backup.toString());
+            assertTrue(backup.problem().isEmpty(), backup.toString());
+            // Counter-check: a running service cannot be held for a copy of its folder.
+            node.services().start("lobby");
+            NodeFixture.await("lobby-1 running again", () -> NodeEndToEndTest.state(node, lobby) == ServiceState.RUNNING);
+            assertThrows(ServiceException.class, () -> node.services().holdStopped(lobby));
+        } finally {
+            node.close();
+        }
+    }
+
+    @Test
+    void takingTheEulaBackStopsEveryRunningServer() throws Exception {
+        NodeFixture fixture = NodeFixture.create(dir, true, List.of());
+        ServiceId lobby = new ServiceId("lobby-1");
+        CloudNode node = CloudNode.open(fixture.settings(), fixture.options());
+        try {
+            node.start();
+            NodeFixture.await("lobby-1 running", () -> NodeEndToEndTest.state(node, lobby) == ServiceState.RUNNING);
+            // A hand edit of cloud.yml; setup-complete needs the EULA, so both go back.
+            node.config().apply(List.of(snapshot -> snapshot.withCloud(
+                    snapshot.cloud().withSetupComplete(false).withEulaAccepted(false))));
+            NodeFixture.await("lobby-1 stopped", () -> NodeEndToEndTest.state(node, lobby) == ServiceState.STOPPED);
+        } finally {
+            node.close();
+        }
+    }
+
+    @Test
+    void whileSetupRunsNothingStopsAndARolledBackSetupLeavesTheServersAlone() throws Exception {
+        NodeFixture fixture = NodeFixture.create(dir, true, List.of());
+        ServiceId lobby = new ServiceId("lobby-1");
+        CloudNode node = CloudNode.open(fixture.settings(), fixture.options());
+        try {
+            node.start();
+            NodeFixture.await("lobby-1 running", () -> NodeEndToEndTest.state(node, lobby) == ServiceState.RUNNING);
+            // A setup run that switched the lobby off in one step and was rolled back in the next.
+            var hooks = node.setupHooks();
+            hooks.started();
+            var before = node.config().snapshot();
+            node.config().apply(new SetGroupWanted("lobby", false));
+            Thread.sleep(500);
+            assertEquals(ServiceState.RUNNING, NodeEndToEndTest.state(node, lobby), "nothing stops while setup runs");
+            node.config().apply(List.of(snapshot -> before));
+            hooks.finished();
+            Thread.sleep(500);
+            assertEquals(ServiceState.RUNNING, NodeEndToEndTest.state(node, lobby), "a rollback changes nothing");
+
+            // Counter-check: a run that ends with the lobby switched off stops it once it is done.
+            hooks.started();
+            node.config().apply(new SetGroupWanted("lobby", false));
+            Thread.sleep(300);
+            assertEquals(ServiceState.RUNNING, NodeEndToEndTest.state(node, lobby));
+            hooks.finished();
+            NodeFixture.await("lobby-1 stopped", () -> NodeEndToEndTest.state(node, lobby) == ServiceState.STOPPED);
+        } finally {
+            node.close();
+        }
+    }
+
+    @Test
     void theLegacyProxyRunsOnlyWhenEnabledAndGetsItsOwnForwardingSecret() throws Exception {
         int port;
         try (ServerSocket free = new ServerSocket(0)) {
@@ -346,7 +425,8 @@ class NodeWiringTest {
             node.start();
             // The questions ran on the console and met the end of its input: cancelled, nothing starts.
             assertEquals(java.util.Optional.of(SetupResult.Status.CANCELLED), node.setupStatus());
-            for (String name : List.of("service", "services", "shutdown", "help", "setup")) {
+            for (String name : List.of("service", "services", "shutdown", "help", "setup", "monitor", "alerts",
+                    "backup", "api")) {
                 assertTrue(console.commands().find(name).isPresent(), name);
             }
             console.dispatcher().execute("service list");
