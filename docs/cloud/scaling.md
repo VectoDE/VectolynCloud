@@ -30,7 +30,7 @@ nodes: []
 
 A new service is static as long as the task has fewer static services than `static-services`, otherwise dynamic. The lobby above therefore has one static lobby and up to three dynamic ones. `static-services = max-services` is a purely static task (it never scales), `static-services = 0` a purely dynamic one.
 
-Lowering `static-services` later does not turn existing static services into dynamic ones: they keep their folder and still count. Raising it makes the next new service static.
+Lowering `static-services` later turns the surplus static services into dynamic ones, from the highest index down: with three static lobbies and `static-services: 1`, lobby-2 and lobby-3 count as dynamic. They are scaled down like any dynamic service (emptied first, see below) but keep their folder when they stop, and a stopped one no longer counts towards `min-services`. Raising it makes the next new service static.
 
 Suggested values from the setup (static/min/max): proxy and legacy proxy 1/1/1, survival, creative, mod and end 1/1/1, lobby 1/1/4, legacy 1.8.8 server 1/1/3, minigame 0/1/8; `scale-up-at` 75, `scale-down-below` 50.
 
@@ -66,18 +66,20 @@ The load is not known while a running service of the group has no known player c
 
 ## Rules
 
-Every 5 seconds the scaler looks at each task once and makes at most one decision for it. After a decision the task waits `cooldown` before the next one.
+Every 5 seconds the scaler looks at each task once. After a decision by load (rules 3 and 4) the task waits `cooldown` before the next one.
 
-1. **min-services.** If fewer services count than `min-services`, one more starts.
+1. **min-services.** If fewer services count than `min-services`, all missing ones start in the same round, without `cooldown`, for example after the EULA was accepted again.
    - A dynamic service counts while it is prepared, starting, running, or crashed and waiting for its restart.
-   - A static service always counts, also when it is stopped or gave up after its crashes. A server stopped with `service stop` therefore stays down. Only a static service that stopped because its group was switched off (or because `eula-accepted` or `setup-complete` was taken back) comes back once the switch is on again, at its own index and in its own folder. Whether a switch caused the stop is judged by the configuration at the moment of the stop.
+   - A static service within `static-services` always counts, also when it is stopped or gave up after its crashes. A server stopped with `service stop` therefore stays down. Only a static service that stopped because its group was switched off (or because `eula-accepted` or `setup-complete` was taken back) comes back once the switch is on again, at its own index and in its own folder. Whether a switch caused the stop is judged by the configuration at the moment of the stop.
    - A new static slot (a new task, a higher `static-services`) gets the lowest index of the group that no service has used in this run, so a folder of a server stopped by hand is not touched.
-2. **Above max-services.** If a task has more services than `max-services` (the limit was lowered), an empty dynamic service stops at once. A service with players is never stopped for this.
-3. **Scale up.** One more dynamic service starts when the load of the group has reached `scale-up-at`, no service of the group is still starting, the task may have dynamic services (`static-services < max-services`), `max-services` leaves room, and the memory budget allows it (below). With 50 slots per service and 75 %: 75 of 100 players on two services.
+2. **Above max-services.** If a task has more services than `max-services` (the limit was lowered), an empty dynamic service is removed the same way as in rule 4: closed on the proxies, checked once more, then stopped. A service with players is never removed for this.
+3. **Scale up.** One more dynamic service starts when the load of the group has reached `scale-up-at`, no service of the group is still starting, no other task of the group started one in the same round, the task may have dynamic services (`static-services < max-services`), `max-services` leaves room, and the memory budget allows it (below). With 50 slots per service and 75 %: 75 of 100 players on two services.
 4. **Scale down.** The task has more than `min-services`, and without its emptiest running dynamic service the rest of the group would stay below `scale-down-below`, with the players of that service counted on the rest. Once that has held without a break for `scale-down-after`, the service goes:
-   - with no players, it stops at once;
-   - with players, it is **emptied**: the proxies send no new player there, every player on it is moved to the other services of the group (static ones included), and then it stops. Each player gets a short message in their client language (German for `de`, English otherwise);
-   - if players are still on it after 30 seconds (a move failed, the proxy is gone), it keeps running and is opened again. Nobody is kicked. The task then waits `scale-down-after` again before the next try.
+   - it is always **closed** on the proxies first, so no new player gets there;
+   - every player on it is moved to the other services of the group (static ones included). The node reads the players again on every check, so someone who joined in between is moved too. Each player gets a short message in their client language (German for `de`, English otherwise);
+   - it stops only when it is empty: the proxies list nobody on it **and** its own bridge reports 0 players. Here the higher of both counts decides, so a proxy that has not seen a join yet cannot get a server stopped under a player;
+   - if players are still on it after the group's `drain-timeout` (default 30 seconds; a move failed, the proxy is gone), it keeps running and is opened again. Nobody is kicked. The task then waits `scale-down-after` again before the next try;
+   - if the stop itself fails after it was emptied, it is opened again too.
 
    Of equally empty services the one with the highest index goes. Example with 50 slots and 50 %: 20 and 4 players on two services, 24 of 50 without the second one (48 %), so the second one is emptied. With 20 and 5 it is exactly 50 % and both stay.
 
@@ -85,7 +87,7 @@ Because `scale-down-below` is lower than `scale-up-at`, a service that was just 
 
 What never happens:
 
-- A static service is never stopped or emptied by the scaler, also not after `static-services` was lowered. It does take players from an emptied dynamic one.
+- A static service within `static-services` is never stopped or emptied by the scaler. It does take players from an emptied dynamic one. Only the surplus ones after `static-services` was lowered count as dynamic (see above).
 - A proxy (`software: velocity`) is never scaled up or down; there is one proxy per node.
 - A player is never kicked to scale down.
 - `min-services: 0` starts nothing. The first service of such a task comes from `service start`; from then on it is scaled.
@@ -110,7 +112,7 @@ The main proxy and the legacy proxy work the same way. The node tells the proxie
 | Players per service | The newest sample of the [monitor](monitor.md): `ServiceStatus.playersOnline` that the service's bridge reports every 5 seconds, at most its own `maxPlayers`. A sample older than `stale-after` (60 s) is not used. While a proxy that lists the service is connected, the count is the lower of the bridge's and the proxy's (`PlayerJoin`, `PlayerSwitch`, see [bridges.md](bridges.md#player-events)): a manipulated server that reports more players than the proxy sees on it cannot start servers. Without such a proxy the bridge's count is used. |
 | Memory of the node | The newest node sample of the monitor (`node-memory`: used and total memory of the machine, or of the container where Java sees a limit). |
 
-A count that is not known (no report yet, an outdated one, a server without bridge) is never full and never empty. It makes the load of its group unknown, which blocks both scale-up and scale-down of the group. With `enabled: false` in `monitor.yml` there are no samples: the scaler then keeps `min-services` and does not scale up or down.
+A count that is not known (no report yet, an outdated one, a server without bridge) is never full and never empty. It makes the load of its group unknown, which blocks both scale-up and scale-down of the group. The node logs this once per service as a warning (`Scaling: group … is not scaled while … reports no player count`) and again only after the count was known in between. With `enabled: false` in `monitor.yml` there are no samples: the scaler then keeps `min-services` and does not scale up or down.
 
 ## Memory budget
 

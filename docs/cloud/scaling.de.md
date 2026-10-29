@@ -30,7 +30,7 @@ Es muss `static ≤ min ≤ max` gelten, und `scale-down-below` muss kleiner sei
 
 Ein neuer Dienst ist statisch, solange der Task weniger statische Dienste hat als `static-services`, sonst dynamisch. Die Lobby oben hat also eine statische und bis zu drei dynamische. `static-services = max-services` ist ein rein statischer Task (er skaliert nie), `static-services = 0` ein rein dynamischer.
 
-Wird `static-services` später gesenkt, werden vorhandene statische Dienste nicht dynamisch: Sie behalten ihren Ordner und zählen weiter. Wird es erhöht, ist der nächste neue Dienst statisch.
+Wird `static-services` später gesenkt, werden die überzähligen statischen Dienste dynamisch, vom höchsten Index abwärts: Bei drei statischen Lobbys und `static-services: 1` zählen lobby-2 und lobby-3 als dynamisch. Sie werden wie jeder dynamische Dienst herunterskaliert (vorher geleert, siehe unten), behalten beim Stopp aber ihren Ordner, und ein gestoppter zählt nicht mehr zu `min-services`. Wird es erhöht, ist der nächste neue Dienst statisch.
 
 Vorschläge des Setups (statisch/min/max): Proxy und Legacy-Proxy 1/1/1, Survival, Creative, Mod und End 1/1/1, Lobby 1/1/4, Legacy-1.8.8-Server 1/1/3, Minigames 0/1/8; `scale-up-at` 75, `scale-down-below` 50.
 
@@ -66,18 +66,20 @@ Unbekannt ist die Last, solange ein laufender Dienst der Gruppe keine bekannte S
 
 ## Regeln
 
-Alle 5 Sekunden prüft der Scaler jeden Task einmal und trifft höchstens eine Entscheidung. Danach wartet der Task `cooldown`, bevor die nächste kommt.
+Alle 5 Sekunden prüft der Scaler jeden Task einmal. Nach einer Entscheidung nach Last (Regeln 3 und 4) wartet der Task `cooldown`, bevor die nächste kommt.
 
-1. **min-services.** Zählen weniger Dienste als `min-services`, startet einer mehr.
+1. **min-services.** Zählen weniger Dienste als `min-services`, starten alle fehlenden in derselben Runde, ohne `cooldown`, etwa nachdem die EULA wieder akzeptiert wurde.
    - Ein dynamischer Dienst zählt, solange er vorbereitet wird, startet, läuft oder nach einem Absturz auf seinen Neustart wartet.
-   - Ein statischer Dienst zählt immer, auch gestoppt oder nach aufgegebenen Neustarts. Ein mit `service stop` angehaltener Server bleibt deshalb aus. Nur ein statischer Dienst, der stoppte, weil seine Gruppe abgeschaltet wurde (oder `eula-accepted` bzw. `setup-complete` zurückgenommen wurde), kommt wieder, sobald der Schalter wieder an ist, mit seinem Index und in seinem Ordner. Ob ein Schalter den Stopp ausgelöst hat, entscheidet die Konfiguration im Moment des Stopps.
+   - Ein statischer Dienst innerhalb von `static-services` zählt immer, auch gestoppt oder nach aufgegebenen Neustarts. Ein mit `service stop` angehaltener Server bleibt deshalb aus. Nur ein statischer Dienst, der stoppte, weil seine Gruppe abgeschaltet wurde (oder `eula-accepted` bzw. `setup-complete` zurückgenommen wurde), kommt wieder, sobald der Schalter wieder an ist, mit seinem Index und in seinem Ordner. Ob ein Schalter den Stopp ausgelöst hat, entscheidet die Konfiguration im Moment des Stopps.
    - Ein neuer statischer Platz (neuer Task, höheres `static-services`) bekommt den kleinsten Index der Gruppe, den in diesem Lauf noch kein Dienst hatte. Der Ordner eines von Hand gestoppten Servers bleibt so unberührt.
-2. **Über max-services.** Hat ein Task mehr Dienste als `max-services` (das Limit wurde gesenkt), stoppt ein leerer dynamischer Dienst sofort. Ein Dienst mit Spielern wird dafür nie gestoppt.
-3. **Hochskalieren.** Ein weiterer dynamischer Dienst startet, wenn die Last der Gruppe `scale-up-at` erreicht hat, kein Dienst der Gruppe mehr startet, der Task dynamische Dienste haben darf (`static-services < max-services`), `max-services` Platz lässt und das Speicherbudget reicht (unten). Bei 50 Plätzen pro Dienst und 75 %: 75 von 100 Spielern auf zwei Diensten.
+2. **Über max-services.** Hat ein Task mehr Dienste als `max-services` (das Limit wurde gesenkt), wird ein leerer dynamischer Dienst so entfernt wie in Regel 4: auf den Proxys geschlossen, noch einmal geprüft, dann gestoppt. Ein Dienst mit Spielern wird dafür nie entfernt.
+3. **Hochskalieren.** Ein weiterer dynamischer Dienst startet, wenn die Last der Gruppe `scale-up-at` erreicht hat, kein Dienst der Gruppe mehr startet, kein anderer Task der Gruppe in derselben Runde einen gestartet hat, der Task dynamische Dienste haben darf (`static-services < max-services`), `max-services` Platz lässt und das Speicherbudget reicht (unten). Bei 50 Plätzen pro Dienst und 75 %: 75 von 100 Spielern auf zwei Diensten.
 4. **Herunterskalieren.** Der Task hat mehr als `min-services` Dienste, und ohne seinen leersten laufenden dynamischen Dienst bliebe der Rest der Gruppe unter `scale-down-below`, die Spieler dieses Dienstes auf den Rest gerechnet. Hält das `scale-down-after` lang ohne Unterbrechung an, geht der Dienst:
-   - ohne Spieler stoppt er sofort;
-   - mit Spielern wird er **geleert**: Die Proxys schicken keinen neuen Spieler mehr hin, alle Spieler darauf werden auf die anderen Dienste der Gruppe umgezogen (statische eingeschlossen), danach stoppt er. Jeder Spieler bekommt eine kurze Nachricht in der Sprache seines Clients (Deutsch bei `de`, sonst Englisch);
-   - sind nach 30 Sekunden noch Spieler darauf (ein Umzug ging schief, der Proxy ist weg), läuft er weiter und wird wieder geöffnet. Niemand wird gekickt. Der Task wartet dann wieder `scale-down-after` bis zum nächsten Versuch.
+   - er wird immer zuerst auf den Proxys **geschlossen**, damit kein neuer Spieler mehr hinkommt;
+   - alle Spieler darauf werden auf die anderen Dienste der Gruppe umgezogen (statische eingeschlossen). Die Node liest die Spieler bei jeder Prüfung neu, also wird auch umgezogen, wer zwischendurch dazukam. Jeder Spieler bekommt eine kurze Nachricht in der Sprache seines Clients (Deutsch bei `de`, sonst Englisch);
+   - er stoppt erst, wenn er leer ist: Die Proxys führen niemanden mehr darauf **und** seine eigene Bridge meldet 0 Spieler. Hier entscheidet die höhere der beiden Zahlen, damit ein Proxy, der einen Beitritt noch nicht gesehen hat, keinen Server unter einem Spieler stoppen lässt;
+   - sind nach der `drain-timeout` der Gruppe (Standard 30 Sekunden) noch Spieler darauf (ein Umzug ging schief, der Proxy ist weg), läuft er weiter und wird wieder geöffnet. Niemand wird gekickt. Der Task wartet dann wieder `scale-down-after` bis zum nächsten Versuch;
+   - schlägt der Stopp selbst fehl, nachdem er geleert wurde, wird er ebenfalls wieder geöffnet.
 
    Von gleich leeren Diensten geht der mit dem höchsten Index. Beispiel mit 50 Plätzen und 50 %: 20 und 4 Spieler auf zwei Diensten, ohne den zweiten 24 von 50 (48 %), also wird der zweite geleert. Bei 20 und 5 sind es genau 50 %, beide bleiben.
 
@@ -85,7 +87,7 @@ Weil `scale-down-below` kleiner ist als `scale-up-at`, startet ein gerade entfer
 
 Was nie passiert:
 
-- Ein statischer Dienst wird vom Scaler nie gestoppt oder geleert, auch nicht, nachdem `static-services` gesenkt wurde. Spieler eines geleerten dynamischen Dienstes nimmt er aber auf.
+- Ein statischer Dienst innerhalb von `static-services` wird vom Scaler nie gestoppt oder geleert. Spieler eines geleerten dynamischen Dienstes nimmt er aber auf. Nur die überzähligen nach einem gesenkten `static-services` zählen als dynamisch (siehe oben).
 - Ein Proxy (`software: velocity`) wird nie hoch- oder herunterskaliert; es gibt einen Proxy pro Node.
 - Zum Herunterskalieren wird nie ein Spieler gekickt.
 - `min-services: 0` startet nichts. Der erste Dienst eines solchen Tasks kommt über `service start`, danach wird skaliert.
@@ -110,7 +112,7 @@ Hauptproxy und Legacy-Proxy arbeiten gleich. Der Node teilt den Proxys mit `Serv
 | Spieler pro Dienst | Der neueste Messwert des [Monitors](monitor.md): `ServiceStatus.playersOnline`, das die Bridge des Dienstes alle 5 Sekunden meldet, höchstens ihr eigenes `maxPlayers`. Ein Messwert älter als `stale-after` (60 s) zählt nicht. Solange ein Proxy verbunden ist, der den Dienst führt, gilt der kleinere Wert aus Bridge und Proxy (`PlayerJoin`, `PlayerSwitch`, siehe [bridges.md](bridges.md#player-events)). Ein manipulierter Server, der mehr Spieler meldet, als der Proxy auf ihm sieht, kann so keine Server starten. Ohne einen solchen Proxy gilt der Wert der Bridge. |
 | Speicher des Nodes | Der neueste Node-Messwert des Monitors (`node-memory`: belegter und gesamter Speicher der Maschine bzw. des Containers, wenn Java ein Limit sieht). |
 
-Eine unbekannte Zahl (noch kein Bericht, ein veralteter, ein Server ohne Bridge) gilt nie als voll und nie als leer. Sie macht die Last ihrer Gruppe unbekannt und blockiert damit Hoch- und Herunterskalieren der Gruppe. Mit `enabled: false` in `monitor.yml` gibt es keine Messwerte. Der Scaler hält dann `min-services` und skaliert weder hoch noch herunter.
+Eine unbekannte Zahl (noch kein Bericht, ein veralteter, ein Server ohne Bridge) gilt nie als voll und nie als leer. Sie macht die Last ihrer Gruppe unbekannt und blockiert damit Hoch- und Herunterskalieren der Gruppe. Die Node schreibt das je Dienst einmal als Warnung ins Log (`Scaling: group … is not scaled while … reports no player count`) und erst wieder, nachdem die Zahl zwischendurch bekannt war. Mit `enabled: false` in `monitor.yml` gibt es keine Messwerte. Der Scaler hält dann `min-services` und skaliert weder hoch noch herunter.
 
 ## Speicherbudget
 
