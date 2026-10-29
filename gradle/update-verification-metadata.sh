@@ -10,9 +10,12 @@
 # What it does:
 # 1. Keeps the <configuration> block and drops every <component>, so entries of dependencies that
 #    are no longer used disappear instead of piling up.
-# 2. Runs "./gradlew --write-verification-metadata sha256 help". With this flag the help task
-#    resolves every resolvable configuration of the build, including build-logic, the plugins, the
-#    toolchain and Jazzer setup, CodeQL/release/e2e classpaths and the bridges' compileOnly APIs.
+# 2. Runs "./gradlew --write-verification-metadata sha256 help --refresh-dependencies". With this
+#    flag the help task resolves every resolvable configuration of the build, including
+#    build-logic, the plugins, the Jazzer setup, CodeQL/release/e2e classpaths and the bridges'
+#    compileOnly APIs. --refresh-dependencies matters: with a warm Gradle cache the parent and BOM
+#    .pom files are not read again and would be missing from the file, while a CI runner with an
+#    empty cache needs them.
 # 3. Works around a Gradle bug: the writer fails with "Multiple entries with same key" for the
 #    metadata (.pom/.module) of a unique snapshot version (pandaspigot-api). The script trusts those
 #    two files during the write and afterwards replaces the trust with their SHA-256, taken from the
@@ -41,7 +44,19 @@ fi
 
 # Step 1: configuration only, plus the temporary trust entry. Line endings are normalised to LF.
 tmp="$(mktemp)"
-trap 'rm -f "$tmp"' EXIT
+backup="$(mktemp)"
+cp "$file" "$backup"
+finished=false
+# On any failure the original file comes back, so a half-written file with the temporary trust
+# entry is never left behind.
+cleanup() {
+    if [ "$finished" != true ]; then
+        cp "$backup" "$file"
+        echo "error: update failed, $file restored." >&2
+    fi
+    rm -f "$tmp" "$backup"
+}
+trap cleanup EXIT
 tr -d '\r' < "$file" | awk -v g="$snapshot_group" -v n="$snapshot_name" -v r="$workaround_reason" '
     /^   <components>/ { print; skip = 1; next }
     /^   <\/components>/ { skip = 0 }
@@ -60,7 +75,7 @@ fi
 cp "$tmp" "$file"
 
 # Step 2: let Gradle write the checksums.
-bash ./gradlew --write-verification-metadata sha256 help --no-configuration-cache --quiet
+bash ./gradlew --write-verification-metadata sha256 help --refresh-dependencies --no-configuration-cache --quiet
 
 # Step 3: replace the temporary trust entry with the checksums of the snapshot metadata.
 tr -d '\r' < "$file" > "$tmp"
@@ -70,11 +85,14 @@ version="$(awk -v g="$snapshot_group" -v n="$snapshot_name" '
     }' "$tmp")"
 
 checksum_of() {
-    local name="$1" found
+    local name="$1" found count
     found="$(find "$gradle_home/caches/modules-2/files-2.1/$snapshot_group/$snapshot_name/$version" \
-        -type f -name "$name" 2>/dev/null | head -n 1)"
-    if [ -z "$found" ]; then
-        echo "error: $name is not in the Gradle cache ($gradle_home)." >&2
+        -type f -name "$name" 2>/dev/null || true)"
+    count="$(printf '%s' "$found" | grep -c . || true)"
+    if [ "$count" -ne 1 ]; then
+        # The cache folders are named after the SHA-1 of the content, so two hits mean two
+        # different files. Clear them (./gradlew --refresh-dependencies) instead of guessing.
+        echo "error: expected one copy of $name in the Gradle cache ($gradle_home), found $count." >&2
         exit 1
     fi
     sha256sum "$found" | cut -c1-64
@@ -106,4 +124,5 @@ if grep -qF "$workaround_reason" "$file"; then
     exit 1
 fi
 
+finished=true
 echo "Updated $file. Review the diff (git diff -- $file) before you commit it."

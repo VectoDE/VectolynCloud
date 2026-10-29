@@ -60,12 +60,23 @@ jobs:
           if grep -qF 'update-verification-metadata.sh: temporary' "$f"; then
             fail "$f still has the temporary trust entry of gradle/update-verification-metadata.sh."
           fi
+          if grep -qE '<!--|<trusted-key|<ignored-key' "$f"; then
+            fail "$f must not contain XML comments or PGP keys (docs/dependency-verification.md)."
+          fi
+          # Only the IDE-only -javadoc/-sources jars may be trusted without a checksum.
+          [ "$(grep -c '<trust ' "$f")" -eq 2 ] \
+            && grep -qF '<trust file=".*-javadoc[.]jar" regex="true"' "$f" \
+            && grep -qF '<trust file=".*-sources[.]jar" regex="true"' "$f" \
+            || fail "$f may only trust -javadoc.jar and -sources.jar files."
           grep -qxF 'org.gradle.dependency.verification=strict' gradle.properties \
             || fail "gradle.properties must set org.gradle.dependency.verification=strict."
-          # The brackets keep the pattern from matching this line itself.
-          weaken='--dependency-verification[= ]+(lenient|off)|dependency[.]verification=(lenient|off)|--write-verification-[m]etadata'
-          if grep -rnE -- "$weaken" .github/workflows gradle.properties build-logic; then
-            fail "A workflow or property file weakens or rewrites dependency verification (lines above)."
+          # Long and short Gradle options (-F for the verification mode, -M for writing the
+          # metadata) and the property in any properties syntax.
+          # The brackets keep the patterns from matching these lines themselves.
+          weaken='--dependency-verification[= ]+(lenient|off)|dependency[.]verification[[:space:]]*[=:][[:space:]]*(lenient|off)|--write-verification-[m]etadata|gradlew.*[[:space:]]-[FM][[:space:]=]'
+          if git ls-files -z -- .github/workflows '*.gradle.kts' '*gradle.properties' '*Dockerfile*' '*.gradle' \
+              | xargs -0 grep -nE -- "$weaken"; then
+            fail "A workflow, build or property file weakens or rewrites dependency verification (lines above)."
           fi
           echo "Dependency verification is on: $(grep -c '<component ' "$f") components with SHA-256."
 

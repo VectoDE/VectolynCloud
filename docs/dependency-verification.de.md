@@ -30,7 +30,7 @@ bash gradle/update-verification-metadata.sh
 git diff -- gradle/verification-metadata.xml
 ```
 
-Unter Windows in Git Bash ausführen. Das Skript behält den Block `<configuration>`, entfernt alle Einträge und lässt Gradle sie neu schreiben (`./gradlew --write-verification-metadata sha256 help`). Mit diesem Schalter löst der Task `help` jede Konfiguration des Builds auf. So fehlt nichts, und Einträge entfernter Abhängigkeiten verschwinden. Die Datei gehört in denselben Pull Request wie die Änderung an den Abhängigkeiten.
+Unter Windows in Git Bash ausführen. Das Skript behält den Block `<configuration>`, entfernt alle Einträge und lässt Gradle sie neu schreiben (`./gradlew --write-verification-metadata sha256 help`). Mit diesem Schalter löst der Task `help` jede Konfiguration auf, die nach der Konfigurationsphase existiert. `--refresh-dependencies` sorgt dafür, dass Gradle die Parent- und BOM-`.pom`-Dateien neu liest, die ein gefüllter lokaler Cache sonst überspringt. Einträge entfernter Abhängigkeiten verschwinden. Eine Konfiguration, die ein Plugin erst während eines Tasks anlegt, ist nicht dabei. Dann schlägt die CI mit einer fehlenden Prüfsumme fehl, und man ergänzt die Abhängigkeit, indem man den betreffenden Task mit `--write-verification-metadata sha256` ausführt. Die Datei gehört in denselben Pull Request wie die Änderung an den Abhängigkeiten.
 
 Prüfsummen nicht von Hand ändern und `--write-verification-metadata` nicht allein aufrufen. Das Skript enthält auch den PandaSpigot-Workaround, der weiter unten beschrieben ist.
 
@@ -55,11 +55,19 @@ Dependabot aktualisiert `gradle/libs.versions.toml` und die Build-Dateien, aber 
 1. Dependabot öffnet oder aktualisiert einen Pull Request, der `gradle/**`, eine `*.gradle.kts`-Datei oder `gradle.properties` ändert.
 2. Der Job `regenerate` checkt den Dependabot-Commit aus und führt `gradle/update-verification-metadata.sh` aus. Er hat ein Token nur mit Leserechten und keine gespeicherten Zugangsdaten. Ändert sich mehr als die Metadaten-Datei, schlägt er fehl.
 3. Der Job `commit` hat als einziger `contents: write` und führt keinen Code aus dem Pull Request aus. Er prüft, dass das Artefakt genau eine normale Metadaten-Datei ist, committet sie mit Sign-off als `github-actions[bot]` und pusht sie auf den Dependabot-Branch. Hat Dependabot den Branch inzwischen verschoben, schlägt der Push fehl, und der nächste Lauf übernimmt.
-4. Ein Push mit `GITHUB_TOKEN` startet keine anderen Workflows. Ein Maintainer prüft den Commit nach der Checkliste oben und **schließt den Pull Request und öffnet ihn wieder** (`gh pr close <n> && gh pr reopen <n>`). Dann laufen CI, CodeQL und Dependency Review auf dem neuen Stand.
+4. Ein Push mit `GITHUB_TOKEN` startet keine anderen Workflows. Ein Maintainer prüft den Commit nach der Checkliste oben und pusht danach einen leeren Commit auf den Branch. Dann laufen CI, CodeQL und Dependency Review auf dem neuen Stand:
+
+   ```sh
+   gh pr checkout <n>
+   git commit --allow-empty -s -m "ci: run checks"
+   git push
+   ```
+
+   Den Pull Request dafür nicht schließen und wieder öffnen: Beim Schließen wertet Dependabot das Update als abgelehnt.
 
 Der Workflow nutzt das normale Ereignis `pull_request`, nie `pull_request_target`. Er läuft nur, wenn Dependabot den Pull Request aus einem Branch dieses Repositorys geöffnet und den Lauf ausgelöst hat. Daten aus dem Pull Request erreichen die Shell nur über Umgebungsvariablen. Alle Actions sind per Commit-SHA festgelegt.
 
-Rebaset Dependabot seinen Branch, ist der Metadaten-Commit weg, und der Workflow schreibt ihn neu. Ohne den Workflow geht es von Hand genauso: Dependabot-Branch auschecken, Skript ausführen, prüfen, mit `-s` committen, pushen.
+Sobald ein Branch fremde Commits hat, rebaset Dependabot ihn nicht mehr von selbst. `@dependabot recreate` baut den Branch neu, danach schreibt der Workflow die Metadaten erneut. Ohne den Workflow geht es von Hand genauso: Dependabot-Branch auschecken, Skript ausführen, prüfen, mit `-s` committen, pushen.
 
 ## Warum SHA-256 und keine PGP-Signaturen
 
@@ -85,6 +93,7 @@ pandaspigot-api gibt es nur als Snapshot, deshalb legt der Build einen eindeutig
 
 ## CI
 
-- Der Job `Validate Gradle wrapper` prüft: Die Datei existiert, prüft Metadaten, hat SHA-256-Einträge und keinen übrig gebliebenen Workaround-Eintrag. `gradle.properties` setzt `strict`. Kein Workflow und keine Properties-Datei schaltet die Prüfung ab oder schreibt die Datei neu.
+- Der Job `Validate Gradle wrapper` prüft: Die Datei existiert, prüft Metadaten und hat SHA-256-Einträge. Sie enthält keine XML-Kommentare, keine PGP-Schlüssel, keinen übrig gebliebenen Workaround-Eintrag und keine vertrauenswürdigen Artefakte außer `-javadoc.jar`/`-sources.jar`. `gradle.properties` setzt `strict`. Kein Workflow, keine Gradle-Build-Datei, keine Properties-Datei und kein Dockerfile schaltet die Prüfung ab oder schreibt die Datei neu (lange Optionen, `-F`/`-M`, die Property in jeder Schreibweise).
+- Der Dependabot-Workflow übernimmt eine neu geschriebene Datei nur, wenn ihr Block `<configuration>` unverändert ist.
 - Alle anderen Jobs führen Gradle mit eingeschalteter Prüfung aus. Eine fehlende oder falsche Prüfsumme lässt also `Build`, `Tests on Java 21`, `Integration`, CodeQL und das Release scheitern.
 - Änderungen unter `gradle/`, `build-logic/`, `settings.gradle.kts` oder `gradle.properties` starten auch den Job `Integration`.
