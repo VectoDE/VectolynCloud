@@ -445,6 +445,14 @@ public final class CloudNode implements AutoCloseable {
         // After the channel, before the first service: the monitor sees every start, and a backup
         // or restore that a crash interrupted is put right before a start renders into its folder.
         ops.monitoring().start();
+        prepareConsole();
+        ServiceManager.Recovery recovery = services.recoverOrphans();
+        if (!recovery.terminated().isEmpty() || !recovery.unverifiable().isEmpty()) {
+            LOG.log(System.Logger.Level.WARNING, "Left over from the previous run: ended {0}, not verifiable {1}",
+                    recovery.terminated(), recovery.unverifiable());
+        }
+        // Only once the orphans are gone: a scheduled backup, a restore or a start through the API
+        // must not copy or render into a folder a server of the previous run still writes to.
         try {
             List<String> recovered = ops.backups().recoverInterruptedOperations();
             if (!recovered.isEmpty()) {
@@ -453,8 +461,14 @@ public final class CloudNode implements AutoCloseable {
         } catch (BackupException e) {
             LOG.log(System.Logger.Level.ERROR, "Backups: an interrupted run could not be put right: {0}", e.getMessage());
         }
-        backupScheduler = new BackupScheduler(ops.backups());
-        backupScheduler.start();
+        // Under the close lock: a close() that has begun either sees the schedule or none is made.
+        synchronized (closeLock) {
+            if (closing) {
+                throw new IllegalStateException("the node is closing");
+            }
+            backupScheduler = new BackupScheduler(ops.backups());
+            backupScheduler.start();
+        }
         if (ops.apiServer() != null) {
             try {
                 InetSocketAddress api = ops.apiServer().start();
@@ -462,12 +476,6 @@ public final class CloudNode implements AutoCloseable {
             } catch (IOException e) {
                 LOG.log(System.Logger.Level.ERROR, "The API cannot start ({0}); the node runs without it.", e.getMessage());
             }
-        }
-        prepareConsole();
-        ServiceManager.Recovery recovery = services.recoverOrphans();
-        if (!recovery.terminated().isEmpty() || !recovery.unverifiable().isEmpty()) {
-            LOG.log(System.Logger.Level.WARNING, "Left over from the previous run: ended {0}, not verifiable {1}",
-                    recovery.terminated(), recovery.unverifiable());
         }
         // The questions read the terminal on this thread, so the console's own read loop starts
         // only afterwards.
