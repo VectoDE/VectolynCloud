@@ -268,7 +268,7 @@ Afterwards the leftover folders in `temp/services/` are deleted, except blocked 
 ./gradlew :VectoraCloud:cloud-node:e2eLiveTest                      # real downloads and servers (cloud-e2e-live.yml, weekly)
 ```
 
-Add `-Pe2eAllowRoot=true` in a shell that runs as administrator or root; the test then passes `--allow-root`.
+Add `-Pe2eAllowRoot=true` in a shell that runs as administrator or root; the test then passes `--allow-root`. GitHub's Windows runners run as administrator, so `managed-mariadb.yml` sets it there.
 
 **Offline (`e2eTest`).** The home starts empty except for `nodes.yml` (a free channel port) and a pre-seeded `software.lock.yml` with `cache/artifacts/`: every catalog entry the default groups ask for points at one fake server jar that logs in to the cloud channel like a bridge. The cloud runs on Java 25 and sees exactly a Java 21 and a Java 25 on the `PATH`. It gets `--non-interactive --setup-file` with every server switched on (proxy, lobby, Survival, Creative, Mod-Server, End, minigames, legacy proxy, 1.8.8 server), free ports, H2 and 256M per group. The test checks:
 
@@ -282,7 +282,7 @@ Add `-Pe2eAllowRoot=true` in a shell that runs as administrator or root; the tes
 
 It takes about 15 seconds. Removing the template seeding makes it fail: no server can render.
 
-**Managed MariaDB.** With `-Pe2eDatabase=managed` the setup chooses `managed`, so the node downloads MariaDB, sets it up before the first server and stops it after the last one; every seeded lock entry stays as it was and only MariaDB is added. It needs internet access and runs in `managed-mariadb.yml` on Linux and Windows.
+**Managed MariaDB.** With `-Pe2eDatabase=managed` the setup chooses `managed`, so the node downloads MariaDB, sets it up before the first server and stops it after the last one; every seeded lock entry stays as it was and only MariaDB is added. It needs internet access and runs in `managed-mariadb.yml` on Linux and Windows; downloading and initialising MariaDB takes a few minutes on a runner, so the test waits up to 15 minutes in this mode.
 
 **Live (`e2eLiveTest`).** No seeding, no fake: the proxy with the lobby (Paper 26.3) and the legacy proxy with the 1.8.8 server (PandaSpigot), with the real downloads and Java 21 and 25. It checks that the jars are in place and pinned, that each server's bridge reports ready on the channel, that each proxy's bridge logs its backend (`Server … from VectoraCloud`) and the clean shutdown. With a fast connection it takes about a minute. It depends on the download APIs and needs a few GB of memory, so it runs weekly and on demand (`cloud-e2e-live.yml`), not on every pull request. Its first run found that PandaSpigot exits on `--nogui` (see [Process](#process)).
 

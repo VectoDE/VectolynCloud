@@ -54,13 +54,14 @@ import org.junit.jupiter.api.io.TempDir;
 @Tag("e2e")
 class CloudJarEndToEndTest {
 
-    private static final Duration START_TIMEOUT = Duration.ofMinutes(3);
-
     /**
      * {@code -Pe2eDatabase=managed}: the cloud downloads and runs its own MariaDB instead of H2
      * (needs internet access; {@code managed-mariadb.yml} runs it).
      */
     private static final boolean MANAGED = "managed".equals(System.getProperty("vectora.e2e.database", "h2"));
+
+    /** Downloading and initialising MariaDB takes minutes on a CI runner, the fake servers seconds. */
+    private static final Duration START_TIMEOUT = Duration.ofMinutes(MANAGED ? 15 : 3);
 
     /** Services of the setup with every server switched on; minigames scale from one. */
     private static final List<String> SERVICES = List.of("proxy-1", "lobby-1", "survival-1", "creative-1", "mod-1",
