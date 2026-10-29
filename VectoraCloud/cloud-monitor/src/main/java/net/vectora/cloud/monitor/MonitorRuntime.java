@@ -115,7 +115,8 @@ public final class MonitorRuntime implements AutoCloseable {
             return Optional.empty();
         }
         if (url.isEmpty() || url.get().isEmpty()) {
-            LOG.warning("Webhook is switched on, but " + webhook.urlSecret()
+            // Only the place to look is logged: the key named in monitor.yml, never data around it.
+            LOG.warning("Webhook is switched on, but the key named in notifications.webhook.url-secret"
                     + " is not set in secrets/vectora.env; alerts go to the log only.");
             return Optional.empty();
         }
@@ -124,7 +125,7 @@ public final class MonitorRuntime implements AutoCloseable {
             return Optional.of(new WebhookNotifier(checked, webhook.format(), webhook.timeout().duration(), origin));
         } catch (IllegalArgumentException e) {
             // The message names the rule, never the URL.
-            LOG.warning("Webhook is switched on, but " + webhook.urlSecret() + " is not usable: " + e.getMessage()
+            LOG.warning("Webhook is switched on, but its URL in secrets/vectora.env is not usable: " + e.getMessage()
                     + ". Alerts go to the log only.");
             return Optional.empty();
         }

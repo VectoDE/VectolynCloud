@@ -148,21 +148,17 @@ public final class WebhookNotifier implements Notifier {
 
     private String text(AlertEvent event) {
         Alert alert = event.alert();
-        String what = switch (event) {
-            case AlertEvent.Fired fired -> "Alert";
-            case AlertEvent.Resolved resolved -> "Resolved";
-            case AlertEvent.Acknowledged acknowledged -> "Acknowledged";
+        String what = switch (event.kind()) {
+            case FIRED -> "Alert";
+            case RESOLVED -> "Resolved";
+            case ACKNOWLEDGED -> "Acknowledged";
         };
         return "[" + alert.severity().id().toUpperCase(java.util.Locale.ROOT) + "] " + what + " " + alert.summary()
                 + " - " + origin;
     }
 
     private static String kind(AlertEvent event) {
-        return switch (event) {
-            case AlertEvent.Fired fired -> "fired";
-            case AlertEvent.Resolved resolved -> "resolved";
-            case AlertEvent.Acknowledged acknowledged -> "acknowledged";
-        };
+        return event.kind().name().toLowerCase(java.util.Locale.ROOT);
     }
 
     @Override

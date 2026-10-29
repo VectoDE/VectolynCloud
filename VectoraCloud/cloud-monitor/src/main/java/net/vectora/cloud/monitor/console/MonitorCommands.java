@@ -263,10 +263,15 @@ public final class MonitorCommands {
             return;
         }
         String digits = which.startsWith("#") ? which.substring(1) : which;
-        if (!digits.matches("[1-9][0-9]{0,8}")) {
+        int id;
+        try {
+            id = digits.matches("[1-9][0-9]{0,8}") ? Integer.parseInt(digits) : -1;
+        } catch (NumberFormatException e) {
+            id = -1;
+        }
+        if (id < 0) {
             throw new CommandException(Text.of("Expected an alert number or all.", "Erwartet: Nummer einer Warnung oder all."));
         }
-        int id = Integer.parseInt(digits);
         if (!monitor.acknowledge(id)) {
             throw new CommandException(Text.of("No active, unacknowledged alert #%1$s.",
                     "Keine aktive, unbestätigte Warnung #%1$s."), id);

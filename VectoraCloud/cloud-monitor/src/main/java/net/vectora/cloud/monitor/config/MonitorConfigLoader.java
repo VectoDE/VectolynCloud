@@ -192,7 +192,13 @@ public final class MonitorConfigLoader {
         boolean ipv4 = IPV4.matcher(text).matches();
         if (ipv4) {
             for (String part : text.split("\\.")) {
-                if (Integer.parseInt(part) > 255) {
+                int octet;
+                try {
+                    octet = Integer.parseInt(part);
+                } catch (NumberFormatException e) {
+                    return null;
+                }
+                if (octet > 255) {
                     // Not a literal; InetAddress would ask DNS for it.
                     return null;
                 }

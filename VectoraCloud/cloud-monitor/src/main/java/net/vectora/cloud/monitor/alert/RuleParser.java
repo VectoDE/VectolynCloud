@@ -202,7 +202,12 @@ public final class RuleParser {
             if (!number.text.matches("(0|[1-9][0-9]{0,9})(\\.[0-9]{1,3})?")) {
                 throw new RuleSyntaxException(Reason.BAD_NUMBER, number.position);
             }
-            double raw = Double.parseDouble(number.text);
+            double raw;
+            try {
+                raw = Double.parseDouble(number.text);
+            } catch (NumberFormatException e) {
+                throw new RuleSyntaxException(Reason.BAD_NUMBER, number.position);
+            }
             String unit = "";
             Token unitToken = peek();
             if (unitToken != null && (unitToken.kind == Kind.PERCENT
@@ -246,7 +251,12 @@ public final class RuleParser {
             if (unit == null || unit.kind != Kind.WORD || !unit.text.matches("[smh]")) {
                 throw new RuleSyntaxException(Reason.BAD_DURATION, unit == null ? end : unit.position);
             }
-            long amount = Long.parseLong(number.text);
+            long amount;
+            try {
+                amount = Long.parseLong(number.text);
+            } catch (NumberFormatException e) {
+                throw new RuleSyntaxException(Reason.BAD_DURATION, number.position);
+            }
             Duration value = switch (unit.text) {
                 case "s" -> Duration.ofSeconds(amount);
                 case "m" -> Duration.ofMinutes(amount);

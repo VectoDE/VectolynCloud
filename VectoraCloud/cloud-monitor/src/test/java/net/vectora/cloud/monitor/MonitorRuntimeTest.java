@@ -41,7 +41,7 @@ class MonitorRuntimeTest {
         try (Fakes.LogCapture log = new Fakes.LogCapture(MonitorRuntime.class.getName());
              MonitorRuntime runtime = open(home)) {
             assertFalse(runtime.notifying());
-            assertTrue(log.text().contains("VECTORA_MONITOR_WEBHOOK_URL is not set"), log.text());
+            assertTrue(log.text().contains("notifications.webhook.url-secret is not set in secrets/vectora.env"), log.text());
         }
     }
 

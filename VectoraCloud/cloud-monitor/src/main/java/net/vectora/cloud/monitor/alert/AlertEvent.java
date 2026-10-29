@@ -8,14 +8,32 @@ import java.util.Objects;
  */
 public sealed interface AlertEvent {
 
+    /** The kinds of event, for code that only needs to tell them apart. */
+    enum Kind {
+        /** {@link Fired}. */
+        FIRED,
+        /** {@link Resolved}. */
+        RESOLVED,
+        /** {@link Acknowledged}. */
+        ACKNOWLEDGED
+    }
+
     /** The alert after the change. */
     Alert alert();
+
+    /** Which kind of event this is. */
+    Kind kind();
 
     /** The rule's condition held long enough. */
     record Fired(Alert alert) implements AlertEvent {
         /** Checks the value. */
         public Fired {
             Objects.requireNonNull(alert, "alert");
+        }
+
+        @Override
+        public Kind kind() {
+            return Kind.FIRED;
         }
     }
 
@@ -25,6 +43,11 @@ public sealed interface AlertEvent {
         public Resolved {
             Objects.requireNonNull(alert, "alert");
         }
+
+        @Override
+        public Kind kind() {
+            return Kind.RESOLVED;
+        }
     }
 
     /** An operator acknowledged the alert. It keeps firing until it clears. */
@@ -32,6 +55,11 @@ public sealed interface AlertEvent {
         /** Checks the value. */
         public Acknowledged {
             Objects.requireNonNull(alert, "alert");
+        }
+
+        @Override
+        public Kind kind() {
+            return Kind.ACKNOWLEDGED;
         }
     }
 }

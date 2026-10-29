@@ -76,10 +76,11 @@ public final class NotificationDispatcher implements AlertListener, AutoCloseabl
     }
 
     private boolean wanted(AlertEvent event) {
-        return switch (event) {
-            case AlertEvent.Acknowledged ack -> false;
-            case AlertEvent.Resolved resolved -> sendResolved && resolved.alert().severity().compareTo(minSeverity) >= 0;
-            case AlertEvent.Fired fired -> fired.alert().severity().compareTo(minSeverity) >= 0;
+        boolean severe = event.alert().severity().compareTo(minSeverity) >= 0;
+        return switch (event.kind()) {
+            case ACKNOWLEDGED -> false;
+            case RESOLVED -> sendResolved && severe;
+            case FIRED -> severe;
         };
     }
 

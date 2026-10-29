@@ -347,7 +347,11 @@ public interface ResidentMemoryProbe {
                 return -1;
             }
         }
-        return Long.parseLong(text);
+        try {
+            return Long.parseLong(text);
+        } catch (NumberFormatException e) {
+            return -1;
+        }
     }
 
     /** A helper program ended with an exit code other than 0. */

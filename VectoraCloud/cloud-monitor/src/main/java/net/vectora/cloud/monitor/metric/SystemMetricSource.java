@@ -188,10 +188,16 @@ public final class SystemMetricSource implements MetricSource {
             if (parts.length != 3 || !parts[2].equals("kB") || !parts[1].matches("[0-9]{1,15}")) {
                 continue;
             }
+            long kilobytes;
+            try {
+                kilobytes = Long.parseLong(parts[1]);
+            } catch (NumberFormatException e) {
+                continue;
+            }
             if (parts[0].equals("MemTotal:")) {
-                total = Long.parseLong(parts[1]) * 1024;
+                total = kilobytes * 1024;
             } else if (parts[0].equals("MemAvailable:")) {
-                available = Long.parseLong(parts[1]) * 1024;
+                available = kilobytes * 1024;
             }
         }
         if (total <= 0 || available < 0 || Math.abs(total - mxTotal) > mxTotal / 100) {
