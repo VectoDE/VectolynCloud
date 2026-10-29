@@ -54,7 +54,7 @@ services:
       - ALL
 
   database:
-    image: mariadb:11.8-noble@sha256:c4124d1afa875e47f2892edf26b482fa54f796e2f342d3717a04ca091a22a9bd
+    image: mariadb:12.2-noble@sha256:6a4c4bbf0447c2247801309513fcc0dd17c3f35390368139ce419387fdd1144d
     restart: unless-stopped
     environment:
       MARIADB_DATABASE: luckperms
