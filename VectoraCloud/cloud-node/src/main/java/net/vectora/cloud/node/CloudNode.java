@@ -92,6 +92,7 @@ import net.vectora.cloud.setup.SetupWizard;
  * </ol>
  * Start order in {@link #start()}:
  * <ol>
+ *   <li>write the built-in templates the home does not have ({@link BuiltInTemplates});</li>
  *   <li>watch the configuration; a change that makes a group unwanted stops its services;</li>
  *   <li>start the cloud channel ({@code nodes.yml}: host and port of this node);</li>
  *   <li>start the console (log output above the prompt, built-in and service commands);</li>
@@ -428,6 +429,12 @@ public final class CloudNode implements AutoCloseable {
      *                     its port
      */
     public void start() throws IOException {
+        // An empty home (first start of VectoraCloud.jar) gets the templates the node carries.
+        try {
+            BuiltInTemplates.fromClassPath().seed(settings.home());
+        } catch (IOException e) {
+            LOG.log(System.Logger.Level.ERROR, "The built-in templates cannot be written: {0}", e.getMessage());
+        }
         config.startWatching();
         reconcile = new ConfigListener() {
             @Override

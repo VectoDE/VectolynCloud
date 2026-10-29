@@ -91,8 +91,64 @@ val bridgeResources = tasks.register<BridgeIndex>("bridgeResources") {
     outputDirectory = layout.buildDirectory.dir("generated/bridge-resources")
 }
 
+/**
+ * Copies the server templates into the node's resources and writes templates.index: one line per
+ * file, "<sha256 hex>  <Server>/template/<path>". BuiltInTemplates writes a missing template folder
+ * from them, so VectoraCloud.jar in an empty folder has every template (docs/cloud/node.md).
+ */
+abstract class TemplateIndex : DefaultTask() {
+
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val templates: ConfigurableFileCollection
+
+    @get:Internal
+    abstract val serverNetwork: DirectoryProperty
+
+    @get:OutputDirectory
+    abstract val outputDirectory: DirectoryProperty
+
+    @TaskAction
+    fun write() {
+        val root = serverNetwork.get().asFile
+        val target = outputDirectory.get().asFile.resolve("net/vectora/cloud/node/templates")
+        target.deleteRecursively()
+        target.mkdirs()
+        val lines = templates.files.filter { it.isFile }
+            .map { it to it.relativeTo(root).invariantSeparatorsPath }
+            .sortedBy { it.second }
+            .map { (file, path) ->
+                val bytes = file.readBytes()
+                val copy = target.resolve(path)
+                copy.parentFile.mkdirs()
+                copy.writeBytes(bytes)
+                MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) } + "  " + path
+            }
+        check(lines.isNotEmpty()) { "No template found under ${root.path}" }
+        target.resolve("templates.index").writeText(
+            "# VectoraCloud server templates, format 1: <sha256>  <Server>/template/<path>\n" +
+                lines.joinToString("") { "$it\n" },
+            Charsets.UTF_8,
+        )
+    }
+}
+
+val serverNetworkDir = rootProject.layout.projectDirectory.dir("Server-Network")
+val templateResources = tasks.register<TemplateIndex>("templateResources") {
+    description = "Puts the server templates and their index into the node's resources."
+    serverNetwork = serverNetworkDir
+    // Only what the repository tracks belongs in the jar: never a plugin jar or a key someone put
+    // into a template folder of their checkout.
+    templates.from(serverNetworkDir.asFileTree.matching {
+        include("*/template/**")
+        exclude("**/*.jar", "**/key.pem", "**/*.key", "**/*.secret", "**/*.p12", "**/*.jks", "**/.*", "**/.*/**")
+    })
+    outputDirectory = layout.buildDirectory.dir("generated/template-resources")
+}
+
 sourceSets.main {
     resources.srcDir(bridgeResources)
+    resources.srcDir(templateResources)
 }
 
 tasks.withType<Test>().configureEach {
