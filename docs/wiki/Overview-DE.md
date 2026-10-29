@@ -8,7 +8,7 @@ Wir betreiben kein Netzwerk, keine Server und keine Domain und hosten weder Webs
 
 ## Stand
 
-Das Projekt steht bei **Etappe 1 von 8** (Fundament). Die vorhandenen Server ziehen ins Repository um, Secrets verlassen den Quellbaum, und der Gradle-Build entsteht. Ein Release gibt es noch nicht. Siehe [Roadmap](Roadmap-DE).
+Das Projekt steht bei **Etappe 2 von 8** (VectoraCloud-Kern). Etappe 1, das Fundament, ist fertig und als signiertes Pre-Release [v0.1.0](https://github.com/VectoDE/Vectora-Network/releases/tag/v0.1.0) erschienen. Ein nutzbares Cloud-Release gibt es noch nicht. Fortschritt: [Roadmap](Roadmap-DE) und [#11](https://github.com/VectoDE/Vectora-Network/issues/11).
 
 ## Ziel
 

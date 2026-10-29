@@ -16,10 +16,10 @@ The long-term goal: you run `java -jar VectoraCloud.jar` on Windows, Linux, macO
 
 ## Status
 
-**Stage 1 of 8: Foundation.** We are moving the existing servers into this repository, taking secrets out, fixing known config problems and setting up the Gradle build. There is no release yet. Most of what this README describes under *Architecture* is the plan, not working code.
+**Stage 2 of 8: VectoraCloud core.** Stage 1, the foundation, is finished and out as the signed pre-release [v0.1.0](https://github.com/VectoDE/Vectora-Network/releases/tag/v0.1.0). Stage 2 builds the cloud module by module; the task list is in [#11](https://github.com/VectoDE/Vectora-Network/issues/11), the overall plan on the roadmap. There is no usable cloud release yet, v0.1.0 only contains the foundation. Much of the *Architecture* section is still the plan, not working code.
 
 - Roadmap and progress: [Vectora Roadmap](https://github.com/users/VectoDE/projects/11)
-- Current stage: [#1 Stage 1: Foundation](https://github.com/VectoDE/Vectora-Network/issues/1)
+- Current stage: [#11 Stage 2: VectoraCloud core](https://github.com/VectoDE/Vectora-Network/issues/11)
 
 | Stage | Content |
 |---|---|
