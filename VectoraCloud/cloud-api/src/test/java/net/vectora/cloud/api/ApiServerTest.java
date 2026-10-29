@@ -258,6 +258,17 @@ class ApiServerTest {
                     task.replace("\"scale-down-below\":40", "\"scale-down-below\":75"));
             assertEquals(422, overlap.statusCode());
             assertTrue(overlap.body().contains("scale-down-not-below-up"), overlap.body());
+            // Without static-services the body is refused with required at the field.
+            HttpResponse<String> noStatic = api.send("PUT", "/api/v1/tasks/lobby", api.admin,
+                    task.replace("\"static-services\":1,", ""));
+            assertEquals(400, noStatic.statusCode(), noStatic.body());
+            assertTrue(noStatic.body().contains("\"path\":\"scaling.static-services\"")
+                    && noStatic.body().contains("\"code\":\"required\""), noStatic.body());
+            // Counter-check: a wrong type there is invalid-value.
+            HttpResponse<String> wrongStatic = api.send("PUT", "/api/v1/tasks/lobby", api.admin,
+                    task.replace("\"static-services\":1", "\"static-services\":\"1\""));
+            assertEquals(400, wrongStatic.statusCode(), wrongStatic.body());
+            assertTrue(wrongStatic.body().contains("\"code\":\"invalid-value\""), wrongStatic.body());
             // Without scale-down-below the default applies.
             assertEquals(200, api.send("PUT", "/api/v1/tasks/lobby", api.admin,
                     task.replace(",\"scale-down-below\":40", "")).statusCode());

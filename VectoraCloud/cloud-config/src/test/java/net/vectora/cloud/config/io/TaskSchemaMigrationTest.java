@@ -1,5 +1,6 @@
 package net.vectora.cloud.config.io;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -210,9 +211,17 @@ class TaskSchemaMigrationTest {
     @Test
     void version2WithoutStaticServicesIsAnError() {
         ConfigError error = single(V2.replace("  static-services: 1\n", ""));
-        // Same code as every other required field the model marks (process.restart.*).
-        assertEquals(ErrorCode.INVALID_VALUE, error.code(), error.toString());
+        assertEquals(ErrorCode.REQUIRED, error.code(), error.toString());
         assertEquals("scaling.static-services", error.path(), error.toString());
+        // The same for an explicit null.
+        ConfigError nul = single(V2.replace("static-services: 1", "static-services: null"));
+        assertEquals(ErrorCode.REQUIRED, nul.code(), nul.toString());
+        assertEquals("scaling.static-services", nul.path(), nul.toString());
+        // Counter-check: a value of the wrong type stays invalid-value, a valid file reads.
+        ConfigError wrong = single(V2.replace("static-services: 1", "static-services: many"));
+        assertEquals(ErrorCode.INVALID_VALUE, wrong.code(), wrong.toString());
+        assertEquals("scaling.static-services", wrong.path());
+        assertEquals(1, assertDoesNotThrow(() -> read(V2)).value().scaling().staticServices());
     }
 
     @Test

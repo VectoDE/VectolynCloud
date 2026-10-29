@@ -127,8 +127,9 @@ class ConfigYamlTest {
                     backoff: 5s
                     max-backoff: 1m
                 """, ConfigFormat.GROUP);
-        assertEquals(ErrorCode.INVALID_VALUE, error.code());
-        assertTrue(error.path().startsWith("process.restart"), error.path());
+        // The missing on-crash is a missing required field.
+        assertEquals(ErrorCode.REQUIRED, error.code());
+        assertEquals("process.restart.on-crash", error.path());
     }
 
     @Test

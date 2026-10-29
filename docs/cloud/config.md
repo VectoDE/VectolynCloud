@@ -174,6 +174,7 @@ People edit these files by hand, so typos must not slip through:
 
 - An unknown field is an error, with its path, for example `cloud.yml: database.hostt (line 20): Unknown field "hostt".`
 - A key that appears twice is an error.
+- A required field that is missing or `null` (for example `scaling.static-services`, the keys of `process.restart`) is an error with the code `required` at its path.
 - No guessing between types: `port: "25565"`, `port: 1.5`, `eula-accepted: yes` or `1`, and an unquoted `minecraft-version: 1.20` all fail.
 - A second YAML document in the same file, more than 1 MiB, nesting deeper than 32 levels and very long strings fail.
 - Problems in several files are reported together.

@@ -154,6 +154,9 @@ public final class ConfigYaml {
         if (e instanceof StreamReadException) {
             return ConfigError.at(file, path, line, ErrorCode.SYNTAX);
         }
+        if (e instanceof MismatchedInputException && isMissing(original)) {
+            return ConfigError.at(file, path, line, ErrorCode.REQUIRED);
+        }
         if (e instanceof MismatchedInputException mismatch) {
             return ConfigError.at(file, path, line, ErrorCode.INVALID_VALUE, expected(mismatch.getTargetType()));
         }
@@ -209,6 +212,16 @@ public final class ConfigYaml {
             // The content was readable a moment ago; give up on the line rather than fail.
         }
         return 0;
+    }
+
+    /**
+     * Whether Jackson refused a field because it has no value: a field the model marks as required
+     * is missing, or a number or switch without a default is missing or {@code null}.
+     */
+    private static boolean isMissing(String message) {
+        return message.startsWith("Missing required creator property")
+                || message.startsWith("Missing creator property")
+                || message.startsWith("Cannot map `null` into type");
     }
 
     private static String expected(Class<?> type) {
