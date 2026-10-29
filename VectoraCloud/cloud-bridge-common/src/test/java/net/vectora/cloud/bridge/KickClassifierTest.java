@@ -38,15 +38,15 @@ class KickClassifierTest {
     @ParameterizedTest
     @ValueSource(strings = {"multiplayer.disconnect.banned", "multiplayer.disconnect.banned.reason",
             "multiplayer.disconnect.banned.expiration", "multiplayer.disconnect.banned_ip.reason",
-            "multiplayer.disconnect.not_whitelisted", "vectora.moderation", "vectora.moderation.kick",
-            "vectora.moderation.mute-kick"})
-    void banWhitelistAndModerationKeysAreNotCaught(String key) {
+            "multiplayer.disconnect.not_whitelisted", "multiplayer.disconnect.kicked", "vectora.moderation",
+            "vectora.moderation.kick", "vectora.moderation.mute-kick"})
+    void banWhitelistVanillaKickAndModerationKeysAreNotCaught(String key) {
         assertEquals(Verdict.NOT_CAUGHT, key(key), key);
         assertFalse(KickClassifier.rescues(KickReason.of(List.of(key), "")), key);
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"multiplayer.disconnect.kicked", "multiplayer.disconnect.duplicate_login",
+    @ValueSource(strings = {"multiplayer.disconnect.duplicate_login",
             "multiplayer.disconnect.idling", "multiplayer.disconnect.flying", "some.plugin.key",
             "vectora.moderationx", "vectora.moderation-kick", "xvectora.moderation.kick"})
     void otherKeysAreCaughtWithTheReason(String key) {
@@ -73,7 +73,14 @@ class KickClassifierTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"Kicked by an operator.", "Du wurdest gekickt", "Hacking is not allowed", "Spam",
+    @ValueSource(strings = {"Kicked by an operator.", "kicked by an operator", "§cKicked by an operator!"})
+    void theVanillaKickTextOf188IsNotCaught(String text) {
+        assertEquals(Verdict.NOT_CAUGHT, text(text), text);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"Kicked by an operator for spamming", "Kicked by a moderator.", "Du wurdest gekickt",
+            "Hacking is not allowed", "Spam",
             "Wartungsarbeiten", "Banana", "Server closed?", "!!!"})
     void unknownTextsAreCaughtWithTheReason(String text) {
         assertEquals(Verdict.OTHER_REASON, text(text), text);

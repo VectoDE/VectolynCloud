@@ -7,18 +7,23 @@ import java.util.regex.Pattern;
 
 /**
  * Whether the proxy catches a kick and sends the player to another server. Every kick is caught
- * except a ban, the whitelist and a kick our own moderation marks ({@link #MODERATION_KEY}).
+ * except a ban, the whitelist, the vanilla {@code /kick} and a kick our own moderation marks
+ * ({@link #MODERATION_KEY}).
  *
  * <ol>
  *   <li>The {@linkplain #MODERATION_KEY moderation marker}, a ban or the whitelist anywhere in the
- *       reason (key or word) is never caught: {@link Verdict#NOT_CAUGHT}.</li>
+ *       reason (key or word), and the vanilla {@code /kick} (the key
+ *       {@code multiplayer.disconnect.kicked} or, on 1.8.8, the whole text
+ *       {@code Kicked by an operator.}) are never caught: {@link Verdict#NOT_CAUGHT}. A
+ *       {@code /kick} with a reason of its own arrives as that text only and is caught like any
+ *       other words.</li>
  *   <li>No reason at all is a lost connection, and an empty one tells nothing either:
  *       {@link Verdict#SERVER_GONE}.</li>
  *   <li>A known key ({@link #RESCUED_KEYS}) or a known text ({@link #RESCUED_TEXTS}, case and
  *       colour codes ignored, or starting with {@code Internal Exception:}) means the server
  *       stopped, broke or is full: {@link Verdict#SERVER_GONE}.</li>
  *   <li>Anything else, a plugin's or an admin's own words or a vanilla key such as
- *       {@code multiplayer.disconnect.kicked}, is caught as well, and the player reads the
+ *       {@code multiplayer.disconnect.idling}, is caught as well, and the player reads the
  *       original reason after the move: {@link Verdict#OTHER_REASON}.</li>
  * </ol>
  */
@@ -41,7 +46,7 @@ public final class KickClassifier {
 
     /** How a kick is handled. */
     public enum Verdict {
-        /** A ban, the whitelist or a kick our moderation marked: the proxy leaves it alone. */
+        /** A ban, the whitelist, the vanilla /kick or a kick our moderation marked: left alone. */
         NOT_CAUGHT,
         /** The server stopped, broke, lost the connection or is full: caught with a short notice. */
         SERVER_GONE,
@@ -60,10 +65,20 @@ public final class KickClassifier {
             "disconnect.endOfStream",
             "disconnect.overflow");
 
-    /** Key prefixes that are never caught: bans and the whitelist. */
+    /**
+     * Key prefixes that are never caught: bans, the whitelist and the vanilla {@code /kick} without
+     * a reason of its own.
+     */
     public static final Set<String> NEVER_KEY_PREFIXES = Set.of(
             "multiplayer.disconnect.banned",
-            "multiplayer.disconnect.not_whitelisted");
+            "multiplayer.disconnect.not_whitelisted",
+            "multiplayer.disconnect.kicked");
+
+    /**
+     * Texts that are never caught, in lower case without the closing punctuation: the plain text of
+     * the vanilla {@code /kick} without a reason of its own on 1.8.8 (Spigot, PandaSpigot).
+     */
+    public static final Set<String> NEVER_TEXTS = Set.of("kicked by an operator");
 
     /**
      * Texts of Paper, Spigot and 1.8.8 for a stop, a restart, a timeout and a full server, in lower
@@ -104,13 +119,13 @@ public final class KickClassifier {
             }
         }
         String text = COLOUR_CODES.matcher(reason.text()).replaceAll("").trim().toLowerCase(Locale.ROOT);
-        if (NEVER_WORDS.matcher(text).find()) {
+        String bare = withoutClosingPunctuation(text);
+        if (NEVER_WORDS.matcher(text).find() || NEVER_TEXTS.contains(bare)) {
             return Verdict.NOT_CAUGHT;
         }
         if (reason.keys().stream().anyMatch(RESCUED_KEYS::contains)) {
             return Verdict.SERVER_GONE;
         }
-        String bare = withoutClosingPunctuation(text);
         if (RESCUED_TEXTS.contains(bare) || text.startsWith(INTERNAL_EXCEPTION)
                 || (text.isEmpty() && reason.keys().isEmpty())) {
             return Verdict.SERVER_GONE;

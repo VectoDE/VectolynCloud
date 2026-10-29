@@ -177,13 +177,17 @@ class ProxyBridgeTest {
     }
 
     @Test
-    void bansWhitelistAndMarkedKicksAreLeftAsTheProxyDecided() {
+    void bansWhitelistVanillaKicksAndMarkedKicksAreLeftAsTheProxyDecided() {
         lobbies();
         bedwars2();
         UUID alex = UUID.randomUUID();
         assertEquals(KickOutcome.keep(), bridge.kicked(alex, "bedwars-1", BANNED, false));
         assertEquals(KickOutcome.keep(), bridge.kicked(alex, "bedwars-1",
                 KickReason.of(List.of("multiplayer.disconnect.not_whitelisted"), ""), false));
+        assertEquals(KickOutcome.keep(), bridge.kicked(alex, "bedwars-1",
+                KickReason.of(List.of("multiplayer.disconnect.kicked"), ""), false));
+        assertEquals(KickOutcome.keep(), bridge.kicked(alex, "bedwars-1",
+                KickReason.of(List.of(), "Kicked by an operator."), false));
         assertEquals(KickOutcome.keep(), bridge.kicked(alex, "bedwars-1",
                 KickReason.of(List.of(KickClassifier.MODERATION_KEY + ".kick"), "Please behave"), false));
         // Counter-check: the same kick from a shutdown is caught.
@@ -201,8 +205,8 @@ class ProxyBridgeTest {
         assertEquals(KickOutcome.moveShowingReason("bedwars-2", TransferMessages.rescued(Locale.GERMANY)), outcome);
         assertTrue(outcome.showReason(), "the player reads the original reason after the move");
         assertEquals(KickOutcome.moveShowingReason("lobby", TransferMessages.rescued(Locale.GERMANY)),
-                bridge.kicked(alex, "bedwars-2", KickReason.of(List.of("multiplayer.disconnect.kicked"), ""), false),
-                "a vanilla /kick as well; no other bedwars server: the fallback group");
+                bridge.kicked(alex, "bedwars-2", KickReason.of(List.of("multiplayer.disconnect.idling"), ""), false),
+                "a vanilla idle kick as well; no other bedwars server: the fallback group");
         // Counter-check: a stop shows the bridge's notice, not the reason.
         assertFalse(bridge.kicked(UUID.randomUUID(), "bedwars-1", SHUTDOWN, false).showReason());
         sender.close(Duration.ofSeconds(5));
