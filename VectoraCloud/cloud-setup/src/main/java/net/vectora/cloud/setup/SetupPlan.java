@@ -20,6 +20,7 @@ import net.vectora.cloud.config.model.HeapConfig;
 import net.vectora.cloud.config.model.JavaSelection;
 import net.vectora.cloud.config.model.Language;
 import net.vectora.cloud.config.model.LegacyProxyConfig;
+import net.vectora.cloud.config.model.MemoryReserve;
 import net.vectora.cloud.config.model.MemorySize;
 import net.vectora.cloud.config.model.NodeConfig;
 import net.vectora.cloud.config.model.ProxyConfig;
@@ -136,6 +137,75 @@ public final class SetupPlan {
                 proxy.bind() == null ? ProxyConfig.defaults().bind() : proxy.bind(), javaPort, proxy.bedrockPort(),
                 legacy.port(), heap, services, drainTimeouts, local.map(NodeConfig::maxMemory).orElse(null),
                 local.map(NodeConfig::reserve).orElse(null), database, Optional.empty());
+    }
+
+    /**
+     * The answers to write when the files may have changed since the assistant read them: a
+     * three-way merge of the settings that the API and the console can change while the assistant
+     * runs. A value the operator left as {@code shown} takes the value of {@code fresh}, so a change
+     * made in the meantime stays; a value the operator changed wins. That covers the heap of every
+     * group, the {@code static/min/max} of every task (each count on its own), the
+     * {@code drain-timeout} of every group (an entry that is gone was removed with {@code default})
+     * and {@code max-memory} and each field of {@code memory-reserve} of this node. Everything else
+     * is taken from {@code answers} unchanged.
+     *
+     * @param answers what the operator answered
+     * @param shown   the defaults the assistant showed, {@link #defaults} of the files at its start
+     * @param fresh   {@link #defaults} of the files now
+     * @return the answers to check and write
+     */
+    public static SetupAnswers rebase(SetupAnswers answers, SetupAnswers shown, SetupAnswers fresh) {
+        Objects.requireNonNull(answers, "answers");
+        Objects.requireNonNull(shown, "shown");
+        Objects.requireNonNull(fresh, "fresh");
+        Map<String, MemorySize> heap = new TreeMap<>(answers.heap());
+        heap.replaceAll((group, value) -> pick(value, shown.heap().get(group), fresh.heap().get(group),
+                fresh.heap().containsKey(group)));
+        Map<String, ServiceCounts> services = new TreeMap<>(answers.services());
+        services.replaceAll((task, value) -> {
+            ServiceCounts before = shown.services().get(task);
+            ServiceCounts now = fresh.services().get(task);
+            if (before == null || now == null) {
+                return value;
+            }
+            return new ServiceCounts(
+                    value.staticServices() == before.staticServices() ? now.staticServices() : value.staticServices(),
+                    value.minServices() == before.minServices() ? now.minServices() : value.minServices(),
+                    value.maxServices() == before.maxServices() ? now.maxServices() : value.maxServices());
+        });
+        Map<String, TimeSpan> drainTimeouts = new TreeMap<>();
+        Set<String> groups = new TreeSet<>(answers.drainTimeouts().keySet());
+        groups.addAll(shown.drainTimeouts().keySet());
+        groups.addAll(fresh.drainTimeouts().keySet());
+        for (String group : groups) {
+            // A missing entry means "no drain-timeout", so the merge runs on the nullable values.
+            TimeSpan value = pick(answers.drainTimeouts().get(group), shown.drainTimeouts().get(group),
+                    fresh.drainTimeouts().get(group), true);
+            if (value != null) {
+                drainTimeouts.put(group, value);
+            }
+        }
+        MemorySize maxMemory = pick(answers.maxMemory(), shown.maxMemory(), fresh.maxMemory(), true);
+        MemoryReserve answered = orNone(answers.memoryReserve());
+        MemoryReserve before = orNone(shown.memoryReserve());
+        MemoryReserve now = orNone(fresh.memoryReserve());
+        MemoryReserve reserve = new MemoryReserve(
+                pick(answered.system(), before.system(), now.system(), true),
+                pick(answered.nodeOverhead(), before.nodeOverhead(), now.nodeOverhead(), true),
+                pick(answered.database(), before.database(), now.database(), true));
+        return new SetupAnswers(answers.language(), answers.eulaAccepted(), answers.networkName(), answers.servers(),
+                answers.groupSwitches(), answers.bind(), answers.javaPort(), answers.bedrockPort(), answers.legacyPort(),
+                heap, services, drainTimeouts, maxMemory, reserve.noneSet() ? null : reserve, answers.database(),
+                answers.databasePassword());
+    }
+
+    /** {@code answer} if the operator changed it from {@code shown}, else {@code fresh} if there is one. */
+    private static <T> T pick(T answer, T shown, T fresh, boolean hasFresh) {
+        return Objects.equals(answer, shown) && hasFresh ? fresh : answer;
+    }
+
+    private static MemoryReserve orNone(MemoryReserve reserve) {
+        return reserve == null ? new MemoryReserve(null, null, null) : reserve;
     }
 
     /**

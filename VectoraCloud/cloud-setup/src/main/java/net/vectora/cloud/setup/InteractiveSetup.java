@@ -86,7 +86,10 @@ final class InteractiveSetup {
     SetupResult run() throws IOException {
         ConfigSnapshot current = config.snapshot();
         boolean again = current.cloud().setupComplete();
-        SetupAnswers answers = SetupPlan.defaults(current, env);
+        // What the questions offer. On saving, a value the operator kept takes what the files hold
+        // then, so a change made through the API or the console in the meantime is not reset.
+        SetupAnswers shown = SetupPlan.defaults(current, env);
+        SetupAnswers answers = shown;
         out.set(answers.language());
         try {
             out.heading(SetupMessages.TITLE.get(out.language()));
@@ -97,15 +100,16 @@ final class InteractiveSetup {
                     return SetupResult.of(SetupResult.Status.EULA_DECLINED);
                 }
                 current = config.snapshot();
-                List<Text> problems = SetupChecks.check(current, answers, env, passwordStored());
+                SetupAnswers target = SetupPlan.rebase(answers, shown, SetupPlan.defaults(current, env));
+                List<Text> problems = SetupChecks.check(current, target, env, passwordStored());
                 Set<String> files = new TreeSet<>();
                 if (problems.isEmpty()) {
-                    files.addAll(SetupPlan.changedFiles(current, SetupPlan.preview(current, answers)));
-                    if (answers.databasePassword().isPresent() || !secrets.file().toFile().isFile()) {
+                    files.addAll(SetupPlan.changedFiles(current, SetupPlan.preview(current, target)));
+                    if (target.databasePassword().isPresent() || !secrets.file().toFile().isFile()) {
                         files.add(CloudHome.SECRETS_DIR + "/" + CloudHome.SECRETS_FILE);
                     }
                 }
-                summary(answers, files);
+                summary(target, files);
                 if (!problems.isEmpty()) {
                     out.error(SetupMessages.S_PROBLEMS);
                     for (Text problem : problems) {
@@ -138,7 +142,7 @@ final class InteractiveSetup {
                         return SetupResult.of(SetupResult.Status.CANCELLED);
                     }
                     default -> {
-                        return save(answers);
+                        return save(answers, shown);
                     }
                 }
             }
@@ -159,10 +163,10 @@ final class InteractiveSetup {
         }
     }
 
-    private SetupResult save(SetupAnswers answers) throws IOException {
+    private SetupResult save(SetupAnswers answers, SetupAnswers shown) throws IOException {
         SetupResult result;
         try {
-            result = SetupApplier.apply(config, secrets, answers, env);
+            result = SetupApplier.apply(config, secrets, answers, shown, env);
         } catch (SetupException e) {
             out.error(SetupMessages.S_PROBLEMS);
             for (Text problem : e.problems()) {

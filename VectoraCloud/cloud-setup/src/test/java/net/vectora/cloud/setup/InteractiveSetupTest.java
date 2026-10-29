@@ -17,14 +17,21 @@ import java.util.Set;
 import java.util.stream.Stream;
 import net.vectora.cloud.config.CloudHome;
 import net.vectora.cloud.config.ConfigService;
+import net.vectora.cloud.config.error.ConfigException;
 import net.vectora.cloud.config.model.CloudConfig;
 import net.vectora.cloud.config.model.DatabaseMode;
 import net.vectora.cloud.config.model.Language;
 import net.vectora.cloud.config.model.MemoryReserve;
 import net.vectora.cloud.config.model.MemorySize;
 import net.vectora.cloud.config.model.ServerKind;
+import net.vectora.cloud.config.model.TimeSpan;
+import net.vectora.cloud.config.operation.ConfigOperation;
 import net.vectora.cloud.config.operation.PutGroup;
+import net.vectora.cloud.config.operation.PutNode;
 import net.vectora.cloud.config.operation.PutTask;
+import net.vectora.cloud.config.operation.SetGroupDrainTimeout;
+import net.vectora.cloud.config.operation.SetGroupHeap;
+import net.vectora.cloud.config.operation.SetTaskScaling;
 import net.vectora.cloud.config.secret.EnvFile;
 import net.vectora.cloud.config.secret.GeneratedSecret;
 import net.vectora.cloud.config.secret.SecretStore;
@@ -353,6 +360,74 @@ class InteractiveSetupTest {
         assertEquals(Set.of("tasks/survival.yml"), again.files());
         assertEquals(new ServiceCounts(1, 1, 2), ServiceCounts.of(config.snapshot().tasks().get("survival").scaling()));
         assertEquals(75, config.snapshot().tasks().get("survival").scaling().scaleUpAt(), "the rest of the scaling stays");
+    }
+
+    @Test
+    void changesMadeWhileTheAssistantRunsSurviveWhereTheOperatorKeptTheShownValue() throws Exception {
+        start();
+        defaultsAndSave();
+        SetupWizard.run(console, config, env(false, true));
+
+        // language, name, servers, ports, heap: proxy keeps, lobby 2G, the other five keep
+        terminal.enter(1 + 1 + SERVER_QUESTIONS + 3 + 1).type("2G").enter(7 - 2)
+                .then(() -> changeInTheMeantime(List.of(
+                        new SetGroupDrainTimeout("proxy", TimeSpan.parse("45s")),
+                        new SetGroupHeap("survival", MemorySize.parse("512M"), MemorySize.parse("4G")),
+                        new SetGroupHeap("lobby", MemorySize.parse("512M"), MemorySize.parse("1536M")),
+                        new SetTaskScaling("lobby", config.snapshot().tasks().get("lobby").scaling().withCounts(1, 2, 6)),
+                        new PutNode(config.snapshot().nodes().nodes().getFirst().withMaxMemory(MemorySize.parse("8G"))
+                                .withMemoryReserve(new MemoryReserve(MemorySize.parse("2G"), null, null))))))
+                .type("1/1/5").enter(SERVICE_QUESTIONS - 1) // lobby: only the maximum changed (shown 1/1/4)
+                .type("y").enter(DRAIN_QUESTIONS).enter(1).enter(3) // advanced: every shown value kept
+                .enter(1).enter(1); // database, save
+        SetupResult again = SetupWizard.run(console, config, env(false, true));
+
+        assertEquals(SetupResult.Status.CHANGED, again.status(), terminal.output());
+        assertEquals(0, terminal.pending(), "every scripted answer was used");
+        var groups = config.snapshot().groups();
+        assertEquals("45s", groups.get("proxy").drainTimeout().toString(), "the parallel drain-timeout stays");
+        assertEquals(MemorySize.parse("4G"), groups.get("survival").heap().max(), "the parallel heap stays");
+        var node = config.snapshot().nodes().nodes().getFirst();
+        assertEquals(MemorySize.parse("8G"), node.maxMemory(), "the parallel max-memory stays");
+        assertEquals(new MemoryReserve(MemorySize.parse("2G"), null, null), node.reserve(), "the parallel reserve stays");
+        // Counter-check: what the operator changed is written, count by count.
+        assertEquals(MemorySize.parse("2G"), groups.get("lobby").heap().max(), "the typed heap wins");
+        assertEquals(new ServiceCounts(1, 2, 5), ServiceCounts.of(config.snapshot().tasks().get("lobby").scaling()),
+                "the typed maximum wins, the kept static and minimum take the parallel values");
+        assertEquals(Set.of("groups/lobby.yml", "tasks/lobby.yml"), again.files());
+    }
+
+    @Test
+    void removingWithDefaultOrAutoWinsOverAChangeInTheMeantime() throws Exception {
+        start();
+        terminal.enter(SERVER_QUESTIONS + 3 + 7 + SERVICE_QUESTIONS).type("y", "45s").enter(DRAIN_QUESTIONS - 1)
+                .type("8G", "2G").enter(2).enter(1 + 1);
+        assertEquals(SetupResult.Status.COMPLETED, SetupWizard.run(console, config, env(false, true)).status(),
+                terminal.output());
+
+        terminal.enter(1 + 1 + SERVER_QUESTIONS + 3 + 7 + SERVICE_QUESTIONS).type("y")
+                .then(() -> changeInTheMeantime(List.of(
+                        new SetGroupDrainTimeout("proxy", TimeSpan.parse("60s")),
+                        new PutNode(config.snapshot().nodes().nodes().getFirst().withMaxMemory(MemorySize.parse("12G"))
+                                .withMemoryReserve(new MemoryReserve(MemorySize.parse("3G"), null, null))))))
+                .type("default").enter(DRAIN_QUESTIONS - 1).type("auto", "default").enter(2).enter(1 + 1);
+        SetupResult again = SetupWizard.run(console, config, env(false, true));
+
+        assertEquals(SetupResult.Status.CHANGED, again.status(), terminal.output());
+        assertEquals(null, config.snapshot().groups().get("proxy").drainTimeout());
+        var node = config.snapshot().nodes().nodes().getFirst();
+        assertEquals(null, node.maxMemory());
+        assertEquals(null, node.reserve());
+    }
+
+    private void changeInTheMeantime(List<ConfigOperation> ops) {
+        try {
+            config.apply(ops);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        } catch (ConfigException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     @Test
