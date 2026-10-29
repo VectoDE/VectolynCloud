@@ -4,7 +4,6 @@ import java.io.BufferedOutputStream;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
@@ -49,11 +48,19 @@ public final class ArchiveWriter implements Closeable {
         if (level < Deflater.NO_COMPRESSION || level > Deflater.BEST_COMPRESSION) {
             throw new IllegalArgumentException("compression level must be 0 to 9");
         }
-        this.channel = FileChannel.open(file, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING,
+        FileChannel opened = FileChannel.open(file, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING,
                 LinkOption.NOFOLLOW_LINKS);
-        OutputStream out = new BufferedOutputStream(Channels.newOutputStream(channel), 256 * 1024);
-        this.zip = new ZipOutputStream(out);
-        zip.setLevel(level);
+        try {
+            // One chain: closing the zip stream closes the buffer and the channel.
+            ZipOutputStream stream = new ZipOutputStream(
+                    new BufferedOutputStream(Channels.newOutputStream(opened), 256 * 1024));
+            stream.setLevel(level);
+            this.channel = opened;
+            this.zip = stream;
+        } catch (RuntimeException | Error e) {
+            opened.close();
+            throw e;
+        }
     }
 
     /**
