@@ -243,6 +243,11 @@ How the egg works:
 
 Every file of a release is signed with cosign keyless (Sigstore, the GitHub Actions identity of `release.yml`). The three files in `SHA256SUMS` also have a GitHub build provenance attestation and are listed in the SLSA provenance; `SHA256SUMS` itself is covered by its signature. Replace `v0.2.0` with the tag you downloaded.
 
+The repository was renamed from `VectoDE/Vectora-Network` to `VectoDE/VectoraCloud` on 2026-10-29. Signatures and provenance record the repository name at build time, so the two names apply to different releases:
+
+- **v0.1.0** was signed as `VectoDE/Vectora-Network`. Use the certificate identity `https://github.com/VectoDE/Vectora-Network/.github/workflows/release.yml@refs/tags/v0.1.0`, `gh attestation verify ... --repo VectoDE/Vectora-Network` and `slsa-verifier ... --source-uri github.com/VectoDE/Vectora-Network`. v0.1.0 contains the plugin jars and `SHA256SUMS`, not `VectoraCloud.jar`.
+- **Every later release** is signed as `VectoDE/VectoraCloud`, as in the commands below.
+
 ```sh
 # 1. Checksums (only integrity: SHA256SUMS comes from the same place)
 sha256sum --check --ignore-missing SHA256SUMS
@@ -250,26 +255,26 @@ sha256sum --check --ignore-missing SHA256SUMS
 # 2. cosign: signed by release.yml of this repository at this tag
 cosign verify-blob VectoraCloud.jar \
   --bundle VectoraCloud.jar.sigstore.json \
-  --certificate-identity "https://github.com/VectoDE/Vectora-Network/.github/workflows/release.yml@refs/tags/v0.2.0" \
+  --certificate-identity "https://github.com/VectoDE/VectoraCloud/.github/workflows/release.yml@refs/tags/v0.2.0" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
 # 3. GitHub attestation (build provenance)
-gh attestation verify VectoraCloud.jar --repo VectoDE/Vectora-Network
+gh attestation verify VectoraCloud.jar --repo VectoDE/VectoraCloud
 
 # 4. SLSA provenance
 slsa-verifier verify-artifact VectoraCloud.jar \
   --provenance-path vectora.intoto.jsonl \
-  --source-uri github.com/VectoDE/Vectora-Network --source-tag v0.2.0
+  --source-uri github.com/VectoDE/VectoraCloud --source-tag v0.2.0
 ```
 
 The container image, always by digest or tag of a release:
 
 ```sh
 cosign verify ghcr.io/vectode/vectora-cloud:0.2.0 \
-  --certificate-identity "https://github.com/VectoDE/Vectora-Network/.github/workflows/release.yml@refs/tags/v0.2.0" \
+  --certificate-identity "https://github.com/VectoDE/VectoraCloud/.github/workflows/release.yml@refs/tags/v0.2.0" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
-gh attestation verify oci://ghcr.io/vectode/vectora-cloud:0.2.0 --repo VectoDE/Vectora-Network
+gh attestation verify oci://ghcr.io/vectode/vectora-cloud:0.2.0 --repo VectoDE/VectoraCloud
 
 # SBOM and BuildKit provenance stored with the image
 docker buildx imagetools inspect ghcr.io/vectode/vectora-cloud:0.2.0 --format '{{ json .SBOM }}'

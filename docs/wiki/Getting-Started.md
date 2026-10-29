@@ -18,7 +18,7 @@ You need:
 1. Clone the repository.
 2. Copy each `templates/<Server>/` to `<network folder>\<Server>\runtime\`.
 3. Copy `cloud/dist/secrets/vectora.env.example` to `<network folder>\secrets\vectora.env` and fill in your own values. Never commit this file.
-4. Replace every `{{VECTORA_…}}` placeholder in the `runtime/` folders with your values. [`placeholders.md`](https://github.com/VectoDE/Vectora-Network/blob/main/templates/placeholders.md) lists each placeholder, where it is used and its local default (ports, heap sizes, the proxy's server list).
+4. Replace every `{{VECTORA_…}}` placeholder in the `runtime/` folders with your values. [`placeholders.md`](https://github.com/VectoDE/VectoraCloud/blob/main/templates/placeholders.md) lists each placeholder, where it is used and its local default (ports, heap sizes, the proxy's server list).
 5. Create the files that do not come from templates: `Proxy/runtime/forwarding.secret` (the forwarding secret), the Floodgate `key.pem` (the base64 value decoded to 16 bytes, the same file on the proxy and on every backend) and `eula.txt` once you have accepted the Minecraft EULA.
 
 VectoraCloud takes over steps 2 to 5 in stage 2.
@@ -74,7 +74,7 @@ From stage 8 on, the web dashboard will offer the same, including the first-time
 gradlew.bat build      # Windows cmd / PowerShell
 ```
 
-Gradle starts on Java 17 or newer and compiles with a Java 25 toolchain, which it downloads if missing. The bytecode target is Java 21. The jars land in `plugins/lobby/paper/build/libs/` and `plugins/portal/paper/build/libs/`. Details: [Java compatibility](https://github.com/VectoDE/Vectora-Network/blob/main/docs/java-compatibility.md).
+Gradle starts on Java 17 or newer and compiles with a Java 25 toolchain, which it downloads if missing. The bytecode target is Java 21. The jars land in `plugins/lobby/paper/build/libs/` and `plugins/portal/paper/build/libs/`. Details: [Java compatibility](https://github.com/VectoDE/VectoraCloud/blob/main/docs/java-compatibility.md).
 
 ## Plugin reference
 

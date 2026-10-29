@@ -22,7 +22,7 @@ public record DownloadSettings(
         Duration maxBackoff) {
 
     /** Project URL in the User-Agent, so API operators can see who is calling. */
-    public static final String PROJECT_URL = "https://github.com/VectoDE/Vectora-Network";
+    public static final String PROJECT_URL = "https://github.com/VectoDE/VectoraCloud";
 
     /** Time allowed for the TCP and TLS handshake in {@link #defaults()}. */
     public static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(15);
@@ -67,7 +67,7 @@ public record DownloadSettings(
     }
 
     /**
-     * Builds the User-Agent {@code VectoraCloud/<version> (+https://github.com/VectoDE/Vectora-Network)}.
+     * Builds the User-Agent {@code VectoraCloud/<version> (+https://github.com/VectoDE/VectoraCloud)}.
      * PaperMC and Modrinth ask for a User-Agent that names the application and a contact.
      *
      * @param version the VectoraCloud version

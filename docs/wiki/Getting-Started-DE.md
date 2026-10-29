@@ -18,7 +18,7 @@ Du brauchst:
 1. Repository klonen.
 2. Jeden Ordner `templates/<Server>/` nach `<Netzwerk-Ordner>\<Server>\runtime\` kopieren.
 3. `cloud/dist/secrets/vectora.env.example` nach `<Netzwerk-Ordner>\secrets\vectora.env` kopieren und eigene Werte eintragen. Diese Datei nie committen.
-4. In den `runtime/`-Ordnern jeden Platzhalter `{{VECTORA_…}}` durch deine Werte ersetzen. [`placeholders.md`](https://github.com/VectoDE/Vectora-Network/blob/main/templates/placeholders.md) listet jeden Platzhalter mit Fundstellen und lokalem Standardwert auf (Ports, Heap-Größen, Serverliste des Proxys).
+4. In den `runtime/`-Ordnern jeden Platzhalter `{{VECTORA_…}}` durch deine Werte ersetzen. [`placeholders.md`](https://github.com/VectoDE/VectoraCloud/blob/main/templates/placeholders.md) listet jeden Platzhalter mit Fundstellen und lokalem Standardwert auf (Ports, Heap-Größen, Serverliste des Proxys).
 5. Die Dateien anlegen, die nicht aus Templates kommen: `Proxy/runtime/forwarding.secret` (das Forwarding-Secret), die Floodgate-`key.pem` (der Base64-Wert, dekodiert zu 16 Bytes, dieselbe Datei auf dem Proxy und auf jedem Backend) und `eula.txt`, sobald du die Minecraft-EULA akzeptiert hast.
 
 Die Schritte 2 bis 5 übernimmt ab Etappe 2 VectoraCloud.
@@ -74,7 +74,7 @@ Ab Etappe 8 soll das Web-Dashboard dasselbe können, auch die Ersteinrichtung un
 gradlew.bat build      # Windows cmd / PowerShell
 ```
 
-Gradle startet ab Java 17 und kompiliert mit einer Java-25-Toolchain, die es bei Bedarf herunterlädt. Das Bytecode-Ziel ist Java 21. Die Jars liegen danach in `plugins/lobby/paper/build/libs/` und `plugins/portal/paper/build/libs/`. Details: [Java-Kompatibilität](https://github.com/VectoDE/Vectora-Network/blob/main/docs/java-compatibility.md).
+Gradle startet ab Java 17 und kompiliert mit einer Java-25-Toolchain, die es bei Bedarf herunterlädt. Das Bytecode-Ziel ist Java 21. Die Jars liegen danach in `plugins/lobby/paper/build/libs/` und `plugins/portal/paper/build/libs/`. Details: [Java-Kompatibilität](https://github.com/VectoDE/VectoraCloud/blob/main/docs/java-compatibility.md).
 
 ## Plugin-Referenz
 

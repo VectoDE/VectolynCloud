@@ -16,8 +16,8 @@ All das läuft auf dem Proxy. Die Backends laufen auf der neuesten Minecraft-Ver
 
 ## Aktueller Stand
 
-- Auf dem Proxy laufen Velocity, Geyser, Floodgate, ViaVersion 5.12.2, ViaBackwards 5.12.2 und ViaRewind 4.2.0. ViaBackwards und ViaRewind übersetzen für ältere Java-Clients bis 1.8 ([#5](https://github.com/VectoDE/Vectora-Network/issues/5)).
-- Floodgate läuft auf jedem Backend, auch auf dem Fabric-Mod-Server (Floodgate-Fabric 2.2.7-b69, [#4](https://github.com/VectoDE/Vectora-Network/issues/4)). Alle Server nutzen denselben Floodgate-Schlüssel.
+- Auf dem Proxy laufen Velocity, Geyser, Floodgate, ViaVersion 5.12.2, ViaBackwards 5.12.2 und ViaRewind 4.2.0. ViaBackwards und ViaRewind übersetzen für ältere Java-Clients bis 1.8 ([#5](https://github.com/VectoDE/VectoraCloud/issues/5)).
+- Floodgate läuft auf jedem Backend, auch auf dem Fabric-Mod-Server (Floodgate-Fabric 2.2.7-b69, [#4](https://github.com/VectoDE/VectoraCloud/issues/4)). Alle Server nutzen denselben Floodgate-Schlüssel.
 - Geyser lauscht auf Port 19132 und nutzt in der aktuellen Konfiguration den NetherNet-Transport.
 
 ## Regeln für Spielinhalte

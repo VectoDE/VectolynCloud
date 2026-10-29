@@ -5,7 +5,7 @@ _Deutsch: siehe [unten](#deutsch)._
 ## Reporting a vulnerability
 
 Please report vulnerabilities privately through GitHub:
-**[Report a vulnerability](https://github.com/VectoDE/Vectora-Network/security/advisories/new)**
+**[Report a vulnerability](https://github.com/VectoDE/VectoraCloud/security/advisories/new)**
 (repository tab *Security* → *Report a vulnerability*).
 
 Do not open a public issue, discussion or pull request for a security problem.
@@ -53,10 +53,12 @@ A release contains `VectoraCloud.jar`, one archive with start scripts for Window
 sha256sum --check --ignore-missing SHA256SUMS
 cosign verify-blob VectoraCloud.jar \
   --bundle VectoraCloud.jar.sigstore.json \
-  --certificate-identity-regexp '^https://github[.]com/VectoDE/Vectora-Network/[.]github/workflows/release[.]yml@refs/tags/v' \
+  --certificate-identity-regexp '^https://github[.]com/VectoDE/VectoraCloud/[.]github/workflows/release[.]yml@refs/tags/v' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
-gh attestation verify VectoraCloud.jar --repo VectoDE/Vectora-Network
+gh attestation verify VectoraCloud.jar --repo VectoDE/VectoraCloud
 ```
+
+The repository was called `VectoDE/Vectora-Network` until 2026-10-29. v0.1.0 is signed under that name: verify it with `--certificate-identity-regexp '^https://github[.]com/VectoDE/Vectora-Network/[.]github/workflows/release[.]yml@refs/tags/v'` and `gh attestation verify ... --repo VectoDE/Vectora-Network`. Later releases use `VectoDE/VectoraCloud` as above.
 
 All steps, including the image: [docs/cloud/operations.md](docs/cloud/operations.md#verifying-a-release).
 
@@ -65,7 +67,7 @@ All steps, including the image: [docs/cloud/operations.md](docs/cloud/operations
 ## Deutsch
 
 Sicherheitslücken bitte privat über GitHub melden:
-**[Sicherheitslücke melden](https://github.com/VectoDE/Vectora-Network/security/advisories/new)**
+**[Sicherheitslücke melden](https://github.com/VectoDE/VectoraCloud/security/advisories/new)**
 (Reiter *Security* → *Report a vulnerability*). Bitte kein öffentliches Issue, keine Discussion und keinen Pull Request.
 
 Hilfreich sind die betroffene Komponente, Version oder Commit, Schritte zum Nachstellen und deine Einschätzung der Auswirkung.
