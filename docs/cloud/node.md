@@ -15,7 +15,7 @@
 7. prepares the console: log records go through it with the secret filter (`logHandler(RedactingFilter::redact)`), the built-in commands get the real shutdown, and the [`service` commands](#console-commands) and `setup` are added;
 8. ends orphaned servers from the previous run (see [Orphans](#orphans));
 9. runs the setup: `SetupWizard.ensureComplete(console, config, SetupEnvironment.of(settings, env))`, also without a console (then only a setup file can answer). The launcher's `setup-file`, `non-interactive` and `platform.*` settings reach `SetupEnvironment` through `NodeSettings.toMap()`. A `SetupException` is printed with `describe(language)`, on the console or, without one, in the log. On `EULA_DECLINED`, `CANCELLED` or any other result that is not ready, no service starts; the console stays open, and once `setup` finishes there, the node starts the planned services right away;
-10. starts the console and every planned service, but only if `cloud.yml` has `setup-complete: true` and `eula-accepted: true`. Otherwise it logs a warning and starts nothing. The same gate applies to every later start, also `service start` in the console;
+10. starts the console and every planned service, but only if `cloud.yml` has `setup-complete: true` and `eula-accepted: true`. Otherwise it logs a warning and starts nothing. The same gate applies to every later start, also `service start` in the console, `service restart` and the automatic restart after a crash;
 11. keeps the JVM alive with the non-daemon thread `vectora-node`.
 
 A second `start` in the same JVM is an error.
@@ -170,7 +170,7 @@ process:
 
 ## Reload
 
-When a configuration file changes, the node calls `ServiceManager.stopUnwanted()`: services whose group is now unwanted (`wanted: false` in the group file, `servers` switch off, `legacy-proxy.enabled` off) are stopped cleanly with their stop command, in the background, and are not planned again. Their proxies get `UnregisterServer`. A static entry in a proxy's `velocity.toml` stays until that proxy restarts; the bridge removes only what it registered. New or changed tasks are not started automatically yet (scaling, PR 15); `service start <task>` starts one.
+When a configuration file changes, the node calls `ServiceManager.stopUnwanted()`: services whose group is now unwanted (`wanted: false` in the group file, `servers` switch off, `legacy-proxy.enabled` off) are stopped cleanly with their stop command, in the background, and are not planned again. Their proxies get `UnregisterServer`, also for a static backend that stands in `velocity.toml`: the Velocity bridge then withdraws it from the running server list, so the proxy no longer offers it (see [bridges.md](bridges.md#dynamic-servers)). The line in the rendered `velocity.toml` goes away with the proxy's next start. Needs a connected proxy bridge; without one, the stopped server stays listed until the proxy restarts. New or changed tasks are not started automatically yet (scaling, PR 15); `service start <task>` starts one.
 
 ## Console commands
 

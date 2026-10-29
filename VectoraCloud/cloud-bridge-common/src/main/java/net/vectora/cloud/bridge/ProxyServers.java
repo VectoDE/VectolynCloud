@@ -17,4 +17,11 @@ public interface ProxyServers {
 
     /** Removes a server added with {@link #register}. */
     void unregister(String name);
+
+    /**
+     * Removes a server of the proxy's own configuration from the running server list, because the
+     * cloud stopped it (for example after its group was switched off). {@code velocity.toml} itself
+     * is not changed; the cloud renders it without the server on the next start of the proxy.
+     */
+    void withdraw(String name);
 }

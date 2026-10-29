@@ -45,9 +45,9 @@ All names are constants in `net.vectora.protocol.ServiceEnvironment` (`SERVICE_P
 `ServerRegistry` applies `RegisterServer` and `UnregisterServer` to the proxy's server list. Only the cloud can send them, the registry still guards the proxy against a confused cloud:
 
 - A server whose `legacy` flag does not fit the proxy is refused. The main proxy never gets a 1.8.8 backend (whose forwarding is weaker), the legacy proxy never a current one.
-- Servers from `velocity.toml` are never replaced or removed. A name that another plugin registered is left alone.
+- Servers from `velocity.toml` are never replaced; a `RegisterServer` for one that is listed changes nothing (`CONFIGURED`, no warning). An `UnregisterServer` for one withdraws it from the running server list (`WITHDRAWN`): the cloud stopped that server, for example because its group was switched off on a reload, so the proxy no longer offers it. `velocity.toml` keeps the line until the proxy restarts, and the cloud renders it without the server then. A later `RegisterServer` adds it again under the same name. A `velocity.toml` server that someone else took out is not put back. A name that another plugin registered is left alone.
 - The same address again changes nothing; another address replaces the entry.
-- Only servers the registry added are removed again. A lost connection to the cloud leaves the list as it is, since the servers keep running.
+- Apart from withdrawn `velocity.toml` servers, only servers the registry added are removed again. A lost connection to the cloud leaves the list as it is, since the servers keep running.
 
 ### Player events
 
@@ -129,7 +129,7 @@ The API has Java 8 class files, so the module needs no `disableAutoTargetJvm()`,
 | Test | Covers |
 |---|---|
 | `BridgeSenderTest` | Calls run on `vectora-bridge-sender`, never on the calling thread, which is a daemon thread; submitting returns at once while the link hangs; full queue drops and counts; coalescing of 50 reports into one; a report after a full queue still goes out; a failing call does not stop the sender; close drains, closes the link, refuses more and waits only as long as allowed. |
-| `ProxyBridgeTest`, `ServerRegistryTest`, `PlayerTrackerTest` | Server list per role (counter-check: each proxy takes its own kind), configured and foreign servers left alone; consistent join, switch and quit, ignored repeats, unknown servers and invalid names, out-of-order events per session, Bedrock detection. |
+| `ProxyBridgeTest`, `ServerRegistryTest`, `PlayerTrackerTest` | Server list per role (counter-check: each proxy takes its own kind), configured servers never replaced, withdrawn on the cloud's `UnregisterServer` and added again later, foreign servers left alone; consistent join, switch and quit, ignored repeats, unknown servers and invalid names, out-of-order events per session, Bedrock detection. |
 | `BungeeGuardCheckTest`, `PropertiesJsonTest`, `AdmissionTicketsTest` | Right, wrong, empty and missing token, two tokens, the main proxy's secret, direct connection, host name as address, no secret; the token as Velocity's Gson writes it (`=` as `=`); the stored fuzz inputs reach the outcome their name says; token stripped; escapes and round trip; every malformed form; tickets used once and expiring. |
 | `HandshakeGuardTest`, `LoginGateTest` (legacy) | The guard on the real PandaSpigot events: right, wrong and missing token, direct connection, another plugin un-failing or cancelling, missing and invalid secret with the counter-check, log limit; logins with and without ticket, another plugin allowing a refused login (with the counter-check). |
 | `ForwardedHandshakeFuzzTest` | Jazzer: any handshake gives a result and never an exception, an accepted one never carries a token on; any properties JSON fails only with `MalformedHandshakeException` and what parses round-trips. |
