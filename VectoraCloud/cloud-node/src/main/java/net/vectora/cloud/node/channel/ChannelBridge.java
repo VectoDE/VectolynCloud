@@ -188,12 +188,12 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
             return;
         }
         try {
-            switch (message) {
-                case PlayerJoin join -> players.find(join.uuid()).ifPresent(p -> listener.changed("join", p));
-                case PlayerSwitch change -> players.find(change.uuid()).ifPresent(p -> listener.changed("switch", p));
-                case PlayerQuit quit -> before.ifPresent(p -> listener.changed("leave", p));
-                default -> {
-                }
+            if (message instanceof PlayerJoin join) {
+                players.find(join.uuid()).ifPresent(p -> listener.changed("join", p));
+            } else if (message instanceof PlayerSwitch change) {
+                players.find(change.uuid()).ifPresent(p -> listener.changed("switch", p));
+            } else if (message instanceof PlayerQuit) {
+                before.ifPresent(p -> listener.changed("leave", p));
             }
         } catch (RuntimeException e) {
             LOG.log(System.Logger.Level.WARNING, "A player listener failed: {0}", e.toString());
