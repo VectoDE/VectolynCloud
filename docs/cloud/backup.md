@@ -2,7 +2,7 @@
 
 `VectoraCloud/cloud-backup` (`net.vectora.cloud.backup`) backs up the static services (worlds and configs from their `runtime/` folder) and the database into zip archives under `backups/`. It writes a manifest with a SHA-256 hash per file, prunes old archives, runs on a schedule and restores a single stopped service. It also defines the `backup` console command.
 
-The module does not start or stop services. `cloud-node` hands it the static services and their control through three small interfaces (see [What cloud-node provides](#what-cloud-node-provides)). Until the node implements them, the module is complete but not wired in.
+The module does not start or stop services. `cloud-node` hands it the static services and their control through three small interfaces (see [What cloud-node provides](#what-cloud-node-provides)). `cloud-node` implements them in `ops.NodeBackups` and wires the module in `CloudNode`: `recoverInterruptedOperations()` before the first start, the schedule, and the `backup` command (see [node.md](node.md#start-order)). The hold of a stopped service is `ServiceManager.holdStopped`, checked under the lock that guards every start. With `database.mode: managed` the dump tool comes from the installed MariaDB under `Database/runtime/`.
 
 ## Packages
 

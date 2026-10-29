@@ -38,6 +38,7 @@ vectora> api scopes
 - Checking a token compares its hash with every stored hash in constant time (`MessageDigest.isEqual`), without stopping at the first match.
 - Revoking works at once: the next request fails, and open WebSockets of that token are closed with code `1008`.
 - At most 100 tokens. Names follow the group name rule `[a-z0-9][a-z0-9_-]{0,31}`.
+- Where the printed token ends up: the command writes to the console, not to the log, so the log files and the journal do not get it. Under systemd the cloud has no console at all; create tokens in a `tmux` or `screen` session ([operations](operations.md)). In Docker, the console of an attached container (`docker attach`) is the container's standard output, so `docker logs` keeps the token. Clear or rotate those logs, or revoke the token and create a new one if the logs are shared.
 
 Send the token as `Authorization: Bearer vct_...`. Browsers cannot set headers on a WebSocket, so the event stream also takes it as the subprotocol `vectora.bearer.<token>` next to `vectora.v1`; the server answers with `vectora.v1` only and never echoes the token. An upgrade that offers subprotocols but not `vectora.v1` is refused with `400 subprotocol-required`.
 
@@ -208,7 +209,7 @@ Groups can be written through the API, so `process.jvm-flags` has an allowlist: 
 
 ## Wiring in cloud-node
 
-`cloud-api` does not depend on `cloud-node`. The node provides an `ApiBackend` and starts the server. Steps for `CloudNode`:
+`cloud-api` does not depend on `cloud-node`. The node provides an `ApiBackend` (`ops.NodeApi`) and starts the server. `CloudNode` follows these steps; player events come from the channel's `NetworkPlayers`. A refusal of the service core reaches the client only if it is one of its own short reasons and holds nothing like a path; any other message stays in the node log and the client gets a short text. `ApiSettings.of` refuses `api.tls.enabled` without key material and key material with TLS off. `runs` in the wanted endpoints is `GroupRules.isWanted` of cloud-config, the rule the node itself plans by.
 
 1. At start, after `ConfigService.open`: `ApiTokens tokens = ApiTokens.open(home)` and register `new ApiCommands(tokens).command()` in the console registry, so tokens can be created even while the API is off.
 2. If `api.enabled`:
