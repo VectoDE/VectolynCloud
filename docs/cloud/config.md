@@ -111,7 +111,7 @@ scaling:
   min-services: 1            # 0 to 1000
   max-services: 4            # 1 to 1000, at least min-services
   players-per-service: 50
-  scale-up-at: 75            # percent of players-per-service, 1 to 100
+  scale-up-at: 75            # load of the group in percent, 1 to 100
   scale-down-below: 50       # percent, 0 to 99, lower than scale-up-at; default 50
   scale-down-after: 5m       # s, m or h; at most 7 days
   cooldown: 60s
@@ -119,8 +119,6 @@ nodes: [node-1]              # empty: any node
 ```
 
 A task mixes static and dynamic services. The first `static-services` services are static: they keep their folder (`<template>/runtime`, `runtime-2`, …) and are never stopped by the scaler. Every service above that is dynamic: it runs in `temp/services/<id>` and its folder is deleted when it stops. `static-services = max-services` is a purely static task, `static-services = 0` a purely dynamic one.
-
-`scale-down-below` is stored and validated now; the scaling rule that uses it follows in a later change.
 
 What the node does with these values (when a service starts or stops, the memory budget, what is never stopped) is in [scaling.md](scaling.md).
 
@@ -155,7 +153,7 @@ nodes:
       database: 512M         # only counted when this cloud runs the database (managed or docker)
 ```
 
-`max-memory` caps the memory the node gives its services. `memory-reserve` is memory the node keeps for itself and never hands to services. Only the fields that are set are written; a missing field or section means the default shown above. `NodeConfig.memoryReserve()` returns the reserve with the defaults filled in. The `database` part counts only when `servers.database` is on and the database runs in `managed` or `docker` mode. Both settings are stored and validated now; the node uses them from a later change on. They can be changed with `node set` in the console, `PUT /nodes/{name}` in the API, the `node:` section of the setup file and the advanced settings of the setup assistant.
+`max-memory` caps the memory the node gives its services: the scaler's memory budget is `max-memory`, at most the measured memory of the machine. Without it the node takes the measured memory minus `memory-reserve`, memory the node keeps for itself and never hands to services; see [scaling.md](scaling.md#memory-budget). Only the fields that are set are written; a missing field or section means the default shown above. `NodeConfig.memoryReserve()` returns the reserve with the defaults filled in. The `database` part counts only when `servers.database` is on and the database runs in `managed` or `docker` mode. Both can be changed with `node set` in the console, `PUT /nodes/{name}` in the API, the `node:` section of the setup file and the advanced settings of the setup assistant.
 
 ### Names
 

@@ -899,6 +899,40 @@ public final class ServiceManager implements AutoCloseable {
     }
 
     /**
+     * The players a backend is meant for: {@code players-per-service} of its task in the current
+     * configuration.
+     *
+     * @param backend the service
+     * @return the slots, empty for a proxy, an unknown service or one whose task is gone
+     */
+    public OptionalInt slots(ServiceId backend) {
+        ConfigSnapshot snapshot = config.get();
+        synchronized (lock) {
+            Service service = services.get(backend);
+            if (service == null || service.spec.isProxy()) {
+                return OptionalInt.empty();
+            }
+            TaskConfig task = snapshot.tasks().get(service.spec.taskName());
+            return task == null || task.scaling() == null ? OptionalInt.empty()
+                    : OptionalInt.of(task.scaling().playersPerService());
+        }
+    }
+
+    /**
+     * Whether a backend is listed by the legacy proxy ({@code true}, PandaSpigot) or the main proxy.
+     *
+     * @param backend the service
+     * @return the kind, empty for a proxy or an unknown service
+     */
+    public Optional<Boolean> backendKind(ServiceId backend) {
+        synchronized (lock) {
+            Service service = services.get(backend);
+            return service == null || service.spec.isProxy() ? Optional.empty()
+                    : Optional.of(isLegacyBackend(service.spec));
+        }
+    }
+
+    /**
      * The {@code RegisterServer} message that adds a backend to the proxies of its kind: under the
      * name it has in {@code velocity.toml} (see {@link #proxyName}), at the node's host and the
      * service's port, with {@code legacy} set for a PandaSpigot server. Only for a backend that is
@@ -1400,12 +1434,14 @@ public final class ServiceManager implements AutoCloseable {
         }
         service.state = next;
         ServiceInfo info = service.info();
+        // The configuration as it is at the change, not at the delivery a moment later.
+        ConfigSnapshot at = config.get();
         persist();
         try {
             events.execute(() -> {
                 for (ServiceListener listener : listeners) {
                     try {
-                        listener.stateChanged(info, previous);
+                        listener.stateChanged(info, previous, at);
                     } catch (RuntimeException e) {
                         LOG.log(System.Logger.Level.WARNING, "A service listener failed", e);
                     }

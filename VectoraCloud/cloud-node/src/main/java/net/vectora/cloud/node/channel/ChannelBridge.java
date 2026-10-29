@@ -1,8 +1,13 @@
 package net.vectora.cloud.node.channel;
 
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import net.vectora.cloud.network.ChannelListener;
 import net.vectora.cloud.network.CloudNetworkServer;
@@ -18,7 +23,9 @@ import net.vectora.protocol.message.PlayerJoin;
 import net.vectora.protocol.message.PlayerQuit;
 import net.vectora.protocol.message.PlayerSwitch;
 import net.vectora.protocol.message.RegisterServer;
+import net.vectora.protocol.message.ServerCapacity;
 import net.vectora.protocol.message.ServiceStatus;
+import net.vectora.protocol.message.TransferPlayer;
 import net.vectora.protocol.message.UnregisterServer;
 
 /**
@@ -59,6 +66,12 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
     /** Orders {@link #register}, {@link #unregister} and {@link #syncProxy}; only sends happen under it. */
     private final Object listLock = new Object();
     private final NetworkPlayers players;
+    /** Backends being emptied: the proxies send no new player there. */
+    private final Set<ServiceId> closed = ConcurrentHashMap.newKeySet();
+    /** The slots last sent per backend, so a reload only resends what changed. */
+    private final Map<ServiceId, Integer> sentSlots = new ConcurrentHashMap<>();
+    /** Time between two looks at the players of a backend being emptied. */
+    static final Duration DRAIN_POLL = Duration.ofMillis(250);
     private volatile CloudNetworkServer server;
     private volatile PlayerListener playerListener;
     private volatile java.util.function.Consumer<ServiceStatus> statusListener;
@@ -233,14 +246,117 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
         }
     }
 
-    /** Sends a backend to every running proxy of its kind. */
+    /** Sends a backend to every running proxy of its kind, with its slots. */
     private void register(ServiceId backend, RegisterServer message) {
         synchronized (listLock) {
             registered.put(backend, message);
             for (ServiceId proxy : services.runningProxies(message.legacy())) {
                 if (send(proxy, message)) {
                     lists.sent(proxy, message.name());
+                    sendCapacity(proxy, backend, message);
                 }
+            }
+        }
+    }
+
+    /** {@code ServerCapacity} of a backend to one proxy, if its slots are known. Holds {@code listLock}. */
+    private void sendCapacity(ServiceId proxy, ServiceId backend, RegisterServer message) {
+        OptionalInt slots = services.slots(backend);
+        if (slots.isPresent()) {
+            send(proxy, new ServerCapacity(message.name(), slots.getAsInt(), !closed.contains(backend)));
+            sentSlots.put(backend, slots.getAsInt());
+        }
+    }
+
+    /** Sends the capacity of every listed backend again; for a changed {@code players-per-service}. */
+    public void refreshCapacities() {
+        synchronized (listLock) {
+            for (Map.Entry<ServiceId, RegisterServer> entry : registered.entrySet()) {
+                OptionalInt slots = services.slots(entry.getKey());
+                if (slots.isPresent() && !Integer.valueOf(slots.getAsInt()).equals(sentSlots.get(entry.getKey()))) {
+                    for (ServiceId proxy : services.runningProxies(entry.getValue().legacy())) {
+                        sendCapacity(proxy, entry.getKey(), entry.getValue());
+                    }
+                }
+            }
+        }
+    }
+
+    private void announceCapacity(ServiceId backend) {
+        synchronized (listLock) {
+            RegisterServer message = registered.get(backend);
+            if (message != null) {
+                for (ServiceId proxy : services.runningProxies(message.legacy())) {
+                    sendCapacity(proxy, backend, message);
+                }
+            }
+        }
+    }
+
+    /**
+     * Whether a proxy that lists this backend is connected right now, so its player count of the
+     * backend can be trusted.
+     *
+     * @param backend the backend
+     * @return whether such a proxy is connected
+     */
+    public boolean proxyWatches(ServiceId backend) {
+        Optional<Boolean> kind = services.backendKind(backend);
+        return kind.isPresent() && services.runningProxies(kind.get()).stream().anyMatch(this::isConnected);
+    }
+
+    /**
+     * Empties a backend before it stops: the proxies send no new player there, every player on it is
+     * moved ({@code TransferPlayer}) to the other open backends of its group, the emptiest first
+     * ({@link TransferPlanner}), and the call waits until the proxies report none left. If players
+     * are left after {@code timeout} (a move failed, no other backend), the backend is opened again.
+     * Nobody is kicked.
+     *
+     * @param backend the backend
+     * @param timeout how long to wait for the moves
+     * @return whether no player is left on it
+     * @throws InterruptedException if the wait is interrupted; the backend is opened again
+     */
+    public boolean drain(ServiceId backend, Duration timeout) throws InterruptedException {
+        Optional<RegisterServer> listed = services.registration(backend);
+        if (listed.isEmpty()) {
+            return players.on(backend).isEmpty();
+        }
+        closed.add(backend);
+        announceCapacity(backend);
+        boolean empty = false;
+        try {
+            List<NetworkPlayers.Player> on = players.on(backend);
+            List<TransferPlanner.Target> targets = new ArrayList<>();
+            for (Map.Entry<ServiceId, RegisterServer> other : services.registrations(listed.get().legacy()).entrySet()) {
+                OptionalInt slots = services.slots(other.getKey());
+                if (!other.getKey().equals(backend) && !closed.contains(other.getKey()) && slots.isPresent()
+                        && other.getValue().group().equals(listed.get().group())) {
+                    targets.add(new TransferPlanner.Target(other.getValue().name(), players.on(other.getKey()).size(),
+                            slots.getAsInt()));
+                }
+            }
+            if (!on.isEmpty() && targets.isEmpty()) {
+                // Nowhere to go: no need to wait for moves that are never sent.
+                return false;
+            }
+            Map<java.util.UUID, ServiceId> moves = TransferPlanner.assign(
+                    on.stream().map(NetworkPlayers.Player::uuid).toList(), targets);
+            for (NetworkPlayers.Player player : on) {
+                ServiceId to = moves.get(player.uuid());
+                if (to != null) {
+                    send(player.proxy(), new TransferPlayer(player.uuid(), to, TransferPlayer.Reason.SCALE_DOWN));
+                }
+            }
+            long deadline = System.nanoTime() + timeout.toNanos();
+            while (!(empty = players.on(backend).isEmpty()) && System.nanoTime() < deadline) {
+                Thread.sleep(DRAIN_POLL.toMillis());
+            }
+            return empty;
+        } finally {
+            if (!empty) {
+                closed.remove(backend);
+                announceCapacity(backend);
             }
         }
     }
@@ -252,6 +368,8 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
     private void unregister(ServiceId backend) {
         synchronized (listLock) {
             RegisterServer message = registered.remove(backend);
+            closed.remove(backend);
+            sentSlots.remove(backend);
             if (message == null) {
                 return;
             }
@@ -289,6 +407,7 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
                 registered.put(entry.getKey(), entry.getValue());
                 if (send(proxy, entry.getValue())) {
                     lists.sent(proxy, entry.getValue().name());
+                    sendCapacity(proxy, entry.getKey(), entry.getValue());
                 }
             }
         }

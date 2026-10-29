@@ -4,11 +4,12 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Predicate;
 import net.vectora.cloud.monitor.Monitor;
-import net.vectora.cloud.monitor.ServiceView;
 import net.vectora.cloud.monitor.metric.NodeSample;
 import net.vectora.cloud.monitor.metric.ServiceSample;
 import net.vectora.cloud.node.channel.NetworkPlayers;
@@ -26,49 +27,85 @@ public interface ScalingSignals {
     ScalingPlanner.Signals read();
 
     /**
-     * The signals of a running node:
-     * <ul>
-     *   <li>players: the newest sample of the monitor, that is {@code ServiceStatus.playersOnline}
-     *       from the service's bridge, missing once the report is older than {@code stale-after};
-     *       and the players the proxies report on that service ({@code PlayerJoin},
-     *       {@code PlayerSwitch}), whichever is higher. A count the proxies report alone is a lower
-     *       bound: enough to scale up, never enough to call a service empty;</li>
-     *   <li>memory: the newest node sample of the monitor ({@code node-memory}).</li>
-     * </ul>
-     * A sample older than {@code stale-after} of {@code monitor.yml} is ignored, so a monitor that
-     * stopped sampling cannot keep an old count alive. With the monitor switched off there are no
-     * samples: the scaler then keeps {@code min-services} and does not scale.
+     * The newest report of a service's bridge.
      *
-     * @param monitor the monitor of the node
-     * @param players the players the proxies report
-     * @param clock   the clock the monitor samples with
+     * @param service the service
+     * @param sample  its newest monitor sample
+     */
+    record Report(ServiceId service, ServiceSample sample) {
+    }
+
+    /**
+     * The signals of a running node, see {@link #merge}.
+     *
+     * @param monitor  the monitor of the node
+     * @param players  the players the proxies report
+     * @param watched  whether a proxy that lists the backend is connected right now
+     * @param clock    the clock the monitor samples with
      * @return the signals
      */
-    static ScalingSignals of(Monitor monitor, NetworkPlayers players, Clock clock) {
+    static ScalingSignals of(Monitor monitor, NetworkPlayers players, Predicate<ServiceId> watched, Clock clock) {
         Objects.requireNonNull(monitor, "monitor");
         Objects.requireNonNull(players, "players");
+        Objects.requireNonNull(watched, "watched");
         Objects.requireNonNull(clock, "clock");
+        long nodeHeap = Runtime.getRuntime().maxMemory() == Long.MAX_VALUE ? 0 : Runtime.getRuntime().maxMemory();
         return () -> {
-            Instant now = clock.instant();
-            Duration maxAge = monitor.config().staleAfter().duration();
-            Map<ServiceId, Integer> counts = new HashMap<>();
             Map<ServiceId, Integer> fromProxies = new HashMap<>();
             for (NetworkPlayers.Player player : players.online()) {
                 fromProxies.merge(player.service(), 1, Integer::sum);
             }
-            for (ServiceView view : monitor.services()) {
-                Optional<ServiceSample> latest = view.latest();
-                if (latest.isPresent() && latest.get().playersOnline() >= 0
-                        && !latest.get().at().plus(maxAge).isBefore(now)) {
-                    counts.put(view.service().id(), latest.get().playersOnline());
-                }
-            }
-            fromProxies.forEach((id, count) -> counts.merge(id, count, Math::max));
-            Optional<ScalingPlanner.Memory> memory = monitor.node()
-                    .filter(n -> n.memoryUsed() != NodeSample.UNKNOWN && n.memoryTotal() != NodeSample.UNKNOWN)
-                    .filter(n -> !n.at().plus(maxAge).isBefore(now))
-                    .map(n -> new ScalingPlanner.Memory(n.memoryUsed(), n.memoryTotal()));
-            return new ScalingPlanner.Signals(counts, memory);
+            List<Report> reports = monitor.services().stream()
+                    .filter(view -> view.latest().isPresent())
+                    .map(view -> new Report(view.service().id(), view.latest().get()))
+                    .toList();
+            return merge(reports, fromProxies, watched, monitor.node(), clock.instant(),
+                    monitor.config().staleAfter().duration(), nodeHeap);
         };
+    }
+
+    /**
+     * Combines the reports into the signals the planner uses.
+     * <ul>
+     *   <li>A bridge report older than {@code staleAfter} is not used: the service has no known
+     *       count, so a server that stopped reporting neither scales up nor counts as empty.</li>
+     *   <li>A count is at most the player limit the server itself reports.</li>
+     *   <li>While a proxy that lists the backend is connected, the count is the lower one of the
+     *       bridge and the proxy: a backend that reports more players than the proxy sees on it
+     *       cannot start servers. Without such a proxy, the bridge's count is used.</li>
+     *   <li>Memory: the newest node sample, unless it is older than {@code staleAfter} or a value
+     *       is not measured.</li>
+     * </ul>
+     *
+     * @param reports     newest sample of each service
+     * @param fromProxies players the proxies report on each backend
+     * @param watched     whether a proxy listing the backend is connected
+     * @param node        newest node sample
+     * @param now         now
+     * @param staleAfter  {@code stale-after} of {@code monitor.yml}
+     * @param nodeHeap    maximum heap of the node's JVM
+     * @return the signals
+     */
+    static ScalingPlanner.Signals merge(List<Report> reports, Map<ServiceId, Integer> fromProxies,
+                                       Predicate<ServiceId> watched, Optional<NodeSample> node, Instant now,
+                                       Duration staleAfter, long nodeHeap) {
+        Map<ServiceId, Integer> counts = new HashMap<>();
+        for (Report report : reports) {
+            ServiceSample sample = report.sample();
+            if (sample.playersOnline() < 0 || sample.at().plus(staleAfter).isBefore(now)) {
+                continue;
+            }
+            int count = sample.maxPlayers() >= 0 ? Math.min(sample.playersOnline(), sample.maxPlayers())
+                    : sample.playersOnline();
+            if (watched.test(report.service())) {
+                count = Math.min(count, fromProxies.getOrDefault(report.service(), 0));
+            }
+            counts.put(report.service(), count);
+        }
+        Optional<ScalingPlanner.Memory> memory = node
+                .filter(n -> n.memoryUsed() != NodeSample.UNKNOWN && n.memoryTotal() != NodeSample.UNKNOWN)
+                .filter(n -> !n.at().plus(staleAfter).isBefore(now))
+                .map(n -> new ScalingPlanner.Memory(n.memoryUsed(), n.memoryTotal(), nodeHeap));
+        return new ScalingPlanner.Signals(counts, memory);
     }
 }

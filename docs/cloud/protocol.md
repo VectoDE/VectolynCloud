@@ -84,9 +84,11 @@ All messages are immutable records in `net.vectora.protocol.message`, listed in 
 | `0x11` | `ServiceStatus` | service → cloud | service id, players online and max (VarInt, 0 to 1,000,000), TPS (double, 0 to 1000), MSPT (double, 0 to 60,000), heap used (VarLong, ≥ 0), heap max (VarLong, ≥ 0, or `-1` for unknown or unlimited) |
 | `0x20` | `RegisterServer` | cloud → proxy | name (service id), host (string ≤ 253, DNS name or IPv6 literal, see below), port (u16, 1 to 65535), group (string ≤ 32), legacy (bool) |
 | `0x21` | `UnregisterServer` | cloud → proxy | name (service id) |
+| `0x22` | `ServerCapacity` | cloud → proxy | name (service id), slots (VarInt, 1 to 1,000,000), open (bool). Since 1.1. |
 | `0x30` | `PlayerJoin` | proxy → cloud | UUID, name (string ≤ 32), service id, Bedrock (bool) |
 | `0x31` | `PlayerQuit` | proxy → cloud | UUID, name, service id, Bedrock (bool) |
 | `0x32` | `PlayerSwitch` | proxy → cloud | UUID, name, from (service id), to (service id, different from `from`), Bedrock (bool) |
+| `0x33` | `TransferPlayer` | cloud → proxy | UUID, to (service id), reason (VarInt). Since 1.1. |
 | `0x40` | `ChannelMessage` | both | channel (string ≤ 64, `[a-z0-9_][a-z0-9_.-]*`), payload (bytes ≤ 64 KiB) |
 | `0x50` | `Request` | both | channel, payload (bytes ≤ 64 KiB) |
 | `0x51` | `Response` | both | status (VarInt), payload (bytes ≤ 64 KiB) |
@@ -98,8 +100,11 @@ Codes:
 | `AuthResult.Outcome` | 0 `ACCEPTED`, 1 `INVALID_TOKEN`, 2 `UNKNOWN_PEER`, 3 `INCOMPATIBLE_VERSION`, 4 `ALREADY_CONNECTED` |
 | `Disconnect.Reason` | 0 `NORMAL`, 1 `SHUTDOWN`, 2 `AUTH_FAILED`, 3 `INCOMPATIBLE_VERSION`, 4 `PROTOCOL_ERROR`, 5 `TIMEOUT`, 6 `REPLACED` |
 | `Response.Status` | 0 `OK`, 1 `ERROR`, 2 `NO_HANDLER`, 3 `DENIED` |
+| `TransferPlayer.Reason` | 0 `SCALE_DOWN` |
 
 Ids are grouped by area: `0x0_` connection, `0x1_` service state, `0x2_` server list, `0x3_` players, `0x4_` messaging, `0x5_` request/response. New messages take the next free id in their group.
+
+`ServerCapacity` tells a proxy how many players a backend is meant for (`players-per-service` of its task) and whether it takes new players; the node sends it after each `RegisterServer` and again when the slots change or the backend is closed for a scale-down or opened again. `TransferPlayer` asks a proxy to move one of its players to another backend of the same group; the proxy carries it out only if the player is on a backend of that group and the target is listed, open and a different backend. Only the cloud sends either message: from a peer, the cloud treats them as a protocol error and closes the connection. See [scaling.md](scaling.md#where-players-go) and [bridges.md](bridges.md).
 
 ### Field rules
 
@@ -133,18 +138,19 @@ The token comes from the cloud: a fresh service token per start, or the join tok
 
 ## Versions
 
-The current version is `Protocol.PROTOCOL_VERSION`, **1.0**.
+The current version is `Protocol.PROTOCOL_VERSION`, **1.1**.
 
 - **Same major version required.** Peers with different major versions cannot talk. A major version changes when the frame layout, an existing message id or the encoding of an existing message changes.
 - **Minor versions only add.** A new message type, a new enum code or a new value range that old peers would reject needs a new minor version. Existing payloads stay as they are.
-- **The lower minor wins.** A connection uses the lower minor version of both peers (`ProtocolVersion.negotiate`). Neither side sends a message or code that came after it, because the older side would reject it as unknown.
+- **The lower minor wins.** A connection uses the lower minor version of both peers (`ProtocolVersion.negotiate`). Neither side sends a message or code that came after it, because the older side would reject it as unknown. Each message type knows the version that added it (`MessageType.since`, `availableIn`); the cloud keeps the negotiated version per connection and drops (with a DEBUG line) a message the peer's version does not have. A 1.0 proxy therefore keeps working: it gets no `ServerCapacity` or `TransferPlayer`, picks servers the way Velocity does, and a scale-down of a backend with its players on it ends with the backend kept running.
 - **The frame header never changes within a major version,** so a peer can always read the version of a frame and answer an incompatible one with `Disconnect(INCOMPATIBLE_VERSION)`.
 
 Version history:
 
 | Version | Changes |
 |---|---|
-| 1.0 | First version: the 15 messages above. Before the first release (stage 2, PR 9) the handshake frame limit was added, `ServiceStatus` accepts a heap maximum of `-1`, and channel names and hosts got the stricter rules above. No peer with the earlier rules was ever released, so the version stayed 1.0. |
+| 1.0 | First version: 15 messages. Before the first release (stage 2, PR 9) the handshake frame limit was added, `ServiceStatus` accepts a heap maximum of `-1`, and channel names and hosts got the stricter rules above. No peer with the earlier rules was ever released, so the version stayed 1.0. |
+| 1.1 | `ServerCapacity` (`0x22`) and `TransferPlayer` (`0x33`, reason `SCALE_DOWN`), both cloud → proxy, for the choice of the emptiest server and the moves before a scale-down. |
 
 ## Limits at a glance
 

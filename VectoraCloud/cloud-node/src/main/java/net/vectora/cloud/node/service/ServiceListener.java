@@ -1,5 +1,6 @@
 package net.vectora.cloud.node.service;
 
+import net.vectora.cloud.config.model.ConfigSnapshot;
 import net.vectora.protocol.ServiceId;
 
 /**
@@ -18,6 +19,19 @@ public interface ServiceListener {
      * @param previous the state before, or {@code null} when the service was just created
      */
     void stateChanged(ServiceInfo service, ServiceState previous);
+
+    /**
+     * A service changed its state; with the configuration as it was at the moment of the change,
+     * which may differ from the one at delivery. The service core calls this one; by default it
+     * passes on to {@link #stateChanged(ServiceInfo, ServiceState)}.
+     *
+     * @param service  the service after the change
+     * @param previous the state before, or {@code null} when the service was just created
+     * @param config   the configuration at the change
+     */
+    default void stateChanged(ServiceInfo service, ServiceState previous, ConfigSnapshot config) {
+        stateChanged(service, previous);
+    }
 
     /**
      * A service printed a line. The line has passed the log filter: secrets and the service token

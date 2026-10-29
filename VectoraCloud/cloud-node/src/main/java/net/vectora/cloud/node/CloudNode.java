@@ -128,6 +128,9 @@ public final class CloudNode implements AutoCloseable {
     private volatile SetupResult.Status setupStatus;
     /** Set once start() has given up on the setup; a later first completion then starts the servers. */
     private volatile boolean startedWithoutSetup;
+    /** The configured services have been started once; from then on the autoscaler keeps them. */
+    private final java.util.concurrent.atomic.AtomicBoolean configuredStarted =
+            new java.util.concurrent.atomic.AtomicBoolean();
     /** Set while the {@code setup} command runs; its config changes are reconciled once it ends. */
     private volatile boolean setupRunning;
     private volatile ConfigSnapshot beforeSetup;
@@ -373,8 +376,8 @@ public final class CloudNode implements AutoCloseable {
 
         // Player counts of the bridges and proxies, memory of the node from the monitor
         // (docs/cloud/scaling.md); the configuration is the same one the console and the API change.
-        Autoscaler scaler = Autoscaler.create(ScalingTarget.of(services), config::snapshot,
-                ScalingSignals.of(monitoring.monitor(), channel.players(), Clock.systemUTC()));
+        Autoscaler scaler = Autoscaler.create(ScalingTarget.of(services, channel), config::snapshot,
+                ScalingSignals.of(monitoring.monitor(), channel.players(), channel::proxyWatches, Clock.systemUTC()));
         services.addListener(scaler);
         return new Ops(tokens, monitoring, backups, api, apiServer(home, config, secrets, api, tokens), scaler);
     }
@@ -513,9 +516,7 @@ public final class CloudNode implements AutoCloseable {
             LOG.log(System.Logger.Level.WARNING, "The setup is not complete (cloud.yml: setup-complete, eula-accepted), "
                     + "so no server is started. See docs/cloud/node.md.");
         } else {
-            services.startConfigured();
-            // Only now: a round must not race the configured starts for the same index.
-            ops.scaler().start();
+            startConfiguredOnce();
         }
         Thread keepAlive = new Thread(() -> {
             try {
@@ -545,12 +546,27 @@ public final class CloudNode implements AutoCloseable {
             return;
         }
         services.stopUnwanted();
-        if (setupJustFinished(previous, current)) {
-            Thread.ofPlatform().daemon().name("vectora-start-after-setup").start(() -> {
-                services.startConfigured();
-                ops.scaler().start();
-            });
+        // A changed players-per-service reaches the proxies' choice of the emptiest server.
+        channel.refreshCapacities();
+        if (setupJustFinished(previous, current) && !configuredStarted.get()) {
+            Thread.ofPlatform().daemon().name("vectora-start-after-setup").start(this::startConfiguredOnce);
         }
+    }
+
+    /**
+     * Starts the configured services and then the autoscaler, once per run of the node. If
+     * {@code eula-accepted} or {@code setup-complete} is taken back and set again later, the
+     * autoscaler is already running and brings the services back itself (released static ones at
+     * their index, {@code min-services}); a second {@code startConfigured} next to it would race it
+     * for the same index.
+     */
+    private void startConfiguredOnce() {
+        if (!configuredStarted.compareAndSet(false, true)) {
+            return;
+        }
+        services.startConfigured();
+        // Only now: a round must not race the configured starts for the same index.
+        ops.scaler().start();
     }
 
     /**

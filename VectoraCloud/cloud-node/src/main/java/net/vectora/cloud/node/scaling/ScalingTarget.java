@@ -1,6 +1,8 @@
 package net.vectora.cloud.node.scaling;
 
+import java.time.Duration;
 import java.util.List;
+import net.vectora.cloud.node.channel.ChannelBridge;
 import java.util.Objects;
 import net.vectora.cloud.node.service.ServiceException;
 import net.vectora.cloud.node.service.ServiceInfo;
@@ -47,14 +49,32 @@ public interface ScalingTarget {
     ServiceInfo stop(ServiceId service) throws ServiceException;
 
     /**
-     * The service core of a node as target.
+     * Moves the players of a service to other services of its group and waits until it is empty
+     * ({@link ChannelBridge#drain}).
+     *
+     * @param service the service
+     * @param timeout how long to wait
+     * @return whether no player is left
+     * @throws InterruptedException if the wait is interrupted
+     */
+    boolean drain(ServiceId service, Duration timeout) throws InterruptedException;
+
+    /**
+     * The service core and the cloud channel of a node as target.
      *
      * @param services the service core
+     * @param channel  the cloud channel, which moves the players
      * @return the target
      */
-    static ScalingTarget of(ServiceManager services) {
+    static ScalingTarget of(ServiceManager services, ChannelBridge channel) {
         Objects.requireNonNull(services, "services");
+        Objects.requireNonNull(channel, "channel");
         return new ScalingTarget() {
+            @Override
+            public boolean drain(ServiceId service, Duration timeout) throws InterruptedException {
+                return channel.drain(service, timeout);
+            }
+
             @Override
             public List<ServiceInfo> services() {
                 return services.services();

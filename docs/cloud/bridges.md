@@ -29,13 +29,15 @@ All names are constants in `net.vectora.protocol.ServiceEnvironment` (`SERVICE_P
 - Status reports are coalesced. However many are waiting, only the newest is sent and only one queue slot is used.
 - Even the connect (`CloudClient.start`) is queued. `onEnable` only creates the client and the sender.
 - The one wait on a platform thread is at shutdown: `BridgeSender.close()` lets the queue drain, closes the client (which sends `Disconnect(SHUTDOWN)`) and waits at most 3 seconds. If the sender thread still hangs in a write after that (a cloud that stopped reading), the client is closed from the closing thread. `CloudClient.close()` gives the goodbye 500 ms and then closes the socket, which also fails the hung write, so neither close blocks on a full socket.
-- Messages from the cloud (`RegisterServer`, `UnregisterServer`) arrive on the client's event thread. The Velocity bridge changes the server list there; Velocity's server list is thread-safe. A host name in `RegisterServer` (the cloud sends IP literals) would be resolved on that thread, not on a proxy thread.
+- Messages from the cloud (`RegisterServer`, `UnregisterServer`, `ServerCapacity`, `TransferPlayer`) arrive on the client's event thread. The Velocity bridge changes the server list there; Velocity's server list is thread-safe. A host name in `RegisterServer` (the cloud sends IP literals) would be resolved on that thread, not on a proxy thread.
 
 ## Velocity bridge
 
 | Proxy event | Bridge |
 |---|---|
 | `ListenerBoundEvent` (Minecraft listener) | The first time: reads the environment, opens the connection, schedules the status every 5 seconds. Every time: `markReady`, players can connect now. |
+| `PlayerChooseInitialServerEvent` | Replaces the proxy's first server with the emptiest server of the same group (below). |
+| `KickedFromServerEvent` | If Velocity redirects the player into a group, the redirect goes to the emptiest server of that group instead, never back to the one that kicked. A disconnect stays a disconnect. |
 | `ServerConnectedEvent` | `PlayerJoin` on the first backend, `PlayerSwitch` afterwards. |
 | `DisconnectEvent` | `PlayerQuit`, if a join was reported. |
 | `ProxyShutdownEvent` (registered once connected) | Stops the status task, closes the sender. |
@@ -48,6 +50,14 @@ All names are constants in `net.vectora.protocol.ServiceEnvironment` (`SERVICE_P
 - Servers from `velocity.toml` are never replaced; a `RegisterServer` for one that is listed changes nothing (`CONFIGURED`, no warning). An `UnregisterServer` for one withdraws it from the running server list (`WITHDRAWN`): the cloud stopped that server, for example because its group was switched off on a reload, so the proxy no longer offers it. `velocity.toml` keeps the line until the proxy restarts, and the cloud renders it without the server then. A later `RegisterServer` adds it again under the same name. A `velocity.toml` server that someone else took out is not put back. A name that another plugin registered is left alone.
 - The same address again changes nothing; another address replaces the entry.
 - Apart from withdrawn `velocity.toml` servers, only servers the registry added are removed again. A lost connection to the cloud leaves the list as it is, since the servers keep running.
+
+### Choosing the server and moving players
+
+The node sends `ServerCapacity` for every backend it registers: its slots (`players-per-service` of its task) and whether it is open. `ServerLoads` keeps that per backend together with its group, and picks for a group the open, listed backend with the lowest load in percent (players / slots); of equal ones the one with fewer players, then by name. A player on the way to a backend counts there for 10 seconds or until the connect is reported, so a burst of joins is spread. A backend without slots (registered by a 1.0 node) is not chosen; the proxy's own choice stays.
+
+This decides the first server on join (Velocity's `try` list still picks the group) and a redirect into a group after a kick, on the main proxy and on the legacy proxy alike.
+
+`TransferPlayer` moves one player, for a scale-down of the backend they are on. `ProxyBridge` carries it out only if the player is on a backend of a known group, and the target is a different backend of that same group that is listed and open; anything else is ignored with a warning. The player first gets a short message in their client language (`Player.getEffectiveLocale`: German for `de`, English otherwise, `TransferMessages`) and is then connected with `connectWithIndication`. If the connect fails, the player stays where they are; the node then calls the scale-down off. See [scaling.md](scaling.md#where-players-go).
 
 ### Player events
 
@@ -129,7 +139,8 @@ The API has Java 8 class files, so the module needs no `disableAutoTargetJvm()`,
 | Test | Covers |
 |---|---|
 | `BridgeSenderTest` | Calls run on `vectora-bridge-sender`, never on the calling thread, which is a daemon thread; submitting returns at once while the link hangs; full queue drops and counts; coalescing of 50 reports into one; a report after a full queue still goes out; a failing call does not stop the sender; close drains, closes the link, refuses more and waits only as long as allowed. |
-| `ProxyBridgeTest`, `ServerRegistryTest`, `PlayerTrackerTest` | Server list per role (counter-check: each proxy takes its own kind), configured servers never replaced, withdrawn on the cloud's `UnregisterServer` and added again later, foreign servers left alone; consistent join, switch and quit, ignored repeats, unknown servers and invalid names, out-of-order events per session, Bedrock detection. |
+| `ProxyBridgeTest`, `ServerRegistryTest`, `PlayerTrackerTest` | Server list per role (counter-check: each proxy takes its own kind), configured servers never replaced, withdrawn on the cloud's `UnregisterServer` and added again later, foreign servers left alone; joins and redirects to the emptiest server of the group; transfers only inside the group to a listed, open, different server; consistent join, switch and quit, ignored repeats, unknown servers and invalid names, out-of-order events per session, Bedrock detection. |
+| `ServerLoadsTest` | Lowest load in percent, then fewer players, then name; pending players counted for 10 seconds; closed, unlisted and slot-less servers skipped; the excluded server; the German and English transfer message by locale. |
 | `BungeeGuardCheckTest`, `PropertiesJsonTest`, `AdmissionTicketsTest` | Right, wrong, empty and missing token, two tokens, the main proxy's secret, direct connection, host name as address, no secret; the token as Velocity's Gson writes it (`=` as `=`); the stored fuzz inputs reach the outcome their name says; token stripped; escapes and round trip; every malformed form; tickets used once and expiring. |
 | `HandshakeGuardTest`, `LoginGateTest` (legacy) | The guard on the real PandaSpigot events: right, wrong and missing token, direct connection, another plugin un-failing or cancelling, missing and invalid secret with the counter-check, log limit; logins with and without ticket, another plugin allowing a refused login (with the counter-check). |
 | `ForwardedHandshakeFuzzTest` | Jazzer: any handshake gives a result and never an exception, an accepted one never carries a token on; any properties JSON fails only with `MalformedHandshakeException` and what parses round-trips. |

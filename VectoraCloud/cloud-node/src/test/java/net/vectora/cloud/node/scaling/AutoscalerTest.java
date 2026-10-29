@@ -33,6 +33,7 @@ import net.vectora.cloud.config.model.TaskMode;
 import net.vectora.cloud.config.model.TimeSpan;
 import net.vectora.cloud.config.model.WantedServers;
 import net.vectora.cloud.node.scaling.ScalingPlanner.Decision;
+import net.vectora.cloud.node.scaling.ScalingPlanner.Drain;
 import net.vectora.cloud.node.scaling.ScalingPlanner.Hold;
 import net.vectora.cloud.node.scaling.ScalingPlanner.Held;
 import net.vectora.cloud.node.scaling.ScalingPlanner.Memory;
@@ -73,27 +74,47 @@ class AutoscalerTest {
     }
 
     @Test
-    void scalesUpOnPlayersAndDownAfterTheEmptyTimeWithTheCooldownInBetween() {
+    void scalesUpOnLoadAndDownAfterTheLowLoadTimeWithTheCooldownInBetween() {
         Fixture f = new Fixture().task("minigame", TaskMode.DYNAMIC, 1, 3);
         f.target.add("minigame", 1, TaskMode.DYNAMIC, ServiceState.RUNNING);
         f.players.put(new ServiceId("minigame-1"), 40);
-        assertEquals(List.of(new Start("minigame", OptionalInt.empty(), Reason.PLAYERS)), f.scaler.tick());
+        assertEquals(List.of(new Start("minigame", OptionalInt.empty(), Reason.LOAD)), f.scaler.tick());
         f.target.setState("minigame-2", ServiceState.RUNNING);
         f.players.put(new ServiceId("minigame-1"), 10);
         f.players.put(new ServiceId("minigame-2"), 0);
 
-        // minigame-2 is empty from now on; the cooldown (60 s) and scale-down-after (5 min) both count.
+        // The load is low from now on; the cooldown (60 s) and scale-down-after (5 min) both count.
         f.advance(Duration.ofSeconds(30));
         assertEquals(List.of(), f.scaler.tick(), "cooldown");
         f.advance(Duration.ofMinutes(5).minusSeconds(1));
-        assertEquals(List.of(), f.scaler.tick(), "empty for 4:59");
+        assertEquals(List.of(), f.scaler.tick(), "low for 4:59");
         f.advance(Duration.ofSeconds(1));
-        assertEquals(List.of(new Stop("minigame", new ServiceId("minigame-2"), Reason.EMPTY)), f.scaler.tick());
+        assertEquals(List.of(new Stop("minigame", new ServiceId("minigame-2"), Reason.LOW_LOAD)), f.scaler.tick());
         assertEquals(List.of("start minigame", "stop minigame-2"), f.target.calls);
     }
 
     @Test
-    void aPlayerJoiningResetsTheEmptyTime() {
+    void aRiseOfTheLoadResetsTheLowLoadTime() {
+        Fixture f = new Fixture().task("minigame", TaskMode.DYNAMIC, 1, 3);
+        f.target.add("minigame", 1, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.target.add("minigame", 2, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.players.put(new ServiceId("minigame-1"), 10);
+        f.players.put(new ServiceId("minigame-2"), 0);
+        assertEquals(List.of(), f.scaler.tick());
+        f.advance(Duration.ofMinutes(4));
+        // 25 of 50 without minigame-2: not below 50 %.
+        f.players.put(new ServiceId("minigame-1"), 25);
+        assertEquals(List.of(), f.scaler.tick());
+        f.players.put(new ServiceId("minigame-1"), 10);
+        assertEquals(List.of(), f.scaler.tick(), "low again from now on");
+        f.advance(Duration.ofMinutes(4));
+        assertEquals(List.of(), f.scaler.tick(), "low again for 4 minutes only, 8 minutes after the first time");
+        f.advance(Duration.ofMinutes(1));
+        assertEquals(List.of(new Stop("minigame", new ServiceId("minigame-2"), Reason.LOW_LOAD)), f.scaler.tick());
+    }
+
+    @Test
+    void aPlayerOnTheSurplusServiceDoesNotResetTheTimeButIsMovedAway() {
         Fixture f = new Fixture().task("minigame", TaskMode.DYNAMIC, 1, 3);
         f.target.add("minigame", 1, TaskMode.DYNAMIC, ServiceState.RUNNING);
         f.target.add("minigame", 2, TaskMode.DYNAMIC, ServiceState.RUNNING);
@@ -103,12 +124,74 @@ class AutoscalerTest {
         f.advance(Duration.ofMinutes(4));
         f.players.put(new ServiceId("minigame-2"), 1);
         assertEquals(List.of(), f.scaler.tick());
-        f.players.put(new ServiceId("minigame-2"), 0);
-        assertEquals(List.of(), f.scaler.tick(), "empty again from now on");
-        f.advance(Duration.ofMinutes(4));
-        assertEquals(List.of(), f.scaler.tick(), "empty again for 4 minutes only, 8 minutes after the first time");
         f.advance(Duration.ofMinutes(1));
-        assertEquals(List.of(new Stop("minigame", new ServiceId("minigame-2"), Reason.EMPTY)), f.scaler.tick());
+        assertEquals(List.of(new Drain("minigame", new ServiceId("minigame-2"), Reason.LOW_LOAD)), f.scaler.tick());
+        assertEquals(List.of("drain minigame-2", "stop minigame-2"), f.target.calls);
+    }
+
+    @Test
+    void aServiceThatCannotBeEmptiedKeepsRunningAndTheTaskWaitsScaleDownAfterAgain() {
+        Fixture f = new Fixture().task("minigame", TaskMode.DYNAMIC, 1, 3);
+        f.target.add("minigame", 1, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.target.add("minigame", 2, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.players.put(new ServiceId("minigame-1"), 10);
+        f.players.put(new ServiceId("minigame-2"), 2);
+        f.target.drainEmpties = false;
+        assertEquals(List.of(), f.scaler.tick());
+        f.advance(Duration.ofMinutes(5));
+        assertEquals(List.of(new Drain("minigame", new ServiceId("minigame-2"), Reason.LOW_LOAD)), f.scaler.tick());
+        assertEquals(List.of("drain minigame-2"), f.target.calls, "no stop, no kick");
+        assertEquals(ServiceState.RUNNING, f.target.services.get(new ServiceId("minigame-2")).state());
+
+        f.advance(Duration.ofMinutes(5).minusSeconds(1));
+        assertEquals(List.of(), f.scaler.tick(), "the low-load time starts again after the attempt");
+        // Counter-check: once scale-down-after has passed again, the next attempt comes.
+        f.target.drainEmpties = true;
+        f.scaler.tick();
+        f.advance(Duration.ofMinutes(5));
+        assertEquals(List.of(new Drain("minigame", new ServiceId("minigame-2"), Reason.LOW_LOAD)), f.scaler.tick());
+        assertEquals(List.of("drain minigame-2", "drain minigame-2", "stop minigame-2"), f.target.calls);
+    }
+
+    @Test
+    void aTaskGetsNoSecondDecisionWhileItsServiceIsEmptied() {
+        Fixture f = new Fixture().task("minigame", TaskMode.DYNAMIC, 1, 4);
+        List<Runnable> queued = new ArrayList<>();
+        Autoscaler scaler = Autoscaler.create(f.target, f::snapshot, f::signals, f.clock(), queued::add);
+        f.target.add("minigame", 1, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.target.add("minigame", 2, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.target.add("minigame", 3, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.players.put(new ServiceId("minigame-1"), 5);
+        f.players.put(new ServiceId("minigame-2"), 2);
+        f.players.put(new ServiceId("minigame-3"), 1);
+        scaler.tick();
+        f.advance(Duration.ofMinutes(5));
+        assertEquals(List.of(new Drain("minigame", new ServiceId("minigame-3"), Reason.LOW_LOAD)), scaler.tick());
+        // While the move runs, the target asks the scaler for a decision of another task's round.
+        f.target.duringDrain = () -> {
+            f.advance(Duration.ofMinutes(10));
+            List<Decision> during = scaler.tick();
+            assertEquals(List.of(), during, "the task is busy with minigame-3");
+        };
+        queued.forEach(Runnable::run);
+        assertEquals(List.of("drain minigame-3", "stop minigame-3"), f.target.calls);
+    }
+
+    @Test
+    void aReleasedStaticServiceIsJudgedByTheConfigurationAtTheMomentItStopped() {
+        Fixture f = new Fixture().task("lobby", TaskMode.STATIC, 1, 1);
+        f.target.add("lobby", 1, TaskMode.STATIC, ServiceState.STOPPED);
+        ConfigSnapshot whenItStopped = f.snapshot().withCloud(f.cloud.withServers(WantedServers.all()
+                .with(ServerKind.LOBBY, false)));
+        // The switch is on again by the time the event is delivered: the stop was still its doing.
+        f.scaler.stateChanged(f.target.services.get(new ServiceId("lobby-1")), ServiceState.STOPPING, whenItStopped);
+        assertEquals(List.of(new Start("lobby", OptionalInt.of(1), Reason.MIN_SERVICES)), f.scaler.tick());
+
+        // Counter-check: judged by the configuration at delivery, it would count as stopped by hand.
+        Fixture g = new Fixture().task("lobby", TaskMode.STATIC, 1, 1);
+        g.target.add("lobby", 1, TaskMode.STATIC, ServiceState.STOPPED);
+        g.scaler.stateChanged(g.target.services.get(new ServiceId("lobby-1")), ServiceState.STOPPING, g.snapshot());
+        assertEquals(List.of(), g.scaler.tick());
     }
 
     @Test
@@ -217,7 +300,7 @@ class AutoscalerTest {
         assertEquals(List.of(new Held("minigame", Hold.MEMORY_UNKNOWN)), f.scaler.tick());
         assertEquals(List.of(), f.target.calls);
         f.memory = ROOMY;
-        assertEquals(List.of(new Start("minigame", OptionalInt.empty(), Reason.PLAYERS)), f.scaler.tick(),
+        assertEquals(List.of(new Start("minigame", OptionalInt.empty(), Reason.LOAD)), f.scaler.tick(),
                 "a hold is no decision: no cooldown");
     }
 
@@ -292,6 +375,10 @@ class AutoscalerTest {
         final List<String> calls = new ArrayList<>();
         boolean failStarts;
         boolean crashEvent;
+        /** Whether a drain empties the service; otherwise its players stay. */
+        boolean drainEmpties = true;
+        /** Runs once inside the next drain, while the service is being emptied. */
+        Runnable duringDrain;
         Fixture fixture;
 
         ServiceInfo info(String task, int index, TaskMode mode, ServiceState state, Instant startedAt) {
@@ -347,6 +434,20 @@ class AutoscalerTest {
             calls.add("stop " + service.value());
             setState(service.value(), ServiceState.STOPPED);
             return services.get(service);
+        }
+
+        @Override
+        public boolean drain(ServiceId service, Duration timeout) {
+            calls.add("drain " + service.value());
+            if (duringDrain != null) {
+                Runnable during = duringDrain;
+                duringDrain = null;
+                during.run();
+            }
+            if (drainEmpties) {
+                fixture.players.put(service, 0);
+            }
+            return drainEmpties;
         }
     }
 }
