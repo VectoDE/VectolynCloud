@@ -56,6 +56,8 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
     private final Map<ServiceId, RegisterServer> registered = new ConcurrentHashMap<>();
     /** What each proxy was told, to withdraw what a reconnect left behind. */
     private final ProxyLists lists = new ProxyLists();
+    /** Orders {@link #register}, {@link #unregister} and {@link #syncProxy}; only sends happen under it. */
+    private final Object listLock = new Object();
     private final NetworkPlayers players;
     private volatile CloudNetworkServer server;
     private volatile PlayerListener playerListener;
@@ -233,10 +235,12 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
 
     /** Sends a backend to every running proxy of its kind. */
     private void register(ServiceId backend, RegisterServer message) {
-        registered.put(backend, message);
-        for (ServiceId proxy : services.runningProxies(message.legacy())) {
-            if (send(proxy, message)) {
-                lists.sent(proxy, message.name());
+        synchronized (listLock) {
+            registered.put(backend, message);
+            for (ServiceId proxy : services.runningProxies(message.legacy())) {
+                if (send(proxy, message)) {
+                    lists.sent(proxy, message.name());
+                }
             }
         }
     }
@@ -246,13 +250,15 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
      * connected right now keeps it in its list; {@link #syncProxy} withdraws it on the reconnect.
      */
     private void unregister(ServiceId backend) {
-        RegisterServer message = registered.remove(backend);
-        if (message == null) {
-            return;
-        }
-        for (ServiceId proxy : services.runningProxies(message.legacy())) {
-            if (send(proxy, new UnregisterServer(message.name()))) {
-                lists.withdrawn(proxy, message.name());
+        synchronized (listLock) {
+            RegisterServer message = registered.remove(backend);
+            if (message == null) {
+                return;
+            }
+            for (ServiceId proxy : services.runningProxies(message.legacy())) {
+                if (send(proxy, new UnregisterServer(message.name()))) {
+                    lists.withdrawn(proxy, message.name());
+                }
             }
         }
     }
@@ -267,18 +273,23 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
         if (legacy.isEmpty()) {
             return;
         }
-        Map<ServiceId, RegisterServer> current = services.registrations(legacy.get());
-        java.util.Set<ServiceId> names = new java.util.HashSet<>();
-        current.values().forEach(message -> names.add(message.name()));
-        for (ServiceId stale : lists.stale(proxy, names)) {
-            if (send(proxy, new UnregisterServer(stale))) {
-                lists.withdrawn(proxy, stale);
+        // Runs on a channel thread (Connected) or the service event thread (RUNNING), while
+        // register() and unregister() run on the latter: without the lock a backend that becomes
+        // RUNNING between the snapshot below and stale() would be withdrawn right after it was sent.
+        synchronized (listLock) {
+            Map<ServiceId, RegisterServer> current = services.registrations(legacy.get());
+            java.util.Set<ServiceId> names = new java.util.HashSet<>();
+            current.values().forEach(message -> names.add(message.name()));
+            for (ServiceId stale : lists.stale(proxy, names)) {
+                if (send(proxy, new UnregisterServer(stale))) {
+                    lists.withdrawn(proxy, stale);
+                }
             }
-        }
-        for (Map.Entry<ServiceId, RegisterServer> entry : current.entrySet()) {
-            registered.put(entry.getKey(), entry.getValue());
-            if (send(proxy, entry.getValue())) {
-                lists.sent(proxy, entry.getValue().name());
+            for (Map.Entry<ServiceId, RegisterServer> entry : current.entrySet()) {
+                registered.put(entry.getKey(), entry.getValue());
+                if (send(proxy, entry.getValue())) {
+                    lists.sent(proxy, entry.getValue().name());
+                }
             }
         }
     }
