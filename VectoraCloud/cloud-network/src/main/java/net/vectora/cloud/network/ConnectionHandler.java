@@ -121,7 +121,8 @@ final class ConnectionHandler extends SimpleChannelInboundHandler<Envelope> {
         }
         handshakeTimer.cancel(false);
         decoder.authenticated();
-        session = server.newSession((ServiceId) peer, ctx.channel());
+        // The lower minor version of both sides: the cloud sends nothing the peer would not know.
+        session = server.newSession((ServiceId) peer, ctx.channel(), hello.version().negotiate(Protocol.PROTOCOL_VERSION));
         // Registered before the answer goes out, so the cloud can send to the service as soon as
         // the service knows it is accepted.
         server.register(session);
@@ -157,7 +158,8 @@ final class ConnectionHandler extends SimpleChannelInboundHandler<Envelope> {
             case Response response -> session.complete(envelope.requestId(), response);
             default -> {
                 // Pong needs nothing: any inbound frame already resets the idle timer. Hello,
-                // AuthResult, RegisterServer and UnregisterServer never come from a service.
+                // AuthResult, RegisterServer, UnregisterServer, ServerCapacity and TransferPlayer
+                // never come from a service: only the cloud moves players.
                 if (!(message instanceof Pong)) {
                     violation(ctx, message.getClass().getSimpleName() + " from a peer");
                 }

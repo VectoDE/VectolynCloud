@@ -108,6 +108,22 @@ class MessageCodecTest {
         assertThrows(ProtocolException.class, () -> codec.fromFrame(frame(0x04, 0, out -> out.writeVarInt(999))));
         assertThrows(ProtocolException.class, () -> codec.fromFrame(frame(0x01, 0, out -> out.writeVarInt(77).writeByte(1).writeByte(0))));
         assertThrows(ProtocolException.class, () -> codec.fromFrame(frame(0x51, 1, out -> out.writeVarInt(-3).writeVarInt(0))));
+        // TransferPlayer: UUID, server, reason 1 (only 0 exists). Counter-check: reason 0 decodes.
+        assertThrows(ProtocolException.class, () -> codec.fromFrame(frame(0x33, 0,
+                out -> out.writeUuid(SampleMessages.PLAYER).writeString("lobby-2", 64).writeVarInt(1))));
+        assertEquals(new TransferPlayer(SampleMessages.PLAYER, new ServiceId("lobby-2"), TransferPlayer.Reason.SCALE_DOWN),
+                codec.fromFrame(frame(0x33, 0,
+                        out -> out.writeUuid(SampleMessages.PLAYER).writeString("lobby-2", 64).writeVarInt(0))).message());
+    }
+
+    @Test
+    void serverCapacityNeedsAtLeastOneSlot() {
+        assertThrows(ProtocolException.class, () -> codec.fromFrame(frame(0x22, 0,
+                out -> out.writeString("lobby-2", 64).writeVarInt(0).writeBoolean(true))));
+        assertThrows(ProtocolException.class, () -> codec.fromFrame(frame(0x22, 0,
+                out -> out.writeString("lobby-2", 64).writeVarInt(MessageLimits.MAX_PLAYERS + 1).writeBoolean(true))));
+        assertEquals(new ServerCapacity(new ServiceId("lobby-2"), 1, false), codec.fromFrame(frame(0x22, 0,
+                out -> out.writeString("lobby-2", 64).writeVarInt(1).writeBoolean(false))).message());
     }
 
     @Test

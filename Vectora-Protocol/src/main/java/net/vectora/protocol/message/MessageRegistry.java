@@ -8,6 +8,7 @@ import java.util.Optional;
 import java.util.TreeMap;
 import java.util.function.Function;
 import net.vectora.protocol.PacketReader;
+import net.vectora.protocol.ProtocolVersion;
 
 /**
  * Maps message ids to message types and back. Immutable once built; ids and types are unique.
@@ -17,6 +18,9 @@ import net.vectora.protocol.PacketReader;
  * a new message gets a new id and a new minor version.
  */
 public final class MessageRegistry {
+
+    /** Version 1.1 added {@link ServerCapacity} and {@link TransferPlayer}. */
+    private static final ProtocolVersion V1_1 = new ProtocolVersion(1, 1);
 
     private static final MessageRegistry STANDARD = builder()
             .register(0x00, Hello.class, Hello::read)
@@ -28,9 +32,11 @@ public final class MessageRegistry {
             .register(0x11, ServiceStatus.class, ServiceStatus::read)
             .register(0x20, RegisterServer.class, RegisterServer::read)
             .register(0x21, UnregisterServer.class, UnregisterServer::read)
+            .register(0x22, ServerCapacity.class, ServerCapacity::read, V1_1)
             .register(0x30, PlayerJoin.class, PlayerJoin::read)
             .register(0x31, PlayerQuit.class, PlayerQuit::read)
             .register(0x32, PlayerSwitch.class, PlayerSwitch::read)
+            .register(0x33, TransferPlayer.class, TransferPlayer::read, V1_1)
             .register(0x40, ChannelMessage.class, ChannelMessage::read)
             .register(0x50, Request.class, Request::read)
             .register(0x51, Response.class, Response::read)
@@ -104,7 +110,18 @@ public final class MessageRegistry {
          *     registered
          */
         public <T extends Message> Builder register(int id, Class<T> type, Function<PacketReader, T> reader) {
-            MessageType<T> entry = new MessageType<>(id, type, reader);
+            return register(id, type, reader, MessageType.FIRST);
+        }
+
+        /**
+         * Adds a message type that a later minor version introduced.
+         *
+         * @throws IllegalArgumentException if the id is negative or the id or type is already
+         *     registered
+         */
+        public <T extends Message> Builder register(int id, Class<T> type, Function<PacketReader, T> reader,
+                                                    ProtocolVersion since) {
+            MessageType<T> entry = new MessageType<>(id, type, reader, since);
             if (byId.containsKey(id)) {
                 throw new IllegalArgumentException("message id " + id + " is already used by "
                         + byId.get(id).type().getSimpleName());
