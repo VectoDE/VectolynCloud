@@ -12,12 +12,14 @@ import net.vectora.cloud.config.secret.EnvFile;
 import net.vectora.cloud.template.PlaceholderValues;
 import net.vectora.cloud.template.ProxyBackend;
 import net.vectora.cloud.template.ProxyServerList;
+import net.vectora.cloud.template.ServerPlatform;
 
 /**
  * Builds the {@code {{VECTORA_*}}} values for one service, as listed in
  * {@code Server-Network/placeholders.md}:
  * <ul>
- *   <li>secrets from {@code secrets/vectora.env} (every non-empty {@code VECTORA_*} key);</li>
+ *   <li>secrets from {@code secrets/vectora.env}, only those the platform of the service needs
+ *       ({@link ServiceSecrets}); {@code VECTORA_DB_ROOT_PASSWORD} never;</li>
  *   <li>database host, port, name and user from {@code cloud.yml};</li>
  *   <li>per service: {@code VECTORA_SERVER_PORT}, {@code VECTORA_SERVER_HOST}, {@code VECTORA_XMS},
  *       {@code VECTORA_XMX};</li>
@@ -35,6 +37,7 @@ final class ServicePlaceholders {
      * Builds the values.
      *
      * @param spec         the service
+     * @param platform     its platform; decides which secrets it sees
      * @param snapshot     the configuration
      * @param node         this node
      * @param secrets      the secrets file
@@ -42,17 +45,13 @@ final class ServicePlaceholders {
      * @param tryOrder     names the proxy tries on login, in order
      * @param contributors extra values
      * @return the placeholder source
-     * @throws ServiceException if the proxy list cannot be built from the backends
+     * @throws ServiceException if the proxy list cannot be built from the backends, or a secret the
+     *                          platform needs is missing in {@code secrets/vectora.env}
      */
-    static PlaceholderValues build(ServiceSpec spec, ConfigSnapshot snapshot, NodeConfig node, EnvFile secrets,
-                                   Collection<ProxyBackend> backends, List<String> tryOrder,
+    static PlaceholderValues build(ServiceSpec spec, ServerPlatform platform, ConfigSnapshot snapshot, NodeConfig node,
+                                   EnvFile secrets, Collection<ProxyBackend> backends, List<String> tryOrder,
                                    List<PlaceholderContributor> contributors) throws ServiceException {
-        Map<String, String> values = new HashMap<>();
-        for (EnvFile.Entry entry : secrets.entries()) {
-            if (entry.key().startsWith("VECTORA_") && !entry.value().isEmpty()) {
-                values.put(entry.key(), entry.value().reveal());
-            }
-        }
+        Map<String, String> values = new HashMap<>(ServiceSecrets.placeholders(platform, secrets));
         DatabaseConfig db = snapshot.cloud().database();
         values.put("VECTORA_DB_HOST", db.host());
         values.put("VECTORA_DB_PORT", Integer.toString(db.port()));

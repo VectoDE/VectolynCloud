@@ -1,6 +1,7 @@
 package net.vectora.cloud.setup;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -131,13 +132,21 @@ public record SetupFile(int schemaVersion, Language language, Boolean eula, Stri
     public static SetupFile read(Path file) throws SetupException {
         byte[] content;
         try {
-            if (Files.size(file) > ConfigMappers.MAX_FILE_BYTES) {
-                throw SetupException.of(new ConfigException(
-                        ConfigError.of(DISPLAY_NAME, "", ErrorCode.FILE_TOO_LARGE, ConfigMappers.MAX_FILE_BYTES)));
+            // Only a regular file (or a link to one); a FIFO or device would block or never end.
+            if (!Files.isRegularFile(file)) {
+                throw new SetupException(List.of(SetupMessages.FILE_UNREADABLE));
             }
-            content = Files.readAllBytes(file);
+            // Read at most one byte more than allowed: the size may change after a check, so the
+            // limit is applied to what was actually read.
+            try (InputStream in = Files.newInputStream(file)) {
+                content = in.readNBytes(ConfigMappers.MAX_FILE_BYTES + 1);
+            }
         } catch (IOException | SecurityException e) {
             throw new SetupException(List.of(SetupMessages.FILE_UNREADABLE));
+        }
+        if (content.length > ConfigMappers.MAX_FILE_BYTES) {
+            throw SetupException.of(new ConfigException(
+                    ConfigError.of(DISPLAY_NAME, "", ErrorCode.FILE_TOO_LARGE, ConfigMappers.MAX_FILE_BYTES)));
         }
         try {
             return parse(content);

@@ -1,6 +1,6 @@
 # VectoraCloud node: service core
 
-`VectoraCloud/cloud-node` (package `net.vectora.cloud.node`) is the node itself. This page covers the entry point the launcher calls, how the node puts its parts together (home lock, Java runtimes, database, cloud channel, console) and the service core, which renders the wanted servers, starts them as plain Java processes, watches them, restarts them after a crash and stops them in stages. Setup assistant, scaling, software downloads and the bridges come in later pull requests; the interfaces they plug into are listed at the end.
+`VectoraCloud/cloud-node` (package `net.vectora.cloud.node`) is the node itself. This page covers the entry point the launcher calls, how the node puts its parts together (home lock, Java runtimes, database, cloud channel, console) and the service core, which renders the wanted servers, starts them as plain Java processes, watches them, restarts them after a crash and stops them in stages. The [setup assistant](setup.md) runs before the first service starts. Scaling, software downloads and copying the bridge jars come in later pull requests; the interfaces they plug into are listed at the end.
 
 ## Start order
 
@@ -12,14 +12,15 @@
 4. builds the parts (`CloudNode.open`) and registers the shutdown hook `vectora-shutdown` before anything starts, so a `SIGTERM` or Ctrl+C while the database is set up or the servers start still stops what has been started: the service core with the [Java runtimes](#java-runtimes) and the [database](#database) as start gate and placeholder source, the [cloud channel](network.md) server with the tokens of the service core, and the [console](console.md);
 5. starts watching the configuration files and reconciles on every change (see [Reload](#reload));
 6. starts the cloud channel on host and port of this node in `nodes.yml`; services get the bound address in `VECTORA_CLOUD_HOST` and `VECTORA_CLOUD_PORT`;
-7. starts the console: log records go through it with the secret filter (`logHandler(RedactingFilter::redact)`), the built-in commands get the real shutdown, and the [`service` commands](#console-commands) are added;
+7. prepares the console: log records go through it with the secret filter (`logHandler(RedactingFilter::redact)`), the built-in commands get the real shutdown, and the [`service` commands](#console-commands) and `setup` are added;
 8. ends orphaned servers from the previous run (see [Orphans](#orphans));
-9. starts every planned service, but only if `cloud.yml` has `setup-complete: true` and `eula-accepted: true`. Otherwise it logs a warning and starts nothing. The same gate applies to every later start, also `service start` in the console;
-10. keeps the JVM alive with the non-daemon thread `vectora-node`.
+9. runs the setup: `SetupWizard.ensureComplete(console, config, SetupEnvironment.of(settings, env))`, also without a console (then only a setup file can answer). The launcher's `setup-file`, `non-interactive` and `platform.*` settings reach `SetupEnvironment` through `NodeSettings.toMap()`. A `SetupException` is printed with `describe(language)`, on the console or, without one, in the log. On `EULA_DECLINED`, `CANCELLED` or any other result that is not ready, no service starts; the console stays open, and once `setup` finishes there, the node starts the planned services right away;
+10. starts the console and every planned service, but only if `cloud.yml` has `setup-complete: true` and `eula-accepted: true`. Otherwise it logs a warning and starts nothing. The same gate applies to every later start, also `service start` in the console, `service restart` and the automatic restart after a crash;
+11. keeps the JVM alive with the non-daemon thread `vectora-node`.
 
 A second `start` in the same JVM is an error.
 
-`CloudNode.close()` (the shutdown hook, `shutdown` in the console, a second Ctrl+C) runs the reverse order: console, services (each with its stop command), database (`DatabaseProvisioner.shutdown()` after the last service), cloud channel, configuration, log handlers, home lock. It is idempotent; a second caller waits until the first has finished. Once it has begun, no start reaches the database any more, so a start that was still running cannot leave a MariaDB behind. `SIGTERM` (`docker stop`, systemd) and Ctrl+C in plain mode reach the JVM's shutdown hook and end the node the same way.
+`CloudNode.close()` (the shutdown hook, `shutdown` in the console, a second Ctrl+C) runs the reverse order: console, services (each with its stop command), database (`DatabaseProvisioner.shutdown()` after the last service), cloud channel, configuration, log handlers, home lock. Every step runs in a `try`/`finally` of its own: if one fails (also with an `Error`), it is logged and the next step still runs, so the home lock is always released; an `Error` is rethrown at the end. It is idempotent; a second caller waits until the first has finished. Once it has begun, no start reaches the database any more, so a start that was still running cannot leave a MariaDB behind. `SIGTERM` (`docker stop`, systemd) and Ctrl+C in plain mode reach the JVM's shutdown hook and end the node the same way.
 
 ## Home lock
 
@@ -52,11 +53,26 @@ The JRE manager is built on the first start that needs it.
 
 A service is one running server process. The plan comes from the configuration:
 
-- Each task in `tasks/` that runs on this node (`nodes` empty or containing `node-id`) gets `min-services` services of its group.
-- A group whose `template` is one of the eight known folders (`Proxy`, `Lobby-Server`, `Survival-Server`, `Creative-Server`, `Mod-Server`, `End-Server`, `Database`, `Minigame-Server`) follows the `servers` switches in `cloud.yml`. An unwanted group is neither rendered nor started, and the proxy does not list it.
-- `Database` is never a service; the [database module](database.md) runs it.
-- The 1.8.8 groups (a group on the `Legacy-Proxy` template and every PandaSpigot group) are only wanted while `legacy-proxy.enabled` is `true`.
-- A group on its own template folder counts as wanted.
+- Each task in `tasks/` that runs on this node (`nodes` empty or containing `node-id`) gets `min-services` services of its group, but only if the group is wanted (`ServicePlanner.isWanted(group, cloud)`):
+  - `wanted: false` in the group file switches the group off, whatever its template (for example one minigame of several);
+  - a group whose `template` is one of the nine known folders (`Proxy`, `Lobby-Server`, `Survival-Server`, `Creative-Server`, `Mod-Server`, `End-Server`, `Database`, `Minigame-Server`, `Legacy-Server`) also needs its switch under `servers` in `cloud.yml`; every PandaSpigot group, also on a template of its own, follows `servers.legacy-server`;
+  - the 1.8.8 groups (the `Legacy-Proxy` template, the `Legacy-Server` template and every PandaSpigot group) are only wanted while `legacy-proxy.enabled` is `true`;
+  - `Database` is never a service; the [database module](database.md) runs it;
+  - any other group on a template folder of its own counts as wanted.
+- An unwanted group is neither rendered nor started, `service start` refuses it and names the setting that switches it off, and it appears in no proxy configuration: neither in the `velocity.toml` of a proxy that renders, nor in a `RegisterServer` of the bridges.
+
+| Group | `wanted` | Switch in `servers` | `legacy-proxy.enabled` | Runs |
+|---|---|---|---|---|
+| `lobby` (`Lobby-Server`) | missing or `true` | `lobby: true` | any | yes |
+| `lobby` | `false` | `lobby: true` | any | no |
+| `lobby` | missing | `lobby: false` | any | no |
+| `bedwars` (`Minigame-Server`) | `false` | `minigame: true` | any | no, the other minigames run |
+| `legacy` (PandaSpigot, own template) | missing | `legacy-server: true` | `true` | yes |
+| `legacy` | missing | `legacy-server: true` | `false` | no |
+| `legacy` | missing | `legacy-server: false` | `true` | no |
+| legacy proxy (`Legacy-Proxy`) | missing | none | `false` | no |
+| `custom` (own template, Paper) | missing | none | any | yes, by its task |
+| `custom` | `false` | none | any | no |
 - `max-services` caps the services per task, also for manual starts.
 
 Backends start before proxies, so the proxy's server list is complete when it renders.
@@ -71,7 +87,17 @@ Backends start before proxies, so the proxy's server list is complete when it re
 | Port, proxy | `cloud.proxy.port` (the software `velocity` marks a proxy); the proxy on the `Legacy-Proxy` template gets `legacy-proxy.port`. One proxy of each kind per node. |
 | Port, other services | the first free port in the node's `service-ports`, skipping the node's fixed ports (proxy, Bedrock, legacy proxy, API, database, channel) and ports another program already has bound. Never two services on one port. |
 
-Every start renders the template with [cloud-template](template.md) into the folder. Besides the secrets, the node provides `VECTORA_SERVER_HOST`, `VECTORA_SERVER_PORT`, `VECTORA_XMS`, `VECTORA_XMX`, `VECTORA_DB_HOST`, `VECTORA_DB_PORT`, `VECTORA_DB_NAME`, `VECTORA_DB_USER` and, for the proxy, `VECTORA_PROXY_BIND`, `VECTORA_PROXY_PORT`, `VECTORA_BEDROCK_PORT` and the server list. In the proxy list a static backend with index 1 appears under its group name (`lobby`), every other one under its id (`lobby-2`). The try list holds the lobby backends. The main proxy lists every backend except PandaSpigot; the legacy proxy lists only the PandaSpigot backends, all of them in its try list, and gets `VECTORA_LEGACY_PROXY_PORT`. Dynamic services are not written into `velocity.toml`; they register through the bridge (PR 13).
+Every start renders the template with [cloud-template](template.md) into the folder. Secrets are need-to-know: a template only gets the secrets of `secrets/vectora.env` that its platform uses (`ServiceSecrets`):
+
+| Platform | Secret placeholders |
+|---|---|
+| `VELOCITY` (main proxy) | `VECTORA_FORWARDING_SECRET`, `VECTORA_FLOODGATE_KEY_B64`, `VECTORA_DB_PASSWORD` |
+| `VELOCITY_LEGACY` (legacy proxy) | `VECTORA_LEGACY_FORWARDING_SECRET` only |
+| `PAPER`, `FABRIC` | `VECTORA_FORWARDING_SECRET`, `VECTORA_MANAGEMENT_SECRET`, `VECTORA_DB_PASSWORD`, `VECTORA_FLOODGATE_KEY_B64` |
+| `PANDASPIGOT` | none; its bridge gets `VECTORA_LEGACY_FORWARDING_SECRET` in the environment |
+| `NONE` (database template) | `VECTORA_DB_PASSWORD` |
+
+`VECTORA_DB_ROOT_PASSWORD` reaches no template; only the database module uses it. A template that asks for a secret outside its row fails to render (unknown placeholder). If a secret of the row is missing in `vectora.env`, the start fails with "secrets/vectora.env has no value for ..., which every ... service needs"; the legacy proxy also refuses a legacy secret equal to the modern one. Other `VECTORA_*` keys an operator adds to `vectora.env` are no placeholders. Besides the secrets, the node provides `VECTORA_SERVER_HOST`, `VECTORA_SERVER_PORT`, `VECTORA_XMS`, `VECTORA_XMX`, `VECTORA_DB_HOST`, `VECTORA_DB_PORT`, `VECTORA_DB_NAME`, `VECTORA_DB_USER` and, for the proxy, `VECTORA_PROXY_BIND`, `VECTORA_PROXY_PORT`, `VECTORA_BEDROCK_PORT` and the server list. In the proxy list a static backend with index 1 appears under its group name (`lobby`), every other one under its id (`lobby-2`); only backends that are still wanted and not being stopped are listed. The try list holds the lobby backends. The main proxy lists every backend except PandaSpigot; the legacy proxy lists only the PandaSpigot backends, all of them in its try list, and gets `VECTORA_LEGACY_PROXY_PORT`. Dynamic services are not written into `velocity.toml`; they register through the bridge (PR 13).
 
 ## Process
 
@@ -92,7 +118,9 @@ The node starts the server JVM directly with `ProcessBuilder`, without a wrapper
 | `VECTORA_SERVICE_ID` | service id |
 | `VECTORA_SERVICE_GROUP`, `VECTORA_SERVICE_TASK` | group and task name |
 | `VECTORA_SERVICE_PORT` | the service's port |
-| `VECTORA_SERVICE_TOKEN` | a new random token per start (`ServiceTokens.issue`, 32 bytes, base64url). The bridge logs in to the cloud channel with it; the channel checks it in constant time through `ServiceManager.authenticator()`. The service core is the only place that issues and revokes tokens: revoked when the process ends and when the start fails, and a restart issues a new one. |
+| `VECTORA_SERVICE_TOKEN` | a new random token per start (`ServiceTokens.issue`, 32 bytes, base64url). The bridge logs in to the cloud channel with it; the channel checks it in constant time through `ServiceManager.authenticator()`. The service core is the only place that issues and removes tokens: `ServiceTokens.remove(id, token)` when the process ends and when the start fails. It only removes the token of that start, so a late exit of an old process cannot remove the token of the restart that follows. |
+| `VECTORA_SERVICE_PLATFORM` | the `ServerPlatform` name (`VELOCITY`, `VELOCITY_LEGACY`, `PAPER`, `FABRIC`, `PANDASPIGOT`), so the bridge knows what it runs on |
+| `VECTORA_LEGACY_FORWARDING_SECRET` | only for `PANDASPIGOT`: the `bungeeguard` token its bridge checks. No other service gets it in its environment. |
 | `VECTORA_CLOUD_HOST`, `VECTORA_CLOUD_PORT` | where this node's channel listens, as bound. A wildcard bind (`0.0.0.0`, `::`) is passed as `127.0.0.1` or `::1`. |
 
 ## Life cycle
@@ -115,7 +143,9 @@ stateDiagram-v2
 
 - **RUNNING** is reached when the output contains a line with `Done (` and `)!` (Paper, Fabric and Velocity print it) or when the bridge sends `ServiceReady` on the cloud channel (`CloudClient.markReady()`; `ChannelBridge` calls `ServiceManager.markReady`).
 - **Stop while PREPARED** (template being rendered, software being downloaded): the service ends in STOPPED right away and no process is started.
-- **The channel follows the life cycle:** when a process ends (STOPPED, CRASHED) its token is revoked and `ChannelBridge` closes its connection with `SHUTDOWN`. The last `ServiceStatus` of each service is kept for `service list` and `service info`.
+- **The channel follows the life cycle:** when a process ends (STOPPED, CRASHED) its token is removed and `ChannelBridge` closes its connection with `SHUTDOWN`. The last `ServiceStatus` of each service is kept for `service list` and `service info`.
+- **Proxies learn about backends from the bridge:** when a backend reaches RUNNING, `ChannelBridge` sends `RegisterServer(name, host, port, group, legacy)` to the proxy that lists it: PandaSpigot backends (`legacy=true`) to the legacy proxy, every other one to the main proxy. The name is the one in `velocity.toml` (`lobby` for `lobby-1`). STOPPING, STOPPED and CRASHED send `UnregisterServer`. A proxy that connects (or reaches RUNNING) gets every current backend of its kind. Unwanted backends are never registered, and a backend that becomes unwanted on a reload is unregistered when it stops.
+- **Players:** `PlayerJoin`, `PlayerSwitch` and `PlayerQuit` from a proxy are kept in `ChannelBridge.players()` (`NetworkPlayers`). The proxy names a server as in its list; the node maps that name back to the service (`lobby` to `lobby-1`). Events from a service that is no proxy, for an unknown server or that do not fit the known state are dropped and logged at debug level without their content. When a proxy ends, its players are removed.
 - **Stop** goes in stages: the stop command on standard input (`stop`, for Velocity `shutdown`, or `process.stop-command`), then up to `process.stop-timeout` (default 60 s), then a normal termination request, 10 s later the forced end of the process and its children. On Windows the termination request already ends the process.
 - **Exit:** a requested stop or exit code 0 ends in STOPPED, anything else in CRASHED.
 - **Restart after a crash** (`process.restart`): with `on-crash: true` the service is prepared and started again after `backoff`, doubled for each further crash and capped at `max-backoff`. After `max-attempts` crashes in a row it stays CRASHED. A service that ran for 5 minutes starts counting from zero again.
@@ -140,7 +170,7 @@ process:
 
 ## Reload
 
-When a configuration file changes, the node calls `ServiceManager.stopUnwanted()`: services whose group is now unwanted (`servers` switch off, `legacy-proxy.enabled` off) are stopped cleanly with their stop command, in the background, and are not planned again. New or changed tasks are not started automatically yet (scaling, PR 15); `service start <task>` starts one.
+When a configuration file changes, the node calls `ServiceManager.stopUnwanted()`: services whose group is now unwanted (`wanted: false` in the group file, `servers` switch off, `legacy-proxy.enabled` off) are stopped cleanly with their stop command, in the background, and are not planned again. Their proxies get `UnregisterServer`, also for a static backend that stands in `velocity.toml`: the Velocity bridge then withdraws it from the running server list, so the proxy no longer offers it (see [bridges.md](bridges.md#dynamic-servers)). The line in the rendered `velocity.toml` goes away with the proxy's next start. Needs a connected proxy bridge; without one, the stopped server stays listed until the proxy restarts. New or changed tasks are not started automatically yet (scaling, PR 15); `service start <task>` starts one.
 
 ## Console commands
 
@@ -203,7 +233,9 @@ Afterwards the leftover folders in `temp/services/` are deleted, except blocked 
 |---|---|---|
 | `CloudNode.open(settings, options -> …)` with `CloudNode.Options`: `services()` (the `ServiceManager.Builder`), `network(…)`, `database(…)`, `console(…)`, `noConsole()` | real parts | modules that replace one of them, tests |
 | `CloudNode.console()` (`Optional<Console>`; `Console.prompter()` asks questions), `config()`, `secrets()`, `services()`, `database()`, `network()`, `channel()` | | PR 11 (setup assistant), PR 13 |
-| `NodeSettings.nonInteractive()`, `setupFile()` | from the launcher | PR 11 |
+| `NodeSettings.nonInteractive()`, `setupFile()`, `toMap()` | from the launcher; `toMap()` feeds `SetupEnvironment.of` | |
+| `CloudNode.Options.environment(Map)` | `System.getenv()` | tests (no Pterodactyl or Docker detection) |
+| `ServiceManager.registration(id)`, `registrations(legacy)`, `runningProxies(legacy)`, `proxyKind(id)`, `backendNamed(proxy, name)` | used by `ChannelBridge` | PR 13, PR 15 |
 | `service.JavaRuntimeResolver` | `ManagedJavaRuntimes` on `JreManager` | `ManagedJavaRuntimes.Minimums` gets the Mojang and Fill minimums in PR 14 |
 | `service.ServerSoftwareProvider` (`provide(spec, folder)` returns the jar name) | `existingJar()`: the jar must already be in the folder | PR 14, downloads |
 | `service.PlaceholderContributor` (extra placeholder values; the node's own values win) | `NodeDatabase` | PR 24 (legacy proxy) |

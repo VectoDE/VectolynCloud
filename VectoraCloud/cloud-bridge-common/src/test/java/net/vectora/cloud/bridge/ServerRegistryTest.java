@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -20,6 +21,7 @@ class ServerRegistryTest {
     /** A proxy server list in memory: configured servers plus runtime ones. */
     static final class FakeServers implements ProxyServers {
         final Set<String> configured;
+        final Set<String> withdrawn = new HashSet<>();
         final Map<String, String> runtime = new HashMap<>();
         final List<String> log = new ArrayList<>();
 
@@ -34,7 +36,13 @@ class ServerRegistryTest {
 
         @Override
         public boolean exists(String name) {
-            return configured.contains(name) || runtime.containsKey(name);
+            return (configured.contains(name) && !withdrawn.contains(name)) || runtime.containsKey(name);
+        }
+
+        @Override
+        public void withdraw(String name) {
+            withdrawn.add(name);
+            log.add("~" + name);
         }
 
         @Override
@@ -76,15 +84,40 @@ class ServerRegistryTest {
     }
 
     @Test
-    void configuredAndForeignServersAreLeftAlone() {
-        assertEquals(ServerRegistry.Outcome.REFUSED_CONFIGURED, main.register(server("lobby", 30001, false)));
+    void configuredServersAreNeverReplacedAndForeignOnesAreLeftAlone() {
+        assertEquals(ServerRegistry.Outcome.CONFIGURED, main.register(server("lobby", 30001, false)));
+        assertEquals(ServerRegistry.Outcome.CONFIGURED, main.register(server("lobby", 30009, false)),
+                "another address does not replace a velocity.toml server");
         servers.runtime.put("other-1", "10.0.0.5:25565");
         assertEquals(ServerRegistry.Outcome.REFUSED_FOREIGN, main.register(server("other-1", 30003, false)));
-        assertEquals(ServerRegistry.Outcome.NOT_OWNED, main.unregister(new UnregisterServer(new ServiceId("lobby"))));
         assertEquals(ServerRegistry.Outcome.NOT_OWNED, main.unregister(new UnregisterServer(new ServiceId("other-1"))));
         assertTrue(servers.log.isEmpty());
         assertTrue(ServerRegistry.Outcome.REFUSED_FOREIGN.refused());
+        assertFalse(ServerRegistry.Outcome.CONFIGURED.refused(), "a static backend sent again is no warning");
         assertFalse(ServerRegistry.Outcome.REGISTERED.refused());
+    }
+
+    @Test
+    void aConfiguredServerTheCloudStopsIsWithdrawnAndComesBackWhenItRunsAgain() {
+        // lobby-1 stopped, for example because servers.lobby was switched off on a reload.
+        assertEquals(ServerRegistry.Outcome.WITHDRAWN, main.unregister(new UnregisterServer(new ServiceId("lobby"))));
+        assertFalse(servers.exists("lobby"), "the proxy no longer lists a server the cloud stopped");
+        assertEquals(ServerRegistry.Outcome.NOT_OWNED, main.unregister(new UnregisterServer(new ServiceId("lobby"))),
+                "a second removal changes nothing");
+        // Switched on again: back under the same name, now owned by the registry.
+        assertEquals(ServerRegistry.Outcome.REGISTERED, main.register(server("lobby", 30001, false)));
+        assertTrue(servers.exists("lobby"));
+        assertEquals(ServerRegistry.Outcome.UNREGISTERED, main.unregister(new UnregisterServer(new ServiceId("lobby"))));
+        assertEquals(ServerRegistry.Outcome.REGISTERED, main.register(server("lobby", 30004, false)));
+        assertEquals(List.of("~lobby", "+lobby@127.0.0.1:30001", "-lobby", "+lobby@127.0.0.1:30004"), servers.log);
+    }
+
+    @Test
+    void aConfiguredServerSomeoneElseTookOutIsNotPutBack() {
+        servers.withdrawn.add("lobby");
+        assertEquals(ServerRegistry.Outcome.REFUSED_FOREIGN, main.register(server("lobby", 30001, false)));
+        assertEquals(ServerRegistry.Outcome.NOT_OWNED, main.unregister(new UnregisterServer(new ServiceId("lobby"))));
+        assertTrue(servers.log.isEmpty());
     }
 
     @Test

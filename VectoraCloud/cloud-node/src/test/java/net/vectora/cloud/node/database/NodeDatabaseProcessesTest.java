@@ -11,9 +11,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import net.vectora.cloud.database.DatabaseProcesses;
 import net.vectora.cloud.node.service.JavaRuntimeResolver;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -49,7 +55,31 @@ class NodeDatabaseProcessesTest {
         List<String> arguments = new ArrayList<>(List.of(JavaRuntimeResolver.JavaRuntime.current().executable().toString(),
                 "-cp", System.getProperty("java.class.path"), Program.class.getName()));
         arguments.addAll(List.of(args));
-        return new DatabaseProcesses.Command(arguments, dir, dir.resolve("logs").resolve("mariadb.log"));
+        Path work = dir.resolve("work");
+        Files.createDirectories(work);
+        return new DatabaseProcesses.Command(arguments, work, dir.resolve("logs").resolve("mariadb.log"));
+    }
+
+    /**
+     * Empties the temporary folder before JUnit deletes it. Windows releases the working folder and
+     * the log of a program that was killed a moment after its exit; JUnit's single attempt then
+     * failed now and then ({@code TempDirDeletionStrategy$DeletionException}). Each entry gets a few
+     * seconds, and a file that is still held after that fails the test.
+     */
+    @AfterEach
+    void releaseTheFolders() throws Exception {
+        for (Path folder : List.of(dir.resolve("logs"), dir.resolve("work"))) {
+            if (!Files.isDirectory(folder)) {
+                continue;
+            }
+            List<Path> entries;
+            try (Stream<Path> walk = Files.walk(folder)) {
+                entries = walk.sorted(Comparator.reverseOrder()).toList();
+            }
+            for (Path entry : entries) {
+                deleteSoon(entry);
+            }
+        }
     }
 
     @Test
@@ -76,6 +106,12 @@ class NodeDatabaseProcessesTest {
         NodeDatabaseProcesses processes = new NodeDatabaseProcesses();
         IOException late = assertThrows(IOException.class, () -> processes.run(command("sleep"), Duration.ofSeconds(3)));
         assertTrue(late.getMessage().contains("did not finish"), late.getMessage());
+        // The program is gone when run() reports: no child of this JVM that run() started is still alive.
+        Set<Long> before = alivePids();
+        assertThrows(IOException.class, () -> processes.run(command("sleep"), Duration.ofSeconds(3)));
+        Set<Long> left = alivePids();
+        left.removeAll(before);
+        assertTrue(left.isEmpty(), "still running after run() reported: " + left);
 
         DatabaseProcesses.Running running = processes.start(command("sleep"));
         assertTrue(running.isAlive());
@@ -83,5 +119,24 @@ class NodeDatabaseProcessesTest {
         running.kill();
         assertTrue(running.waitFor(Duration.ofSeconds(30)), "killed");
         assertFalse(running.isAlive());
+    }
+
+    private static Set<Long> alivePids() {
+        return ProcessHandle.current().children().filter(ProcessHandle::isAlive).map(ProcessHandle::pid)
+                .collect(Collectors.toCollection(HashSet::new));
+    }
+
+    private static void deleteSoon(Path path) throws Exception {
+        for (int attempt = 1; ; attempt++) {
+            try {
+                Files.delete(path);
+                return;
+            } catch (IOException e) {
+                if (attempt >= 50) {
+                    throw e;
+                }
+                Thread.sleep(100);
+            }
+        }
     }
 }

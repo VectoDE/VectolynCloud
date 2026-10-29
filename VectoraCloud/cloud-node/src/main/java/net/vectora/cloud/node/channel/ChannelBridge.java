@@ -13,7 +13,10 @@ import net.vectora.cloud.node.service.ServiceManager;
 import net.vectora.cloud.node.service.ServiceState;
 import net.vectora.protocol.ServiceId;
 import net.vectora.protocol.message.Disconnect;
+import net.vectora.protocol.message.Message;
+import net.vectora.protocol.message.RegisterServer;
 import net.vectora.protocol.message.ServiceStatus;
+import net.vectora.protocol.message.UnregisterServer;
 
 /**
  * Connects the cloud channel with the service core, in both directions.
@@ -27,8 +30,17 @@ import net.vectora.protocol.message.ServiceStatus;
  *       token itself is revoked by the service core at the same moment, so the connection cannot
  *       come back.</li>
  * </ul>
- * Player events from the proxies arrive as {@link ServiceEvent.MessageReceived}; they are not
- * used yet (stage 2 PR 13 checks them against the node's state).
+ * Server lists of the proxies: a backend that is RUNNING is sent to the running proxies of its kind
+ * as {@code RegisterServer} (the main proxy gets every backend except PandaSpigot with
+ * {@code legacy = false}, the legacy proxy only the PandaSpigot ones with {@code legacy = true}), and
+ * as {@code UnregisterServer} once it stops. A proxy that connects or becomes RUNNING gets every
+ * backend of its kind at once. Backends of a group that is not wanted are never sent. The Velocity
+ * bridge leaves the servers of {@code velocity.toml} alone, so a static backend that is listed
+ * there already is not changed.
+ *
+ * <p>Player events from the proxies ({@code PlayerJoin}, {@code PlayerSwitch}, {@code PlayerQuit})
+ * go into {@link NetworkPlayers}, with the static backend names of the proxy ({@code lobby}) mapped
+ * to the service ({@code lobby-1}).
  */
 public final class ChannelBridge implements ChannelListener, ServiceListener {
 
@@ -36,6 +48,9 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
 
     private final ServiceManager services;
     private final Map<ServiceId, ServiceStatus> statuses = new ConcurrentHashMap<>();
+    /** Backends sent to the proxies, with the message, so they can be removed after they are gone. */
+    private final Map<ServiceId, RegisterServer> registered = new ConcurrentHashMap<>();
+    private final NetworkPlayers players;
     private volatile CloudNetworkServer server;
 
     /**
@@ -45,7 +60,17 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
      */
     public ChannelBridge(ServiceManager services) {
         this.services = Objects.requireNonNull(services, "services");
+        this.players = new NetworkPlayers(services::backendNamed);
         services.addListener(this);
+    }
+
+    /**
+     * Returns the players online, as the proxies report them.
+     *
+     * @return the directory
+     */
+    public NetworkPlayers players() {
+        return players;
     }
 
     /**
@@ -87,20 +112,41 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
                 }
             }
             case ServiceEvent.StatusReported reported -> statuses.put(reported.service(), reported.status());
-            case ServiceEvent.Connected connected ->
-                    LOG.log(System.Logger.Level.DEBUG, "{0} connected to the cloud channel", connected.service());
+            case ServiceEvent.Connected connected -> {
+                LOG.log(System.Logger.Level.DEBUG, "{0} connected to the cloud channel", connected.service());
+                syncProxy(connected.service());
+            }
             case ServiceEvent.Disconnected disconnected ->
                     LOG.log(System.Logger.Level.DEBUG, "{0} left the cloud channel ({1})", disconnected.service(),
                             disconnected.reason() == null ? "connection lost" : disconnected.reason());
-            // Player events: used from stage 2 PR 13 on. Only the sender is logged, never the content.
-            case ServiceEvent.MessageReceived received ->
-                    LOG.log(System.Logger.Level.TRACE, "{0} sent a message on the cloud channel", received.service());
+            // Only the sender and the outcome are logged, never the content (player names).
+            case ServiceEvent.MessageReceived received -> {
+                NetworkPlayers.Outcome outcome = players.apply(received.service(), received.message());
+                if (outcome != NetworkPlayers.Outcome.APPLIED) {
+                    LOG.log(System.Logger.Level.DEBUG, "A message of {0} on the cloud channel was dropped: {1}",
+                            received.service(), outcome);
+                }
+            }
         }
     }
 
     @Override
     public void stateChanged(ServiceInfo service, ServiceState previous) {
-        if (service.state() != ServiceState.STOPPED && service.state() != ServiceState.CRASHED) {
+        switch (service.state()) {
+            case RUNNING -> {
+                if (services.proxyKind(service.id()).isPresent()) {
+                    syncProxy(service.id());
+                } else {
+                    services.registration(service.id()).ifPresent(message -> register(service.id(), message));
+                }
+                return;
+            }
+            case STOPPING, STOPPED, CRASHED -> unregister(service.id());
+            default -> {
+                return;
+            }
+        }
+        if (service.state() == ServiceState.STOPPING) {
             return;
         }
         // Events arrive a moment later; if the service has been started again meanwhile, its new
@@ -109,9 +155,48 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
             return;
         }
         statuses.remove(service.id());
+        players.proxyEnded(service.id());
         CloudNetworkServer current = server;
         if (current != null) {
             current.disconnect(service.id(), Disconnect.Reason.SHUTDOWN);
+        }
+    }
+
+    /** Sends a backend to every running proxy of its kind. */
+    private void register(ServiceId backend, RegisterServer message) {
+        registered.put(backend, message);
+        for (ServiceId proxy : services.runningProxies(message.legacy())) {
+            send(proxy, message);
+        }
+    }
+
+    /** Removes a backend that was sent before from the proxies of its kind. */
+    private void unregister(ServiceId backend) {
+        RegisterServer message = registered.remove(backend);
+        if (message == null) {
+            return;
+        }
+        for (ServiceId proxy : services.runningProxies(message.legacy())) {
+            send(proxy, new UnregisterServer(message.name()));
+        }
+    }
+
+    /** Sends a proxy every backend of its kind; repeats change nothing in the Velocity bridge. */
+    private void syncProxy(ServiceId proxy) {
+        Optional<Boolean> legacy = services.proxyKind(proxy);
+        if (legacy.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<ServiceId, RegisterServer> entry : services.registrations(legacy.get()).entrySet()) {
+            registered.put(entry.getKey(), entry.getValue());
+            send(proxy, entry.getValue());
+        }
+    }
+
+    private void send(ServiceId proxy, Message message) {
+        CloudNetworkServer current = server;
+        if (current != null && current.isConnected(proxy)) {
+            current.send(proxy, message);
         }
     }
 

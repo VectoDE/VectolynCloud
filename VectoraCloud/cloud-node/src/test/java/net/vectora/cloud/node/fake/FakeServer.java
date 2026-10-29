@@ -24,7 +24,10 @@ import java.nio.file.Path;
  *   <li>{@code ignore-term}: like {@code ignore-stop}, and its shutdown hook blocks, so only the
  *       forced end stops it (on Linux and macOS).</li>
  * </ul>
- * It also prints the service token (which the node must mask in the log), writes it to
+ * With the cloud client, a console line {@code player join|switch|quit ...} sends a player event
+ * like a proxy bridge, and received {@code RegisterServer}/{@code UnregisterServer} are printed.
+ * It also prints {@code VECTORA_SERVICE_PLATFORM}, whether {@code VECTORA_LEGACY_FORWARDING_SECRET}
+ * is set (never its value), the service token (which the node must mask in the log), writes it to
  * {@code token.txt} for the test, prints every line of the files named in {@code -Dfake.echo}
  * (to prove secrets in rendered files are masked), and creates {@code world/level.dat} like a
  * real server creating its world.
@@ -54,6 +57,9 @@ public final class FakeServer {
         out.println("[fake] Starting minecraft server " + id + " on port " + System.getenv("VECTORA_SERVICE_PORT"));
         out.println("[fake] args " + String.join(" ", args));
         out.println("[fake] token " + token);
+        out.println("[fake] platform " + System.getenv("VECTORA_SERVICE_PLATFORM"));
+        out.println("[fake] legacy secret " + (System.getenv("VECTORA_LEGACY_FORWARDING_SECRET") == null
+                ? "absent" : "present"));
         Files.writeString(Path.of("token.txt"), token == null ? "" : token, StandardCharsets.UTF_8);
         String echo = System.getProperty("fake.echo");
         if (echo != null && Files.isRegularFile(Path.of(echo))) {
@@ -83,6 +89,11 @@ public final class FakeServer {
         String line;
         while ((line = in.readLine()) != null) {
             out.println("> " + line);
+            if (line.startsWith("player ") && bridge != null) {
+                Class.forName("net.vectora.cloud.node.fake.FakeCloudBridge")
+                        .getMethod("command", Object.class, PrintStream.class, String.class)
+                        .invoke(null, bridge, out, line);
+            }
             if ((line.equals("stop") || line.equals("shutdown")) && mode.equals("normal")) {
                 out.println("[fake] Stopping the server");
                 if (bridge != null) {

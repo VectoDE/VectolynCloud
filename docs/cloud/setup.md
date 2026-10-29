@@ -34,7 +34,7 @@ The assistant asks in this order. Every question shows its default in brackets; 
    | survival, mod | 3G |
 
    Values from 256M, in `M` or `G`. The minimum heap is set to 512M or the maximum, whichever is smaller. The assistant adds everything up and warns when the sum exceeds the memory of the machine or of the Pterodactyl server (`SERVER_MEMORY`).
-7. **Database.** `managed` (the cloud runs its own MariaDB), `docker`, `external` or `h2`. On Pterodactyl `docker` is left out, since the server already runs inside a container without access to Docker. Where MariaDB has no server build (anything except Windows x64 and Linux x86_64 with glibc), `managed` is marked as falling back to H2, and H2 is the default. For `external` it asks for host, port (3306), database name, user and password.
+7. **Database.** `managed` (the cloud runs its own MariaDB), `docker`, `external` or `h2`. On Pterodactyl `docker` is left out, since the server already runs inside a container without access to Docker. Where MariaDB has no server build (anything except Windows x64 and Linux x86_64 with glibc), `managed` is marked as falling back to H2, and H2 is the default. After `managed` the assistant explains the switch behind it: `servers.database: true` in `cloud.yml` runs MariaDB, `false` uses H2 files per server. For `external` it asks for host, port (3306), database name, user and password.
 
 Then it prints a summary: every answer, the generated secrets (as "hidden"), and the files it would write. You choose `save`, `change` (all questions again, your answers are the new defaults) or `cancel`. Only `save` writes. If the checks find a problem, `save` is not offered until you change the answer.
 
@@ -54,7 +54,7 @@ All other secrets (forwarding secrets, database passwords of the managed server,
 
 ### Running it again: `setup`
 
-The console command `setup` runs the questions again. The current configuration provides the defaults, and only what you change is written. If you change nothing, the assistant says so and writes nothing; if you only change the lobby's heap, only `groups/lobby.yml` is written. An existing EULA consent and `setup-complete` stay.
+The console command `setup` runs the questions again. The current configuration provides the defaults, and only what you change is written. If you change nothing, the assistant says so and writes nothing; if you only change the lobby's heap, only `groups/lobby.yml` is written. An existing EULA consent and `setup-complete` stay. A server switched off stops right away (see [node](node.md#reload)); a server switched on starts with `service start <task>` or at the next start of the cloud, and the assistant says so after saving.
 
 ## Setup file (`--setup-file`)
 
@@ -104,7 +104,7 @@ Rules:
 - The file is read as strictly as `cloud.yml`: unknown fields, duplicate keys, wrong types or a missing `eula: true` are errors. The file is checked with exactly the same rules as typed answers (ports, heap, legacy server only with legacy proxy, Docker not on Pterodactyl, the whole-configuration validation). On any error nothing is written and every problem is listed.
 - `memory` and `minigames` may only name groups that exist or that the setup creates.
 - The file is used only while `setup-complete` is false. Once the setup is done, a file that stays mounted is ignored, so it cannot undo later changes made with `config set` or the dashboard.
-- The file holds no secret. The password of an external database comes from `secrets/vectora.env` (`VECTORA_DB_PASSWORD`) or from `database.password-file`: a file with the password on one line (a trailing line break is dropped), at most 4 KiB, UTF-8, relative to the home or absolute. That fits Docker and Kubernetes secrets.
+- The file holds no secret. The password of an external database comes from `secrets/vectora.env` (`VECTORA_DB_PASSWORD`) or from `database.password-file`: a regular file (a link to one is fine; a FIFO or device is refused) with the password on one line (a trailing line break is dropped), at most 4 KiB, UTF-8, relative to the home or absolute. That fits Docker and Kubernetes secrets.
 
 ### Why a file and not environment variables
 
@@ -150,26 +150,29 @@ For an egg without questions, let Wings write the setup file from egg variables 
 
 ## Integration into the node
 
+`CloudNode.start()` runs the setup after the cloud channel is up and orphans are ended, before any service starts (see [node](node.md#start-order)):
+
 ```java
-SetupEnvironment env = SetupEnvironment.of(settings, System.getenv());
-SetupResult result = SetupWizard.ensureComplete(console, config, env);
+SetupEnvironment env = SetupEnvironment.of(settings.toMap(), System.getenv());
+SetupWizard.registerCommand(console, config, env);       // only with a console
+SetupResult result = SetupWizard.ensureComplete(console, config, env);  // console may be null
 if (!result.ready()) {
-    return; // cancelled or EULA declined: start no server
+    // cancelled or EULA declined: start no server; the console stays open for "setup"
 }
-SetupWizard.registerCommand(console, config, env);
 ```
 
-`ensureComplete` does nothing once `setup-complete` is true, uses the setup file if there is one, asks on the console if questions are allowed, and otherwise throws a `SetupException` that explains `--setup-file`. It runs before the node starts any service.
+`ensureComplete` does nothing once `setup-complete` is true, uses the setup file if there is one, asks on the console if questions are allowed, and otherwise throws a `SetupException` that explains `--setup-file`. The node prints the exception with `describe(language)` (on the console, or in the log without one) and starts no service. `nonInteractive` checks `setup-complete` itself as well, so a setup file that stays mounted never undoes later changes. The launcher passes `setup-file`, `non-interactive` and the `platform.*` entries through to `SetupEnvironment`. If the setup is finished later with `setup` on the console, the node starts the wanted servers right after it.
 
 ## What gets written
 
-Writing happens in two steps, so nothing ends up half done and marked complete:
+Writing happens in three steps, so nothing ends up half done and marked complete:
 
-1. secrets (an external password first, then every missing generated secret), then all configuration changes in one `ConfigService.apply`, validated as a whole;
-2. only then `eula-accepted: true` and `setup-complete: true`.
+1. all configuration changes in one `ConfigService.apply`, validated as a whole. If it fails, nothing is written at all;
+2. only then the secrets: every missing generated secret, then the password of an external database, so a password never goes with a host and user that were not saved;
+3. last, `eula-accepted: true` and `setup-complete: true`.
 
-If step 1 fails, `setup-complete` stays false and the next start asks again. For every wanted server without a group, the assistant creates the group (template, software, Minecraft version, heap, `combat: legacy` for PandaSpigot) and a task: one static service, minigames dynamic from one to four. An unwanted server only gets its switch under `servers:` in `cloud.yml` turned off; an existing group stays as it is. Minigame groups switched off one by one get `wanted: false` in their group file. The download catalog of new groups starts empty and is filled by the server templates.
+If step 2 or 3 fails, the configuration goes back to the state before (groups and tasks the setup created are removed again) and a password the setup wrote goes back to the one before. Generated secrets that were missing stay; they never replace a value. `setup-complete` stays false and the next start asks again. For every wanted server without a group, the assistant creates the group (template, software, Minecraft version, heap, `combat: legacy` for PandaSpigot) and a task: one static service, minigames dynamic from one to four. An unwanted server only gets its switch under `servers:` in `cloud.yml` turned off; an existing group stays as it is. Minigame groups switched off one by one get `wanted: false` in their group file. The download catalog of new groups starts empty and is filled by the server templates.
 
 ## Tests
 
-`VectoraCloud/cloud-setup/src/test`: the questions through a scripted terminal (order, defaults, cancel at any point, EOF, Ctrl+C, declined EULA, Pterodactyl, masked and visible password input, reserved ports, `change`, rerun with no and with one change, German texts, the `setup` command), the setup file (every rule above, `ensureComplete`), password files, the Administrators group, the environment, and a check that no text opens with "No" or "Not". Jazzer fuzz tests: `SetupFileFuzzTest.setupFileFailsOnlyWithReadableProblems` and `SetupFileFuzzTest.passwordFileGivesASecretOrAProblem`, seeds in `src/test/resources/net/vectora/cloud/setup/SetupFileFuzzTestInputs/`.
+`VectoraCloud/cloud-setup/src/test`: the questions through a scripted terminal (order, defaults, cancel at any point, EOF, Ctrl+C, declined EULA, Pterodactyl, masked and visible password input, reserved ports, `change`, rerun with no and with one change, German texts, the `setup` command), the setup file (every rule above, `ensureComplete`, only regular files up to the limit), the writer (`SetupApplierTest`: declined EULA, rollback after a failed secret write, no secret after a failed configuration write), password files (also FIFOs and devices), the Administrators group, the environment, and a check that no text opens with "No" or "Not", including the `setup` command's description, the labels of the port hint and the problems of cloud-config that the setup passes on. Jazzer fuzz tests: `SetupFileFuzzTest.setupFileFailsOnlyWithReadableProblems` and `SetupFileFuzzTest.passwordFileGivesASecretOrAProblem`, seeds in `src/test/resources/net/vectora/cloud/setup/SetupFileFuzzTestInputs/`.

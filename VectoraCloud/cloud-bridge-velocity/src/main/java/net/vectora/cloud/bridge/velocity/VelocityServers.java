@@ -44,4 +44,9 @@ final class VelocityServers implements ProxyServers {
             proxy.unregisterServer(info);
         }
     }
+
+    @Override
+    public void withdraw(String name) {
+        proxy.getServer(name).ifPresent(server -> proxy.unregisterServer(server.getServerInfo()));
+    }
 }

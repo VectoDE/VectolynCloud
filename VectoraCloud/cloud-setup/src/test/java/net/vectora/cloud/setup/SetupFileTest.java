@@ -239,6 +239,37 @@ class SetupFileTest {
     }
 
     @Test
+    void readTakesOnlyRegularFilesUpToTheLimit() throws Exception {
+        Files.createDirectories(root.resolve("folder.yml"));
+        SetupException folder = assertThrows(SetupException.class, () -> SetupFile.read(root.resolve("folder.yml")));
+        assertTrue(folder.describe(Language.EN).contains("cannot be read"), folder.describe(Language.EN));
+        if (Files.exists(Path.of("/dev/zero"))) {
+            // Endless: refused before it is opened, instead of filling the memory.
+            assertThrows(SetupException.class, () -> SetupFile.read(Path.of("/dev/zero")));
+        }
+        Path large = root.resolve("large.yml");
+        byte[] tooLarge = new byte[net.vectora.cloud.config.io.ConfigMappers.MAX_FILE_BYTES + 1];
+        java.util.Arrays.fill(tooLarge, (byte) '#');
+        Files.write(large, tooLarge);
+        SetupException e = assertThrows(SetupException.class, () -> SetupFile.read(large));
+        assertTrue(e.describe(Language.EN).contains("larger than"), e.describe(Language.EN));
+
+        // Counter-check: a regular file within the limit is read.
+        Files.writeString(large, "schema-version: 1\neula: true\n");
+        assertTrue(SetupFile.read(large).toString().startsWith("SetupFile"));
+    }
+
+    @Test
+    void nonInteractiveLeavesACompletedSetupAlone() throws Exception {
+        SetupWizard.nonInteractive(config, env(FULL, false), null);
+        byte[] cloud = Files.readAllBytes(config.home().cloudFile());
+        SetupResult again = SetupWizard.nonInteractive(config,
+                env("schema-version: 1\neula: true\nnetwork-name: Other\n", false), null);
+        assertEquals(SetupResult.Status.ALREADY_COMPLETE, again.status());
+        assertArrayEquals(cloud, Files.readAllBytes(config.home().cloudFile()), "a mounted file undoes nothing");
+    }
+
+    @Test
     void parseReportsLineAndPath() {
         ConfigException e = assertThrows(ConfigException.class,
                 () -> SetupFile.parse("schema-version: 1\neula: true\nnetwork:\n  jav-port: 1\n".getBytes(StandardCharsets.UTF_8)));

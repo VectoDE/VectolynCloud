@@ -64,7 +64,9 @@ public final class SetupWizard {
 
     /**
      * Takes the answers from the setup file in {@code env}, checks them like typed answers and saves
-     * them. Writes nothing if anything is wrong.
+     * them. Writes nothing if anything is wrong. Once {@code setup-complete} is set it does not read
+     * the file at all and returns {@link SetupResult.Status#ALREADY_COMPLETE}: a file that stays
+     * mounted must never undo what was changed later with {@code setup} or by hand.
      *
      * @param out where to report the result
      * @throws SetupException if the file is missing, unreadable or has problems
@@ -72,6 +74,9 @@ public final class SetupWizard {
      */
     public static SetupResult nonInteractive(ConfigService config, SetupEnvironment env, ConsoleOutput out)
             throws SetupException, IOException {
+        if (!needed(config)) {
+            return SetupResult.of(SetupResult.Status.ALREADY_COMPLETE);
+        }
         Path file = env.setupFile().orElseThrow(() -> new SetupException(java.util.List.of(SetupMessages.NEEDS_ANSWERS)));
         SetupFile parsed;
         try {
@@ -138,8 +143,7 @@ public final class SetupWizard {
     /** The {@code setup} command. */
     static Command command(Console console, ConfigService config, SetupEnvironment env) {
         return Command.builder(COMMAND)
-                .description(Text.of("Runs the setup assistant again to change the settings.",
-                        "Startet den Einrichtungsassistenten erneut, um die Einstellungen zu ändern."))
+                .description(SetupMessages.COMMAND_DESCRIPTION)
                 .executes(context -> {
                     try {
                         run(console, config, env.withLanguage(context.language()));

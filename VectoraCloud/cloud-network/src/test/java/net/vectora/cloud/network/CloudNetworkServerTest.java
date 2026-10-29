@@ -120,7 +120,11 @@ class CloudNetworkServerTest {
         try (TestPeer peer = TestPeer.connect(address)) {
             assertEquals(AuthResult.Outcome.UNKNOWN_PEER, peer.hello(new ServiceId("ghost-1"), lobbyToken).outcome());
         }
-        tokens.revoke(SURVIVAL);
+        // A stale token of an earlier start removes nothing; the current one is removed.
+        AuthToken stale = new ServiceTokens().issue(SURVIVAL);
+        assertFalse(tokens.remove(SURVIVAL, stale));
+        assertEquals(AuthResult.Outcome.ACCEPTED, tokens.authenticate(SURVIVAL, survivalToken));
+        assertTrue(tokens.remove(SURVIVAL, survivalToken));
         try (TestPeer peer = TestPeer.connect(address)) {
             assertEquals(AuthResult.Outcome.UNKNOWN_PEER, peer.hello(SURVIVAL, survivalToken).outcome());
         }

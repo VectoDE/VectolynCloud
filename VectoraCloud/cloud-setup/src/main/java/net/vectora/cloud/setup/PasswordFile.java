@@ -84,6 +84,15 @@ public final class PasswordFile {
         } catch (RuntimeException e) {
             return new Result(null, SetupMessages.FILE_PASSWORD_UNREADABLE);
         }
+        // Only a regular file (a link to one is fine, as Kubernetes mounts its secrets): a FIFO or a
+        // device such as /dev/zero would block the start or never end.
+        try {
+            if (!Files.isRegularFile(path)) {
+                return new Result(null, SetupMessages.FILE_PASSWORD_UNREADABLE);
+            }
+        } catch (SecurityException e) {
+            return new Result(null, SetupMessages.FILE_PASSWORD_UNREADABLE);
+        }
         try (InputStream in = Files.newInputStream(path)) {
             byte[] content = in.readNBytes(MAX_BYTES + 1);
             return parse(content);
