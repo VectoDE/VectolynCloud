@@ -46,11 +46,11 @@ Der Scaler liest die Konfiguration in jeder Runde neu. Alle drei Wege wirken des
 
 ### Gruppeneinstellungen für den Scaler
 
-`drain-timeout` in `groups/<name>.yml` (5s bis 10m, Standard 30s) gibt an, wie lange ein Dienst der Gruppe Zeit hat, seine Spieler anderswohin zu schicken, bevor der Scaler ihn stoppt. Gespeichert und geprüft wird der Wert schon jetzt, genutzt ab einer späteren Änderung. Ändern lässt er sich in der Datei, mit `group set <Name> drain-timeout 45s`, über `PUT /api/v1/groups/{name}`, mit `drain-timeout:` in der Setup-Datei oder in den erweiterten Einstellungen des Einrichtungsassistenten.
+`drain-timeout` in `groups/<name>.yml` (5s bis 10m, Standard 30s) gibt an, wie lange ein Dienst der Gruppe Zeit hat, seine Spieler anderswohin zu schicken, bevor der Scaler ihn stoppt. Siehe Regel 4 unten. Ändern lässt er sich in der Datei, mit `group set <Name> drain-timeout 45s`, über `PUT /api/v1/groups/{name}`, mit `drain-timeout:` in der Setup-Datei oder in den erweiterten Einstellungen des Einrichtungsassistenten.
 
 ### Node-Einstellungen für den Scaler
 
-In `nodes.yml` kann jeder Node `max-memory` setzen (mindestens 512M, fehlt der Wert, rechnet der Node selbst) und `memory-reserve` mit `system` (Standard 1G), `node-overhead` (Standard 256M) und `database` (Standard 512M, zählt nur, wenn die Cloud die Datenbank im Modus `managed` oder `docker` selbst betreibt), je 1M bis 64G. Die Reserve behält der Node für sich. Gespeichert und geprüft wird das schon jetzt, das Speicherbudget weiter unten nutzt es ab einer späteren Änderung. Ändern lässt es sich in der Datei, mit `node set <ID> <Feld> <Wert>`, über `PUT /api/v1/nodes/{name}`, mit `node:` in der Setup-Datei oder in den erweiterten Einstellungen des Einrichtungsassistenten. Siehe [config.md](config.md#nodesyml).
+In `nodes.yml` kann jeder Node `max-memory` setzen (mindestens 512M, fehlt der Wert, rechnet der Node selbst) und `memory-reserve` mit `system` (Standard 1G), `node-overhead` (Standard 256M) und `database` (Standard 512M, zählt nur, wenn die Cloud die Datenbank im Modus `managed` oder `docker` selbst betreibt), je 1M bis 64G. Die Reserve behält der Node für sich. Das [Speicherbudget](#speicherbudget) nutzt beides. Ändern lässt es sich in der Datei, mit `node set <ID> <Feld> <Wert>`, über `PUT /api/v1/nodes/{name}`, mit `node:` in der Setup-Datei oder in den erweiterten Einstellungen des Einrichtungsassistenten. Siehe [config.md](config.md#nodesyml).
 
 ## Welche Tasks skaliert werden
 
@@ -121,15 +121,15 @@ Hochskalieren (Regel 3) braucht außerdem:
 - Die maximalen Heaps (`heap.max`) aller Dienste des Nodes, die einen Prozess haben oder gleich bekommen, plus der neue passen in das **Budget** des Nodes.
 - Mindestens `heap.max` des neuen Dienstes ist gerade frei.
 
-Das Budget ist `max-memory` des Nodes in `nodes.yml`, höchstens der gemessene Speicher der Maschine (bzw. des Containers). Ohne `max-memory` hält der Node eine Reserve frei und nutzt den Rest:
+Das Budget ist `max-memory` des Nodes in `nodes.yml`, höchstens der gemessene Speicher der Maschine (bzw. des Containers). Ohne `max-memory` hält der Node eine Reserve frei und nutzt den Rest. Die Größen stammen aus `memory-reserve` des Nodes in `nodes.yml`; ein fehlendes Feld (oder ein Node ohne Eintrag) hat den Standardwert:
 
-| Reserve | Größe |
-|---|---|
-| Betriebssystem | 1 GiB |
-| Die JVM des Nodes selbst | ihr maximaler Heap (`-Xmx` oder was die JVM gewählt hat) plus 256 MiB für Metaspace, Threads und Puffer |
-| MariaDB, die die Cloud betreibt | 512 MiB, wenn `servers.database` an ist und `database.mode` `managed` oder `docker` |
+| Reserve | Feld | Standard |
+|---|---|---|
+| Betriebssystem | `system` | 1 GiB |
+| Die JVM des Nodes selbst | `node-overhead`, dazu ihr maximaler Heap (`-Xmx` oder was die JVM gewählt hat) | 256 MiB für Metaspace, Threads und Puffer |
+| MariaDB, die die Cloud betreibt | `database`, nur wenn `servers.database` an ist und `database.mode` `managed` oder `docker` | 512 MiB |
 
-Beispiel: Maschine mit 16 GiB, Node mit `-Xmx1G`, verwaltete Datenbank: 16 - 1 - 1 - 0,25 - 0,5 = 13,25 GiB für die Heaps der Dienste. Eine Datenbank, die der Betreiber woanders betreibt (`external`), braucht hier keine Reserve. Teilen sich andere Programme die Maschine, `max-memory` setzen.
+Beispiel mit den Standardwerten: Maschine mit 16 GiB, Node mit `-Xmx1G`, verwaltete Datenbank: 16 - 1 - 1 - 0,25 - 0,5 = 13,25 GiB für die Heaps der Dienste. Eine Datenbank, die der Betreiber woanders betreibt (`external`), braucht hier keine Reserve. Teilen sich andere Programme die Maschine, `max-memory` setzen.
 
 Fehlt eins davon oder ist der Speicher des Nodes noch nicht gemessen, wartet der Task. Das Log nennt den Grund einmal, bis er sich ändert:
 

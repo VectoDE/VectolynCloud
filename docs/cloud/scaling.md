@@ -46,11 +46,11 @@ The scaler reads the configuration again in every round, so all three take effec
 
 ### Group settings for the scaler
 
-`drain-timeout` in `groups/<name>.yml` (5s to 10m, default 30s) is how long a service of the group may take to send its players elsewhere before the scaler stops it. Stored and checked now, used by a later change. File, `group set <name> drain-timeout 45s`, `PUT /api/v1/groups/{name}`, `drain-timeout:` in the setup file or the advanced settings of the setup assistant.
+`drain-timeout` in `groups/<name>.yml` (5s to 10m, default 30s) is how long a service of the group may take to send its players elsewhere before the scaler stops it. See rule 4 below. File, `group set <name> drain-timeout 45s`, `PUT /api/v1/groups/{name}`, `drain-timeout:` in the setup file or the advanced settings of the setup assistant.
 
 ### Node settings for the scaler
 
-In `nodes.yml` each node may set `max-memory` (at least 512M, missing: worked out by the node) and `memory-reserve` with `system` (default 1G), `node-overhead` (default 256M) and `database` (default 512M, counted only when the cloud runs the database in `managed` or `docker` mode), each 1M to 64G. The reserve is memory the node keeps for itself. Stored and checked now; the memory budget below uses them from a later change on. File, `node set <id> <field> <value>`, `PUT /api/v1/nodes/{name}`, `node:` in the setup file or the advanced settings of the setup assistant. See [config.md](config.md#nodesyml).
+In `nodes.yml` each node may set `max-memory` (at least 512M, missing: worked out by the node) and `memory-reserve` with `system` (default 1G), `node-overhead` (default 256M) and `database` (default 512M, counted only when the cloud runs the database in `managed` or `docker` mode), each 1M to 64G. The reserve is memory the node keeps for itself. The [memory budget](#memory-budget) uses both. File, `node set <id> <field> <value>`, `PUT /api/v1/nodes/{name}`, `node:` in the setup file or the advanced settings of the setup assistant. See [config.md](config.md#nodesyml).
 
 ## Which tasks are scaled
 
@@ -121,15 +121,15 @@ A scale-up (rule 3) also needs:
 - the maximum heaps (`heap.max`) of every service on the node that has or is about to get a process, plus the new one, to fit into the **budget** of the node;
 - at least the new service's `heap.max` to be free right now.
 
-The budget is `max-memory` of the node in `nodes.yml`, at most the measured memory of the machine (or container). Without `max-memory` the node keeps a reserve free and uses the rest:
+The budget is `max-memory` of the node in `nodes.yml`, at most the measured memory of the machine (or container). Without `max-memory` the node keeps a reserve free and uses the rest. The sizes come from `memory-reserve` of the node in `nodes.yml`; a missing field (or a node without an entry) has the default:
 
-| Reserve | Size |
-|---|---|
-| Operating system | 1 GiB |
-| The node's own JVM | its maximum heap (`-Xmx`, or what the JVM chose) plus 256 MiB for metaspace, threads and buffers |
-| MariaDB run by the cloud | 512 MiB, if `servers.database` is on and `database.mode` is `managed` or `docker` |
+| Reserve | Field | Default |
+|---|---|---|
+| Operating system | `system` | 1 GiB |
+| The node's own JVM | `node-overhead`, plus its maximum heap (`-Xmx`, or what the JVM chose) | 256 MiB for metaspace, threads and buffers |
+| MariaDB run by the cloud | `database`, only if `servers.database` is on and `database.mode` is `managed` or `docker` | 512 MiB |
 
-Example: a 16 GiB machine, the node started with `-Xmx1G`, a managed database: 16 - 1 - 1 - 0.25 - 0.5 = 13.25 GiB for the heaps of the services. A database the operator runs elsewhere (`external`) needs no reserve here. Set `max-memory` when other programs share the machine.
+Example with the defaults: a 16 GiB machine, the node started with `-Xmx1G`, a managed database: 16 - 1 - 1 - 0.25 - 0.5 = 13.25 GiB for the heaps of the services. A database the operator runs elsewhere (`external`) needs no reserve here. Set `max-memory` when other programs share the machine.
 
 If either fails, or the node's memory is not measured yet, the task waits and the log says why, once until the reason changes:
 

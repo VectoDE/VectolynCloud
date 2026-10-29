@@ -692,7 +692,7 @@ components:
           example: "45s"
           description: >-
             Optional, 5s to 10m; missing means 30s and is not returned. How long a service may take
-            to send its players elsewhere before the scaler stops it (used from a later change on).
+            to send its players elsewhere before the scaler stops it; after that the stop is called off.
     Task:
       type: object
       description: >-
@@ -733,7 +733,7 @@ components:
           minimum: 0
           maximum: 99
           default: 50
-          description: "Percent, below scale-up-at. Stored and checked; the scaling rule that uses it follows in a later change."
+          description: "Percent, below scale-up-at. A dynamic service is removed once the rest of the group would stay below it."
         scale-down-after: {type: string, example: "5m"}
         cooldown: {type: string, example: "60s"}
     Node:

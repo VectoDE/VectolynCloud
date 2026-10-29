@@ -97,7 +97,7 @@ process:                     # optional, see docs/cloud/node.md; every key has a
 
 `process.jvm-flags` must not set what the node controls: `-Xms`, `-Xmx`, `-jar`, `-cp`/`-classpath`/`--class-path`, `-XX:Flags=`, `-XX:VMOptionsFile=`, and the version and help switches are rejected. On top of that, a change through the [REST API](api.md) may only add flags from the [allowlist](#jvm-flag-allowlist).
 
-`drain-timeout` is how long a service of the group may take to send its players to other services before the scaler stops it. It is stored and validated now; the scaler uses it from a later change on.
+`drain-timeout` is how long a service of the group may take to send its players to other services before the scaler stops it. If players are still on it after that time, the stop is called off and it keeps running; see [scaling.md](scaling.md#rules).
 
 `transitional` marks the third-party plugins the cloud installs until Vectora's own replacement is ready (LuckPerms, TAB, PlaceholderAPI, WorldEdit, WorldGuard, Chunky, spark, ProxyPortal). `mod` entries are only allowed with `fabric`, `plugin` entries only without it. `pandaspigot` only runs `1.8.8`.
 
