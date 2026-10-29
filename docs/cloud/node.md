@@ -306,6 +306,7 @@ What none of these tests do: join with a real client. Logging in with Java 1.8.8
 | `ServiceManager.sendCommand(id, line)` | 1 to 1024 characters, no control characters | |
 | `ServiceManager.start(task)`, `startDynamic(task)`, `start(task, index)`, `stop(id)`, `restart(id)`, `stopUnwanted()`, `services()`, `find(id)` | used by the console, the API and `scaling.Autoscaler` (through `ScalingTarget`) | |
 | `ChannelBridge.drain(id, timeout)` | closes a backend on the proxies, moves its players with `TransferPlayer` and waits until it is empty; used by `scaling.Autoscaler` (through `ScalingTarget`) | |
+| `ChannelBridge` and `NetworkKick` | a backend's network kick is passed on to the running proxies of its kind, only from a backend on the proxies' lists ([bridges.md](bridges.md#network-wide-kicks)) | the moderation module (stage 3) |
 | `scaling.ScalingSignals` (player counts per service, node memory) | the monitor's newest samples, capped by the proxies' player events while a proxy watches the backend | the Vectora plugin (stage 3), a queue for matchmaking |
 | `ServiceManager.authenticator()`, `markReady(id)` | used by the cloud channel | PR 13, bridges |
 
