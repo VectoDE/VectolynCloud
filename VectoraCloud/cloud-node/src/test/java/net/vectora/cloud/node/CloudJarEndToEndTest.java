@@ -287,7 +287,26 @@ class CloudJarEndToEndTest {
         builder.environment().put("PATH", java25.getParent() + java.io.File.pathSeparator + java21.getParent()
                 + java.io.File.pathSeparator + System.getenv().getOrDefault("PATH", ""));
         builder.environment().put("JAVA_HOME", java25.getParent().getParent().toString());
-        return builder.start();
+        Process cloud = builder.start();
+        // A test JVM that is ended from outside (cancelled build) never reaches end(), and the cloud
+        // keeps running when its input ends (docs/cloud/console.md). The hook ends what this test
+        // started, the cloud and its servers, and nothing else.
+        Thread hook = new Thread(() -> destroyTree(cloud), "e2e-cloud-cleanup");
+        Runtime.getRuntime().addShutdownHook(hook);
+        cloud.onExit().thenRun(() -> {
+            try {
+                Runtime.getRuntime().removeShutdownHook(hook);
+            } catch (IllegalStateException e) {
+                // The JVM is shutting down already; the hook runs and finds nothing alive.
+            }
+        });
+        return cloud;
+    }
+
+    private static void destroyTree(Process cloud) {
+        List<ProcessHandle> children = new ArrayList<>(cloud.toHandle().descendants().toList());
+        cloud.destroyForcibly();
+        children.forEach(ProcessHandle::destroyForcibly);
     }
 
     private static boolean allRunning(Path home, List<String> ids) {
@@ -361,9 +380,7 @@ class CloudJarEndToEndTest {
         if (cloud.waitFor(1, TimeUnit.MINUTES)) {
             return;
         }
-        List<ProcessHandle> children = new ArrayList<>(cloud.toHandle().descendants().toList());
-        cloud.destroyForcibly();
-        children.forEach(ProcessHandle::destroyForcibly);
+        destroyTree(cloud);
         cloud.waitFor(30, TimeUnit.SECONDS);
     }
 
