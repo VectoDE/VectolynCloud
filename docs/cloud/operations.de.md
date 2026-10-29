@@ -41,6 +41,8 @@ Das Container-Image landet unter `ghcr.io/vectode/vectora-cloud` mit der Version
 
 ## Erster Start: was in jedem Server landet
 
+Die Vorlagen stecken im Jar: Ein leerer Home-Ordner bekommt beim ersten Start jeden Ordner `<Server>/template/`. Einen Ordner, den du schon hast, rührt die Cloud nicht an ([node.md](node.md#built-in-templates)).
+
 Vor jedem Start füllt der Node den Ordner des Servers: das Server-Jar, die Plugins (bei Fabric die Mods), die seine Gruppe braucht, und die VectoraCloud-Bridge seiner Plattform. Was er dort ablegt, notiert er in `plugins/.vectora-managed` (bei Fabric `mods/`). Will die Gruppe eine dieser Dateien nicht mehr, entfernt er sie wieder. Plugins, die du selbst hineinkopierst, bleiben liegen. Ein PandaSpigot-Server (1.8.8) startet nicht ohne seine Bridge, denn nur sie prüft den Token des Legacy-Proxys. Einzelheiten: [node.md](node.md#server-software).
 
 ## Startskripte

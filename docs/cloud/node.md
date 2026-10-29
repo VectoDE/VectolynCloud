@@ -10,7 +10,7 @@
 2. takes the [home lock](#home-lock) and removes what an interrupted run left behind: unfinished downloads (`cache/artifacts/download-*.part`, `ArtifactCache.removeStalePartFiles`) and unfinished Java installs (`jre/.staging-*`, `jre/.old-*`, `JreInstaller.removeLeftovers`);
 3. opens the configuration (`ConfigService`) and generates missing secrets in `secrets/vectora.env`;
 4. builds the parts (`CloudNode.open`) and registers the shutdown hook `vectora-shutdown` before anything starts, so a `SIGTERM` or Ctrl+C while the database is set up or the servers start still stops what has been started: the service core with the [Java runtimes](#java-runtimes) and the [database](#database) as start gate and placeholder source, the [cloud channel](network.md) server with the tokens of the service core, and the [console](console.md);
-5. starts watching the configuration files and reconciles on every change (see [Reload](#reload));
+5. writes every [built-in template](#built-in-templates) the home does not have yet, then starts watching the configuration files and reconciles on every change (see [Reload](#reload));
 6. starts the cloud channel on host and port of this node in `nodes.yml`; services get the bound address in `VECTORA_CLOUD_HOST` and `VECTORA_CLOUD_PORT`;
 7. starts the [monitoring](monitor.md) (`MonitorRuntime`, opened in step 4 with the node id as origin; an invalid `monitor.yml` fails the start there);
 8. prepares the console: log records go through it with the secret filter (`logHandler(RedactingFilter::redact)`), the built-in commands get the real shutdown, and the [`service` commands](#console-commands), `setup`, `monitor`, `alerts`, `backup` and `api` are added (`api token` works while the API is off);
@@ -47,6 +47,19 @@ The JRE manager is built on the first start that needs it.
 - **A `PANDASPIGOT` service without `plugins/VectoraCloudBridgeLegacy-<version>.jar` does not start.** Its `server.properties` has `bungeecord: true`; without the bridge's token check it would trust every connection that claims to come from the legacy proxy. The check runs in `ServiceManager` itself, also when a test or a later module plugs in another `ServerSoftwareProvider`.
 - A download that fails stops this start: the service fails with the reason, like any other error before the launch.
 - Floodgate's `key.pem` is only written, and `VECTORA_FLOODGATE_KEY_B64` only needed, when the template ships Floodgate's folder (`plugins/floodgate/` or `config/floodgate/` on Fabric; `TemplateInstaller.runsFloodgate`).
+
+## Built-in templates
+
+`VectoraCloud.jar` carries the templates of every server of the network: the tracked files of `Server-Network/<Server>/template/` for `Proxy`, `Legacy-Proxy`, `Lobby-Server`, `Survival-Server`, `Creative-Server`, `Mod-Server`, `End-Server`, `Minigame-Server`, `Legacy-Server` and `Database`. The build task `:VectoraCloud:cloud-node:templateResources` copies them into the node's resources under `net/vectora/cloud/node/templates/` and lists each file with its SHA-256 in `templates.index`. Jars, `key.pem`, `*.key`, `*.secret`, keystores and hidden files never go in, even if a checkout has them in a template folder.
+
+On every start `BuiltInTemplates.seed` writes the templates whose folder `<home>/<Server>/template/` does not exist. That is what makes `java -jar VectoraCloud.jar` in an empty folder work: the release, the Docker image and the Pterodactyl egg ship only the jar.
+
+- A template folder that exists, also an empty one or a link, belongs to the operator. The cloud never overwrites, merges or updates it; to get the built-in version back, delete or rename the folder and start again.
+- Each folder is written into `<home>/<Server>/.vectora-template-incoming/` first, every file is checked against the index, and the folder is then moved into place. A crash leaves either the whole template or none; the staging folder is removed on the next start.
+- The index accepts only plain paths below `<Server>/template/` (no `..`, no hidden names, no backslash).
+- A template that cannot be written is logged as an error; the node keeps running, and the servers of that template fail to start with the missing folder as reason.
+
+In the repository checkout (`Server-Network/` as home) every template exists, so nothing is written.
 
 ## Database
 
@@ -115,12 +128,12 @@ Every start renders the template with [cloud-template](template.md) into the fol
 The node starts the server JVM directly with `ProcessBuilder`, without a wrapper jar (see [architecture](architecture.md#no-wrapper-jar)):
 
 ```
-<java> -Xms<heap.min> -Xmx<heap.max> <process.jvm-flags> [-Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8] -jar <software jar> [--nogui]
+<java> -Xms<heap.min> -Xmx<heap.max> <process.jvm-flags> [-Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8] -jar <software jar> [--nogui | nogui]
 ```
 
 - `<java>` comes from the `JavaRuntimeResolver`, in the running node `ManagedJavaRuntimes` (see [Java runtimes](#java-runtimes)).
 - The template is installed for its platform: `Legacy-Proxy` with Velocity as `VELOCITY_LEGACY`, so its `forwarding.secret` holds `VECTORA_LEGACY_FORWARDING_SECRET`; PandaSpigot as `PANDASPIGOT`; the others by their software.
-- The encoding flags are added from Java 18 on. `--nogui` is added for everything except Velocity.
+- The encoding flags are added from Java 18 on. Paper and Fabric get `--nogui`, PandaSpigot the bare word `nogui` (CraftBukkit 1.8 treats `--nogui` as an unknown option, prints its help and exits with 0), Velocity nothing.
 - No shell is involved; flags are single arguments. Flags that would change heap, class path or the main jar (`-Xms…`, `-Xmx…`, `-jar`, `-cp`, `-XX:Flags=`, `-XX:VMOptionsFile=`, `-version`, `-help`, …) are rejected by the validator.
 - The environment is the node's own without any `VECTORA_*` variable, plus the variables below. Their names are constants of `net.vectora.protocol.ServiceEnvironment`, which `CloudClientSettings` reads as well, so node and bridges cannot drift apart.
 
@@ -244,6 +257,36 @@ If the node ends without stopping its services (crash, power loss, `kill -9`), t
 - blocks the folder and the port for this run if the start time cannot be read, so no second server opens the same world. The id is reported as unverifiable.
 
 Afterwards the leftover folders in `temp/services/` are deleted, except blocked ones.
+
+## End-to-end test
+
+`CloudJarEndToEndTest` starts the real `VectoraCloud.jar` as its own process, the way an operator does:
+
+```sh
+./gradlew :VectoraCloud:cloud-node:e2eTest                          # offline, fake servers (CI: Integration job)
+./gradlew :VectoraCloud:cloud-node:e2eTest -Pe2eDatabase=managed    # same with a downloaded MariaDB (managed-mariadb.yml)
+./gradlew :VectoraCloud:cloud-node:e2eLiveTest                      # real downloads and servers (cloud-e2e-live.yml, weekly)
+```
+
+Add `-Pe2eAllowRoot=true` in a shell that runs as administrator or root; the test then passes `--allow-root`.
+
+**Offline (`e2eTest`).** The home starts empty except for `nodes.yml` (a free channel port) and a pre-seeded `software.lock.yml` with `cache/artifacts/`: every catalog entry the default groups ask for points at one fake server jar that logs in to the cloud channel like a bridge. The cloud runs on Java 25 and sees exactly a Java 21 and a Java 25 on the `PATH`. It gets `--non-interactive --setup-file` with every server switched on (proxy, lobby, Survival, Creative, Mod-Server, End, minigames, legacy proxy, 1.8.8 server), free ports, H2 and 256M per group. The test checks:
+
+- the setup ran from the file and the built-in templates were written;
+- all nine services become `running`, which only the channel's `ServiceReady` does;
+- `software.lock.yml` is unchanged byte for byte, nothing was downloaded, no `.part` file is left;
+- each server's `.vectora-managed` lists exactly the catalog's plugins (or mods) for its template plus the bridge of its platform, and none on Fabric; the Floodgate key is in the lobby but not in the 1.8.8 server;
+- the 1.8.8 server runs on Java 21, Paper and Velocity on Java 25;
+- the main proxy gets a `RegisterServer` for every modern backend and none for the 1.8.8 server; the legacy proxy gets the 1.8.8 server with `legacy=true` and not the lobby;
+- `shutdown` on the console stops every server with its stop command and the cloud ends with exit code 0.
+
+It takes about 15 seconds. Removing the template seeding makes it fail: no server can render.
+
+**Managed MariaDB.** With `-Pe2eDatabase=managed` the setup chooses `managed`, so the node downloads MariaDB, sets it up before the first server and stops it after the last one; every seeded lock entry stays as it was and only MariaDB is added. It needs internet access and runs in `managed-mariadb.yml` on Linux and Windows.
+
+**Live (`e2eLiveTest`).** No seeding, no fake: the proxy with the lobby (Paper 26.3) and the legacy proxy with the 1.8.8 server (PandaSpigot), with the real downloads and Java 21 and 25. It checks that the jars are in place and pinned, that each server's bridge reports ready on the channel, that each proxy's bridge logs its backend (`Server … from VectoraCloud`) and the clean shutdown. With a fast connection it takes about a minute. It depends on the download APIs and needs a few GB of memory, so it runs weekly and on demand (`cloud-e2e-live.yml`), not on every pull request. Its first run found that PandaSpigot exits on `--nogui` (see [Process](#process)).
+
+What none of these tests do: join with a real client. Logging in with Java 1.8.8 to 26.3 and with Bedrock stays a manual check.
 
 ## Interfaces for the next pull requests
 

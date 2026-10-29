@@ -41,6 +41,8 @@ The container image goes to `ghcr.io/vectode/vectora-cloud`, tagged with the ver
 
 ## First start: what lands in each server
 
+The templates come out of the jar: an empty home gets every `<Server>/template/` folder on the first start, and a folder you already have is never touched ([node.md](node.md#built-in-templates)).
+
 Before each start the node fills the server's folder: the server jar, the plugins (or mods on Fabric) its group needs, and the VectoraCloud bridge of its platform. It notes what it put there in `plugins/.vectora-managed` (`mods/` on Fabric) and removes those files again once the group no longer wants them; plugins you copy in yourself stay. A PandaSpigot 1.8.8 server does not start without its bridge, because only the bridge checks the legacy proxy's token. Details: [node.md](node.md#server-software).
 
 ## Start scripts

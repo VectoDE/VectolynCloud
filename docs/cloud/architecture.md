@@ -1,8 +1,8 @@
 # VectoraCloud architecture
 
-VectoraCloud is the Java application behind `java -jar VectoraCloud.jar`. It renders the server templates in `Server-Network/`, downloads and verifies the server software, sets up the database, starts and watches every proxy and server, and offers a console and later an API.
+VectoraCloud is the Java application behind `java -jar VectoraCloud.jar`. It renders the server templates in `Server-Network/` (or the copies it carries, in an empty home), downloads and verifies the server software, sets up the database, starts and watches every proxy and server, and offers a console and an [API](api.md).
 
-This page describes the module layout. Each module gets its content in its own pull request (see the [roadmap](../wiki/Roadmap.md)). Done so far: [protocol](protocol.md), [configuration](config.md), [templates](template.md), [downloads](download.md), the [launcher](launcher.md), the [cloud channel](network.md) (`cloud-network` and `Vectora-CloudClient`), the [database](database.md), the [node's service core](node.md), the [console](console.md), the [bridges](bridges.md), [backups](backup.md), [operations](operations.md) (start scripts, systemd, Docker, Pterodactyl, release files) and [monitoring](monitor.md) (not wired into the node yet). The other modules are still empty shells with their final dependencies.
+This page describes the module layout. Each module gets its content in its own pull request (see the [roadmap](../wiki/Roadmap.md)). Done so far: [protocol](protocol.md), [configuration](config.md), [templates](template.md), [downloads](download.md), the [launcher](launcher.md), the [cloud channel](network.md) (`cloud-network` and `Vectora-CloudClient`), the [database](database.md), the [node's service core](node.md), the [console](console.md), the [bridges](bridges.md), [backups](backup.md), [operations](operations.md) (start scripts, systemd, Docker, Pterodactyl, release files), [monitoring](monitor.md) and the [API](api.md), all wired into the node. The other modules are still empty shells with their final dependencies.
 
 ## Modules
 
