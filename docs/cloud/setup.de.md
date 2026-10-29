@@ -32,7 +32,7 @@ Reihenfolge wie unten. Jede Frage zeigt ihren Vorschlag in eckigen Klammern, Ent
    | survival, mod | 3G |
 
    Ab 256M, in `M` oder `G`. Der Mindest-Heap wird 512M oder das Maximum, je nachdem, was kleiner ist. Der Assistent zählt alles zusammen und warnt, wenn die Summe den Speicher der Maschine oder des Pterodactyl-Servers (`SERVER_MEMORY`) übersteigt.
-7. **Datenbank.** `managed` (die Cloud betreibt ein eigenes MariaDB), `docker`, `external` oder `h2`. Auf Pterodactyl fehlt `docker`, weil der Server dort schon in einem Container ohne Zugriff auf Docker läuft. Wo es kein MariaDB-Server-Build gibt (alles außer Windows x64 und Linux x86_64 mit glibc), steht bei `managed`, dass dort H2 genutzt wird, und H2 ist der Vorschlag. Bei `external` fragt er Host, Port (3306), Datenbankname, Benutzer und Passwort ab.
+7. **Datenbank.** `managed` (die Cloud betreibt ein eigenes MariaDB), `docker`, `external` oder `h2`. Auf Pterodactyl fehlt `docker`, weil der Server dort schon in einem Container ohne Zugriff auf Docker läuft. Wo es kein MariaDB-Server-Build gibt (alles außer Windows x64 und Linux x86_64 mit glibc), steht bei `managed`, dass dort H2 genutzt wird, und H2 ist der Vorschlag. Nach `managed` erklärt der Assistent den Schalter dahinter: `servers.database: true` in `cloud.yml` betreibt MariaDB, `false` nutzt H2-Dateien pro Server. Bei `external` fragt er Host, Port (3306), Datenbankname, Benutzer und Passwort ab.
 
 Danach kommt eine Zusammenfassung: alle Antworten, die erzeugten Secrets (als „verborgen“) und die Dateien, die geschrieben würden. Zur Wahl stehen `save`, `change` (alle Fragen noch einmal, mit deinen Antworten als Vorschlag) und `cancel`. Geschrieben wird nur bei `save`. Findet die Prüfung ein Problem, gibt es `save` erst, wenn die Antwort geändert ist.
 
@@ -52,7 +52,7 @@ Alle anderen Secrets (Forwarding-Secrets, Passwörter der verwalteten Datenbank,
 
 ### Erneut ausführen: `setup`
 
-Der Konsolenbefehl `setup` stellt die Fragen noch einmal. Die aktuelle Konfiguration liefert die Vorschläge, geschrieben wird nur, was du änderst. Änderst du nichts, sagt der Assistent das und schreibt nichts. Änderst du nur den Heap der Lobby, wird nur `groups/lobby.yml` geschrieben. Eine erteilte EULA-Zustimmung und `setup-complete` bleiben.
+Der Konsolenbefehl `setup` stellt die Fragen noch einmal. Die aktuelle Konfiguration liefert die Vorschläge, geschrieben wird nur, was du änderst. Änderst du nichts, sagt der Assistent das und schreibt nichts. Änderst du nur den Heap der Lobby, wird nur `groups/lobby.yml` geschrieben. Eine erteilte EULA-Zustimmung und `setup-complete` bleiben. Ein ausgeschalteter Server stoppt sofort (siehe [node](node.md#reload)); ein eingeschalteter startet mit `service start <Task>` oder beim nächsten Start der Cloud. Das sagt der Assistent nach dem Speichern.
 
 ## Setup-Datei (`--setup-file`)
 
@@ -68,7 +68,7 @@ Das Format und ein vollständiges Beispiel stehen in der [englischen Fassung](se
 - Die Datei wird so streng gelesen wie `cloud.yml`: Unbekannte Felder, doppelte Schlüssel, falsche Typen oder ein fehlendes `eula: true` sind Fehler. Geprüft wird genau wie bei getippten Antworten (Ports, Heap, Legacy-Server nur mit Legacy-Proxy, kein Docker auf Pterodactyl, Prüfung der ganzen Konfiguration). Bei einem Fehler wird nichts geschrieben, und alle Probleme werden aufgelistet.
 - `memory` und `minigames` dürfen nur Gruppen nennen, die es gibt oder die die Einrichtung anlegt.
 - Die Datei zählt nur, solange `setup-complete` false ist. Danach wird eine weiterhin gemountete Datei übergangen, damit sie spätere Änderungen über `config set` oder das Dashboard nicht zurückdreht.
-- Die Datei enthält kein Secret. Das Passwort einer externen Datenbank kommt aus `secrets/vectora.env` (`VECTORA_DB_PASSWORD`) oder aus `database.password-file`: eine Datei mit dem Passwort in einer Zeile (ein Zeilenumbruch am Ende wird entfernt), höchstens 4 KiB, UTF-8, relativ zum Home oder absolut. Das passt zu Docker- und Kubernetes-Secrets.
+- Die Datei enthält kein Secret. Das Passwort einer externen Datenbank kommt aus `secrets/vectora.env` (`VECTORA_DB_PASSWORD`) oder aus `database.password-file`: eine normale Datei (eine Verknüpfung darauf geht, ein FIFO oder Gerät nicht) mit dem Passwort in einer Zeile (ein Zeilenumbruch am Ende wird entfernt), höchstens 4 KiB, UTF-8, relativ zum Home oder absolut. Das passt zu Docker- und Kubernetes-Secrets.
 
 ### Warum eine Datei und keine Umgebungsvariablen
 
@@ -95,9 +95,10 @@ Für ein Egg ohne Fragen erzeugt Wings die Setup-Datei aus Egg-Variablen über `
 
 ## Was geschrieben wird
 
-In zwei Schritten, damit nichts halb fertig als abgeschlossen gilt:
+In drei Schritten, damit nichts halb fertig als abgeschlossen gilt:
 
-1. Secrets (zuerst ein externes Passwort, dann jedes fehlende erzeugte Secret), danach alle Änderungen an der Konfiguration in einem `ConfigService.apply`, das als Ganzes geprüft wird;
-2. erst dann `eula-accepted: true` und `setup-complete: true`.
+1. alle Änderungen an der Konfiguration in einem `ConfigService.apply`, das als Ganzes geprüft wird. Scheitert das, wird gar nichts geschrieben;
+2. erst dann die Secrets: jedes fehlende erzeugte Secret, danach das Passwort einer externen Datenbank. So landet nie ein Passwort ohne den gespeicherten Host und Benutzer dazu;
+3. zuletzt `eula-accepted: true` und `setup-complete: true`.
 
-Scheitert Schritt 1, bleibt `setup-complete` false, und der nächste Start fragt erneut. Für jeden gewollten Server ohne Gruppe legt der Assistent Gruppe und Task an. Einzeln abgeschaltete Minigame-Gruppen bekommen `wanted: false` in ihrer Gruppendatei.
+Scheitert Schritt 2 oder 3, kehrt die Konfiguration zum Stand davor zurück (vom Setup angelegte Gruppen und Tasks verschwinden wieder), und ein vom Setup geschriebenes Passwort bekommt seinen alten Wert. Fehlende erzeugte Secrets bleiben, sie ersetzen nie einen Wert. `setup-complete` bleibt false, und der nächste Start fragt erneut. Für jeden gewollten Server ohne Gruppe legt der Assistent Gruppe und Task an. Einzeln abgeschaltete Minigame-Gruppen bekommen `wanted: false` in ihrer Gruppendatei.

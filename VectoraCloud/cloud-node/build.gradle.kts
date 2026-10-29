@@ -17,6 +17,8 @@ dependencies {
     // (jni on Java 21, ffm on 22+), see docs/java-compatibility.md. CloudNode.console() is part of
     // the API that the setup assistant (PR 11) uses.
     api(project(":VectoraCloud:cloud-console"))
+    // The setup assistant runs before the first server starts, and "setup" is a console command.
+    implementation(project(":VectoraCloud:cloud-setup"))
 
     // End-to-end test: the fake server connects with the real client.
     testImplementation(project(":Vectora-CloudClient"))

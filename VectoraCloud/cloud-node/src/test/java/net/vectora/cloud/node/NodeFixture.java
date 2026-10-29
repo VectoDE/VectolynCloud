@@ -119,6 +119,13 @@ final class NodeFixture {
         return NodeSettings.parse(Map.of("home", home.toAbsolutePath().toString()));
     }
 
+    /** The settings with more launcher entries, for example {@code setup-file} or {@code non-interactive}. */
+    NodeSettings settings(Map<String, String> extra) {
+        Map<String, String> all = new java.util.HashMap<>(extra);
+        all.put("home", home.toAbsolutePath().toString());
+        return NodeSettings.parse(all);
+    }
+
     /**
      * The fixture of a home that {@link #create} prepared, for another process.
      *
@@ -139,7 +146,9 @@ final class NodeFixture {
     Consumer<CloudNode.Options> withConsole() {
         return options -> {
             options.network(network -> network.withAddress("127.0.0.1", 0))
-                    .database(database);
+                    .database(database)
+                    // No Pterodactyl or Docker detection from the machine the tests run on.
+                    .environment(Map.of());
             options.services()
                     .javaRuntimes(JavaRuntimeResolver.current())
                     .serverSoftware(fakeSoftware())
@@ -178,6 +187,30 @@ final class NodeFixture {
 
         final AtomicInteger provisions = new AtomicInteger();
         final AtomicInteger shutdowns = new AtomicInteger();
+        /** The service core, set by a test that checks the order; the database records what it sees. */
+        volatile java.util.function.Supplier<List<net.vectora.cloud.node.service.ServiceInfo>> services;
+        /** Services with a process when the database was set up, and when it was stopped. */
+        final List<String> runningAtProvision = new java.util.concurrent.CopyOnWriteArrayList<>();
+        final List<String> runningAtShutdown = new java.util.concurrent.CopyOnWriteArrayList<>();
+        /** Makes {@link #shutdown()} throw, to check that the node's close goes on. */
+        volatile boolean failShutdown;
+        /** Every service the node knew when the database was stopped. */
+        final List<String> knownAtShutdown = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+        private void record(List<String> running, List<String> known) {
+            java.util.function.Supplier<List<net.vectora.cloud.node.service.ServiceInfo>> source = services;
+            if (source == null) {
+                return;
+            }
+            for (net.vectora.cloud.node.service.ServiceInfo info : source.get()) {
+                if (known != null) {
+                    known.add(info.id().value());
+                }
+                if (info.state().hasProcess()) {
+                    running.add(info.id() + " " + info.state());
+                }
+            }
+        }
 
         @Override
         public DatabaseProvisioner create(net.vectora.cloud.config.model.ConfigSnapshot snapshot,
@@ -193,6 +226,7 @@ final class NodeFixture {
         @Override
         public DatabaseEndpoint provision() {
             provisions.incrementAndGet();
+            record(runningAtProvision, null);
             return new DatabaseEndpoint(StorageMethod.H2, "127.0.0.1", 3306, "vectora", "vectora", Optional.empty());
         }
 
@@ -208,7 +242,12 @@ final class NodeFixture {
 
         @Override
         public void shutdown() {
+            record(runningAtShutdown, knownAtShutdown);
             shutdowns.incrementAndGet();
+            if (failShutdown) {
+                // An Error: NodeDatabase catches runtime exceptions itself, so only this reaches close().
+                throw new LinkageError("test: the database does not stop");
+            }
         }
     }
 }

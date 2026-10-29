@@ -67,6 +67,26 @@ public record NodeSettings(Path home, String language, boolean nonInteractive, O
                 bool(settings, "root-allowed"), settings.getOrDefault("launcher.version", "dev"), platform);
     }
 
+    /**
+     * The settings again in the launcher's form, for parts that read that map themselves (the setup
+     * assistant's {@code SetupEnvironment.of}): {@code home}, {@code language},
+     * {@code non-interactive}, {@code setup-file} if given, {@code root-allowed},
+     * {@code launcher.version} and every {@code platform.*} entry.
+     *
+     * @return a new, unmodifiable map; {@link #parse} of it gives equal settings
+     */
+    public Map<String, String> toMap() {
+        Map<String, String> map = new java.util.TreeMap<>();
+        map.put("home", home.toString());
+        map.put("language", language);
+        map.put("non-interactive", Boolean.toString(nonInteractive));
+        setupFile.ifPresent(file -> map.put("setup-file", file.toString()));
+        map.put("root-allowed", Boolean.toString(rootAllowed));
+        map.put("launcher.version", launcherVersion);
+        platform.forEach((key, value) -> map.put("platform." + key, value));
+        return java.util.Collections.unmodifiableMap(map);
+    }
+
     private static boolean bool(Map<String, String> settings, String key) {
         String value = settings.getOrDefault(key, "false");
         return switch (value) {

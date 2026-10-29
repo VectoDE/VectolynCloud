@@ -12,6 +12,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import net.vectora.cloud.config.model.ServerKind;
+import net.vectora.cloud.config.model.ServerSoftware;
+import net.vectora.cloud.config.model.TaskMode;
+import net.vectora.cloud.config.operation.PutGroup;
 import net.vectora.cloud.console.Console;
 import net.vectora.cloud.console.terminal.PlainTerminal;
 import net.vectora.cloud.node.service.ServiceInfo;
@@ -78,6 +82,92 @@ class NodeEndToEndTest {
         try (HomeLock again = HomeLock.acquire(fixture.home)) {
             assertTrue(again.isHeld(), "the home lock is released on close");
         }
+    }
+
+    /**
+     * A proxy, a static and a dynamic backend, and a group switched off with {@code wanted: false}:
+     * the database is set up before the first process and stopped after the last one, the proxy
+     * gets the backends through {@code RegisterServer} (never the unwanted one), its player events
+     * are mapped from the proxy's names to the services, and a stopped backend is unregistered.
+     */
+    @Test
+    void theDatabaseFramesTheServicesAndTheProxyGetsOnlyWantedBackends() throws Exception {
+        NodeFixture fixture = NodeFixture.create(dir, true, List.of(
+                new PutGroup("proxy", NodeFixture.group(ServerKind.PROXY.templateFolder(), ServerSoftware.VELOCITY,
+                        "-Dfake.cloud=true")),
+                NodeFixture.task("proxy", "proxy", TaskMode.STATIC, 1, 1),
+                new PutGroup("minigame", NodeFixture.group(ServerKind.MINIGAME.templateFolder(), ServerSoftware.PAPER,
+                        "-Dfake.cloud=true")),
+                NodeFixture.task("minigame", "minigame", TaskMode.DYNAMIC, 1, 2),
+                new PutGroup("survival", NodeFixture.group(ServerKind.SURVIVAL.templateFolder(), ServerSoftware.PAPER,
+                        "-Dfake.cloud=true").withWanted(false)),
+                NodeFixture.task("survival", "survival", TaskMode.STATIC, 1, 1)));
+        fixture.file("Proxy/template/velocity.toml", """
+                bind = "{{VECTORA_PROXY_BIND}}:{{VECTORA_PROXY_PORT}}"
+                [servers]
+                {{VECTORA_PROXY_SERVERS}}
+                try = [ {{VECTORA_PROXY_TRY}} ]
+                """);
+        ServiceId lobby = new ServiceId("lobby-1");
+        ServiceId minigame = new ServiceId("minigame-1");
+        ServiceId proxy = new ServiceId("proxy-1");
+        CloudNode node = CloudNode.open(fixture.settings(), fixture.options());
+        fixture.database.services = node.services()::services;
+        Path proxyLog = fixture.home.resolve("logs/services/proxy-1.log");
+        try {
+            node.start();
+            for (ServiceId id : List.of(lobby, minigame, proxy)) {
+                NodeFixture.await(id + " running", () -> state(node, id) == ServiceState.RUNNING);
+            }
+            assertEquals(List.of(), fixture.database.runningAtProvision, "no process before the database");
+            assertTrue(node.services().find(new ServiceId("survival-1")).isEmpty(), "wanted: false is never created");
+            assertFalse(Files.exists(fixture.home.resolve("Survival-Server/runtime")));
+            String velocity = NodeFixture.read(fixture.home.resolve("Proxy/runtime/velocity.toml"));
+            assertTrue(velocity.contains("lobby = "), velocity);
+            assertFalse(velocity.contains("survival"), velocity);
+
+            int minigamePort = node.services().find(minigame).orElseThrow().port();
+            int lobbyPort = node.services().find(lobby).orElseThrow().port();
+            NodeFixture.await("minigame registered", () -> NodeFixture.read(proxyLog).contains(
+                    "[fake] register minigame-1 127.0.0.1:" + minigamePort + " group=minigame legacy=false"));
+            NodeFixture.await("lobby registered under its proxy name", () -> NodeFixture.read(proxyLog).contains(
+                    "[fake] register lobby 127.0.0.1:" + lobbyPort + " group=lobby legacy=false"));
+            assertFalse(NodeFixture.read(proxyLog).contains("register survival"));
+            assertTrue(NodeFixture.read(proxyLog).contains("[fake] platform VELOCITY"));
+            assertTrue(NodeFixture.read(proxyLog).contains("[fake] legacy secret absent"));
+            Path lobbyLog = fixture.home.resolve("logs/services/lobby-1.log");
+            assertTrue(NodeFixture.read(lobbyLog).contains("[fake] platform PAPER"), NodeFixture.read(lobbyLog));
+            assertTrue(NodeFixture.read(lobbyLog).contains("[fake] legacy secret absent"));
+
+            // Player events use the proxy's names; the node maps "lobby" to lobby-1.
+            java.util.UUID steve = java.util.UUID.fromString("00000000-0000-4000-8000-000000000001");
+            node.services().sendCommand(proxy, "player join " + steve + " Steve lobby");
+            NodeFixture.await("join", () -> node.channel().players().find(steve)
+                    .map(p -> p.service().equals(lobby)).orElse(false));
+            node.services().sendCommand(proxy, "player switch " + steve + " Steve lobby minigame-1");
+            NodeFixture.await("switch", () -> node.channel().players().find(steve)
+                    .map(p -> p.service().equals(minigame)).orElse(false));
+            assertEquals(List.of(steve), node.channel().players().on(minigame).stream()
+                    .map(net.vectora.cloud.node.channel.NetworkPlayers.Player::uuid).toList());
+            // A backend sends no player events; the node drops them.
+            node.services().sendCommand(minigame, "player quit " + steve + " Steve minigame-1");
+            node.services().sendCommand(proxy, "player quit " + steve + " Steve minigame-1");
+            NodeFixture.await("quit", () -> node.channel().players().find(steve).isEmpty());
+
+            node.services().stop(minigame);
+            NodeFixture.await("minigame unregistered", () -> NodeFixture.read(proxyLog)
+                    .contains("[fake] unregister minigame-1"));
+            assertTrue(state(node, lobby) == ServiceState.RUNNING && state(node, proxy) == ServiceState.RUNNING,
+                    "still running when the node closes");
+        } finally {
+            node.close();
+        }
+        assertEquals(1, fixture.database.provisions.get());
+        assertEquals(1, fixture.database.shutdowns.get());
+        assertEquals(List.of(), fixture.database.runningAtShutdown, "every process ended before the database");
+        assertTrue(fixture.database.knownAtShutdown.containsAll(List.of("lobby-1", "proxy-1")),
+                "the database stopped after the services, not before they were known: "
+                        + fixture.database.knownAtShutdown);
     }
 
     static ServiceState state(CloudNode node, ServiceId id) {

@@ -27,12 +27,20 @@ import net.vectora.protocol.ServiceEnvironment;
 public final class NodeDatabaseProcesses implements DatabaseProcesses {
 
     private static final System.Logger LOG = System.getLogger(NodeDatabaseProcesses.class.getName());
+    /** How long {@link #run} waits for a killed program to be gone. */
+    static final Duration KILL_WAIT = Duration.ofSeconds(30);
 
     @Override
     public int run(Command command, Duration timeout) throws IOException, InterruptedException {
         Process process = launch(command);
         if (!process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS)) {
             kill(process);
+            // Only report once it is gone: until then it still holds its log file and working folder
+            // (on Windows nothing in there can be moved or deleted), and a retry would start a second copy.
+            if (!process.waitFor(KILL_WAIT.toMillis(), TimeUnit.MILLISECONDS)) {
+                LOG.log(System.Logger.Level.WARNING, "{0} (pid {1}) is still running after it was killed",
+                        programName(command), process.pid());
+            }
             throw new IOException(programName(command) + " did not finish within " + timeout.toSeconds() + " s");
         }
         return process.exitValue();

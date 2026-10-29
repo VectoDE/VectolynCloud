@@ -15,7 +15,7 @@ import net.vectora.protocol.message.AuthResult;
  * The tokens of the services this node has started, one per service and start. Thread-safe.
  *
  * <p>The node calls {@link #issue} before it starts a service and hands the token to the process
- * in {@code VECTORA_SERVICE_TOKEN}; it calls {@link #revoke} when the process has ended. Cluster
+ * in {@code VECTORA_SERVICE_TOKEN}; it calls {@link #remove} with that token when the process has ended. Cluster
  * nodes ({@link net.vectora.protocol.NodeId}) are refused until the cluster exists (stage 2,
  * PR 20).
  */
@@ -46,9 +46,17 @@ public final class ServiceTokens implements ServiceAuthenticator {
         tokens.put(Objects.requireNonNull(service, "service"), Objects.requireNonNull(token, "token"));
     }
 
-    /** Forgets the token of {@code service}; later connections with it are refused. */
-    public void revoke(ServiceId service) {
-        tokens.remove(service);
+    /**
+     * Forgets {@code token} of {@code service}; later connections with it are refused. Nothing
+     * happens if the service has another token by now: the exit of an old process cannot revoke the
+     * token a newer start of the same service was given.
+     *
+     * @param service the service
+     * @param token   the token that was issued for the start that has ended
+     * @return whether the token was the current one and is removed now
+     */
+    public boolean remove(ServiceId service, AuthToken token) {
+        return tokens.remove(Objects.requireNonNull(service, "service"), Objects.requireNonNull(token, "token"));
     }
 
     /** Returns the services that currently have a token. */

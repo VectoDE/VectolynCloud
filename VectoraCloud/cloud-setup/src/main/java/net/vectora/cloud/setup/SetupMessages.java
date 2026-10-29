@@ -231,8 +231,29 @@ public final class SetupMessages {
     public static final Text CHANGED = Text.of(
             "The changes are saved. \"setup\" opens these questions again at any time.",
             "Die Änderungen sind gespeichert. „setup“ öffnet diese Fragen jederzeit wieder.");
+    /** After a change: when a server switched on starts. */
+    public static final Text WANTED_STARTS_LATER = Text.of(
+            "A server switched on here starts with \"service start <group>\" or at the next start of the cloud;"
+                    + " a server switched off stops right away.",
+            "Ein hier eingeschalteter Server startet mit „service start <Gruppe>“ oder beim nächsten Start der Cloud;"
+                    + " ein ausgeschalteter Server stoppt sofort.");
+    /** After choosing managed: what servers.database means then. */
+    public static final Text MANAGED_DATABASE_SWITCH = Text.of(
+            "With managed, servers.database in cloud.yml decides: true runs MariaDB, false uses H2 files per server.",
+            "Bei managed entscheidet servers.database in cloud.yml: true betreibt MariaDB, false nutzt H2-Dateien pro Server.");
+    /** Description of the setup command. */
+    public static final Text COMMAND_DESCRIPTION = Text.of("Runs the setup assistant again to change the settings.",
+            "Startet den Einrichtungsassistenten erneut, um die Einstellungen zu ändern.");
+    /** Language option. */
+    public static final Text LANGUAGE_DE = Text.of("Deutsch", "Deutsch");
+    /** Language option. */
+    public static final Text LANGUAGE_EN = Text.of("English", "English");
+    /** Label of a reserved port in the port hint. */
+    public static final Text PORT_CLOUD_CHANNEL = Text.of("cloud channel", "Cloud-Kanal");
+    /** Label of the service port range in the port hint. */
+    public static final Text PORT_SERVICES = Text.of("services", "Dienste");
     /** Cancelled. */
-    public static final Text CANCELLED = Text.of("Setup cancelled. Nothing was saved.", "Einrichtung abgebrochen. Gespeichert wurde nichts.");
+    public static final Text CANCELLED =Text.of("Setup cancelled. Nothing was saved.", "Einrichtung abgebrochen. Gespeichert wurde nichts.");
     /** Input ended. */
     public static final Text INPUT_ENDED = Text.of(
             "The input ended before the setup was done, so nothing was saved. Without a console,"

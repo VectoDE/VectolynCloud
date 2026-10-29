@@ -16,10 +16,10 @@ Each jar contains the bridge core, `Vectora-CloudClient` and `Vectora-Protocol`,
 | Variable | Read by | Set by | Content |
 |---|---|---|---|
 | `VECTORA_CLOUD_HOST`, `VECTORA_CLOUD_PORT`, `VECTORA_SERVICE_ID`, `VECTORA_SERVICE_TOKEN` | all bridges | `cloud-node` | See [network.md](network.md#environment-variables). Missing id or token: the bridge logs why and stays inactive (the legacy token check still runs). |
-| `VECTORA_SERVICE_PLATFORM` | Velocity bridge | `cloud-node` (to do) | Name of cloud-template's `ServerPlatform`. `VELOCITY_LEGACY` makes the bridge the legacy proxy, anything else (also a missing value) the main proxy. |
-| `VECTORA_LEGACY_FORWARDING_SECRET` | legacy bridge | `cloud-node` (to do), for `PANDASPIGOT` services only | The forwarding secret of the legacy proxy, the same value as in `Legacy-Proxy/runtime/forwarding.secret`. Must follow the template's secret rule (16 or more characters from `A-Z a-z 0-9 . _ ~ + / = -`). Read from the environment only, never from a system property, which would show on the command line. |
+| `VECTORA_SERVICE_PLATFORM` | Velocity bridge | `cloud-node`, for every service | Name of cloud-template's `ServerPlatform`. `VELOCITY_LEGACY` makes the bridge the legacy proxy, anything else (also a missing value) the main proxy. |
+| `VECTORA_LEGACY_FORWARDING_SECRET` | legacy bridge | `cloud-node`, for `PANDASPIGOT` services only | The forwarding secret of the legacy proxy, the same value as in `Legacy-Proxy/runtime/forwarding.secret`. Must follow the template's secret rule (16 or more characters from `A-Z a-z 0-9 . _ ~ + / = -`). Read from the environment only, never from a system property, which would show on the command line. |
 
-All names are constants in `net.vectora.protocol.ServiceEnvironment` (`SERVICE_PLATFORM` and `LEGACY_FORWARDING_SECRET` added with this module), so node and bridges cannot drift apart. `cloud-node` passes the services an environment without the cloud's own `VECTORA_*` variables (see [node.md](node.md#process)), so the last two have to be added there explicitly.
+All names are constants in `net.vectora.protocol.ServiceEnvironment` (`SERVICE_PLATFORM` and `LEGACY_FORWARDING_SECRET` added with this module), so node and bridges cannot drift apart. `cloud-node` passes the services an environment without the cloud's own `VECTORA_*` variables (see [node.md](node.md#process)), so the node adds the last two explicitly: the platform for every service, the legacy secret only for `PANDASPIGOT`.
 
 ## Threads
 
@@ -61,7 +61,7 @@ The proxy's events are not passed on as they come. `PlayerTracker` checks them a
 - The events are queued while the tracker's lock is held, so two threads cannot swap them on the way to the send queue.
 - Bedrock players are recognised by Floodgate's UUID scheme (upper 64 bits zero), without the Floodgate API.
 
-Backend names: a dynamic server is registered under its service id. A static backend appears in `velocity.toml` under its group name (`lobby`) when its index is 1 (see [node.md](node.md#ids-folders-and-ports)), so the proxy reports `lobby`, not `lobby-1`. `cloud-node` has to map that name when it checks the events.
+Backend names: a dynamic server is registered under its service id. A static backend appears in `velocity.toml` under its group name (`lobby`) when its index is 1 (see [node.md](node.md#ids-folders-and-ports)), so the proxy reports `lobby`, not `lobby-1`. `cloud-node` maps that name back to the service when it takes the events (`NetworkPlayers`, see [node.md](node.md#life-cycle)).
 
 ### Status
 
@@ -139,6 +139,6 @@ All tests of `cloud-bridge-common` and `cloud-bridge-legacy` run on Java 25 and,
 
 ## Open for later pull requests
 
-- `cloud-node`: set `VECTORA_SERVICE_PLATFORM` for every service and `VECTORA_LEGACY_FORWARDING_SECRET` for `PANDASPIGOT` services, copy the bridge jar into the plugin folder of each service, send `RegisterServer` with the right `legacy` flag to the right proxy, check the player events and map static backend names.
+- PR 14 (downloads): copy the bridge jar into the plugin folder of each service. Environment, `RegisterServer` with the `legacy` flag to the proxy of the right kind, and the player events with static backend names are in `cloud-node` since stage 2 (see [node.md](node.md#life-cycle)).
 - PR 24 (legacy proxy group): a real start of the legacy proxy with a PandaSpigot backend and the token check end to end.
 - Stage 3: the Vectora plugin per platform takes over `cloud-bridge-common`.

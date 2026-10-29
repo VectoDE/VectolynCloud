@@ -53,6 +53,23 @@ class PasswordFileTest {
     }
 
     @Test
+    void onlyRegularFilesAreRead(@TempDir Path home) throws Exception {
+        Files.createDirectories(home.resolve("folder"));
+        assertSame(SetupMessages.FILE_PASSWORD_UNREADABLE, PasswordFile.read(home, "folder").problem());
+        Path fifo = home.resolve("fifo");
+        if (Files.isDirectory(Path.of("/dev")) && new ProcessBuilder("mkfifo", fifo.toString()).start().waitFor() == 0) {
+            // Would block forever if it were opened.
+            assertSame(SetupMessages.FILE_PASSWORD_UNREADABLE, PasswordFile.read(home, "fifo").problem());
+        }
+        if (Files.exists(Path.of("/dev/zero"))) {
+            assertSame(SetupMessages.FILE_PASSWORD_UNREADABLE, PasswordFile.read(home, "/dev/zero").problem());
+        }
+        // Counter-check: a regular file next to them is read.
+        Files.writeString(home.resolve("pw"), "regular-Pw\n");
+        assertEquals("regular-Pw", PasswordFile.read(home, "pw").secret().reveal());
+    }
+
+    @Test
     void resultHoldsExactlyOneAndNeverPrintsTheSecret() {
         assertThrows(IllegalArgumentException.class, () -> new PasswordFile.Result(null, null));
         assertThrows(IllegalArgumentException.class,

@@ -166,6 +166,9 @@ final class InteractiveSetup {
             out.success(SetupMessages.SAVED, String.join(", ", result.files()));
         }
         out.success(result.status() == SetupResult.Status.COMPLETED ? SetupMessages.COMPLETE : SetupMessages.CHANGED);
+        if (result.status() != SetupResult.Status.COMPLETED) {
+            out.println(SetupMessages.WANTED_STARTS_LATER);
+        }
         if (secrets.file().toFile().isFile()) {
             out.println(SecretAccess.describe(secrets.file(), env.windows(), groupList).get(out.language()));
         }
@@ -177,8 +180,8 @@ final class InteractiveSetup {
     /** All questions once, with {@code answers} as defaults; null if the EULA was declined. */
     private SetupAnswers questions(ConfigSnapshot current, SetupAnswers answers) throws PromptCancelledException {
         Language language = ask.ask(Question.choice(SetupMessages.LANGUAGE, List.of(
-                Question.option("de", Text.of("Deutsch", "Deutsch"), Language.DE),
-                Question.option("en", Text.of("English", "English"), Language.EN))).defaultValue(answers.language()));
+                Question.option("de", SetupMessages.LANGUAGE_DE, Language.DE),
+                Question.option("en", SetupMessages.LANGUAGE_EN, Language.EN))).defaultValue(answers.language()));
         out.set(language);
         answers = answers.withLanguage(language);
 
@@ -260,7 +263,7 @@ final class InteractiveSetup {
 
     private Map<Integer, String> reservedPorts(ConfigSnapshot current) {
         Map<Integer, String> taken = new LinkedHashMap<>();
-        node(current).ifPresent(node -> taken.put(node.port(), "cloud channel"));
+        node(current).ifPresent(node -> taken.put(node.port(), SetupMessages.PORT_CLOUD_CHANNEL.get(out.language())));
         return taken;
     }
 
@@ -273,7 +276,7 @@ final class InteractiveSetup {
         taken.forEach((port, what) -> parts.add(what + " " + port));
         node(config.snapshot()).ifPresent(node -> {
             if (node.servicePorts() != null) {
-                parts.add((out.language() == Language.DE ? "Dienste " : "services ") + node.servicePorts());
+                parts.add(SetupMessages.PORT_SERVICES.get(out.language()) + " " + node.servicePorts());
             }
         });
         return String.join(", ", parts);
@@ -356,6 +359,9 @@ final class InteractiveSetup {
             modeQuestion = modeQuestion.defaultValue(db.mode());
         }
         DatabaseMode mode = ask.ask(modeQuestion);
+        if (mode == DatabaseMode.MANAGED) {
+            out.println(SetupMessages.MANAGED_DATABASE_SWITCH);
+        }
         DatabaseConfig chosen = mode == db.mode() ? db : SetupPlan.switchMode(db, mode);
         if (mode != DatabaseMode.EXTERNAL) {
             return answers.withDatabase(chosen, Optional.empty());

@@ -35,7 +35,7 @@ public final class ServicePlanner {
      * The server kind whose template a group uses.
      *
      * @param group the group
-     * @return the kind, or empty for a template that is none of the eight known folders
+     * @return the kind, or empty for a template that is none of the nine known folders
      */
     public static Optional<ServerKind> kindOf(GroupConfig group) {
         for (ServerKind kind : ServerKind.values()) {
@@ -47,17 +47,44 @@ public final class ServicePlanner {
     }
 
     /**
-     * Tells whether a group is wanted. A group on one of the eight known templates follows the
-     * "wanted" switch of its server kind in {@code cloud.yml}. The database template is never a
-     * service of the node (the database module runs it). A group on any other template is the
-     * operator's own and counts as wanted; whether it runs is decided by its task.
+     * The switch under {@code servers:} in {@code cloud.yml} that a group follows: the server kind
+     * of its template, and {@link ServerKind#LEGACY_SERVER} for a PandaSpigot group on a template
+     * of its own, because every PandaSpigot server is a 1.8.8 server behind the legacy proxy.
+     *
+     * @param group the group
+     * @return the switch, or empty for a group of the operator's own that no switch covers
+     */
+    public static Optional<ServerKind> switchOf(GroupConfig group) {
+        Optional<ServerKind> kind = kindOf(group);
+        if (kind.isEmpty() && group.software() == ServerSoftware.PANDASPIGOT) {
+            return Optional.of(ServerKind.LEGACY_SERVER);
+        }
+        return kind;
+    }
+
+    /**
+     * Tells whether a group is wanted by its own switch and by the switch of its server kind:
+     * <ul>
+     *   <li>{@code wanted: false} in the group file switches the group off, whatever its kind
+     *       (for example one minigame out of several);</li>
+     *   <li>a group on one of the known templates, and every PandaSpigot group, also needs its
+     *       switch under {@code servers:} in {@code cloud.yml} (see {@link #switchOf});</li>
+     *   <li>the database template is never a service of the node (the database module runs it);</li>
+     *   <li>any other group is the operator's own and counts as wanted; whether it runs is decided
+     *       by its task.</li>
+     * </ul>
+     * This overload does not look at {@code legacy-proxy.enabled}; the node uses
+     * {@link #isWanted(GroupConfig, CloudConfig)}.
      *
      * @param group  the group
      * @param wanted the switches from {@code cloud.yml}
      * @return whether services of the group may be created
      */
     public static boolean isWanted(GroupConfig group, WantedServers wanted) {
-        Optional<ServerKind> kind = kindOf(group);
+        if (!group.wantedOrDefault()) {
+            return false;
+        }
+        Optional<ServerKind> kind = switchOf(group);
         if (kind.isEmpty()) {
             return true;
         }
@@ -65,18 +92,45 @@ public final class ServicePlanner {
     }
 
     /**
-     * Like {@link #isWanted(GroupConfig, WantedServers)}, and the 1.8.8 groups (the legacy proxy
-     * and PandaSpigot, see {@link #isLegacy}) only while {@code legacy-proxy.enabled} is set.
+     * Like {@link #isWanted(GroupConfig, WantedServers)}, and the 1.8.8 part of the network (the
+     * legacy proxy, every PandaSpigot group and every group on the {@code Legacy-Server} template)
+     * only while {@code legacy-proxy.enabled} is set. This is the rule for planning, for starts,
+     * for the proxy lists and for {@link ServiceManager#stopUnwanted()} after a reload.
      *
      * @param group the group
      * @param cloud {@code cloud.yml}
      * @return whether services of the group may be created
      */
     public static boolean isWanted(GroupConfig group, CloudConfig cloud) {
-        if (isLegacy(group) && !cloud.legacyProxy().enabled()) {
+        if (needsLegacyProxy(group) && !cloud.legacyProxy().enabled()) {
             return false;
         }
         return isWanted(group, cloud.servers());
+    }
+
+    /**
+     * Tells why a group is not wanted, for messages. Only meaningful if
+     * {@link #isWanted(GroupConfig, CloudConfig)} is false.
+     *
+     * @param group the group
+     * @param cloud {@code cloud.yml}
+     * @return the setting that switches it off, for example {@code servers.lobby}
+     */
+    public static String unwantedBecause(GroupConfig group, CloudConfig cloud) {
+        if (needsLegacyProxy(group) && !cloud.legacyProxy().enabled()) {
+            return "cloud.yml legacy-proxy.enabled";
+        }
+        if (!group.wantedOrDefault()) {
+            return "wanted: false in its group file";
+        }
+        return switchOf(group).map(kind -> kind == ServerKind.DATABASE
+                ? "the database template runs no service"
+                : "cloud.yml servers." + kind.key()).orElse("cloud.yml servers");
+    }
+
+    /** The legacy proxy and the 1.8.8 servers run only together with {@code legacy-proxy.enabled}. */
+    private static boolean needsLegacyProxy(GroupConfig group) {
+        return isLegacy(group) || kindOf(group).orElse(null) == ServerKind.LEGACY_SERVER;
     }
 
     /**

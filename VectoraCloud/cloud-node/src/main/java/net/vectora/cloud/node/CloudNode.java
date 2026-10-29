@@ -5,6 +5,7 @@ import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
@@ -49,6 +50,10 @@ import net.vectora.cloud.node.database.NodeDatabase;
 import net.vectora.cloud.node.database.NodeDatabaseProcesses;
 import net.vectora.cloud.node.jre.ManagedJavaRuntimes;
 import net.vectora.cloud.node.service.ServiceManager;
+import net.vectora.cloud.setup.SetupEnvironment;
+import net.vectora.cloud.setup.SetupException;
+import net.vectora.cloud.setup.SetupResult;
+import net.vectora.cloud.setup.SetupWizard;
 
 /**
  * One running node: home lock, configuration, secrets, the service core, the database, the cloud
@@ -89,6 +94,10 @@ public final class CloudNode implements AutoCloseable {
     private final CloudNetworkServer network;
     private final ChannelBridge channel;
     private final Console console;
+    private final SetupEnvironment setupEnvironment;
+    private volatile SetupResult.Status setupStatus;
+    /** Set once start() has given up on the setup; a later first completion then starts the servers. */
+    private volatile boolean startedWithoutSetup;
     private final CountDownLatch closed = new CountDownLatch(1);
     private final CountDownLatch closeDone = new CountDownLatch(1);
     private final Object closeLock = new Object();
@@ -101,8 +110,9 @@ public final class CloudNode implements AutoCloseable {
 
     private CloudNode(NodeSettings settings, HomeLock homeLock, ConfigService config, SecretStore secrets,
                       ServiceManager services, NodeDatabase database, CloudNetworkServer network,
-                      ChannelBridge channel, Console console) {
+                      ChannelBridge channel, Console console, SetupEnvironment setupEnvironment) {
         this.settings = settings;
+        this.setupEnvironment = setupEnvironment;
         this.homeLock = homeLock;
         this.config = config;
         this.secrets = secrets;
@@ -124,6 +134,7 @@ public final class CloudNode implements AutoCloseable {
         private NodeDatabase.Factory database;
         private Console console;
         private boolean noConsole;
+        private Map<String, String> environment = System.getenv();
 
         private Options(ServiceManager.Builder services, NodeDatabase.Factory database) {
             this.services = services;
@@ -185,6 +196,18 @@ public final class CloudNode implements AutoCloseable {
         public Options noConsole() {
             this.console = null;
             this.noConsole = true;
+            return this;
+        }
+
+        /**
+         * Replaces the environment variables the setup assistant looks at (default: the process's
+         * own; Pterodactyl's {@code SERVER_MEMORY}, {@code SERVER_PORT} and so on), for tests.
+         *
+         * @param value the variables
+         * @return these options
+         */
+        public Options environment(Map<String, String> value) {
+            this.environment = Map.copyOf(value);
             return this;
         }
     }
@@ -253,7 +276,8 @@ public final class CloudNode implements AutoCloseable {
                             .language(() -> configService.snapshot().cloud().language())
                             .historyFilter(line -> !containsSecret(secrets, line))
                             .build();
-            return new CloudNode(settings, lock, config, secrets, services, database, network, channel, console);
+            SetupEnvironment setup = SetupEnvironment.of(settings.toMap(), options.environment);
+            return new CloudNode(settings, lock, config, secrets, services, database, network, channel, console, setup);
         } catch (IOException | ConfigException | EnvFormatException | RuntimeException e) {
             if (config != null) {
                 try {
@@ -312,19 +336,37 @@ public final class CloudNode implements AutoCloseable {
             @Override
             public void configChanged(ConfigChanged change) {
                 services.stopUnwanted();
+                if (setupJustFinished(change)) {
+                    // The "setup" command finished the first setup after this start had to wait
+                    // for it: start what is configured now, off the listener thread.
+                    Thread.ofPlatform().daemon().name("vectora-start-after-setup").start(services::startConfigured);
+                }
             }
         };
         config.addListener(reconcile);
         InetSocketAddress channelAddress = network.start();
         services.channelAddress(channelAddress.getAddress().getHostAddress(), channelAddress.getPort());
         requireOpen();
-        startConsole();
+        prepareConsole();
         ServiceManager.Recovery recovery = services.recoverOrphans();
         if (!recovery.terminated().isEmpty() || !recovery.unverifiable().isEmpty()) {
             LOG.log(System.Logger.Level.WARNING, "Left over from the previous run: ended {0}, not verifiable {1}",
                     recovery.terminated(), recovery.unverifiable());
         }
-        if (!config.snapshot().cloud().setupComplete() || !config.snapshot().cloud().eulaAccepted()) {
+        // The questions read the terminal on this thread, so the console's own read loop starts
+        // only afterwards.
+        boolean ready = runSetup();
+        requireOpen();
+        if (console != null) {
+            console.start();
+        }
+        if (!ready || !config.snapshot().cloud().setupComplete() || !config.snapshot().cloud().eulaAccepted()) {
+            startedWithoutSetup = true;
+        }
+        if (!ready) {
+            LOG.log(System.Logger.Level.WARNING, "The setup did not finish, so no server is started. Run \"setup\" in "
+                    + "the console or start again with --setup-file; see docs/cloud/setup.md.");
+        } else if (!config.snapshot().cloud().setupComplete() || !config.snapshot().cloud().eulaAccepted()) {
             LOG.log(System.Logger.Level.WARNING, "The setup is not complete (cloud.yml: setup-complete, eula-accepted), "
                     + "so no server is started. See docs/cloud/node.md.");
         } else {
@@ -341,6 +383,17 @@ public final class CloudNode implements AutoCloseable {
         keepAlive.start();
     }
 
+    /**
+     * Whether a change finished the first setup while the node was already running: before it,
+     * {@code setup-complete} or {@code eula-accepted} was false, now both are true, and the setup
+     * assistant in {@link #start()} has already given up (so its own save does not count twice).
+     */
+    private boolean setupJustFinished(ConfigChanged change) {
+        boolean before = change.previous().cloud().setupComplete() && change.previous().cloud().eulaAccepted();
+        boolean now = change.current().cloud().setupComplete() && change.current().cloud().eulaAccepted();
+        return !before && now && startedWithoutSetup;
+    }
+
     /** A close() from the shutdown hook or the console may run while start() is still busy. */
     private void requireOpen() {
         synchronized (closeLock) {
@@ -350,7 +403,55 @@ public final class CloudNode implements AutoCloseable {
         }
     }
 
-    private void startConsole() {
+    /**
+     * Runs the setup assistant: nothing once {@code setup-complete} is set, otherwise the setup file,
+     * the questions on the console, or a message that says how to pass the answers. Also without a
+     * console. A problem is shown in the language of the start and never stops the node; it only
+     * keeps every server from starting.
+     *
+     * @return whether servers may start ({@link SetupResult#ready()})
+     */
+    private boolean runSetup() {
+        try {
+            SetupResult result = SetupWizard.ensureComplete(console, config, setupEnvironment);
+            setupStatus = result.status();
+            if (result.status() != SetupResult.Status.ALREADY_COMPLETE) {
+                LOG.log(System.Logger.Level.INFO, "Setup assistant: {0}",
+                        result.status().name().toLowerCase(java.util.Locale.ROOT));
+            }
+            return result.ready();
+        } catch (SetupException e) {
+            setupStatus = null;
+            report(e.describe(setupEnvironment.language()));
+            return false;
+        } catch (IOException e) {
+            setupStatus = null;
+            LOG.log(System.Logger.Level.ERROR, "The setup could not be saved: {0}", e.getMessage());
+            return false;
+        }
+    }
+
+    /** Shows a setup problem on the console, or in the log when the node runs without one. */
+    private void report(String text) {
+        if (console != null) {
+            console.output().error(text);
+        } else {
+            LOG.log(System.Logger.Level.ERROR, text);
+        }
+    }
+
+    /**
+     * How the setup assistant ended in {@link #start()}: empty if it did not finish (a setup file with
+     * problems, no way to ask, saving failed).
+     *
+     * @return the status
+     */
+    Optional<SetupResult.Status> setupStatus() {
+        return Optional.ofNullable(setupStatus);
+    }
+
+    /** Log output through the console and its commands; the console's read loop starts later. */
+    private void prepareConsole() {
         if (console == null) {
             return;
         }
@@ -378,7 +479,7 @@ public final class CloudNode implements AutoCloseable {
         serviceCommands = new ServiceCommands(services, config, channel::status, console.output());
         services.addListener(serviceCommands);
         console.commands().register(serviceCommands.command());
-        console.start();
+        SetupWizard.registerCommand(console, config, setupEnvironment);
     }
 
     /**
@@ -471,30 +572,54 @@ public final class CloudNode implements AutoCloseable {
             closing = true;
             closingThread = Thread.currentThread();
         }
-        try {
+        // Every step runs even if an earlier one fails: a failing service stop must not leave the
+        // database, the channel or the home lock behind. The services stop before the database
+        // (they hold connections to it); the channel outlives both, so a bridge can still say
+        // goodbye while its server shuts down.
+        List<Error> errors = new ArrayList<>();
+        step(errors, "stopping the console", () -> {
             if (console != null) {
                 console.stop();
             }
+        });
+        step(errors, "removing the configuration listener", () -> {
             if (reconcile != null) {
                 config.removeListener(reconcile);
             }
-            services.close();
-            database.shutdown();
-            network.close();
-        } finally {
-            try {
-                config.close();
-            } catch (IOException e) {
-                LOG.log(System.Logger.Level.WARNING, "Closing the configuration failed", e);
-            }
-            closeConsole();
-            try {
-                homeLock.close();
-            } catch (IOException e) {
-                LOG.log(System.Logger.Level.WARNING, "Releasing the home lock failed", e);
-            }
-            closed.countDown();
-            closeDone.countDown();
+        });
+        step(errors, "stopping the services", services::close);
+        step(errors, "stopping the database", database::shutdown);
+        step(errors, "closing the cloud channel", network::close);
+        step(errors, "closing the configuration", config::close);
+        step(errors, "closing the console", this::closeConsole);
+        step(errors, "releasing the home lock", homeLock::close);
+        closed.countDown();
+        closeDone.countDown();
+        if (!errors.isEmpty()) {
+            Error first = errors.getFirst();
+            errors.stream().skip(1).forEach(first::addSuppressed);
+            throw first;
+        }
+    }
+
+    /** One step of {@link #close()}. */
+    @FunctionalInterface
+    private interface Step {
+        void run() throws Exception;
+    }
+
+    /**
+     * Runs one step of {@link #close()} in its own try block: a failure is logged and the next step
+     * runs anyway. An {@link Error} is kept and thrown once every step has run.
+     */
+    private static void step(List<Error> errors, String what, Step action) {
+        try {
+            action.run();
+        } catch (Exception e) {
+            LOG.log(System.Logger.Level.WARNING, "Shutdown: " + what + " failed", e);
+        } catch (Error e) {
+            LOG.log(System.Logger.Level.ERROR, "Shutdown: " + what + " failed", e);
+            errors.add(e);
         }
     }
 

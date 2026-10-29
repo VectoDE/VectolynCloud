@@ -38,7 +38,7 @@ servers:                     # the "wanted" switch per server; a missing entry c
   end: true
   database: true
   minigame: true
-  legacy-server: false       # the 1.8.8 server, runs only with legacy-proxy.enabled
+  legacy-server: true        # the 1.8.8 servers (every PandaSpigot group); true by default, but they only run while legacy-proxy.enabled is true
 proxy:
   bind: 0.0.0.0
   port: 25565

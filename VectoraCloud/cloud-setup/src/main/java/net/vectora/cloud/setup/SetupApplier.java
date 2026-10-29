@@ -3,6 +3,7 @@ package net.vectora.cloud.setup;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import net.vectora.cloud.config.CloudHome;
@@ -13,6 +14,7 @@ import net.vectora.cloud.config.model.ConfigSnapshot;
 import net.vectora.cloud.config.operation.ConfigOperation;
 import net.vectora.cloud.config.secret.EnvFormatException;
 import net.vectora.cloud.config.secret.GeneratedSecret;
+import net.vectora.cloud.config.secret.Secret;
 import net.vectora.cloud.config.secret.SecretGenerator;
 import net.vectora.cloud.config.secret.SecretStore;
 import net.vectora.cloud.console.Text;
@@ -22,12 +24,13 @@ import net.vectora.cloud.console.Text;
  *
  * <ol>
  *   <li>Check everything ({@link SetupChecks}). On a problem nothing is written.</li>
- *   <li>Secrets: the password of an external database if a new one was given, then every generated
- *       secret that is still missing. Existing generated secrets are never replaced.</li>
  *   <li>The configuration through {@link ConfigService#apply}: one change, validated as a whole;
- *       only files whose content differs are written.</li>
- *   <li>Last, in a change of its own, {@code eula-accepted} and {@code setup-complete}. If anything
- *       before fails, the setup stays open and runs again on the next start.</li>
+ *       only files whose content differs are written. If it fails, nothing is written at all.</li>
+ *   <li>Only then the secrets: every generated secret that is still missing, then the password of an
+ *       external database if a new one was given. Existing generated secrets are never replaced.</li>
+ *   <li>Last, in a change of its own, {@code eula-accepted} and {@code setup-complete}. If step 2 or
+ *       3 fails, the configuration and the password go back to what they were before, and the
+ *       setup stays open and runs again on the next start.</li>
  * </ol>
  */
 final class SetupApplier {
@@ -66,34 +69,85 @@ final class SetupApplier {
         }
         Set<String> files = new TreeSet<>();
         String secretsFile = CloudHome.SECRETS_DIR + "/" + CloudHome.SECRETS_FILE;
+        Optional<Secret> previousPassword;
         try {
-            if (answers.databasePassword().isPresent()
-                    && secrets.put(GeneratedSecret.DB_PASSWORD.key(), answers.databasePassword().get(), PASSWORD_COMMENT)) {
-                files.add(secretsFile);
-            }
-            if (!secrets.ensureGenerated(new SecretGenerator()).isEmpty()) {
-                files.add(secretsFile);
-            }
+            previousPassword = secrets.load().get(GeneratedSecret.DB_PASSWORD.key());
         } catch (EnvFormatException e) {
             throw new SetupException(List.of(SetupMessages.fill(SetupMessages.SECRETS_UNREADABLE, e.line())));
         }
+        // 1. The configuration. If it fails, nothing at all has been written yet.
+        boolean configWritten = false;
         try {
             List<ConfigOperation> ops = SetupPlan.operations(current, answers);
             if (!ops.isEmpty()) {
                 ConfigChanged change = config.apply(ops);
                 files.addAll(change.files());
-            }
-            List<ConfigOperation> finish = SetupPlan.finish(config.snapshot());
-            if (!finish.isEmpty()) {
-                files.addAll(config.apply(finish).files());
+                configWritten = !change.files().isEmpty();
             }
         } catch (ConfigException e) {
             // The files changed between the check and the write (a hand edit in between).
             throw SetupException.of(e);
         }
+        // 2. Secrets, only now: a password must never go with a host and user that were not saved.
+        //    3. Then eula-accepted and setup-complete. A failure in 2 or 3 rolls 1 and the password back.
+        boolean passwordWritten = false;
+        try {
+            if (!secrets.ensureGenerated(new SecretGenerator()).isEmpty()) {
+                files.add(secretsFile);
+            }
+            if (answers.databasePassword().isPresent()
+                    && secrets.put(GeneratedSecret.DB_PASSWORD.key(), answers.databasePassword().get(), PASSWORD_COMMENT)) {
+                passwordWritten = true;
+                files.add(secretsFile);
+            }
+            List<ConfigOperation> finish = SetupPlan.finish(config.snapshot());
+            if (!finish.isEmpty()) {
+                files.addAll(config.apply(finish).files());
+            }
+        } catch (IOException | EnvFormatException | ConfigException | RuntimeException e) {
+            rollBack(config, configWritten ? current : null, secrets, passwordWritten ? previousPassword : null, e);
+            if (e instanceof EnvFormatException format) {
+                throw new SetupException(List.of(SetupMessages.fill(SetupMessages.SECRETS_UNREADABLE, format.line())));
+            }
+            if (e instanceof ConfigException configProblem) {
+                throw SetupException.of(configProblem);
+            }
+            if (e instanceof IOException io) {
+                throw io;
+            }
+            throw (RuntimeException) e;
+        }
         if (first) {
             return new SetupResult(SetupResult.Status.COMPLETED, files);
         }
         return new SetupResult(files.isEmpty() ? SetupResult.Status.UNCHANGED : SetupResult.Status.CHANGED, files);
+    }
+
+    /**
+     * Undoes a half-written setup: the configuration goes back to {@code before} (in one change, so
+     * groups and tasks the setup created are removed again), and a password the setup wrote goes back
+     * to the one stored before. Generated secrets that were missing stay; they never replace a value
+     * and the node creates them on every start anyway. A failure here is attached to {@code cause}.
+     *
+     * @param before           the configuration before the setup, or null if it was not changed
+     * @param previousPassword the password before, or null if the setup did not write one; empty if
+     *                         there was none (it cannot be removed, but the setup stays open then)
+     */
+    private static void rollBack(ConfigService config, ConfigSnapshot before, SecretStore secrets,
+                                 Optional<Secret> previousPassword, Exception cause) {
+        if (before != null) {
+            try {
+                config.apply(List.<ConfigOperation>of(snapshot -> before));
+            } catch (IOException | ConfigException | RuntimeException e) {
+                cause.addSuppressed(e);
+            }
+        }
+        if (previousPassword != null && previousPassword.isPresent()) {
+            try {
+                secrets.put(GeneratedSecret.DB_PASSWORD.key(), previousPassword.get(), PASSWORD_COMMENT);
+            } catch (IOException | EnvFormatException | RuntimeException e) {
+                cause.addSuppressed(e);
+            }
+        }
     }
 }

@@ -64,8 +64,10 @@ import net.vectora.cloud.template.ServerPlatform;
 import net.vectora.cloud.template.TemplateException;
 import net.vectora.cloud.template.TemplateInstaller;
 import net.vectora.protocol.AuthToken;
+import net.vectora.protocol.GroupName;
 import net.vectora.protocol.ServiceEnvironment;
 import net.vectora.protocol.ServiceId;
+import net.vectora.protocol.message.RegisterServer;
 
 /**
  * The service core of a node: plans, prepares, starts, watches, stops and restarts the server
@@ -495,8 +497,8 @@ public final class ServiceManager implements AutoCloseable {
             throw new ServiceException("group " + task.group() + " of task " + taskName + " does not exist");
         }
         if (!ServicePlanner.isWanted(group, snapshot.cloud())) {
-            throw new ServiceException("group " + task.group() + " is not wanted (cloud.yml "
-                    + (ServicePlanner.isLegacy(group) ? "legacy-proxy.enabled)" : "servers)"));
+            throw new ServiceException("group " + task.group() + " is not wanted ("
+                    + ServicePlanner.unwantedBecause(group, snapshot.cloud()) + ")");
         }
         if (!ServicePlanner.runsOn(task, nodeId)) {
             throw new ServiceException("task " + taskName + " does not run on node " + nodeId);
@@ -601,16 +603,18 @@ public final class ServiceManager implements AutoCloseable {
             List<String> tryOrder = new ArrayList<>();
             if (spec.isProxy()) {
                 synchronized (lock) {
-                    proxyBackends(spec, node, backends, tryOrder);
+                    proxyBackends(spec, node, snapshot, backends, tryOrder);
                 }
             }
-            PlaceholderValues values = ServicePlaceholders.build(spec, snapshot, node, env, backends, tryOrder,
-                    contributors);
+            ServerPlatform platform = platformOf(spec.group());
+            PlaceholderValues values = ServicePlaceholders.build(spec, platform, snapshot, node, env, backends,
+                    tryOrder, contributors);
+            Optional<Secret> legacySecret = ServiceSecrets.legacyForwardingFor(platform, env);
             if (!spec.isStatic()) {
                 checkDynamicRoot();
                 deleteDynamicFolder(spec.workDirectory());
             }
-            TemplateInstaller.install(spec.templateDir(), spec.workDirectory(), platformOf(spec.group()),
+            TemplateInstaller.install(spec.templateDir(), spec.workDirectory(), platform,
                     values, snapshot.cloud().eulaAccepted());
             JavaRuntimeResolver.JavaRuntime runtime = javaRuntimes.resolve(spec.groupName(), spec.group());
             String jar = software.provide(spec, spec.workDirectory());
@@ -621,7 +625,7 @@ public final class ServiceManager implements AutoCloseable {
             List<String> command = command(runtime, spec, jar);
             Map<String, String> environment;
             synchronized (lock) {
-                environment = environment(spec, token, channelHost, channelPort);
+                environment = environment(spec, platform, legacySecret, token, channelHost, channelPort);
             }
             log = ServiceOutput.openLog(home.resolve(ServiceOutput.LOG_DIR), spec.id().value());
 
@@ -632,6 +636,7 @@ public final class ServiceManager implements AutoCloseable {
                 }
                 process = processes.start(command, spec.workDirectory(), environment);
                 service.process = process;
+                service.token = token;
                 service.stdin = process.getOutputStream();
                 service.pid = process.pid();
                 service.startedAt = processes.startTime(process.toHandle()).orElse(clock.instant());
@@ -667,7 +672,8 @@ public final class ServiceManager implements AutoCloseable {
     private void fail(Service service, AuthToken token, String reason) {
         synchronized (lock) {
             if (token != null && service.process == null) {
-                tokens.revoke(service.spec.id());
+                // Only this start's token: a newer start of the same id keeps its own.
+                tokens.remove(service.spec.id(), token);
             }
             if (service.state == ServiceState.PREPARED) {
                 LOG.log(System.Logger.Level.WARNING, "{0} could not be started: {1}", service.spec.id(), reason);
@@ -684,26 +690,158 @@ public final class ServiceManager implements AutoCloseable {
 
     /**
      * The backends a proxy lists: for the main proxy every static backend except the 1.8.8 ones,
-     * for the legacy proxy only the 1.8.8 ones (PandaSpigot). Needs the lock.
+     * for the legacy proxy only the 1.8.8 ones (PandaSpigot). Only active services of groups that
+     * are still wanted in {@code snapshot}. Needs the lock.
      */
-    private void proxyBackends(ServiceSpec proxy, NodeConfig node, List<ProxyBackend> backends, List<String> tryOrder) {
+    private void proxyBackends(ServiceSpec proxy, NodeConfig node, ConfigSnapshot snapshot, List<ProxyBackend> backends,
+                               List<String> tryOrder) {
         boolean legacyProxy = proxy.isLegacyProxy();
         for (Service other : services.values()) {
             ServiceSpec s = other.spec;
-            if (s.isProxy() || !s.isStatic() || !other.isActive()) {
+            if (s.isProxy() || !s.isStatic() || !other.isActive() || other.stopRequested
+                    || !isStillWanted(s, snapshot)) {
+                // A group switched off a moment ago is still stopping; the proxy must not list it.
                 continue;
             }
             if ((s.group().software() == ServerSoftware.PANDASPIGOT) != legacyProxy) {
                 continue;
             }
-            // The first static service of a group appears under the group name, so plugins can keep
-            // addressing "lobby" or "end"; further ones under their service id.
-            String name = s.index() == 1 ? s.groupName() : s.id().value();
+            String name = proxyName(s);
             backends.add(new ProxyBackend(name, node.host(), s.port(), true));
             if (s.kind().orElse(null) == ServerKind.LOBBY || legacyProxy) {
                 tryOrder.add(name);
             }
         }
+    }
+
+    /**
+     * The name a backend has in a proxy's server list. The first static service of a group appears
+     * under the group name, so plugins can keep addressing "lobby" or "end"; every other one, also
+     * every dynamic one, under its service id.
+     */
+    private static String proxyName(ServiceSpec spec) {
+        return spec.isStatic() && spec.index() == 1 ? spec.groupName() : spec.id().value();
+    }
+
+    /**
+     * The {@code RegisterServer} message that adds a backend to the proxies of its kind: under the
+     * name it has in {@code velocity.toml} (see {@link #proxyName}), at the node's host and the
+     * service's port, with {@code legacy} set for a PandaSpigot server. Only for a backend that is
+     * RUNNING, not being stopped, and whose group is still wanted; never for a proxy.
+     *
+     * @param backend the service
+     * @return the message, or empty if the service must not be listed by any proxy right now
+     */
+    public Optional<RegisterServer> registration(ServiceId backend) {
+        ConfigSnapshot snapshot = config.get();
+        String host = thisNode(snapshot).host();
+        synchronized (lock) {
+            Service service = services.get(backend);
+            if (service == null || !isListable(service, snapshot)) {
+                return Optional.empty();
+            }
+            return Optional.of(registerMessage(service.spec, host));
+        }
+    }
+
+    /**
+     * Every {@link #registration} a proxy of one kind should have: all listable backends for the main
+     * proxy ({@code legacy = false}) or for the legacy proxy ({@code legacy = true}).
+     *
+     * @param legacy which proxy
+     * @return service id to message, in creation order of the services
+     */
+    public Map<ServiceId, RegisterServer> registrations(boolean legacy) {
+        ConfigSnapshot snapshot = config.get();
+        String host = thisNode(snapshot).host();
+        Map<ServiceId, RegisterServer> result = new LinkedHashMap<>();
+        synchronized (lock) {
+            for (Service service : services.values()) {
+                if (isListable(service, snapshot) && isLegacyBackend(service.spec) == legacy) {
+                    result.put(service.spec.id(), registerMessage(service.spec, host));
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
+     * The proxies of one kind that are running now: the main proxy ({@code legacy = false}) or the
+     * legacy proxy ({@code legacy = true}).
+     *
+     * @param legacy which proxy
+     * @return their ids
+     */
+    public List<ServiceId> runningProxies(boolean legacy) {
+        synchronized (lock) {
+            return services.values().stream()
+                    .filter(s -> s.spec.isProxy() && s.spec.isLegacyProxy() == legacy && s.state == ServiceState.RUNNING)
+                    .map(s -> s.spec.id())
+                    .toList();
+        }
+    }
+
+    /**
+     * Tells whether a service is a proxy, and which one.
+     *
+     * @param id the service
+     * @return {@code false} for the main proxy, {@code true} for the legacy proxy, empty for a
+     *         backend or an unknown service
+     */
+    public Optional<Boolean> proxyKind(ServiceId id) {
+        synchronized (lock) {
+            Service service = services.get(id);
+            return service != null && service.spec.isProxy()
+                    ? Optional.of(service.spec.isLegacyProxy()) : Optional.empty();
+        }
+    }
+
+    /**
+     * Turns the server name a proxy reports (for example in {@code PlayerJoin}) into the service it
+     * means: {@code lobby} is the static {@code lobby-1}, every other name is the service id itself.
+     * Only backends the proxy may list count: PandaSpigot for the legacy proxy, every other backend
+     * for the main proxy.
+     *
+     * @param proxy the proxy that reported the name
+     * @param name  the name in its server list
+     * @return the service, or empty if the name means no backend of this proxy
+     */
+    public Optional<ServiceId> backendNamed(ServiceId proxy, ServiceId name) {
+        synchronized (lock) {
+            Service sender = services.get(proxy);
+            if (sender == null || !sender.spec.isProxy()) {
+                return Optional.empty();
+            }
+            boolean legacy = sender.spec.isLegacyProxy();
+            for (Service service : services.values()) {
+                ServiceSpec s = service.spec;
+                if (!s.isProxy() && isLegacyBackend(s) == legacy && proxyName(s).equals(name.value())) {
+                    return Optional.of(s.id());
+                }
+            }
+            return Optional.empty();
+        }
+    }
+
+    /** A backend a proxy may list now. Needs the lock. */
+    private static boolean isListable(Service service, ConfigSnapshot snapshot) {
+        return !service.spec.isProxy() && service.state == ServiceState.RUNNING && !service.stopRequested
+                && isStillWanted(service.spec, snapshot);
+    }
+
+    private static boolean isLegacyBackend(ServiceSpec spec) {
+        return spec.group().software() == ServerSoftware.PANDASPIGOT;
+    }
+
+    private static RegisterServer registerMessage(ServiceSpec spec, String host) {
+        return new RegisterServer(new ServiceId(proxyName(spec)), host, spec.port(), new GroupName(spec.groupName()),
+                isLegacyBackend(spec));
+    }
+
+    /** Whether the group of a service is wanted in {@code snapshot}, with its current group file if it still exists. */
+    private static boolean isStillWanted(ServiceSpec spec, ConfigSnapshot snapshot) {
+        GroupConfig group = snapshot.groups().getOrDefault(spec.groupName(), spec.group());
+        return ServicePlanner.isWanted(group, snapshot.cloud());
     }
 
     // ------------------------------------------------------------------ running
@@ -807,8 +945,12 @@ public final class ServiceManager implements AutoCloseable {
             service.exitCode = exit;
             service.process = null;
             service.stdin = null;
-            // The token dies with the process: a new start gets a new one.
-            tokens.revoke(service.spec.id());
+            // The token dies with the process: a new start gets a new one. Only the token of this
+            // process is removed, never one a later start has issued in the meantime.
+            if (service.token != null) {
+                tokens.remove(service.spec.id(), service.token);
+                service.token = null;
+            }
             releasePort(service);
             boolean requested = service.stopRequested;
             ServiceState next = requested || exit == 0 ? ServiceState.STOPPED : ServiceState.CRASHED;
@@ -1272,9 +1414,13 @@ public final class ServiceManager implements AutoCloseable {
 
     /**
      * The environment of a service: the cloud's own environment without any {@code VECTORA_*}
-     * variable, plus the service's id, group, port, token and where the cloud channel listens.
+     * variable, plus the service's id, group, task, port, platform ({@code ServerPlatform} name),
+     * token and where the cloud channel listens. A PandaSpigot server also gets the forwarding
+     * secret of the legacy proxy, for the {@code bungeeguard} check of its bridge; no other
+     * service gets a secret of {@code vectora.env} in its environment.
      */
-    static Map<String, String> environment(ServiceSpec spec, AuthToken token, String channelHost, int channelPort) {
+    static Map<String, String> environment(ServiceSpec spec, ServerPlatform platform, Optional<Secret> legacySecret,
+                                           AuthToken token, String channelHost, int channelPort) {
         Map<String, String> env = new HashMap<>();
         System.getenv().forEach((key, value) -> {
             if (!key.toUpperCase(java.util.Locale.ROOT).startsWith(ServiceEnvironment.PREFIX)) {
@@ -1285,6 +1431,10 @@ public final class ServiceManager implements AutoCloseable {
         env.put(ServiceEnvironment.SERVICE_GROUP, spec.groupName());
         env.put(ServiceEnvironment.SERVICE_TASK, spec.taskName());
         env.put(ServiceEnvironment.SERVICE_PORT, Integer.toString(spec.port()));
+        env.put(ServiceEnvironment.SERVICE_PLATFORM, platform.name());
+        if (platform == ServerPlatform.PANDASPIGOT) {
+            legacySecret.ifPresent(secret -> env.put(ServiceEnvironment.LEGACY_FORWARDING_SECRET, secret.reveal()));
+        }
         env.put(ServiceEnvironment.SERVICE_TOKEN, token.value());
         env.put(ServiceEnvironment.CLOUD_HOST, channelHost(channelHost));
         env.put(ServiceEnvironment.CLOUD_PORT, Integer.toString(channelPort));
@@ -1366,6 +1516,8 @@ public final class ServiceManager implements AutoCloseable {
         ServiceSpec spec;
         ServiceState state;
         Process process;
+        /** Token of the current process; removed from the registry when exactly this process ends. */
+        AuthToken token;
         OutputStream stdin;
         boolean portHeld;
         long pid;

@@ -33,7 +33,7 @@ The token proves which service a connection belongs to, nothing more. It sits in
 - **Its own reports only.** `ServiceReady` and `ServiceStatus` must name the authenticated service, otherwise the connection ends. Player events from a proxy are passed on as they are; the node has to check them against what it knows (PR 8).
 - **No system messages.** `RegisterServer`, `UnregisterServer` and `AuthResult` go from the cloud to services only; a service that sends one is disconnected. A service cannot make another service receive them: `send` and `request` are methods of the cloud, services do not route to each other.
 - **Channel messages are not authenticated between services.** A service may publish on any channel, and every other service receives every channel message (they filter by channel on their side). The receiving service cannot see who sent it, so a plugin in one service can read and forge any channel. Cloud subscribers get the authenticated sender (`ChannelSubscriber.received(ServiceId, ...)`). Anything that has to be trusted (server lists, permissions, transfers) uses its own message type or a request to the cloud, never a channel message between services.
-- **Takeover by the token holder.** Whoever has the token can connect as the service and replace its connection (`REPLACED`). That needs the token, which only the process of that start has; the cloud revokes it when the process ends (`ServiceTokens.revoke`). Tokens are not single-use, so a token read from a running process stays valid until then.
+- **Takeover by the token holder.** Whoever has the token can connect as the service and replace its connection (`REPLACED`). That needs the token, which only the process of that start has; the cloud removes it when the process ends (`ServiceTokens.remove(id, token)`, which only removes the token of that start, so the late exit of an old process cannot remove the token of its restart). Tokens are not single-use, so a token read from a running process stays valid until then.
 - **Limits per connection.** 1 MiB per frame, 256 open requests in each direction, backpressure as above. One service can still load the cloud within those limits, for example by publishing large channel messages that are fanned out to every service; the fan-out skips services that do not keep up.
 
 **No TLS yet.** The channel is plain TCP. On loopback that is fine. If `host` in `nodes.yml` is set to another address, the cloud logs a warning at start; such a setup needs a firewall that only lets the cloud's own machines in. TLS 1.3 with mutual authentication follows with the cluster (stage 2, PR 20). The server has a hook for it already: a `PipelineCustomizer` runs first for every accepted connection and can add an `SslHandler` in front of the handler named `CloudNetworkServer.FRAME_DECODER`. The client accepts any `javax.net.SocketFactory`, so an `SSLSocketFactory` fits without changes to the client.
@@ -49,11 +49,11 @@ server.start();
 
 AuthToken token = tokens.issue(serviceId); // before starting the process, goes into VECTORA_SERVICE_TOKEN
 // ...
-tokens.revoke(serviceId);                  // after the process has ended
+tokens.remove(serviceId, token);           // after the process has ended; false if a newer token replaced it
 server.close();                            // Disconnect(SHUTDOWN) to everyone
 ```
 
-In the running node the tokens belong to the service core: `ServiceManager` holds the only `ServiceTokens`, issues a token right before it starts a process and revokes it when the process ends or the start fails. `CloudNode` passes `ServiceManager.authenticator()` to the builder, so the channel accepts exactly the services that run now, and `ChannelBridge` closes the connection of a service whose process has ended. `CloudNode` starts the server before the first service and closes it after the last one.
+In the running node the tokens belong to the service core: `ServiceManager` holds the only `ServiceTokens`, issues a token right before it starts a process and removes exactly that token when the process ends or the start fails. `CloudNode` passes `ServiceManager.authenticator()` to the builder, so the channel accepts exactly the services that run now, and `ChannelBridge` closes the connection of a service whose process has ended. `CloudNode` starts the server before the first service and closes it after the last one.
 
 ### Seams for the service core (`cloud-node`, PR 8)
 
@@ -61,7 +61,7 @@ The network module knows nothing about groups or processes. The node connects it
 
 | Interface | Direction | Purpose |
 |---|---|---|
-| `ServiceAuthenticator` | network asks node | `authenticate(PeerId, AuthToken)` returns an `AuthResult.Outcome`. `ServiceTokens` is the ready-made implementation with `issue`, `register` and `revoke`. |
+| `ServiceAuthenticator` | network asks node | `authenticate(PeerId, AuthToken)` returns an `AuthResult.Outcome`. `ServiceTokens` is the ready-made implementation with `issue`, `register` and `remove(id, token)`. |
 | `ChannelListener` (the service core's own listener in `cloud-node` is `ServiceListener`) | network tells node | `onEvent(ServiceEvent)` with one of the records `Connected`, `Ready`, `StatusReported`, `MessageReceived` (`PlayerJoin`, `PlayerQuit`, `PlayerSwitch`) and `Disconnected`. `ServiceEvent` is sealed, so a `switch` can cover every case. Without a listener the events are dropped. |
 
 And the node talks to services through the server:
@@ -159,7 +159,7 @@ The client uses option 3. `Vectora-CloudClient` depends on `Vectora-Protocol` on
 
 | Test | What it covers |
 |---|---|
-| `CloudNetworkServerTest` (cloud-network) | Real loopback connections with a hand-driven peer: loopback default, valid and wrong token, unknown service, revoked token, cluster node refused, oversized frame before authentication (and the same size accepted after it), message before `Hello`, garbage, other major version, slowloris and silent new connection, idle timeout and the counter-check with a peer that answers pings, limits per address and in total, own and foreign status reports, replacement on reconnect (also when the old peer does not read), requests in both directions with timeout and disconnect, channel messages between services, `send` restrictions, shutdown, port in use. |
+| `CloudNetworkServerTest` (cloud-network) | Real loopback connections with a hand-driven peer: loopback default, valid and wrong token, unknown service, removed token (and a stale token that removes nothing), cluster node refused, oversized frame before authentication (and the same size accepted after it), message before `Hello`, garbage, other major version, slowloris and silent new connection, idle timeout and the counter-check with a peer that answers pings, limits per address and in total, own and foreign status reports, replacement on reconnect (also when the old peer does not read), requests in both directions with timeout and disconnect, channel messages between services, `send` restrictions, shutdown, port in use. |
 | `CloudClientEndToEndTest` (cloud-network) | `CloudClient` against the real server: ready and status repeated after a reconnect, cloud started after the client and restarted on the same port, wrong token, messaging between two clients, requests in both directions, `RegisterServer` to the listener, `Disconnect(SHUTDOWN)` on close. |
 | `ConnectionPipelineTest` (cloud-network) | The pipeline on Netty's `EmbeddedChannel`: frame limits before and after authentication, frames split into single bytes, reading paused while the peer is not writable, `PipelineCustomizer` in front of the decoder. |
 | `CloudClientTest`, `FrameReaderTest`, `CloudClientSettingsTest`, `BackoffTest` (CloudClient) | The client against a scripted JDK server socket: `Hello` contents, oversized frame before `AuthResult`, silent cloud, clamped status values, misuse, close; reading in single bytes; the variables; backoff steps. |

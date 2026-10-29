@@ -43,6 +43,7 @@ graph TD
     node --> network[cloud-network]
     node --> database[cloud-database]
     node --> console[cloud-console]
+    node --> setup[cloud-setup]
     monitor[cloud-monitor] --> config
     monitor --> console
     monitor --> protocol
