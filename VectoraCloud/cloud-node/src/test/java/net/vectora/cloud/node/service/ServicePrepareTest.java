@@ -85,9 +85,11 @@ class ServicePrepareTest {
             Files.createDirectories(net.home.resolve("temp"));
             Files.createSymbolicLink(net.home.resolve(ServicePlanner.DYNAMIC_DIR), outside);
             try (ServiceManager manager = net.manager().build()) {
-                ServiceId id = manager.start("minigame").id();
-                TestNetwork.await("start refused", WAIT, () -> manager.find(id)
-                        .map(s -> !s.state().hasProcess() && s.state() != ServiceState.PREPARED).orElse(true));
+                ServiceException refused = org.junit.jupiter.api.Assertions.assertThrows(ServiceException.class,
+                        () -> manager.start("minigame"));
+                assertTrue(refused.getMessage().contains("is a link"), refused.getMessage());
+                ServiceId id = new ServiceId("minigame-1");
+                assertTrue(manager.find(id).map(s -> !s.state().hasProcess()).orElse(true), "no process");
                 assertTrue(Files.exists(precious), "nothing outside the home is deleted");
                 try (java.util.stream.Stream<Path> files = Files.list(outside.resolve("minigame-1"))) {
                     assertEquals(List.of(precious), files.toList(), "nothing is rendered outside the home");

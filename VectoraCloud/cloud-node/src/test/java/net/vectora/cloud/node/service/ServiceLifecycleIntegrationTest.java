@@ -88,6 +88,8 @@ class ServiceLifecycleIntegrationTest {
                 for (ServiceId id : List.of(lobby, minigame, proxy)) {
                     TestNetwork.await(id + " running", WAIT, () -> state(manager, id) == ServiceState.RUNNING);
                 }
+                // Listeners run on their own thread, a moment after the state has changed.
+                TestNetwork.await("running event", WAIT, () -> recorder.of("lobby-1").contains("RUNNING"));
                 assertEquals(List.of("prepared", "starting", "running"),
                         recorder.of("lobby-1").stream().map(s -> s.toLowerCase(java.util.Locale.ROOT)).toList());
 
@@ -167,6 +169,7 @@ class ServiceLifecycleIntegrationTest {
                 assertTrue(Files.isRegularFile(lobbyDir.resolve("world/level.dat")), "static world must stay");
                 assertEquals(AuthResult.Outcome.UNKNOWN_PEER, auth(manager, lobby, token),
                         "token must die with the process");
+                TestNetwork.await("stopped event", WAIT, () -> recorder.of("lobby-1").contains("STOPPED"));
                 assertEquals(List.of("prepared", "starting", "running", "stopping", "stopped"),
                         recorder.of("lobby-1").stream().map(s -> s.toLowerCase(java.util.Locale.ROOT)).toList());
 

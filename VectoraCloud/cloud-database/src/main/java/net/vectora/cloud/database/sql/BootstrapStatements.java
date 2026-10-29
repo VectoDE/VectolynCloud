@@ -24,10 +24,12 @@ public final class BootstrapStatements {
     /**
      * The grants of the {@code test} database and of every {@code test_...} database, as
      * {@code mysql_secure_installation} removes them. The stored name is {@code test\_%} with a
-     * literal backslash; it is built with {@code CHAR(92)} instead of a backslash escape, so the
-     * condition also matches on a server with {@code NO_BACKSLASH_ESCAPES} in its SQL mode.
+     * literal backslash. It is compared by its bytes ({@code HEX(Db)}, {@code 74 65 73 74 5C 5F 25})
+     * instead of a backslash escape, so the condition means the same on a server with
+     * {@code NO_BACKSLASH_ESCAPES} in its SQL mode, and no character set or collation of the
+     * {@code utf8mb3} column {@code mysql.db.Db} gets in the way.
      */
-    static final String TEST_DATABASES = "Db = 'test' OR Db = CONCAT('test', CHAR(92 USING utf8mb4), '_%')";
+    static final String TEST_DATABASES = "Db = 'test' OR HEX(Db) = '746573745C5F25'";
 
     /**
      * Rights of the application user on its own database, nothing else. LuckPerms creates its
