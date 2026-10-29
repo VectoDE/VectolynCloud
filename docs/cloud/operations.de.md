@@ -26,7 +26,9 @@ Der Release-Workflow ([`release.yml`](../../.github/workflows/release.yml)) läu
 | `VectoraCloud-<version>-linux-macos.tar.gz` | `VectoraCloud.jar`, `start.sh` (ausführbar) |
 | `SHA256SUMS` | SHA-256 der drei Dateien darüber |
 | `<datei>.sigstore.json` | cosign-Signatur-Bundle für jede Datei und für `SHA256SUMS` |
-| `vectora.intoto.jsonl` | SLSA-Level-3-Provenance für jede Datei aus `SHA256SUMS` |
+| `vectora.intoto.jsonl` | SLSA-Build-Provenance für jede Datei aus `SHA256SUMS`, als Sigstore-Bundle der GitHub-Attestierung |
+
+Bevor ein Tag gepusht wird, und am Ende jeder Etappe, läuft die Aufräum-Prüfung aus [docs/openssf.de.md](../openssf.de.md#die-aufräum-prüfung): keine offenen Pull Requests, nichts Behebbares mehr unter *Security and quality*, und CI, CodeQL, Dependency Review und Scorecard laufen auf `main` erneut, bis das gilt.
 
 Die Startskripte kommen als ein Archiv pro Betriebssystem, nicht als lose Dateien. Ein heruntergeladenes `start.sh` verliert sein Ausführungsrecht, im tar bleibt es erhalten. Das zip behält die CRLF-Zeilenenden, die die Windows-Skripte brauchen. Und jedes Archiv ist ein einziger Download mit dem passenden Jar. Das Jar hängt zusätzlich einzeln am Release. Die Archive sind reproduzierbar (feste Reihenfolge, feste Besitzer und Zeitstempel), derselbe Tag ergibt also beim zweiten Bauen dieselbe SHA-256.
 
@@ -241,12 +243,14 @@ So funktioniert das Egg:
 
 ## Ein Release prüfen
 
-Jede Datei eines Releases ist mit cosign keyless signiert (Sigstore, die GitHub-Actions-Identität von `release.yml`). Die drei Dateien aus `SHA256SUMS` haben zusätzlich eine Build-Provenance-Attestierung von GitHub und stehen in der SLSA-Provenance; `SHA256SUMS` selbst sichert seine Signatur ab. Ersetze `v0.2.0` durch den Tag, den du heruntergeladen hast.
+Jede Datei eines Releases ist mit cosign keyless signiert (Sigstore, die GitHub-Actions-Identität von `release.yml`). Die drei Dateien aus `SHA256SUMS` haben zusätzlich eine Build-Provenance-Attestierung von GitHub (SLSA-Provenance, mit Sigstore signiert). `vectora.intoto.jsonl` ist dieselbe Attestierung als Datei, sie lässt sich also auch ohne Abfrage bei GitHub prüfen; `SHA256SUMS` selbst sichert seine Signatur ab. Ersetze `v0.2.0` durch den Tag, den du heruntergeladen hast.
 
 Das Repository heißt seit dem 29.10.2026 `VectoDE/VectoraCloud` statt `VectoDE/Vectora-Network`. Signaturen und Provenance halten den Repository-Namen zum Zeitpunkt des Builds fest, deshalb gelten je nach Release unterschiedliche Namen:
 
 - **v0.1.0** ist als `VectoDE/Vectora-Network` signiert. Nimm als Zertifikats-Identität `https://github.com/VectoDE/Vectora-Network/.github/workflows/release.yml@refs/tags/v0.1.0`, `gh attestation verify ... --repo VectoDE/Vectora-Network` und `slsa-verifier ... --source-uri github.com/VectoDE/Vectora-Network`. v0.1.0 enthält die Plugin-Jars und `SHA256SUMS`, kein `VectoraCloud.jar`.
 - **Alle späteren Releases** sind als `VectoDE/VectoraCloud` signiert, wie in den Befehlen unten.
+
+Bis v0.1.0 stammt `vectora.intoto.jsonl` aus slsa-github-generator und wird mit `slsa-verifier verify-artifact ... --provenance-path vectora.intoto.jsonl --source-uri github.com/VectoDE/Vectora-Network --source-tag v0.1.0` geprüft. Spätere Releases erzeugen die Provenance mit `actions/attest-build-provenance` im Build-Job: Der SLSA-Generator lässt sich nur über einen Tag einbinden, der Release-Workflow pinnt aber jede Action auf einen Commit-SHA. Die Datei ist dann ein Sigstore-Bundle, das `gh attestation verify --bundle` liest.
 
 ```sh
 # 1. Prüfsummen (nur Integrität: SHA256SUMS kommt vom selben Ort)
@@ -261,10 +265,11 @@ cosign verify-blob VectoraCloud.jar \
 # 3. GitHub-Attestierung (Build-Provenance)
 gh attestation verify VectoraCloud.jar --repo VectoDE/VectoraCloud
 
-# 4. SLSA-Provenance
-slsa-verifier verify-artifact VectoraCloud.jar \
-  --provenance-path vectora.intoto.jsonl \
-  --source-uri github.com/VectoDE/VectoraCloud --source-tag v0.2.0
+# 4. Dieselbe Provenance aus der Release-Datei, ohne Abruf bei GitHub
+gh attestation verify VectoraCloud.jar --repo VectoDE/VectoraCloud \
+  --bundle vectora.intoto.jsonl \
+  --signer-workflow VectoDE/VectoraCloud/.github/workflows/release.yml \
+  --source-ref refs/tags/v0.2.0
 ```
 
 Das Container-Image, immer über Digest oder Tag eines Releases:

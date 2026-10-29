@@ -26,7 +26,9 @@ The release workflow ([`release.yml`](../../.github/workflows/release.yml)) runs
 | `VectoraCloud-<version>-linux-macos.tar.gz` | `VectoraCloud.jar`, `start.sh` (executable) |
 | `SHA256SUMS` | SHA-256 of the three files above |
 | `<file>.sigstore.json` | cosign signature bundle for each file and for `SHA256SUMS` |
-| `vectora.intoto.jsonl` | SLSA level 3 provenance for every file in `SHA256SUMS` |
+| `vectora.intoto.jsonl` | SLSA build provenance for every file in `SHA256SUMS`, as the Sigstore bundle of the GitHub attestation |
+
+Before a tag is pushed, and at the end of every stage, the cleanup check in [docs/openssf.md](../openssf.md#the-cleanup-check) runs: no open pull requests, nothing fixable left under *Security and quality*, and CI, CodeQL, Dependency Review and Scorecard run again on `main` until that holds.
 
 The start scripts come in one archive per operating system rather than as loose files: a downloaded `start.sh` loses its executable bit, while the tar keeps it; the zip keeps the CRLF line ends the Windows scripts need; and each archive is a single download with the matching jar. The jar is attached on its own as well. The archives are reproducible (fixed file order, owner and time stamps), so building the same tag twice gives the same SHA-256.
 
@@ -241,12 +243,14 @@ How the egg works:
 
 ## Verifying a release
 
-Every file of a release is signed with cosign keyless (Sigstore, the GitHub Actions identity of `release.yml`). The three files in `SHA256SUMS` also have a GitHub build provenance attestation and are listed in the SLSA provenance; `SHA256SUMS` itself is covered by its signature. Replace `v0.2.0` with the tag you downloaded.
+Every file of a release is signed with cosign keyless (Sigstore, the GitHub Actions identity of `release.yml`). The three files in `SHA256SUMS` also have a GitHub build provenance attestation (SLSA provenance, signed with Sigstore). `vectora.intoto.jsonl` is the same attestation as a file, so it can be checked without asking GitHub; `SHA256SUMS` itself is covered by its signature. Replace `v0.2.0` with the tag you downloaded.
 
 The repository was renamed from `VectoDE/Vectora-Network` to `VectoDE/VectoraCloud` on 2026-10-29. Signatures and provenance record the repository name at build time, so the two names apply to different releases:
 
 - **v0.1.0** was signed as `VectoDE/Vectora-Network`. Use the certificate identity `https://github.com/VectoDE/Vectora-Network/.github/workflows/release.yml@refs/tags/v0.1.0`, `gh attestation verify ... --repo VectoDE/Vectora-Network` and `slsa-verifier ... --source-uri github.com/VectoDE/Vectora-Network`. v0.1.0 contains the plugin jars and `SHA256SUMS`, not `VectoraCloud.jar`.
 - **Every later release** is signed as `VectoDE/VectoraCloud`, as in the commands below.
+
+Up to v0.1.0, `vectora.intoto.jsonl` came from slsa-github-generator and is checked with `slsa-verifier verify-artifact ... --provenance-path vectora.intoto.jsonl --source-uri github.com/VectoDE/Vectora-Network --source-tag v0.1.0`. Later releases build the provenance with `actions/attest-build-provenance` in the build job: the SLSA generator can only be referenced by tag, and the release workflow pins every action to a commit SHA. The file is then a Sigstore bundle, which `gh attestation verify --bundle` reads.
 
 ```sh
 # 1. Checksums (only integrity: SHA256SUMS comes from the same place)
@@ -261,10 +265,11 @@ cosign verify-blob VectoraCloud.jar \
 # 3. GitHub attestation (build provenance)
 gh attestation verify VectoraCloud.jar --repo VectoDE/VectoraCloud
 
-# 4. SLSA provenance
-slsa-verifier verify-artifact VectoraCloud.jar \
-  --provenance-path vectora.intoto.jsonl \
-  --source-uri github.com/VectoDE/VectoraCloud --source-tag v0.2.0
+# 4. The same provenance from the release file, without fetching it from GitHub
+gh attestation verify VectoraCloud.jar --repo VectoDE/VectoraCloud \
+  --bundle vectora.intoto.jsonl \
+  --signer-workflow VectoDE/VectoraCloud/.github/workflows/release.yml \
+  --source-ref refs/tags/v0.2.0
 ```
 
 The container image, always by digest or tag of a release:

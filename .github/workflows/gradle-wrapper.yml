@@ -1,0 +1,121 @@
+name: Gradle wrapper and dependency verification
+
+# A workflow of its own, and a fast one, for two reasons:
+# - OpenSSF Scorecard (BinaryArtifacts) only accepts gradle/wrapper/gradle-wrapper.jar if a workflow
+#   that runs gradle/actions/wrapper-validation has a successful run on the newest commit of main
+#   at the moment Scorecard looks. The CI workflow takes many minutes; this one is done in seconds,
+#   and scorecard.yml waits for it. No other workflow may use wrapper-validation: Scorecard only
+#   looks at the first workflow file it finds with that action.
+# - The job name "Validate Gradle wrapper" is a required check of the main ruleset, so it stays.
+#   The dependency verification checks run in the same job and are required with it.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gradle-wrapper-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  wrapper-validation:
+    name: Validate Gradle wrapper
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            services.gradle.org:443
+            downloads.gradle.org:443
+
+      # Two commits: on a pull request HEAD is the merge commit and HEAD^1 the base branch it would
+      # be merged into; on main HEAD^1 is the commit before the squash merge.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      # gradle-wrapper.jar must be byte for byte an official Gradle release (checksums from
+      # services.gradle.org). The distribution itself is pinned by distributionSha256Sum in
+      # gradle/wrapper/gradle-wrapper.properties.
+      - name: Validate wrapper checksum
+        uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+
+      - name: Check wrapper properties
+        run: |
+          f=gradle/wrapper/gradle-wrapper.properties
+          grep -qE '^distributionSha256Sum=[0-9a-f]{64}$' "$f" \
+            || { echo "::error::$f must pin the distribution with distributionSha256Sum."; exit 1; }
+          grep -qE '^distributionUrl=https\\://services[.]gradle[.]org/distributions/gradle-[0-9.]+-bin[.]zip$' "$f" \
+            || { echo "::error::$f must download an official -bin distribution from services.gradle.org."; exit 1; }
+          echo "Wrapper properties OK."
+
+      # Every Gradle run verifies dependencies and plugins against gradle/verification-metadata.xml
+      # (docs/dependency-verification.md). Gradle switches verification off without a word when the
+      # file is missing, so this step makes sure it is there and nothing weakens it.
+      - name: Check dependency verification
+        run: |
+          f=gradle/verification-metadata.xml
+          fail() { echo "::error::$1"; exit 1; }
+          [ -f "$f" ] || fail "$f is missing, dependency verification would be off."
+          grep -q '<verify-metadata>true</verify-metadata>' "$f" || fail "$f must verify metadata (pom/module files) too."
+          grep -q '<sha256 ' "$f" || fail "$f has no SHA-256 entries."
+          if grep -qF 'update-verification-metadata.sh: temporary' "$f"; then
+            fail "$f still has the temporary trust entry of gradle/update-verification-metadata.sh."
+          fi
+          if grep -qE '<!--|<trusted-key|<ignored-key' "$f"; then
+            fail "$f must not contain XML comments or PGP keys (docs/dependency-verification.md)."
+          fi
+          # Only the IDE-only -javadoc/-sources jars may be trusted without a checksum.
+          if [ "$(grep -c '<trust ' "$f")" -ne 2 ] \
+              || ! grep -qF '<trust file=".*-javadoc[.]jar" regex="true"' "$f" \
+              || ! grep -qF '<trust file=".*-sources[.]jar" regex="true"' "$f"; then
+            fail "$f may only trust -javadoc.jar and -sources.jar files."
+          fi
+          # Structure: plain SHA-256 entries only, no PGP, <also-trust>, DOCTYPE or duplicates.
+          python3 -I .github/scripts/check-verification-metadata.py "$f" || fail "$f has entries Gradle would accept without a plain SHA-256."
+          grep -qxF 'org.gradle.dependency.verification=strict' gradle.properties \
+            || fail "gradle.properties must set org.gradle.dependency.verification=strict."
+          # Long and short Gradle options (-F for the verification mode, -M for writing the
+          # metadata) and the property in any properties syntax.
+          # The brackets keep the patterns from matching these lines themselves.
+          weaken='--dependency-verification[= ]+(lenient|off)|dependency[.]verification[[:space:]]*[=:][[:space:]]*(lenient|off)|--write-verification-[m]etadata|gradlew.*[[:space:]]-[FM][[:space:]=]'
+          if git ls-files -z -- .github/workflows '*.gradle.kts' '*gradle.properties' '*Dockerfile*' '*.gradle' \
+              | xargs -0 grep -nE -- "$weaken"; then
+            fail "A workflow, build or property file weakens or rewrites dependency verification (lines above)."
+          fi
+          echo "Dependency verification is on: $(grep -c '<component ' "$f") components with SHA-256."
+
+      # Compared with the base: the <configuration> block must stay exactly as it is, and no
+      # checksum of an artifact that both files list may change. New entries are fine (new
+      # versions), and so are removed ones: Gradle fails the build on an artifact without a
+      # checksum, so dropping an entry can never let an unverified file through. The checker is
+      # taken from the base commit, so a pull request cannot relax the rules it is checked
+      # against; a change to the checker itself takes effect from the next pull request on.
+      - name: Compare dependency verification with the base
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          f=gradle/verification-metadata.xml
+          base_dir="$RUNNER_TEMP/verification-base"
+          mkdir -p "$base_dir"
+          if ! git cat-file -e 'HEAD^1:'"$f" 2>/dev/null; then
+            echo "::notice::No base commit with $f (first commit or shallow history), nothing to compare."
+            exit 0
+          fi
+          git show 'HEAD^1:'"$f" > "$base_dir/verification-metadata.xml"
+          git show 'HEAD^1:.github/scripts/check-verification-metadata.py' > "$base_dir/check.py" \
+            || fail "The base commit has no .github/scripts/check-verification-metadata.py."
+          echo "Base: $(git rev-parse 'HEAD^1')"
+          python3 -I "$base_dir/check.py" "$f" --base "$base_dir/verification-metadata.xml" \
+            || fail "$f weakens dependency verification compared with the base (see above)."
