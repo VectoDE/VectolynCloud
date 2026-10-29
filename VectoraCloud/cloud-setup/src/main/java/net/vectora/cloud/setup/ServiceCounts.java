@@ -35,7 +35,22 @@ public record ServiceCounts(int staticServices, int minServices, int maxServices
         if (!m.matches()) {
             return null;
         }
-        return new ServiceCounts(Integer.parseInt(m.group(1)), Integer.parseInt(m.group(2)), Integer.parseInt(m.group(3)));
+        int staticServices = count(m.group(1));
+        int minServices = count(m.group(2));
+        int maxServices = count(m.group(3));
+        if (staticServices < 0 || minServices < 0 || maxServices < 0) {
+            return null;
+        }
+        return new ServiceCounts(staticServices, minServices, maxServices);
+    }
+
+    /** One count of 1 to 4 ASCII digits, or -1 if it is no such number. */
+    private static int count(String digits) {
+        try {
+            return Integer.parseInt(digits);
+        } catch (NumberFormatException e) {
+            return -1;
+        }
     }
 
     /**
