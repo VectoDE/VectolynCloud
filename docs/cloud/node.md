@@ -145,6 +145,7 @@ The node starts the server JVM directly with `ProcessBuilder`, without a wrapper
 | `VECTORA_SERVICE_TOKEN` | a new random token per start (`ServiceTokens.issue`, 32 bytes, base64url). The bridge logs in to the cloud channel with it; the channel checks it in constant time through `ServiceManager.authenticator()`. The service core is the only place that issues and removes tokens: `ServiceTokens.remove(id, token)` when the process ends and when the start fails. It only removes the token of that start, so a late exit of an old process cannot remove the token of the restart that follows. |
 | `VECTORA_SERVICE_PLATFORM` | the `ServerPlatform` name (`VELOCITY`, `VELOCITY_LEGACY`, `PAPER`, `FABRIC`, `PANDASPIGOT`), so the bridge knows what it runs on |
 | `VECTORA_LEGACY_FORWARDING_SECRET` | only for `PANDASPIGOT`: the `bungeeguard` token its bridge checks. No other service gets it in its environment. |
+| `VECTORA_FALLBACK_GROUP` | only for `VELOCITY` and `VELOCITY_LEGACY`: `fallback-group` of `cloud.yml`, or `lobby` without it. |
 | `VECTORA_CLOUD_HOST`, `VECTORA_CLOUD_PORT` | where this node's channel listens, as bound. A wildcard bind (`0.0.0.0`, `::`) is passed as `127.0.0.1` or `::1`. |
 
 ## Life cycle

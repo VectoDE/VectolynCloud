@@ -35,7 +35,7 @@ import net.vectora.cloud.config.operation.SetServerWanted;
  * {@code ConfigService.apply} then runs the same validation as for a hand-edited file.
  *
  * <p>{@code schema-version} is not a key: the cloud manages it. Secrets are not in {@code cloud.yml}.
- * Optional texts ({@code database.docker-image}, {@code api.tls.keystore}) are cleared with {@code ""};
+ * Optional texts ({@code fallback-group}, {@code database.docker-image}, {@code api.tls.keystore}) are cleared with {@code ""};
  * {@code api.cors-origins} is a comma list, {@code ""} switches CORS off.
  */
 final class ConfigKeys {
@@ -69,6 +69,10 @@ final class ConfigKeys {
         }, bool);
         add("node-id", CloudConfig::nodeId,
                 (s, v) -> snapshot -> snapshot.withCloud(snapshot.cloud().withNodeId(v)), List.of());
+        add("fallback-group", CloudConfig::fallbackGroupOrDefault, (s, v) -> {
+            String value = Values.optionalText(v);
+            return snapshot -> snapshot.withCloud(snapshot.cloud().withFallbackGroup(value));
+        }, List.of());
         for (ServerKind kind : ServerKind.values()) {
             String key = "servers." + kind.key();
             add(key, c -> String.valueOf(servers(c).isWanted(kind)),

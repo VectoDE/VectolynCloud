@@ -29,6 +29,7 @@ language: en                 # en or de
 eula-accepted: false         # eula.txt is written only after this is true
 setup-complete: false        # needs eula-accepted: true
 node-id: node-1              # must exist in nodes.yml
+# fallback-group: lobby      # optional: where the proxies send a kicked player when the player's own group has no free server; default lobby, must be an existing group when set
 servers:                     # the "wanted" switch per server; a missing entry counts as false
   proxy: true
   lobby: true
@@ -208,6 +209,7 @@ Besides types and patterns, `ConfigValidator` checks the configuration as a whol
 - A node's `max-memory`, if set, lies between 512M and the largest size the cloud accepts.
 - Every field of a node's `memory-reserve`, if set, lies between 1M and 64G (`out-of-range`).
 - Tasks refer to existing groups and nodes; `node-id` refers to an existing node; node ids are unique.
+- `fallback-group`, if set, is a valid group name and an existing group (`unknown-group`), so a group cannot be deleted while it is named there. Without the field the default `lobby` is used and need not exist; the proxies then find no server there.
 - Catalog ids are unique per group and fit the software.
 - `docker-image` only and always with `mode: docker`.
 - An enabled API on a non-loopback address needs TLS.

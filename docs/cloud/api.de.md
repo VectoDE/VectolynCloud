@@ -81,6 +81,8 @@ Jeder Schreibzugriff läuft über `ConfigService.apply`. Geprüft wird die ganze
 
 **Nodes.** `PUT /nodes/{name}` erwartet den ganzen Node wie in `nodes.yml`, zum Beispiel `{"host": "127.0.0.1", "port": 7010, "service-ports": {"first": 30000, "last": 30999}, "max-memory": "8G", "memory-reserve": {"system": "2G"}}`. `id` kann fehlen; ist sie gesetzt, muss sie zum Pfad passen, sonst `400 invalid-value`. `max-memory` (mindestens 512M) und jedes Feld von `memory-reserve` (1M bis 64G; Defaults `system` 1G, `node-overhead` 256M, `database` 512M) sind optional. Ein weggelassenes Feld wird aus der Datei entfernt, dann gilt der Default. Derselbe Validator wie für die Datei antwortet mit `422` (etwa `out-of-range` bei `nodes[0].memory-reserve.system`). `ETag` und `If-Match` funktionieren wie bei Gruppen. Ein `DELETE` gibt es nicht; Nodes entfernt man in der Datei.
 
+**Ausweichgruppe.** `fallback-group` in `PUT /config` nennt die Gruppe, auf die die Proxys einen gekickten Spieler schicken, wenn seine eigene Gruppe keinen freien Server hat, zum Beispiel `"fallback-group": "hub"`. Das Feld ist optional (Standard `lobby`, dann fehlt es in der Antwort); eine Gruppe, die es nicht gibt, beantwortet die API mit `422 invalid-config` und `unknown-group`. Ohne das Feld gilt wieder der Standard. Die Proxys übernehmen den Wert bei ihrem Start (siehe [bridges.md](bridges.md#catching-kicks)).
+
 **Gruppen.** `drain-timeout` ist optional (5s bis 10m, Default 30s), zum Beispiel `"drain-timeout": "45s"`; außerhalb der Grenzen antwortet die API mit `422 out-of-range`.
 
 **Herunterfahren.** Während der Node herunterfährt, beantworten Start, Neustart, Reload und das Erstellen eines Backups die Anfrage mit `503 shutting-down`. Lesen und Stoppen gehen weiter.

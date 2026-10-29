@@ -7,8 +7,11 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.UnaryOperator;
 import net.vectora.cloud.client.CloudClientEvent;
 import net.vectora.cloud.client.CloudClientListener;
+import net.vectora.protocol.GroupName;
+import net.vectora.protocol.ServiceEnvironment;
 import net.vectora.protocol.message.RegisterServer;
 import net.vectora.protocol.message.ServerCapacity;
 import net.vectora.protocol.message.TransferPlayer;
@@ -36,15 +39,47 @@ public final class ProxyBridge implements CloudClientListener {
     private final KickGuard guard;
     private final String fallbackGroup;
 
-    /** The group a kicked player goes to when no other server of their own group is free. */
-    public static final String FALLBACK_GROUP = "lobby";
+    /**
+     * The group a kicked player goes to when no other server of their own group is free, when the
+     * cloud names none ({@value ServiceEnvironment#FALLBACK_GROUP}, from {@code fallback-group} in
+     * {@code cloud.yml}).
+     */
+    public static final String DEFAULT_FALLBACK_GROUP = "lobby";
 
     /** Lets a player onto a server the cloud closed. */
     public static final String BYPASS_CLOSED_PERMISSION = "vectora.server.bypass-closed";
 
-    /** Creates the bridge for a proxy in {@code role} whose server list is {@code servers}. */
-    public ProxyBridge(BridgeSender sender, ProxyServers servers, ProxyPlayers players, ProxyRole role) {
-        this(sender, servers, players, role, new ServerLoads(), new KickGuard(), FALLBACK_GROUP);
+    /**
+     * Creates the bridge for a proxy in {@code role} whose server list is {@code servers}.
+     *
+     * @param fallbackGroup the group a kicked player goes to when no other server of their own
+     *                      group is free, see {@link #fallbackGroup(UnaryOperator)}
+     */
+    public ProxyBridge(BridgeSender sender, ProxyServers servers, ProxyPlayers players, ProxyRole role,
+                       String fallbackGroup) {
+        this(sender, servers, players, role, new ServerLoads(), new KickGuard(), fallbackGroup);
+    }
+
+    /**
+     * The fallback group the cloud passed in {@value ServiceEnvironment#FALLBACK_GROUP}. A missing
+     * or invalid value (a proxy started by an older node, a hand-made start) gives
+     * {@link #DEFAULT_FALLBACK_GROUP}; an invalid one is logged without repeating it.
+     *
+     * @param environment reads an environment variable, {@code System::getenv}
+     * @return a valid group name
+     */
+    public static String fallbackGroup(UnaryOperator<String> environment) {
+        String value = environment.apply(ServiceEnvironment.FALLBACK_GROUP);
+        if (value == null || value.isBlank()) {
+            return DEFAULT_FALLBACK_GROUP;
+        }
+        try {
+            return new GroupName(value.strip()).value();
+        } catch (IllegalArgumentException e) {
+            LOG.log(Level.WARNING, "{0} is no valid group name; kicked players fall back to the group {1}",
+                    ServiceEnvironment.FALLBACK_GROUP, DEFAULT_FALLBACK_GROUP);
+            return DEFAULT_FALLBACK_GROUP;
+        }
     }
 
     /** As above, with the load directory, the kick guard and the fallback group given (tests). */
@@ -161,7 +196,7 @@ public final class ProxyBridge implements CloudClientListener {
     /**
      * A backend kicked the player or refused the connect. If the kick is one the proxy catches
      * ({@link KickClassifier}), the player goes to the emptiest other server of the same group,
-     * otherwise to the emptiest server of the {@linkplain #FALLBACK_GROUP fallback group}; servers
+     * otherwise to the emptiest server of the fallback group (see {@link #fallbackGroup}); servers
      * already tried in this incident are skipped ({@link KickGuard}). A player who still is on
      * another server (a refused switch) is only moved inside the group and otherwise stays. For a
      * kick with a reason of its own ({@link KickClassifier.Verdict#OTHER_REASON}) the player reads

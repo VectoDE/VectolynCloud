@@ -32,7 +32,8 @@ class ProxyBridgeTest {
     private final BridgeSender sender = BridgeSender.start(link);
     private final ServerRegistryTest.FakeServers servers = new ServerRegistryTest.FakeServers(Set.of("lobby"));
     private final FakePlayers players = new FakePlayers();
-    private final ProxyBridge bridge = new ProxyBridge(sender, servers, players, ProxyRole.MAIN);
+    private final ProxyBridge bridge = new ProxyBridge(sender, servers, players, ProxyRole.MAIN,
+            ProxyBridge.DEFAULT_FALLBACK_GROUP);
 
     /** Players on the proxy and the moves the bridge asked for. */
     static final class FakePlayers implements ProxyPlayers {
@@ -219,6 +220,39 @@ class ProxyBridgeTest {
         receive(new ServerCapacity(new ServiceId("lobby-2"), 50, true));
         assertEquals(move("lobby-2", null), bridge.kicked(UUID.randomUUID(), "bedwars-1", SHUTDOWN, false));
         assertEquals(move("lobby-2", null), bridge.kicked(UUID.randomUUID(), "survival", SHUTDOWN, false));
+        sender.close(Duration.ofSeconds(5));
+    }
+
+    @Test
+    void theFallbackGroupComesFromTheCloud() {
+        assertEquals("lobby", ProxyBridge.DEFAULT_FALLBACK_GROUP);
+        assertEquals("hub", ProxyBridge.fallbackGroup(Map.of("VECTORA_FALLBACK_GROUP", "hub")::get));
+        assertEquals("hub", ProxyBridge.fallbackGroup(Map.of("VECTORA_FALLBACK_GROUP", " hub ")::get));
+        // Counter-checks: missing, blank and invalid values give the default.
+        assertEquals("lobby", ProxyBridge.fallbackGroup(Map.<String, String>of()::get));
+        assertEquals("lobby", ProxyBridge.fallbackGroup(Map.of("VECTORA_FALLBACK_GROUP", " ")::get));
+        assertEquals("lobby", ProxyBridge.fallbackGroup(Map.of("VECTORA_FALLBACK_GROUP", "Hub!")::get));
+        assertEquals("lobby", ProxyBridge.fallbackGroup(Map.of("VECTORA_FALLBACK_GROUP", "con")::get));
+        sender.close(Duration.ofSeconds(5));
+    }
+
+    @Test
+    void aKickedPlayerGoesToTheConfiguredFallbackGroup() {
+        ServerRegistryTest.FakeServers hubServers = new ServerRegistryTest.FakeServers(Set.of());
+        ProxyBridge hubBridge = new ProxyBridge(sender, hubServers, players, ProxyRole.MAIN, "hub");
+        hubBridge.onEvent(new CloudClientEvent.MessageReceived(ServerRegistryTest.server("hub-1", 30006, false)));
+        hubBridge.onEvent(new CloudClientEvent.MessageReceived(ServerRegistryTest.server("lobby-2", 30002, false)));
+        hubBridge.onEvent(new CloudClientEvent.MessageReceived(ServerRegistryTest.server("bedwars-1", 30003, false)));
+        hubBridge.onEvent(new CloudClientEvent.MessageReceived(new ServerCapacity(new ServiceId("hub-1"), 50, true)));
+        hubBridge.onEvent(new CloudClientEvent.MessageReceived(new ServerCapacity(new ServiceId("lobby-2"), 50, true)));
+        hubBridge.onEvent(new CloudClientEvent.MessageReceived(new ServerCapacity(new ServiceId("bedwars-1"), 8, true)));
+        hubServers.players.put("lobby-2", 0);
+        hubServers.players.put("hub-1", 40);
+        assertEquals(move("hub-1", null), hubBridge.kicked(UUID.randomUUID(), "bedwars-1", SHUTDOWN, false),
+                "the hub, although lobby-2 is emptier");
+        // Counter-check: the default bridge sends the same player to the lobby.
+        lobbies();
+        assertEquals(move("lobby", null), bridge.kicked(UUID.randomUUID(), "bedwars-1", SHUTDOWN, false));
         sender.close(Duration.ofSeconds(5));
     }
 

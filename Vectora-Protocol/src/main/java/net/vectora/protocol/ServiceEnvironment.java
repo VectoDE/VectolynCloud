@@ -42,6 +42,13 @@ public final class ServiceEnvironment {
     public static final String LEGACY_FORWARDING_SECRET = "VECTORA_LEGACY_FORWARDING_SECRET";
 
     /**
+     * Group a proxy sends a kicked player to when no other server of the player's own group is
+     * free ({@code fallback-group} in {@code cloud.yml}, default {@code lobby}). Only the two
+     * proxies get it; the Velocity bridge reads it once when it connects.
+     */
+    public static final String FALLBACK_GROUP = "VECTORA_FALLBACK_GROUP";
+
+    /**
      * Prefix of every variable the cloud owns. The node removes all variables with this prefix
      * from its own environment before it starts a service, so nothing of the cloud's environment
      * leaks into a server.

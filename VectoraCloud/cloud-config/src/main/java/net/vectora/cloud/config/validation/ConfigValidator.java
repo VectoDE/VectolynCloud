@@ -315,6 +315,13 @@ public final class ConfigValidator {
         if (ConfigNames.isValidName(nodeId) && snapshot.nodes().find(nodeId).isEmpty()) {
             c.add(ConfigError.of(CloudHome.CLOUD_FILE, "node-id", ErrorCode.UNKNOWN_NODE, nodeId));
         }
+        // Only a group named in the file must exist; the default may be missing (the proxy then
+        // finds no server there and disconnects, as before the setting existed).
+        String fallback = snapshot.cloud().fallbackGroup();
+        if (fallback != null && c.name(CloudHome.CLOUD_FILE, "fallback-group", fallback)
+                && !snapshot.groups().containsKey(fallback)) {
+            c.add(ConfigError.of(CloudHome.CLOUD_FILE, "fallback-group", ErrorCode.UNKNOWN_GROUP, fallback));
+        }
     }
 
     /**

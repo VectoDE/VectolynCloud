@@ -768,6 +768,15 @@ components:
     CloudConfig:
       type: object
       description: "cloud.yml, see docs/cloud/config.md. Unknown fields are refused."
+      properties:
+        fallback-group:
+          type: string
+          pattern: "^[a-z0-9][a-z0-9_-]{0,31}$"
+          example: lobby
+          description: >-
+            Group the proxies send a kicked player to when no other server of the player's own group is
+            free. Optional, default lobby (then not returned). When set it must be an existing group,
+            otherwise 422 invalid-config with the error code unknown-group. The proxies read it when they start.
     NodeStatus:
       type: object
       properties:

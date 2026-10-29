@@ -225,8 +225,9 @@ public final class VelocityBridgePlugin {
         LOG.log(ProxyRole.isProxyPlatform(platform) ? System.Logger.Level.INFO : System.Logger.Level.WARNING,
                 ProxyRole.describe(platform));
         VelocityServers servers = new VelocityServers(proxy);
+        String fallbackGroup = ProxyBridge.fallbackGroup(System::getenv);
         sender = BridgeConnection.open(settings.get(), created -> {
-            ProxyBridge proxyBridge = new ProxyBridge(created, servers, new VelocityPlayers(proxy), role);
+            ProxyBridge proxyBridge = new ProxyBridge(created, servers, new VelocityPlayers(proxy), role, fallbackGroup);
             bridge = proxyBridge;
             return proxyBridge;
         });
