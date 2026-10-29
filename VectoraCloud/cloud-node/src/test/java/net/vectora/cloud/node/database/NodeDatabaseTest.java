@@ -180,4 +180,29 @@ class NodeDatabaseTest {
         IllegalStateException refused = assertThrows(IllegalStateException.class, () -> tight.values(null, snapshot));
         assertTrue(refused.getMessage().contains("max_connections"), refused.getMessage());
     }
+
+    @Test
+    void anUnwantedManagedDatabaseStartsNoServerButFallsBackToH2() throws Exception {
+        ConfigSnapshot snapshot = config(List.of(new SetServerWanted(ServerKind.DATABASE, false)));
+        assertEquals(DatabaseMode.MANAGED, snapshot.cloud().database().mode());
+        AtomicInteger created = new AtomicInteger();
+        NodeDatabase database = new NodeDatabase(() -> snapshot, () -> EnvFile.empty(), (s, secrets) -> {
+            created.incrementAndGet();
+            return new Provisioner();
+        });
+        database.beforeStart();
+        assertEquals(0, created.get(), "no MariaDB provisioner for a database that is not wanted");
+        assertEquals("h2", database.values(null, snapshot).get(DatabaseEndpoint.STORAGE_METHOD));
+    }
+
+    @Test
+    void afterTheShutdownNothingIsSetUpAgain() throws Exception {
+        ConfigSnapshot snapshot = config(List.of());
+        Provisioner provisioner = new Provisioner();
+        NodeDatabase database = new NodeDatabase(() -> snapshot, () -> EnvFile.empty(), (s, secrets) -> provisioner);
+        database.shutdown();
+        ServiceException refused = assertThrows(ServiceException.class, database::beforeStart);
+        assertTrue(refused.getMessage().contains("shut down"), refused.getMessage());
+        assertEquals(0, provisioner.provisions.get(), "a start racing with the shutdown leaves no database behind");
+    }
 }

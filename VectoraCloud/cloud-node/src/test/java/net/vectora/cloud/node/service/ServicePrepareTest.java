@@ -28,6 +28,22 @@ class ServicePrepareTest {
     Path dir;
 
     @Test
+    void afterCloseNoStartReachesTheStartGate() throws Exception {
+        try (TestNetwork net = TestNetwork.create(dir)) {
+            net.group("lobby", ServerKind.LOBBY, ServerSoftware.PAPER, TestNetwork.process("normal", "20s", null));
+            net.task("lobby", "lobby", TaskMode.STATIC, 0, 1);
+            java.util.concurrent.atomic.AtomicInteger gate = new java.util.concurrent.atomic.AtomicInteger();
+            ServiceManager manager = net.manager().startGate(gate::incrementAndGet).build();
+            manager.close();
+            ServiceException refused = org.junit.jupiter.api.Assertions.assertThrows(ServiceException.class,
+                    () -> manager.start("lobby"));
+            assertTrue(refused.getMessage().contains("stopping"), refused.getMessage());
+            assertTrue(manager.startConfigured().isEmpty());
+            assertEquals(0, gate.get(), "the database is not set up while the cloud stops");
+        }
+    }
+
+    @Test
     void aStopWhilePreparedEndsAsStoppedAndNoProcessStarts() throws Exception {
         try (TestNetwork net = TestNetwork.create(dir)) {
             net.group("lobby", ServerKind.LOBBY, ServerSoftware.PAPER, TestNetwork.process("normal", "20s", null));

@@ -63,7 +63,7 @@ For a MariaDB or MySQL server the operator runs. The cloud only connects as the 
 
 ### H2 (embedded)
 
-The embedded fallback: chosen with `database.mode: h2`, and used automatically when `managed` is configured on a platform without a MariaDB server build. Good for tests and for a single small setup without any database server. LuckPerms ships its own H2 driver and file storage, so the cloud adds no dependency and starts nothing. Each service then has its own rank data; nothing is shared between servers. For a network, use one of the other modes.
+The embedded fallback: chosen with `database.mode: h2`, and used automatically when `managed` is configured on a platform without a MariaDB server build or with `servers.database: false` in `cloud.yml` (the database server is not wanted, so the node starts none). Good for tests and for a single small setup without any database server. LuckPerms ships its own H2 driver and file storage, so the cloud adds no dependency and starts nothing. Each service then has its own rank data; nothing is shared between servers. For a network, use one of the other modes.
 
 H2 is dual-licensed under MPL 2.0 and EPL 1.0. MPL 2.0 allows combination with GPL code (section 3.3, "Secondary License"), so the choice is compatible with Vectora's GPL-3.0. Vectora does not distribute H2 anyway; LuckPerms downloads it at runtime.
 

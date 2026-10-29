@@ -469,7 +469,13 @@ public final class ServiceManager implements AutoCloseable {
         return List.copyOf(unwanted);
     }
 
-    private static void checkStartAllowed(CloudConfig cloud) throws ServiceException {
+    /** Refuses a start before the setup is done and after {@link #close()} has begun, before the start gate runs. */
+    private void checkStartAllowed(CloudConfig cloud) throws ServiceException {
+        synchronized (lock) {
+            if (closing) {
+                throw new ServiceException("the cloud is stopping, so no server may start");
+            }
+        }
         if (!cloud.setupComplete() || !cloud.eulaAccepted()) {
             throw new ServiceException("the setup is not complete (cloud.yml: setup-complete and eula-accepted "
                     + "must be true), so no server may start");

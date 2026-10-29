@@ -9,17 +9,17 @@
 1. checks the settings (`NodeSettings.parse`: `home` absolute, `language` `de` or `en`, booleans `true` or `false`);
 2. takes the [home lock](#home-lock) and removes what an interrupted run left behind: unfinished downloads (`cache/artifacts/download-*.part`, `ArtifactCache.removeStalePartFiles`) and unfinished Java installs (`jre/.staging-*`, `jre/.old-*`, `JreInstaller.removeLeftovers`);
 3. opens the configuration (`ConfigService`) and generates missing secrets in `secrets/vectora.env`;
-4. builds the parts (`CloudNode.open`): the service core with the [Java runtimes](#java-runtimes) and the [database](#database) as start gate and placeholder source, the [cloud channel](network.md) server with the tokens of the service core, and the [console](console.md);
+4. builds the parts (`CloudNode.open`) and registers the shutdown hook `vectora-shutdown` before anything starts, so a `SIGTERM` or Ctrl+C while the database is set up or the servers start still stops what has been started: the service core with the [Java runtimes](#java-runtimes) and the [database](#database) as start gate and placeholder source, the [cloud channel](network.md) server with the tokens of the service core, and the [console](console.md);
 5. starts watching the configuration files and reconciles on every change (see [Reload](#reload));
 6. starts the cloud channel on host and port of this node in `nodes.yml`; services get the bound address in `VECTORA_CLOUD_HOST` and `VECTORA_CLOUD_PORT`;
 7. starts the console: log records go through it with the secret filter (`logHandler(RedactingFilter::redact)`), the built-in commands get the real shutdown, and the [`service` commands](#console-commands) are added;
 8. ends orphaned servers from the previous run (see [Orphans](#orphans));
 9. starts every planned service, but only if `cloud.yml` has `setup-complete: true` and `eula-accepted: true`. Otherwise it logs a warning and starts nothing. The same gate applies to every later start, also `service start` in the console;
-10. keeps the JVM alive with the non-daemon thread `vectora-node` and registers the shutdown hook `vectora-shutdown`.
+10. keeps the JVM alive with the non-daemon thread `vectora-node`.
 
 A second `start` in the same JVM is an error.
 
-`CloudNode.close()` (the shutdown hook, `shutdown` in the console, a second Ctrl+C) runs the reverse order: console, services (each with its stop command), database (`DatabaseProvisioner.shutdown()` after the last service), cloud channel, configuration, log handlers, home lock. It is idempotent; a second caller waits until the first has finished. `SIGTERM` (`docker stop`, systemd) and Ctrl+C in plain mode reach the JVM's shutdown hook and end the node the same way.
+`CloudNode.close()` (the shutdown hook, `shutdown` in the console, a second Ctrl+C) runs the reverse order: console, services (each with its stop command), database (`DatabaseProvisioner.shutdown()` after the last service), cloud channel, configuration, log handlers, home lock. It is idempotent; a second caller waits until the first has finished. Once it has begun, no start reaches the database any more, so a start that was still running cannot leave a MariaDB behind. `SIGTERM` (`docker stop`, systemd) and Ctrl+C in plain mode reach the JVM's shutdown hook and end the node the same way.
 
 ## Home lock
 
@@ -42,7 +42,8 @@ The JRE manager is built on the first start that needs it.
 
 - As `ServiceManager.StartGate` it calls `DatabaseProvisioner.provision()` before the first service starts, once per run. A failed attempt refuses that start with the reason and is repeated at the next start. The provisioner's `notice()` (for example that `max_connections` could not be read) is logged as a warning.
 - As `PlaceholderContributor` it adds `VECTORA_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `VECTORA_DB_STORAGE_METHOD` and `VECTORA_DB_POOL_SIZE`. The pool size comes from the provisioner's `ConnectionBudget`, shared by all services that may run on this node at once (the sum of `max-services` of the wanted tasks). If even pools of 2 do not fit, the start is refused with the budget's explanation instead of servers that fail later with "Too many connections".
-- `shutdown()` runs after the last service has stopped.
+- `shutdown()` runs after the last service has stopped. After it, `beforeStart()` refuses.
+- Only a wanted database server runs: with `servers.database: false` in `cloud.yml`, the mode `managed` starts no MariaDB and uses the embedded H2 store instead, with a warning. The modes `docker` and `external` start no server of the cloud's own, and `h2` starts nothing.
 - `NodeDatabaseProcesses` runs MariaDB's programs for the managed mode: absolute program path, no shell, output appended to the log file, the node's environment without `VECTORA_*`, and a program that does not finish in time is killed with its children.
 
 `database.mode` is read when the database is first set up; a change takes effect at the next start of the cloud.

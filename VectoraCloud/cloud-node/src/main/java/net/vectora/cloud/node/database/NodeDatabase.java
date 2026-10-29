@@ -6,6 +6,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Supplier;
 import net.vectora.cloud.config.model.ConfigSnapshot;
+import net.vectora.cloud.config.model.DatabaseConfig;
+import net.vectora.cloud.config.model.DatabaseMode;
 import net.vectora.cloud.config.model.GroupConfig;
 import net.vectora.cloud.config.model.ServerKind;
 import net.vectora.cloud.config.model.TaskConfig;
@@ -18,6 +20,7 @@ import net.vectora.cloud.database.DatabaseEndpoint;
 import net.vectora.cloud.database.DatabaseException;
 import net.vectora.cloud.database.DatabaseProvisioner;
 import net.vectora.cloud.database.DatabaseSecrets;
+import net.vectora.cloud.database.EmbeddedProvisioner;
 import net.vectora.cloud.database.HealthReport;
 import net.vectora.cloud.node.service.PlaceholderContributor;
 import net.vectora.cloud.node.service.ServiceException;
@@ -37,7 +40,12 @@ import net.vectora.cloud.node.service.ServiceSpec;
  *       {@code VECTORA_DB_STORAGE_METHOD} and {@code VECTORA_DB_POOL_SIZE}. The pool size comes
  *       from the provisioner's {@link ConnectionBudget}, shared by every service that may run on
  *       this node at the same time (the sum of {@code max-services} of the wanted tasks).</li>
- *   <li>{@link #shutdown()} stops what the provisioner started, after the last service stopped.</li>
+ *   <li>{@link #shutdown()} stops what the provisioner started, after the last service stopped.
+ *       Afterwards nothing is set up again, so a start that races with the shutdown cannot leave a
+ *       database server behind.</li>
+ *   <li>Only a wanted database server is started: with {@code servers.database: false} in
+ *       {@code cloud.yml} the mode {@code managed} falls back to the embedded H2 store (with a
+ *       warning) instead of running MariaDB. The other modes start no server of the cloud's own.</li>
  * </ul>
  * The database mode is read when the database is set up; a change of {@code database.mode}
  * takes effect at the next start of the cloud.
@@ -65,6 +73,7 @@ public final class NodeDatabase implements ServiceManager.StartGate, Placeholder
     private final Factory factory;
     private final Object lock = new Object();
     private DatabaseProvisioner provisioner;
+    private boolean closed;
     private volatile DatabaseEndpoint endpoint;
     private volatile ConnectionBudget budget = ConnectionBudget.managed();
 
@@ -100,13 +109,16 @@ public final class NodeDatabase implements ServiceManager.StartGate, Placeholder
     @Override
     public void beforeStart() throws ServiceException {
         synchronized (lock) {
+            if (closed) {
+                throw new ServiceException("the database has been shut down; the cloud is stopping");
+            }
             if (endpoint != null) {
                 return;
             }
             ConfigSnapshot snapshot = config.get();
             try {
                 if (provisioner == null) {
-                    provisioner = factory.create(snapshot, secrets(secrets.load()));
+                    provisioner = create(snapshot);
                 }
                 LOG.log(System.Logger.Level.INFO, "Setting up the database (mode {0})",
                         snapshot.cloud().database().mode().name().toLowerCase(java.util.Locale.ROOT));
@@ -125,6 +137,17 @@ public final class NodeDatabase implements ServiceManager.StartGate, Placeholder
                 throw new ServiceException("interrupted while setting up the database", e);
             }
         }
+    }
+
+    /** The provisioner of {@code database.mode}, or H2 if the database server is not wanted. */
+    private DatabaseProvisioner create(ConfigSnapshot snapshot) throws IOException, EnvFormatException {
+        DatabaseConfig database = snapshot.cloud().database();
+        if (database.mode() == DatabaseMode.MANAGED && !snapshot.cloud().servers().database()) {
+            return EmbeddedProvisioner.fallback(database, "servers.database is false in cloud.yml, so the cloud"
+                    + " starts no MariaDB of its own (database.mode managed). Set servers.database to true to let"
+                    + " the cloud run it.");
+        }
+        return factory.create(snapshot, secrets(secrets.load()));
     }
 
     @Override
@@ -187,11 +210,13 @@ public final class NodeDatabase implements ServiceManager.StartGate, Placeholder
 
     /**
      * Stops what the provisioner started (the managed MariaDB). Call after the last service has
-     * stopped. Safe to call more than once and before anything was set up.
+     * stopped. Safe to call more than once and before anything was set up. Later calls of
+     * {@link #beforeStart()} are refused.
      */
     public void shutdown() {
         DatabaseProvisioner current;
         synchronized (lock) {
+            closed = true;
             current = provisioner;
             provisioner = null;
             endpoint = null;

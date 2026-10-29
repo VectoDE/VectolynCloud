@@ -54,13 +54,22 @@ public final class NodeMain {
                 throw new IllegalStateException("a node already runs in this JVM");
             }
             CloudNode node = CloudNode.open(parsed, customize);
+            // The hook comes before the start: setting up the database and starting the servers
+            // can take minutes, and a SIGTERM or Ctrl+C in that time must still stop what has
+            // been started instead of leaving servers and MariaDB running without the cloud.
+            Thread hook = new Thread(node::close, "vectora-shutdown");
+            Runtime.getRuntime().addShutdownHook(hook);
             try {
                 node.start();
             } catch (IOException | RuntimeException e) {
                 node.close();
+                try {
+                    Runtime.getRuntime().removeShutdownHook(hook);
+                } catch (IllegalStateException shuttingDown) {
+                    // The JVM is ending already; the hook finds the node closed.
+                }
                 throw e;
             }
-            Runtime.getRuntime().addShutdownHook(new Thread(node::close, "vectora-shutdown"));
             current = node;
             return node;
         }

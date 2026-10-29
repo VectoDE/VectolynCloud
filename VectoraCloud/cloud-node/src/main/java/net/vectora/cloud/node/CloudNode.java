@@ -317,6 +317,7 @@ public final class CloudNode implements AutoCloseable {
         config.addListener(reconcile);
         InetSocketAddress channelAddress = network.start();
         services.channelAddress(channelAddress.getAddress().getHostAddress(), channelAddress.getPort());
+        requireOpen();
         startConsole();
         ServiceManager.Recovery recovery = services.recoverOrphans();
         if (!recovery.terminated().isEmpty() || !recovery.unverifiable().isEmpty()) {
@@ -338,6 +339,15 @@ public final class CloudNode implements AutoCloseable {
         }, "vectora-node");
         keepAlive.setDaemon(false);
         keepAlive.start();
+    }
+
+    /** A close() from the shutdown hook or the console may run while start() is still busy. */
+    private void requireOpen() {
+        synchronized (closeLock) {
+            if (closing) {
+                throw new IllegalStateException("the node is closing");
+            }
+        }
     }
 
     private void startConsole() {
