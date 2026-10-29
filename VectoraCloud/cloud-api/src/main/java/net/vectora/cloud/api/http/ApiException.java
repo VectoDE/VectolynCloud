@@ -66,6 +66,18 @@ public final class ApiException extends Exception {
         return new ApiException(400, code, message);
     }
 
+    /**
+     * 400 for a body that cannot be read as the document, with the error of the strict reader
+     * (field path, line in the body, a code such as {@code required}). The code of the answer is
+     * {@code unknown-field} for an unknown field and {@code invalid-json} for anything else.
+     */
+    static ApiException invalidBody(List<ConfigError> errors) {
+        boolean unknown = !errors.isEmpty()
+                && errors.getFirst().code() == net.vectora.cloud.config.error.ErrorCode.UNKNOWN_FIELD;
+        return new ApiException(400, unknown ? "unknown-field" : "invalid-json",
+                "The body is not a valid document; see errors.", errors, 0);
+    }
+
     /** 404. */
     static ApiException notFound(String what) {
         return new ApiException(404, "not-found", what + " does not exist.");
@@ -99,7 +111,7 @@ public final class ApiException extends Exception {
     }
 
     /**
-     * Configuration errors (only for {@code invalid-config}).
+     * Configuration errors ({@code invalid-config}, and a body the strict reader refused).
      *
      * @return the errors, possibly empty
      */

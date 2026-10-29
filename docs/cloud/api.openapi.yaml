@@ -630,11 +630,16 @@ components:
     Task:
       type: object
       description: >-
-        tasks/<name>.yml (schema-version 2), see docs/cloud/config.md. Unknown fields are refused,
-        including the field mode of schema-version 1; send static-services instead.
+        tasks/<name>.yml (schema-version 2), see docs/cloud/config.md. Unknown fields are refused.
+        A request body of schema-version 1 (with mode instead of scaling.static-services) is
+        migrated like a file and stored as version 2; answers are always version 2.
       required: [schema-version, group, scaling]
       properties:
-        schema-version: {type: integer, enum: [2]}
+        schema-version: {type: integer, enum: [1, 2], description: "1 only in a request body; it is migrated."}
+        mode:
+          type: string
+          enum: [static, dynamic]
+          description: "Only with schema-version 1, where it is required; refused in version 2."
         group: {$ref: "#/components/schemas/Name"}
         scaling: {$ref: "#/components/schemas/Scaling"}
         nodes:
@@ -647,7 +652,8 @@ components:
         Service counts of a task. The first static-services services are static (own folder, always
         run, never stopped by the scaler), the ones above them up to max-services are dynamic.
         Rules: 0 <= static-services <= min-services <= max-services, 1 <= max-services <= 1000,
-        scale-down-below < scale-up-at.
+        scale-down-below < scale-up-at. A version-1 body has no static-services; the migration
+        sets it.
       required: [static-services, min-services, max-services, players-per-service, scale-up-at,
                  scale-down-after, cooldown]
       properties:

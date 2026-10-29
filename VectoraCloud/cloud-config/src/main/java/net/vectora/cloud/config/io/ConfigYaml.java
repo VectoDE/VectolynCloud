@@ -16,6 +16,7 @@ import tools.jackson.core.TokenStreamLocation;
 import tools.jackson.core.exc.StreamReadException;
 import tools.jackson.databind.JavaType;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.exc.MismatchedInputException;
 import tools.jackson.databind.exc.UnrecognizedPropertyException;
 import tools.jackson.databind.exc.ValueInstantiationException;
@@ -56,14 +57,30 @@ public final class ConfigYaml {
      * @throws ConfigException with exactly one error describing the first problem
      */
     public static <T> Decoded<T> read(String file, byte[] content, ConfigFormat<T> format) throws ConfigException {
+        return read(file, content, format, ConfigMappers.yaml());
+    }
+
+    /**
+     * Parses, migrates and binds {@code content} with another mapper of the same rules, for example
+     * the JSON mapper of the REST API. A request body of an older {@code schema-version} then runs
+     * through exactly the migrations of a file.
+     *
+     * @param file    file name for error messages, relative to the cloud home
+     * @param content raw bytes (UTF-8)
+     * @param format  what the content holds
+     * @param mapper  a mapper set up by {@link ConfigMappers#configure}
+     * @throws ConfigException with exactly one error describing the first problem
+     */
+    public static <T> Decoded<T> read(String file, byte[] content, ConfigFormat<T> format, ObjectMapper mapper)
+            throws ConfigException {
         if (content.length > ConfigMappers.MAX_FILE_BYTES) {
             throw new ConfigException(ConfigError.of(file, "", ErrorCode.FILE_TOO_LARGE, ConfigMappers.MAX_FILE_BYTES));
         }
         JsonNode tree;
         try {
-            tree = ConfigMappers.yaml().readTree(content);
+            tree = mapper.readTree(content);
         } catch (JacksonException e) {
-            throw new ConfigException(toError(file, e, content));
+            throw new ConfigException(toError(file, e, content, mapper));
         }
         if (tree == null || !tree.isObject()) {
             throw new ConfigException(ConfigError.of(file, "", ErrorCode.NOT_A_MAPPING));
@@ -74,19 +91,19 @@ public final class ConfigYaml {
             if (version < format.currentVersion()) {
                 ObjectNode root = (ObjectNode) tree;
                 format.migrate(root, version, file);
-                value = ConfigMappers.yaml().treeToValue(root, format.type());
+                value = mapper.treeToValue(root, format.type());
             } else {
                 // Bind from the text, not the tree, so errors keep their line numbers.
-                value = ConfigMappers.yaml().readValue(content, format.type());
+                value = mapper.readValue(content, format.type());
             }
             if (value == null) {
                 throw new ConfigException(ConfigError.of(file, "", ErrorCode.NOT_A_MAPPING));
             }
             return new Decoded<>(value, version);
         } catch (JacksonException e) {
-            throw new ConfigException(toError(file, e, content));
+            throw new ConfigException(toError(file, e, content, mapper));
         } catch (MigrationException e) {
-            throw new ConfigException(ConfigError.at(file, e.path(), locate(content, "/" + e.path().replace('.', '/')),
+            throw new ConfigException(ConfigError.at(file, e.path(), locate(content, "/" + e.path().replace('.', '/'), mapper),
                     e.code(), e.args()));
         } catch (RuntimeException e) {
             // A migration that trips over unexpected content.
@@ -115,12 +132,16 @@ public final class ConfigYaml {
 
     /** Maps a Jackson failure to an error without quoting the value. */
     static ConfigError toError(String file, JacksonException e, byte[] content) {
+        return toError(file, e, content, ConfigMappers.yaml());
+    }
+
+    private static ConfigError toError(String file, JacksonException e, byte[] content, ObjectMapper mapper) {
         TokenStreamLocation location = e.getLocation();
         int line = location == null ? 0 : Math.max(0, location.getLineNr());
         String path = path(e.getPath());
         if (line == 0 && !e.getPath().isEmpty()) {
             // Records are bound through a token buffer, which loses positions; find the field again.
-            line = locate(content, pointer(e.getPath()));
+            line = locate(content, pointer(e.getPath()), mapper);
         }
         String original = e.getOriginalMessage() == null ? "" : e.getOriginalMessage();
         if (e instanceof UnrecognizedPropertyException unknown) {
@@ -174,7 +195,11 @@ public final class ConfigYaml {
 
     /** Line of the token at {@code pointer}, or 0 if it cannot be found. */
     static int locate(byte[] content, String pointer) {
-        try (JsonParser parser = ConfigMappers.yaml().createParser(content)) {
+        return locate(content, pointer, ConfigMappers.yaml());
+    }
+
+    private static int locate(byte[] content, String pointer, ObjectMapper mapper) {
+        try (JsonParser parser = mapper.createParser(content)) {
             while (parser.nextToken() != null) {
                 if (pointer.equals(parser.streamReadContext().pathAsPointer().toString())) {
                     return Math.max(0, parser.currentTokenLocation().getLineNr());

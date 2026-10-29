@@ -8,13 +8,17 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import net.vectora.cloud.config.error.ConfigError;
+import net.vectora.cloud.config.error.ConfigException;
+import net.vectora.cloud.config.io.ConfigFormat;
 import net.vectora.cloud.config.io.ConfigMappers;
+import net.vectora.cloud.config.io.ConfigYaml;
 import net.vectora.cloud.config.model.Language;
 import net.vectora.cloud.config.validation.ConfigNames;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.StreamReadConstraints;
 import tools.jackson.core.json.JsonFactory;
 import tools.jackson.databind.DatabindException;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.exc.UnrecognizedPropertyException;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -85,6 +89,30 @@ public final class ApiJson {
             throw ApiException.badRequest("body-required", "A JSON body is required.");
         }
         return value;
+    }
+
+    /**
+     * Reads a request body that is a whole configuration document, through the same reader as the
+     * files ({@link ConfigYaml#read(String, byte[], ConfigFormat, tools.jackson.databind.ObjectMapper)}):
+     * a body of an older {@code schema-version} is migrated like a file, and a missing required
+     * field is reported as {@code required} at its path.
+     *
+     * @param body   the bytes, UTF-8
+     * @param file   the file the document goes to, for the errors, for example {@code tasks/lobby.yml}
+     * @param format the document type
+     * @param <T>    the type
+     * @return the value in the current format, never null
+     * @throws ApiException 400 {@code body-required}, {@code invalid-json} (also for broken JSON) or
+     *                      {@code unknown-field}, with {@code errors} for problems of the document
+     */
+    public static <T> T readDocument(byte[] body, String file, ConfigFormat<T> format) throws ApiException {
+        // First the plain JSON rules, so broken JSON keeps the answers of every other endpoint.
+        read(body, JsonNode.class);
+        try {
+            return ConfigYaml.read(file, body, format, MAPPER).value();
+        } catch (ConfigException e) {
+            throw ApiException.invalidBody(e.errors());
+        }
     }
 
     /**

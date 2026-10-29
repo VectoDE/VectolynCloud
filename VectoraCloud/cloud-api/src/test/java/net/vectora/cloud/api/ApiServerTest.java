@@ -262,12 +262,36 @@ class ApiServerTest {
             assertEquals(200, api.send("PUT", "/api/v1/tasks/lobby", api.admin,
                     task.replace(",\"scale-down-below\":40", "")).statusCode());
             assertEquals(50, api.config.snapshot().tasks().get("lobby").scaling().scaleDownBelow());
-            // A body of schema-version 1 with mode is refused, not guessed.
+            // A body of schema-version 1 with mode is migrated like a file and stored as version 2.
             String v1 = """
-                    {"schema-version":1,"group":"lobby","mode":"static","scaling":{"min-services":1,"max-services":1,
-                     "players-per-service":50,"scale-up-at":80,"scale-down-after":"5m","cooldown":"60s"},"nodes":[]}""";
-            assertEquals(400, api.send("PUT", "/api/v1/tasks/lobby", api.admin, v1).statusCode());
-            assertEquals(3, api.config.snapshot().tasks().get("lobby").scaling().maxServices(), "unchanged");
+                    {"schema-version":1,"group":"lobby","mode":"static","scaling":{"min-services":2,"max-services":5,
+                     "players-per-service":50,"scale-up-at":50,"scale-down-after":"5m","cooldown":"60s"},"nodes":[]}""";
+            HttpResponse<String> migrated = api.send("PUT", "/api/v1/tasks/lobby", api.admin, v1);
+            assertEquals(200, migrated.statusCode(), migrated.body());
+            assertTrue(migrated.body().contains("\"schema-version\":2") && !migrated.body().contains("\"mode\""),
+                    migrated.body());
+            var stored = api.config.snapshot().tasks().get("lobby").scaling();
+            assertEquals(List.of(2, 2, 2, 25), List.of(stored.staticServices(), stored.minServices(), stored.maxServices(),
+                    stored.scaleDownBelow()), "static = min = max, scale-down-below = min(50, 50 / 2)");
+            String file = Files.readString(home.resolve("tasks/lobby.yml"));
+            assertTrue(file.contains("schema-version: 2") && file.contains("static-services: 2") && !file.contains("mode"), file);
+            HttpResponse<String> dynamic = api.send("PUT", "/api/v1/tasks/fresh", api.admin,
+                    v1.replace("\"static\"", "\"dynamic\""));
+            assertEquals(201, dynamic.statusCode(), dynamic.body());
+            assertEquals(0, api.config.snapshot().tasks().get("fresh").scaling().staticServices());
+            assertEquals(5, api.config.snapshot().tasks().get("fresh").scaling().maxServices());
+            assertEquals(204, api.send("DELETE", "/api/v1/tasks/fresh?confirm=fresh", api.admin, null).statusCode());
+            // Counter-check: a version-1 body with an invalid mode is refused at the field, nothing changes.
+            HttpResponse<String> badMode = api.send("PUT", "/api/v1/tasks/lobby", api.admin,
+                    v1.replace("\"static\"", "\"elastic\"").replace("\"min-services\":2", "\"min-services\":1"));
+            assertEquals(400, badMode.statusCode(), badMode.body());
+            assertTrue(badMode.body().contains("\"path\":\"mode\"") && badMode.body().contains("\"code\":\"invalid-value\""),
+                    badMode.body());
+            assertFalse(badMode.body().contains("elastic"), "the value is not echoed");
+            assertEquals(2, api.config.snapshot().tasks().get("lobby").scaling().maxServices(), "unchanged");
+            assertEquals(400, api.send("PUT", "/api/v1/tasks/lobby", api.admin, "{\"schema-version\":1,").statusCode());
+            assertEquals(400, api.send("PUT", "/api/v1/tasks/lobby", api.admin, v1.replace("\"mode\"", "\"mood\""))
+                    .statusCode());
 
             // Wanted: the group's own switch; the switch of its server kind stays as it is.
             HttpResponse<String> off = api.send("PUT", "/api/v1/groups/lobby/wanted", api.admin, "{\"wanted\":false}");

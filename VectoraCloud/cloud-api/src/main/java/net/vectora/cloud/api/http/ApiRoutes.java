@@ -17,10 +17,12 @@ import net.vectora.cloud.api.backend.ApiBackend;
 import net.vectora.cloud.api.backend.BackupAccess;
 import net.vectora.cloud.api.backend.BackupOrder;
 import net.vectora.cloud.api.backend.ServiceView;
+import net.vectora.cloud.config.CloudHome;
 import net.vectora.cloud.config.ConfigChanged;
 import net.vectora.cloud.config.ConfigService;
 import net.vectora.cloud.config.error.ConfigError;
 import net.vectora.cloud.config.error.ConfigException;
+import net.vectora.cloud.config.io.ConfigFormat;
 import net.vectora.cloud.config.model.CloudConfig;
 import net.vectora.cloud.config.model.ConfigSnapshot;
 import net.vectora.cloud.config.model.GroupConfig;
@@ -220,7 +222,7 @@ public final class ApiRoutes {
 
     private ApiResponse putGroup(ApiRequest q) throws Exception {
         String name = q.param("name");
-        GroupConfig next = q.json(GroupConfig.class);
+        GroupConfig next = ApiJson.readDocument(q.body(), CloudHome.groupFileName(name), ConfigFormat.GROUP);
         AtomicBoolean existed = new AtomicBoolean();
         ConfigSnapshot after = applyIfMatch(q, s -> {
             Optional<GroupConfig> current = Optional.ofNullable(s.groups().get(name));
@@ -232,7 +234,8 @@ public final class ApiRoutes {
 
     private ApiResponse putTask(ApiRequest q) throws Exception {
         String name = q.param("name");
-        TaskConfig next = q.json(TaskConfig.class);
+        // A body of schema-version 1 (with mode) runs through the migration of a task file.
+        TaskConfig next = ApiJson.readDocument(q.body(), CloudHome.taskFileName(name), ConfigFormat.TASK);
         AtomicBoolean existed = new AtomicBoolean();
         ConfigSnapshot after = applyIfMatch(q, s -> {
             Optional<TaskConfig> current = Optional.ofNullable(s.tasks().get(name));
