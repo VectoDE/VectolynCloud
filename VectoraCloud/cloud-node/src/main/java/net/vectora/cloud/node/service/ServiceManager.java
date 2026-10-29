@@ -681,6 +681,15 @@ public final class ServiceManager implements AutoCloseable {
                 if (service.stopRequested || closing) {
                     throw new ServiceException("stopped before it was started");
                 }
+                // The snapshot of this start may be older than a reload that took eula-accepted back
+                // while the start waited (start gate, download). The node's stopAll() for that reload
+                // only sees services with a process, so the current file decides here, under the
+                // same lock as that stopAll() reads the services.
+                CloudConfig now = config.get().cloud();
+                if (!now.setupComplete() || !now.eulaAccepted()) {
+                    throw new ServiceException("the setup is not complete (cloud.yml: setup-complete and "
+                            + "eula-accepted must be true), so no server may start");
+                }
                 process = processes.start(command, spec.workDirectory(), environment);
                 service.process = process;
                 service.token = token;

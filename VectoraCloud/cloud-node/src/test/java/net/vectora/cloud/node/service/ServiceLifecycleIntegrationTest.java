@@ -255,6 +255,60 @@ class ServiceLifecycleIntegrationTest {
     }
 
     @Test
+    void aStartWaitingAtTheGateIsRefusedOnceTheEulaIsTakenBack() throws Exception {
+        try (TestNetwork net = TestNetwork.create(dir)) {
+            net.group("lobby", ServerKind.LOBBY, ServerSoftware.PAPER, TestNetwork.process("normal", "20s", null));
+            net.task("lobby", "lobby", TaskMode.STATIC, 0, 1);
+            java.util.concurrent.Semaphore entered = new java.util.concurrent.Semaphore(0);
+            java.util.concurrent.Semaphore release = new java.util.concurrent.Semaphore(0);
+            Recorder recorder = new Recorder();
+            try (ServiceManager manager = net.manager().startGate(() -> {
+                // Like the database's gate while a managed MariaDB comes up.
+                entered.release();
+                release.acquireUninterruptibly();
+            }).build()) {
+                manager.addListener(recorder);
+                java.util.concurrent.CompletableFuture<ServiceInfo> start = java.util.concurrent.CompletableFuture
+                        .supplyAsync(() -> {
+                            try {
+                                return manager.start("lobby");
+                            } catch (ServiceException e) {
+                                throw new java.util.concurrent.CompletionException(e);
+                            }
+                        });
+                assertTrue(entered.tryAcquire(30, java.util.concurrent.TimeUnit.SECONDS), "the start reached the gate");
+                // The operator takes the EULA back while the start still waits.
+                net.config.apply(current -> current.withCloud(
+                        current.cloud().withSetupComplete(false).withEulaAccepted(false)));
+                release.release();
+                java.util.concurrent.ExecutionException refused = assertThrows(
+                        java.util.concurrent.ExecutionException.class, () -> start.get(30, java.util.concurrent.TimeUnit.SECONDS));
+                assertTrue(refused.getCause().getMessage().contains("eula-accepted"), refused.getCause().getMessage());
+                Thread.sleep(500);
+                assertFalse(recorder.of("lobby-1").contains("STARTING"), "no process without the EULA: "
+                        + recorder.of("lobby-1"));
+
+                // Counter-check: with the EULA accepted again the same waiting start goes through.
+                net.config.apply(current -> current.withCloud(
+                        current.cloud().withEulaAccepted(true).withSetupComplete(true)));
+                java.util.concurrent.CompletableFuture<ServiceInfo> again = java.util.concurrent.CompletableFuture
+                        .supplyAsync(() -> {
+                            try {
+                                return manager.start("lobby");
+                            } catch (ServiceException e) {
+                                throw new java.util.concurrent.CompletionException(e);
+                            }
+                        });
+                assertTrue(entered.tryAcquire(30, java.util.concurrent.TimeUnit.SECONDS));
+                release.release();
+                again.get(30, java.util.concurrent.TimeUnit.SECONDS);
+                TestNetwork.await("lobby-1 running", WAIT, () -> manager.find(new ServiceId("lobby-1"))
+                        .map(info -> info.state() == ServiceState.RUNNING).orElse(false));
+            }
+        }
+    }
+
+    @Test
     void aCrashRestartIsRefusedOnceTheEulaIsTakenBack() throws Exception {
         try (TestNetwork net = TestNetwork.create(dir)) {
             RestartConfig later = new RestartConfig(true, 3, TimeSpan.parse("2s"), TimeSpan.parse("2s"));
