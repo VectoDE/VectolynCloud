@@ -35,6 +35,7 @@ import net.vectora.cloud.download.archive.ExtractionLimits;
 import net.vectora.cloud.download.archive.SafeExtractor;
 import net.vectora.cloud.download.cache.ArtifactCache;
 import net.vectora.cloud.download.cache.ArtifactDownloader;
+import net.vectora.cloud.download.catalog.ArtifactCatalog;
 import net.vectora.cloud.download.http.DownloadClient;
 import net.vectora.cloud.download.jre.JreInstaller;
 import net.vectora.cloud.download.jre.JreManager;
@@ -50,6 +51,10 @@ import net.vectora.cloud.node.database.NodeDatabase;
 import net.vectora.cloud.node.database.NodeDatabaseProcesses;
 import net.vectora.cloud.node.jre.ManagedJavaRuntimes;
 import net.vectora.cloud.node.service.ServiceManager;
+import net.vectora.cloud.node.software.ArtifactSource;
+import net.vectora.cloud.node.software.BridgePlugins;
+import net.vectora.cloud.node.software.LockedDownloads;
+import net.vectora.cloud.node.software.SoftwareInstaller;
 import net.vectora.cloud.setup.SetupEnvironment;
 import net.vectora.cloud.setup.SetupException;
 import net.vectora.cloud.setup.SetupResult;
@@ -238,6 +243,8 @@ public final class CloudNode implements AutoCloseable {
             SecretStore secrets = new SecretStore(home);
             secrets.ensureGenerated(new SecretGenerator());
             Downloads downloads = new Downloads(homePath);
+            SoftwareInstaller software = new SoftwareInstaller(ArtifactCatalog.builtIn(), downloads::software,
+                    BridgePlugins.fromClassPath());
             JreManager[] jre = new JreManager[1];
             ManagedJavaRuntimes java = new ManagedJavaRuntimes(requirement -> {
                 synchronized (jre) {
@@ -247,9 +254,10 @@ public final class CloudNode implements AutoCloseable {
                     }
                 }
                 return jre[0].provide(requirement);
-            }, ManagedJavaRuntimes.Minimums.NONE);
+            }, software);
             ServiceManager.Builder builder = ServiceManager.builder(homePath, config::snapshot, secrets::load)
-                    .javaRuntimes(java);
+                    .javaRuntimes(java)
+                    .serverSoftware(software);
             Path databaseHome = homePath.resolve(ServerKind.DATABASE.templateFolder()).resolve("runtime");
             NodeDatabase.Factory productionDatabase = (snapshot, passwords) -> DatabaseProvisioners.create(
                     snapshot.cloud().database(), passwords, databaseHome, new JdbcConnector(),
@@ -653,6 +661,7 @@ public final class CloudNode implements AutoCloseable {
         private ProviderRegistry providers;
         private ArtifactDownloader downloader;
         private SoftwareLockStore lockStore;
+        private LockedDownloads software;
 
         Downloads(Path home) {
             this.home = home;
@@ -673,13 +682,20 @@ public final class CloudNode implements AutoCloseable {
             return lockStore;
         }
 
+        synchronized ArtifactSource software() {
+            init();
+            return software;
+        }
+
         private void init() {
             if (providers == null) {
                 DownloadClient client = DownloadClient.createDefault();
                 providers = ProviderRegistry.standard(client);
-                downloader = new ArtifactDownloader(client, providers, new ArtifactCache(home.resolve("cache")));
-                // One store for every download of the node: JREs, MariaDB, later the server software.
+                ArtifactCache cache = new ArtifactCache(home.resolve("cache"));
+                downloader = new ArtifactDownloader(client, providers, cache);
+                // One store for every download of the node: JREs, MariaDB and the server software.
                 lockStore = SoftwareLockStore.inHome(home);
+                software = new LockedDownloads(providers, downloader, cache, lockStore);
             }
         }
     }
