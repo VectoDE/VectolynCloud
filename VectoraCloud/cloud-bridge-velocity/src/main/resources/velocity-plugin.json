@@ -1,0 +1,1 @@
+{"id":"vectora-cloud-bridge","name":"VectoraCloudBridge","version":"${pluginVersion}","description":"Connects a Velocity proxy to VectoraCloud: dynamic servers, player events, status.","authors":["Vectora"],"dependencies":[],"main":"net.vectora.cloud.bridge.velocity.VelocityBridgePlugin"}

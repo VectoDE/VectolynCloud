@@ -29,6 +29,19 @@ public final class ServiceEnvironment {
     public static final String SERVICE_PORT = "VECTORA_SERVICE_PORT";
 
     /**
+     * Platform of the service, the name of cloud-template's {@code ServerPlatform}
+     * ({@code VELOCITY}, {@code VELOCITY_LEGACY}, {@code PAPER}, {@code PANDASPIGOT}, ...). The
+     * Velocity bridge tells the main proxy from the legacy proxy by it.
+     */
+    public static final String SERVICE_PLATFORM = "VECTORA_SERVICE_PLATFORM";
+
+    /**
+     * Forwarding secret of the legacy proxy, for the 1.8.8 backends behind it; a secret. The legacy
+     * bridge checks the {@code bungeeguard-token} of every login against it.
+     */
+    public static final String LEGACY_FORWARDING_SECRET = "VECTORA_LEGACY_FORWARDING_SECRET";
+
+    /**
      * Prefix of every variable the cloud owns. The node removes all variables with this prefix
      * from its own environment before it starts a service, so nothing of the cloud's environment
      * leaks into a server.
