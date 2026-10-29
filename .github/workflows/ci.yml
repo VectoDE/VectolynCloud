@@ -47,6 +47,28 @@ jobs:
       - name: Validate wrapper checksum
         uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
+      # Every Gradle run verifies dependencies and plugins against gradle/verification-metadata.xml
+      # (docs/dependency-verification.md). Gradle switches verification off without a word when the
+      # file is missing, so this step makes sure it is there and nothing weakens it.
+      - name: Check dependency verification
+        run: |
+          f=gradle/verification-metadata.xml
+          fail() { echo "::error::$1"; exit 1; }
+          [ -f "$f" ] || fail "$f is missing, dependency verification would be off."
+          grep -q '<verify-metadata>true</verify-metadata>' "$f" || fail "$f must verify metadata (pom/module files) too."
+          grep -q '<sha256 ' "$f" || fail "$f has no SHA-256 entries."
+          if grep -qF 'update-verification-metadata.sh: temporary' "$f"; then
+            fail "$f still has the temporary trust entry of gradle/update-verification-metadata.sh."
+          fi
+          grep -qxF 'org.gradle.dependency.verification=strict' gradle.properties \
+            || fail "gradle.properties must set org.gradle.dependency.verification=strict."
+          # The brackets keep the pattern from matching this line itself.
+          weaken='--dependency-verification[= ]+(lenient|off)|dependency[.]verification=(lenient|off)|--write-verification-[m]etadata'
+          if grep -rnE -- "$weaken" .github/workflows gradle.properties build-logic; then
+            fail "A workflow or property file weakens or rewrites dependency verification (lines above)."
+          fi
+          echo "Dependency verification is on: $(grep -c '<component ' "$f") components with SHA-256."
+
   build:
     name: Build (JDK 25, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -181,7 +203,8 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          pattern='^(VectoraCloud|Server-Network|Vectora-Protocol|Vectora-CloudClient)/'
+          # Build setup counts too: dependency versions, verification metadata, conventions.
+          pattern='^((VectoraCloud|Server-Network|Vectora-Protocol|Vectora-CloudClient|gradle|build-logic)/|settings[.]gradle[.]kts$|gradle[.]properties$)'
           if [ "$EVENT" = schedule ] || [ "$EVENT" = workflow_dispatch ]; then
             cloud=true
             echo "Event $EVENT: integration always runs."
@@ -224,7 +247,7 @@ jobs:
 
       - name: No cloud-related changes
         if: needs.changes.outputs.cloud != 'true'
-        run: echo "Nothing under VectoraCloud/, Server-Network/, Vectora-Protocol/ or Vectora-CloudClient/ changed. Integration is not needed."
+        run: echo "Nothing under VectoraCloud/, Server-Network/, Vectora-Protocol/, Vectora-CloudClient/ or the build setup changed. Integration is not needed."
 
       # VectoraCloud.jar in an empty folder, as its own process, without network: setup file,
       # built-in templates, every default server (fake server jars that log in like a bridge),

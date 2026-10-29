@@ -117,7 +117,7 @@ Only the proxy ports should be reachable from outside.
 ./gradlew build
 ```
 
-On Windows use `gradlew.bat build`. The Gradle wrapper downloads Gradle itself.
+On Windows use `gradlew.bat build`. The Gradle wrapper downloads Gradle itself. Every dependency is checked against a SHA-256 checksum, see [docs/dependency-verification.md](docs/dependency-verification.md).
 
 - Gradle starts on Java 17 or newer and compiles with a Java 25 toolchain. If no JDK 25 is installed, Gradle downloads one (Foojay resolver).
 - The bytecode target is Java 21 (`--release 21`). The servers themselves need Java 25, because Paper 26.3 does.
