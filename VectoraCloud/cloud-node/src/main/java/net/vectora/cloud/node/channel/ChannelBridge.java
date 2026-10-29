@@ -320,44 +320,84 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
     public boolean drain(ServiceId backend, Duration timeout) throws InterruptedException {
         Optional<RegisterServer> listed = services.registration(backend);
         if (listed.isEmpty()) {
-            return players.on(backend).isEmpty();
+            return isEmpty(backend);
         }
         closed.add(backend);
         announceCapacity(backend);
         boolean empty = false;
         try {
-            List<NetworkPlayers.Player> on = players.on(backend);
-            List<TransferPlanner.Target> targets = new ArrayList<>();
-            for (Map.Entry<ServiceId, RegisterServer> other : services.registrations(listed.get().legacy()).entrySet()) {
-                OptionalInt slots = services.slots(other.getKey());
-                if (!other.getKey().equals(backend) && !closed.contains(other.getKey()) && slots.isPresent()
-                        && other.getValue().group().equals(listed.get().group())) {
-                    targets.add(new TransferPlanner.Target(other.getValue().name(), players.on(other.getKey()).size(),
-                            slots.getAsInt()));
-                }
-            }
-            if (!on.isEmpty() && targets.isEmpty()) {
-                // Nowhere to go: no need to wait for moves that are never sent.
-                return false;
-            }
-            Map<java.util.UUID, ServiceId> moves = TransferPlanner.assign(
-                    on.stream().map(NetworkPlayers.Player::uuid).toList(), targets);
-            for (NetworkPlayers.Player player : on) {
-                ServiceId to = moves.get(player.uuid());
-                if (to != null) {
-                    send(player.proxy(), new TransferPlayer(player.uuid(), to, TransferPlayer.Reason.SCALE_DOWN));
-                }
-            }
+            Set<java.util.UUID> sent = new java.util.HashSet<>();
             long deadline = System.nanoTime() + timeout.toNanos();
-            while (!(empty = players.on(backend).isEmpty()) && System.nanoTime() < deadline) {
+            while (true) {
+                // Read again on every look: a player who reached the server while it was being
+                // closed is moved as well.
+                if (!moveAway(backend, listed.get(), sent)) {
+                    // Players on it and nowhere to go: no need to wait for moves that are never sent.
+                    return false;
+                }
+                empty = isEmpty(backend);
+                if (empty || System.nanoTime() >= deadline) {
+                    return empty;
+                }
                 Thread.sleep(DRAIN_POLL.toMillis());
             }
-            return empty;
         } finally {
             if (!empty) {
-                closed.remove(backend);
-                announceCapacity(backend);
+                reopen(backend);
             }
+        }
+    }
+
+    /**
+     * Sends {@code TransferPlayer} for every player on the backend that was not sent yet.
+     *
+     * @return false if players are on it and no other backend of the group can take them
+     */
+    private boolean moveAway(ServiceId backend, RegisterServer listed, Set<java.util.UUID> sent) {
+        List<NetworkPlayers.Player> on = players.on(backend).stream().filter(p -> !sent.contains(p.uuid())).toList();
+        if (on.isEmpty()) {
+            return true;
+        }
+        List<TransferPlanner.Target> targets = new ArrayList<>();
+        for (Map.Entry<ServiceId, RegisterServer> other : services.registrations(listed.legacy()).entrySet()) {
+            OptionalInt slots = services.slots(other.getKey());
+            if (!other.getKey().equals(backend) && !closed.contains(other.getKey()) && slots.isPresent()
+                    && other.getValue().group().equals(listed.group())) {
+                targets.add(new TransferPlanner.Target(other.getValue().name(), players.on(other.getKey()).size(),
+                        slots.getAsInt()));
+            }
+        }
+        if (targets.isEmpty()) {
+            return false;
+        }
+        Map<java.util.UUID, ServiceId> moves = TransferPlanner.assign(
+                on.stream().map(NetworkPlayers.Player::uuid).toList(), targets);
+        for (NetworkPlayers.Player player : on) {
+            ServiceId to = moves.get(player.uuid());
+            if (to != null && send(player.proxy(), new TransferPlayer(player.uuid(), to, TransferPlayer.Reason.SCALE_DOWN))) {
+                sent.add(player.uuid());
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Empty means nobody on it for the proxies and 0 players in the backend's own last report: a
+     * player who was just routed there and is not in one of the two lists yet keeps it running.
+     */
+    private boolean isEmpty(ServiceId backend) {
+        ServiceStatus status = statuses.get(backend);
+        return players.on(backend).isEmpty() && status != null && status.playersOnline() == 0;
+    }
+
+    /**
+     * Opens a backend that was closed for a scale-down again, for example because its stop failed.
+     *
+     * @param backend the backend
+     */
+    public void reopen(ServiceId backend) {
+        if (closed.remove(backend)) {
+            announceCapacity(backend);
         }
     }
 

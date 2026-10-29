@@ -373,11 +373,16 @@ class NodeWiringTest {
             assertFalse(NodeFixture.read(proxyLog).contains("[fake] transfer " + steve), "Steve stays");
             assertEquals(ServiceState.RUNNING, NodeEndToEndTest.state(node, second), "not stopped with a player on it");
 
-            // The proxy reports the move: minigame-2 is empty and stops.
+            // The proxy reports the move, but minigame-2 only counts as empty once its own bridge
+            // reports no player too (the higher of both counts decides).
             node.services().sendCommand(proxy, "player switch " + alex + " Alex minigame-2 minigame-1");
+            awaitReporting(node, "the proxy list emptied", () -> node.channel().players().on(second).isEmpty(),
+                    Map.of(first, "status 2 10", second, "status 1 10"));
+            assertEquals(ServiceState.RUNNING, NodeEndToEndTest.state(node, second),
+                    "not stopped while its bridge still counts a player");
             awaitReporting(node, "minigame-2 stopped", () -> node.services().find(second).isEmpty()
                             || NodeEndToEndTest.state(node, second) == ServiceState.STOPPED,
-                    Map.of(first, "status 2 10"));
+                    Map.of(first, "status 2 10", second, "status 0 10"));
             assertEquals(ServiceState.RUNNING, NodeEndToEndTest.state(node, first));
             assertEquals(2, node.channel().players().on(first).size());
         } finally {

@@ -26,31 +26,35 @@ import net.vectora.protocol.ServiceId;
 
 /**
  * The pure decisions of the autoscaler, without any I/O or clock of its own: which task gets
- * another service and which dynamic service may go. {@link Autoscaler} feeds it the configuration,
+ * more services and which dynamic service may go. {@link Autoscaler} feeds it the configuration,
  * the services of the node, the player counts and memory, and what it remembers from earlier
  * rounds. The rules are in {@code docs/cloud/scaling.md}.
  *
- * <p>Per task of this node whose group is wanted ({@link ServicePlanner#isWanted}), at most one
- * decision per task and round, and none before {@code cooldown} has passed since the last one:
+ * <p>Per task of this node whose group is wanted ({@link ServicePlanner#isWanted}):
  * <ol>
- *   <li><b>min-services</b>: fewer than {@code min-services} count, so one more starts: a static
- *       one while the task has fewer static services than {@code static-services}, otherwise a
- *       dynamic one. The memory budget does not apply here.</li>
- *   <li><b>above max-services</b> (a limit that was lowered): an empty dynamic service stops at
- *       once.</li>
+ *   <li><b>min-services</b>: fewer than {@code min-services} count, so every missing one starts in
+ *       this round, without waiting for {@code cooldown}: static ones while the task has fewer
+ *       static services than {@code static-services}, then dynamic ones. The memory budget does not
+ *       apply here.</li>
+ *   <li><b>above max-services</b> (a limit that was lowered): an empty dynamic service is emptied
+ *       ({@link Drain}) and stopped.</li>
  *   <li><b>load</b>: the load of the group, the players of its running services divided by their
  *       slots ({@code players-per-service} of each service's task), has reached
- *       {@code scale-up-at}, no service of the group is starting, the task may have dynamic
- *       services and {@code max-services} leaves room: one more dynamic service starts, if the
- *       memory budget allows it.</li>
+ *       {@code scale-up-at}, no service of the group is starting and none was started for the group
+ *       earlier in this round, the task may have dynamic services and {@code max-services} leaves
+ *       room: one more dynamic service starts, if the memory budget allows it.</li>
  *   <li><b>low load</b>: the task has more than {@code min-services}, and without its emptiest
  *       running dynamic service the load of the group would stay below {@code scale-down-below};
- *       once that has held for {@code scale-down-after}, that service is emptied
- *       ({@link Drain}: its players are moved to other services of the group) and stopped, or
- *       stopped at once if it has no players.</li>
+ *       once that has held for {@code scale-down-after}, that service is emptied ({@link Drain})
+ *       and stopped.</li>
  * </ol>
- * Static services are never stopped or emptied, proxies never scaled. A load that is not known
- * (a running service of the group without a player count) blocks both scale-up and scale-down.
+ * Except for min-services, at most one decision per task and round, and none before
+ * {@code cooldown} has passed since the last one. Every scale-down goes through {@link Drain}: the
+ * proxies stop sending players there first, so a player routed to an empty server in the meantime
+ * is not lost. Static services are never emptied or stopped, proxies never scaled. A static
+ * service above {@code static-services} (the number was lowered) counts as dynamic: of the static
+ * services of a task the ones with the lowest indices stay static. A load that is not known (a
+ * running service of the group without a player count) blocks both scale-up and scale-down.
  */
 public final class ScalingPlanner {
 
@@ -66,7 +70,7 @@ public final class ScalingPlanner {
     private ScalingPlanner() {
     }
 
-    /** Why a service starts or stops. */
+    /** Why a service starts or goes. */
     public enum Reason {
         /** Fewer services than {@code min-services}. */
         MIN_SERVICES,
@@ -91,7 +95,7 @@ public final class ScalingPlanner {
     }
 
     /** One decision of a round. */
-    public sealed interface Decision permits Start, Stop, Drain, Held {
+    public sealed interface Decision permits Start, Drain, Held {
 
         /**
          * The task the decision is about.
@@ -112,18 +116,8 @@ public final class ScalingPlanner {
     }
 
     /**
-     * Stop one service that has no players.
-     *
-     * @param task    task name
-     * @param service the service
-     * @param reason  why
-     */
-    public record Stop(String task, ServiceId service, Reason reason) implements Decision {
-    }
-
-    /**
-     * Move the players of a dynamic service to other services of its group, then stop it; if
-     * players are left after the timeout, it keeps running.
+     * Close a dynamic service on the proxies, move its players to other services of its group and
+     * stop it once it is empty; if players are left after the drain timeout, it keeps running.
      *
      * @param task    task name
      * @param service the service
@@ -146,7 +140,7 @@ public final class ScalingPlanner {
      *
      * @param used     bytes in use on the machine
      * @param total    bytes of the machine or container
-     * @param nodeHeap maximum heap of the node's own JVM, 0 if unknown
+     * @param nodeHeap maximum heap of the node's JVM, 0 if unknown
      */
     public record Memory(long used, long total, long nodeHeap) {
 
@@ -159,15 +153,25 @@ public final class ScalingPlanner {
     /**
      * What the services report.
      *
-     * @param players players per service; a service without an entry has no known count
+     * @param players players per service for the load: the lower of the bridge's and a watching
+     *                proxy's count; a service without an entry has no known count
+     * @param present players per service for "is it empty": the higher of the two counts; a
+     *                service without an entry falls back to {@code players}
      * @param memory  memory of the node, if measured
      */
-    public record Signals(Map<ServiceId, Integer> players, Optional<Memory> memory) {
+    public record Signals(Map<ServiceId, Integer> players, Map<ServiceId, Integer> present,
+                          Optional<Memory> memory) {
 
         /** Copies the values. */
         public Signals {
             players = Map.copyOf(players);
+            present = Map.copyOf(present);
             Objects.requireNonNull(memory, "memory");
+        }
+
+        /** One count per service for both uses. */
+        public Signals(Map<ServiceId, Integer> players, Optional<Memory> memory) {
+            this(players, Map.of(), memory);
         }
 
         /** No player count and no memory reading. */
@@ -178,6 +182,16 @@ public final class ScalingPlanner {
         OptionalInt playersOf(ServiceId id) {
             Integer value = players.get(id);
             return value == null || value < 0 ? OptionalInt.empty() : OptionalInt.of(value);
+        }
+
+        /** The higher count, to judge whether nobody is on the service. */
+        OptionalInt presentOn(ServiceId id) {
+            OptionalInt low = playersOf(id);
+            Integer high = present.get(id);
+            if (low.isEmpty()) {
+                return low;
+            }
+            return high == null || high < 0 ? low : OptionalInt.of(Math.max(low.getAsInt(), high));
         }
     }
 
@@ -233,10 +247,13 @@ public final class ScalingPlanner {
      * Decides one round.
      *
      * @param in what the round sees
-     * @return the decisions, in task name order, at most one per task
+     * @return the decisions, in task name order; several starts for a task below
+     *         {@code min-services}, otherwise at most one per task
      */
     public static List<Decision> plan(Input in) {
         List<Decision> decisions = new ArrayList<>();
+        // Groups that get a service by load in this round: a second task of the group waits for it.
+        Set<String> grownThisRound = new HashSet<>();
         for (Map.Entry<String, TaskConfig> entry : in.snapshot().tasks().entrySet()) {
             String name = entry.getKey();
             TaskConfig task = entry.getValue();
@@ -245,60 +262,109 @@ public final class ScalingPlanner {
                     || !ServicePlanner.runsOn(task, in.node())) {
                 continue;
             }
+            List<Decision> filling = fillToMinimum(in, name, task);
+            if (filling != null) {
+                decisions.addAll(filling);
+                continue;
+            }
             Instant last = in.lastAction().get(name);
             if (last != null && in.now().isBefore(last.plus(task.scaling().cooldown().duration()))) {
                 continue;
             }
-            decide(in, name, task, group).ifPresent(decisions::add);
+            Optional<Decision> decision = decide(in, name, task, group, grownThisRound.contains(task.group()));
+            decision.ifPresent(decisions::add);
+            if (decision.isPresent() && decision.get() instanceof Start) {
+                grownThisRound.add(task.group());
+            }
         }
         return List.copyOf(decisions);
     }
 
-    private static Optional<Decision> decide(Input in, String name, TaskConfig task, GroupConfig group) {
+    /**
+     * The starts that bring a task up to {@code min-services}, all in this round and without
+     * {@code cooldown}; {@code null} if the task has its minimum, so the other rules apply.
+     */
+    private static List<Decision> fillToMinimum(Input in, String name, TaskConfig task) {
         ScalingConfig scaling = task.scaling();
         List<ServiceInfo> mine = in.services().stream().filter(s -> name.equals(s.task())).toList();
-        long counted = mine.stream().filter(s -> counts(s, in.released())).count();
+        Set<ServiceId> demoted = demoted(mine, scaling);
+        long counted = mine.stream().filter(s -> counts(s, in.released(), demoted)).count();
+        if (counted >= scaling.minServices()) {
+            return null;
+        }
+        long occupying = mine.stream().filter(ScalingPlanner::occupiesASlot).count();
+        if (occupying >= scaling.maxServices()) {
+            return List.of();
+        }
+        Instant paused = in.pausedUntil().get(name);
+        if (paused != null && in.now().isBefore(paused)) {
+            return List.of(new Held(name, Hold.PAUSED));
+        }
+        List<Decision> starts = new ArrayList<>();
+        Set<Integer> taken = new HashSet<>();
+        for (ServiceInfo s : in.services()) {
+            if (task.group().equals(s.group())) {
+                taken.add(s.index());
+            }
+        }
+        List<Integer> released = in.services().stream()
+                .filter(s -> name.equals(s.task()) && s.mode() == TaskMode.STATIC && !demoted.contains(s.id())
+                        && in.released().contains(s.id()) && !occupiesASlot(s))
+                .map(ServiceInfo::index).sorted().toList();
+        long statics = Math.min(staticCount(mine), scaling.staticServices());
+        int nextReleased = 0;
+        for (long missing = scaling.minServices() - counted; missing > 0; missing--) {
+            if (occupying >= scaling.maxServices()) {
+                break;
+            }
+            OptionalInt index;
+            if (nextReleased < released.size()) {
+                index = OptionalInt.of(released.get(nextReleased++));
+            } else if (statics < scaling.staticServices()) {
+                index = freeIndex(taken);
+                if (index.isEmpty()) {
+                    break;
+                }
+                taken.add(index.getAsInt());
+                statics++;
+            } else if (scaling.allowsDynamic()) {
+                index = OptionalInt.empty();
+            } else {
+                break;
+            }
+            starts.add(new Start(name, index, Reason.MIN_SERVICES));
+            occupying++;
+        }
+        return starts;
+    }
+
+    private static Optional<Decision> decide(Input in, String name, TaskConfig task, GroupConfig group,
+                                             boolean groupGrown) {
+        ScalingConfig scaling = task.scaling();
+        if (group.software() == ServerSoftware.VELOCITY) {
+            return Optional.empty();
+        }
+        List<ServiceInfo> mine = in.services().stream().filter(s -> name.equals(s.task())).toList();
+        Set<ServiceId> demoted = demoted(mine, scaling);
+        long counted = mine.stream().filter(s -> counts(s, in.released(), demoted)).count();
         long occupying = mine.stream().filter(ScalingPlanner::occupiesASlot).count();
         Instant paused = in.pausedUntil().get(name);
         boolean isPaused = paused != null && in.now().isBefore(paused);
 
-        if (counted < scaling.minServices()) {
-            if (occupying >= scaling.maxServices()) {
-                return Optional.empty();
-            }
-            if (isPaused) {
-                return Optional.of(new Held(name, Hold.PAUSED));
-            }
-            OptionalInt index = releasedIndex(in, name);
-            if (index.isEmpty() && staticCount(mine) < scaling.staticServices()) {
-                index = staticIndex(in, task);
-                if (index.isEmpty()) {
-                    return Optional.empty();
-                }
-            } else if (index.isEmpty() && !scaling.allowsDynamic()) {
-                return Optional.empty();
-            }
-            return Optional.of(new Start(name, index, Reason.MIN_SERVICES));
-        }
-        if (group.software() == ServerSoftware.VELOCITY) {
-            return Optional.empty();
-        }
         if (counted > scaling.maxServices()) {
             return mine.stream()
-                    .filter(s -> s.state() == ServiceState.RUNNING && s.mode() == TaskMode.DYNAMIC
+                    .filter(s -> s.state() == ServiceState.RUNNING && isDynamic(s, demoted)
                             && !in.draining().contains(s.id())
-                            && in.signals().playersOf(s.id()).orElse(-1) == 0)
+                            && in.signals().presentOn(s.id()).orElse(-1) == 0)
                     .max(Comparator.comparingInt(ServiceInfo::index))
-                    .map(s -> new Stop(name, s.id(), Reason.ABOVE_MAX));
-        }
-        if (!scaling.allowsDynamic()) {
-            return Optional.empty();
+                    .map(s -> new Drain(name, s.id(), Reason.ABOVE_MAX));
         }
 
         Optional<Load> load = groupLoad(in.snapshot(), task.group(), in.services(), in.signals(), in.draining(), null);
-        boolean starting = in.services().stream().anyMatch(s -> task.group().equals(s.group())
+        boolean starting = groupGrown || in.services().stream().anyMatch(s -> task.group().equals(s.group())
                 && (s.state() == ServiceState.PREPARED || s.state() == ServiceState.STARTING));
-        if (!starting && load.isPresent() && occupying < scaling.maxServices() && load.get().reaches(scaling.scaleUpAt())) {
+        if (scaling.allowsDynamic() && !starting && load.isPresent() && occupying < scaling.maxServices()
+                && load.get().reaches(scaling.scaleUpAt())) {
             if (isPaused) {
                 return Optional.of(new Held(name, Hold.PAUSED));
             }
@@ -309,14 +375,8 @@ public final class ScalingPlanner {
 
         Instant since = in.lowSince().get(name);
         if (since != null && !in.now().isBefore(since.plus(scaling.scaleDownAfter().duration()))) {
-            Optional<ServiceInfo> candidate = scaleDownCandidate(in.snapshot(), name, in.services(), in.signals(),
-                    in.released(), in.draining());
-            if (candidate.isPresent()) {
-                ServiceId id = candidate.get().id();
-                return Optional.of(in.signals().playersOf(id).orElse(-1) == 0
-                        ? new Stop(name, id, Reason.LOW_LOAD)
-                        : new Drain(name, id, Reason.LOW_LOAD));
-            }
+            return scaleDownCandidate(in.snapshot(), name, in.services(), in.signals(), in.released(), in.draining())
+                    .map(candidate -> new Drain(name, candidate.id(), Reason.LOW_LOAD));
         }
         return Optional.empty();
     }
@@ -326,7 +386,8 @@ public final class ScalingPlanner {
      * {@code scale-down-after}: the task has more than {@code min-services}, and without its
      * emptiest running dynamic service (of equal ones the highest index) the load of the group
      * would stay below {@code scale-down-below}, with at least one other running service left. The
-     * autoscaler calls it every round to know since when the condition holds.
+     * players of the candidate are counted with the higher of the bridge's and the proxy's count.
+     * The autoscaler calls it every round to know since when the condition holds.
      *
      * @param snapshot the configuration
      * @param task     task name
@@ -348,15 +409,16 @@ public final class ScalingPlanner {
             return Optional.empty();
         }
         ScalingConfig scaling = config.scaling();
-        long counted = services.stream().filter(s -> task.equals(s.task()) && counts(s, released)).count();
+        List<ServiceInfo> mine = services.stream().filter(s -> task.equals(s.task())).toList();
+        Set<ServiceId> demoted = demoted(mine, scaling);
+        long counted = mine.stream().filter(s -> counts(s, released, demoted)).count();
         if (counted <= scaling.minServices()) {
             return Optional.empty();
         }
-        Optional<ServiceInfo> candidate = services.stream()
-                .filter(s -> task.equals(s.task()) && s.state() == ServiceState.RUNNING
-                        && s.mode() == TaskMode.DYNAMIC && !draining.contains(s.id())
-                        && signals.playersOf(s.id()).isPresent())
-                .min(Comparator.<ServiceInfo>comparingInt(s -> signals.playersOf(s.id()).getAsInt())
+        Optional<ServiceInfo> candidate = mine.stream()
+                .filter(s -> s.state() == ServiceState.RUNNING && isDynamic(s, demoted)
+                        && !draining.contains(s.id()) && signals.presentOn(s.id()).isPresent())
+                .min(Comparator.<ServiceInfo>comparingInt(s -> signals.presentOn(s.id()).getAsInt())
                         .thenComparing(Comparator.comparingInt(ServiceInfo::index).reversed()));
         if (candidate.isEmpty()) {
             return Optional.empty();
@@ -366,7 +428,7 @@ public final class ScalingPlanner {
             return Optional.empty();
         }
         // Every player of the group, the candidate's included: they move to the services that stay.
-        long players = without.get().players() + signals.playersOf(candidate.get().id()).getAsInt();
+        long players = without.get().players() + signals.presentOn(candidate.get().id()).getAsInt();
         return players * 100 < without.get().slots() * (long) scaling.scaleDownBelow() ? candidate : Optional.empty();
     }
 
@@ -405,9 +467,32 @@ public final class ScalingPlanner {
         return Optional.of(new Load(players, slots));
     }
 
+    /**
+     * The static services of a task above {@code static-services}: after the number was lowered,
+     * the ones with the highest indices count as dynamic, so they can be emptied and stopped. They
+     * keep their folder.
+     *
+     * @param mine    the services of the task
+     * @param scaling its scaling
+     * @return the static services that count as dynamic
+     */
+    static Set<ServiceId> demoted(List<ServiceInfo> mine, ScalingConfig scaling) {
+        List<ServiceInfo> statics = mine.stream().filter(s -> s.mode() == TaskMode.STATIC)
+                .sorted(Comparator.comparingInt(ServiceInfo::index)).toList();
+        Set<ServiceId> result = new HashSet<>();
+        for (int i = Math.max(0, scaling.staticServices()); i < statics.size(); i++) {
+            result.add(statics.get(i).id());
+        }
+        return result;
+    }
+
+    private static boolean isDynamic(ServiceInfo s, Set<ServiceId> demoted) {
+        return s.mode() == TaskMode.DYNAMIC || demoted.contains(s.id());
+    }
+
     /** Counts toward {@code min-services}. */
-    private static boolean counts(ServiceInfo s, Set<ServiceId> released) {
-        if (s.mode() == TaskMode.STATIC) {
+    private static boolean counts(ServiceInfo s, Set<ServiceId> released, Set<ServiceId> demoted) {
+        if (!isDynamic(s, demoted)) {
             // A released one still stopping counts until it has stopped, so it comes back at its own
             // index and no second static service is started next to it.
             return !released.contains(s.id()) || s.state() != ServiceState.STOPPED;
@@ -426,15 +511,6 @@ public final class ScalingPlanner {
         return s.state() != ServiceState.STOPPED;
     }
 
-    /** The lowest static service of the task that stopped because its group was switched off. */
-    private static OptionalInt releasedIndex(Input in, String name) {
-        return in.services().stream()
-                .filter(s -> name.equals(s.task()) && s.mode() == TaskMode.STATIC && in.released().contains(s.id())
-                        && !occupiesASlot(s))
-                .mapToInt(ServiceInfo::index)
-                .min();
-    }
-
     /** Static services of the task, in any state: they keep their folder and always count. */
     private static long staticCount(List<ServiceInfo> mine) {
         return mine.stream().filter(s -> s.mode() == TaskMode.STATIC).count();
@@ -444,13 +520,7 @@ public final class ScalingPlanner {
      * The index of a new static service: the lowest index of the group without any service, so no
      * folder of a server the operator stopped by hand is used.
      */
-    private static OptionalInt staticIndex(Input in, TaskConfig task) {
-        Set<Integer> taken = new HashSet<>();
-        for (ServiceInfo s : in.services()) {
-            if (task.group().equals(s.group())) {
-                taken.add(s.index());
-            }
-        }
+    private static OptionalInt freeIndex(Set<Integer> taken) {
         for (int index = 1; index <= ServiceIds.MAX_INDEX; index++) {
             if (!taken.contains(index)) {
                 return OptionalInt.of(index);

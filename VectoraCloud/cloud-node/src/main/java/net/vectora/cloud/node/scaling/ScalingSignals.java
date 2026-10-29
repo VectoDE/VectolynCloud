@@ -73,6 +73,8 @@ public interface ScalingSignals {
      *   <li>While a proxy that lists the backend is connected, the count is the lower one of the
      *       bridge and the proxy: a backend that reports more players than the proxy sees on it
      *       cannot start servers. Without such a proxy, the bridge's count is used.</li>
+     *   <li>For "is it empty" ({@code present}) the higher one counts instead: a server is only
+     *       empty if neither the bridge nor the proxy sees a player on it.</li>
      *   <li>Memory: the newest node sample, unless it is older than {@code staleAfter} or a value
      *       is not measured.</li>
      * </ul>
@@ -90,6 +92,7 @@ public interface ScalingSignals {
                                        Predicate<ServiceId> watched, Optional<NodeSample> node, Instant now,
                                        Duration staleAfter, long nodeHeap) {
         Map<ServiceId, Integer> counts = new HashMap<>();
+        Map<ServiceId, Integer> present = new HashMap<>();
         for (Report report : reports) {
             ServiceSample sample = report.sample();
             if (sample.playersOnline() < 0 || sample.at().plus(staleAfter).isBefore(now)) {
@@ -97,15 +100,21 @@ public interface ScalingSignals {
             }
             int count = sample.maxPlayers() >= 0 ? Math.min(sample.playersOnline(), sample.maxPlayers())
                     : sample.playersOnline();
+            int high = count;
             if (watched.test(report.service())) {
-                count = Math.min(count, fromProxies.getOrDefault(report.service(), 0));
+                int proxy = fromProxies.getOrDefault(report.service(), 0);
+                count = Math.min(count, proxy);
+                // Whoever the bridge or the proxy sees counts for "is it empty", even right after
+                // a join the bridge has not reported yet.
+                high = Math.max(sample.playersOnline(), proxy);
             }
             counts.put(report.service(), count);
+            present.put(report.service(), high);
         }
         Optional<ScalingPlanner.Memory> memory = node
                 .filter(n -> n.memoryUsed() != NodeSample.UNKNOWN && n.memoryTotal() != NodeSample.UNKNOWN)
                 .filter(n -> !n.at().plus(staleAfter).isBefore(now))
                 .map(n -> new ScalingPlanner.Memory(n.memoryUsed(), n.memoryTotal(), nodeHeap));
-        return new ScalingPlanner.Signals(counts, memory);
+        return new ScalingPlanner.Signals(counts, present, memory);
     }
 }

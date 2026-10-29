@@ -42,7 +42,6 @@ import net.vectora.cloud.node.scaling.ScalingPlanner.Load;
 import net.vectora.cloud.node.scaling.ScalingPlanner.Memory;
 import net.vectora.cloud.node.scaling.ScalingPlanner.Reason;
 import net.vectora.cloud.node.scaling.ScalingPlanner.Start;
-import net.vectora.cloud.node.scaling.ScalingPlanner.Stop;
 import net.vectora.cloud.node.service.ServiceInfo;
 import net.vectora.cloud.node.service.ServiceState;
 import net.vectora.protocol.ServiceId;
@@ -112,7 +111,8 @@ class ScalingPlannerTest {
     @Test
     void aMixedTaskFillsItsStaticServicesFirstAndTheRestOfMinServicesDynamically() {
         Scenario s = new Scenario().task("lobby", "lobby", 1, 2, 4);
-        assertEquals(List.of(new Start("lobby", OptionalInt.of(1), Reason.MIN_SERVICES)), s.plan(), "static first");
+        assertEquals(List.of(new Start("lobby", OptionalInt.of(1), Reason.MIN_SERVICES),
+                new Start("lobby", OptionalInt.empty(), Reason.MIN_SERVICES)), s.plan(), "static first, then dynamic");
         s.running("lobby", 1, TaskMode.STATIC, 0);
         assertEquals(List.of(new Start("lobby", OptionalInt.empty(), Reason.MIN_SERVICES)), s.plan(),
                 "the static quota is full, the second service is dynamic");
@@ -332,7 +332,7 @@ class ScalingPlannerTest {
 
         Scenario down = surplus();
         down.pausedUntil.put("minigame", NOW.plusSeconds(600));
-        assertEquals(List.of(new Stop("minigame", new ServiceId("minigame-2"), Reason.LOW_LOAD)), down.plan());
+        assertEquals(List.of(new Drain("minigame", new ServiceId("minigame-2"), Reason.LOW_LOAD)), down.plan());
     }
 
     // ---------------------------------------------------------------- scale down
@@ -346,7 +346,7 @@ class ScalingPlannerTest {
 
     @Test
     void anEmptySurplusServiceStopsOnceTheLoadHasBeenLowForScaleDownAfter() {
-        assertEquals(List.of(new Stop("minigame", new ServiceId("minigame-2"), Reason.LOW_LOAD)), surplus().plan());
+        assertEquals(List.of(new Drain("minigame", new ServiceId("minigame-2"), Reason.LOW_LOAD)), surplus().plan());
 
         Scenario early = surplus().lowSince("minigame", NOW.minus(Duration.ofMinutes(5)).plusSeconds(1));
         assertEquals(List.of(), early.plan(), "low for 4:59");
@@ -397,7 +397,7 @@ class ScalingPlannerTest {
         assertEquals(List.of(), atMin.plan());
 
         Scenario two = surplus().running("minigame", 3, TaskMode.DYNAMIC, 0);
-        assertEquals(List.of(new Stop("minigame", new ServiceId("minigame-3"), Reason.LOW_LOAD)), two.plan(),
+        assertEquals(List.of(new Drain("minigame", new ServiceId("minigame-3"), Reason.LOW_LOAD)), two.plan(),
                 "one per decision");
     }
 
@@ -405,24 +405,26 @@ class ScalingPlannerTest {
     void scaleDownBelowIsReadFromTheTask() {
         // 20 of 50 without minigame-2: 40 %.
         Scenario s = surplus().running("minigame", 1, TaskMode.DYNAMIC, 20).running("minigame", 2, TaskMode.DYNAMIC, 0);
-        assertEquals(List.of(new Stop("minigame", new ServiceId("minigame-2"), Reason.LOW_LOAD)), s.plan());
+        assertEquals(List.of(new Drain("minigame", new ServiceId("minigame-2"), Reason.LOW_LOAD)), s.plan());
         s.tasks.put("minigame", s.tasks.get("minigame").withScaling(s.tasks.get("minigame").scaling().withScaleDownBelow(40)));
         assertEquals(List.of(), s.plan(), "40 % is not below 40 %");
     }
 
     @Test
     void staticServicesAreNeverEmptiedButTakePlayersFromADynamicOne() {
-        // Both static, empty for a day: they stay.
-        Scenario s = new Scenario().task("lobby", "lobby", 1, 1, 3)
+        // Both static (static-services 2), empty for a day: they stay.
+        Scenario s = new Scenario().task("lobby", "lobby", 2, 2, 3)
                 .running("lobby", 1, TaskMode.STATIC, 0).running("lobby", 2, TaskMode.STATIC, 0)
                 .lowSince("lobby", NOW.minus(Duration.ofDays(1)));
         assertEquals(List.of(), s.plan());
+        s.task("lobby", "lobby", 2, 1, 3);
+        assertEquals(List.of(), s.plan(), "min-services 1, but both are within static-services");
 
         // Counter-check: the same service, dynamic, is stopped.
         Scenario overflow = new Scenario().task("lobby", "lobby", 1, 1, 3)
                 .running("lobby", 1, TaskMode.STATIC, 0).running("lobby", 2, TaskMode.DYNAMIC, 0)
                 .lowSince("lobby", NOW.minus(Duration.ofDays(1)));
-        assertEquals(List.of(new Stop("lobby", new ServiceId("lobby-2"), Reason.LOW_LOAD)), overflow.plan());
+        assertEquals(List.of(new Drain("lobby", new ServiceId("lobby-2"), Reason.LOW_LOAD)), overflow.plan());
 
         // With players on it, they move to the static lobby-1 although it has more of them.
         overflow.running("lobby", 1, TaskMode.STATIC, 10).running("lobby", 2, TaskMode.DYNAMIC, 3);
@@ -433,7 +435,7 @@ class ScalingPlannerTest {
     void aboveMaxServicesAnEmptyServiceStopsWithoutWaiting() {
         Scenario s = new Scenario().task("minigame", TaskMode.DYNAMIC, 0, 1)
                 .running("minigame", 1, TaskMode.DYNAMIC, 50).running("minigame", 2, TaskMode.DYNAMIC, 0);
-        assertEquals(List.of(new Stop("minigame", new ServiceId("minigame-2"), Reason.ABOVE_MAX)), s.plan());
+        assertEquals(List.of(new Drain("minigame", new ServiceId("minigame-2"), Reason.ABOVE_MAX)), s.plan());
 
         // Counter-check: nobody is stopped with players on it, also above the limit.
         s.running("minigame", 2, TaskMode.DYNAMIC, 1);
@@ -448,6 +450,90 @@ class ScalingPlannerTest {
         assertEquals(List.of(new Start("lobby", OptionalInt.of(1), Reason.MIN_SERVICES),
                 new Start("minigame", OptionalInt.empty(), Reason.LOAD)), decisions);
         assertTrue(decisions.stream().allMatch(d -> d.task() != null));
+    }
+
+    @Test
+    void staticServicesAboveALoweredStaticServicesCountAsDynamicFromTheHighestIndex() {
+        // static-services lowered from 3 to 1: lobby-2 and lobby-3 are surplus, lobby-1 stays static.
+        Scenario s = new Scenario().task("lobby", "lobby", 1, 1, 3)
+                .running("lobby", 1, TaskMode.STATIC, 0).running("lobby", 2, TaskMode.STATIC, 0)
+                .running("lobby", 3, TaskMode.STATIC, 0).lowSince("lobby", NOW.minus(Duration.ofDays(1)));
+        assertEquals(List.of(new Drain("lobby", new ServiceId("lobby-3"), Reason.LOW_LOAD)), s.plan());
+
+        // lobby-3 has a player, lobby-2 none: the emptiest surplus one goes, never lobby-1.
+        s.running("lobby", 3, TaskMode.STATIC, 1);
+        assertEquals(List.of(new Drain("lobby", new ServiceId("lobby-2"), Reason.LOW_LOAD)), s.plan());
+
+        // Counter-check: with static-services back at 3 none of them is surplus.
+        s.task("lobby", "lobby", 3, 3, 3);
+        assertEquals(List.of(), s.plan());
+    }
+
+    @Test
+    void aSurplusStaticServiceThatStoppedNoLongerCountsTowardMinServices() {
+        // static-services 1, min 2: lobby-2 (static, surplus) was stopped by the scaler, so one more starts,
+        // a dynamic one, since the static quota is full.
+        Scenario s = new Scenario().task("lobby", "lobby", 1, 2, 3)
+                .running("lobby", 1, TaskMode.STATIC, 0).service("lobby", 2, TaskMode.STATIC, ServiceState.STOPPED);
+        assertEquals(List.of(new Start("lobby", OptionalInt.empty(), Reason.MIN_SERVICES)), s.plan());
+        // Counter-check: within static-services it would count although stopped (stopped by hand stays down).
+        s.task("lobby", "lobby", 2, 2, 3);
+        assertEquals(List.of(), s.plan());
+    }
+
+    @Test
+    void everyMissingServiceOfMinServicesStartsInOneRoundWithoutCooldown() {
+        // static 2, min 4, max 6, nothing runs (for example after the EULA was given again).
+        Scenario s = new Scenario().task("lobby", "lobby", 2, 4, 6);
+        s.lastAction.put("lobby", NOW.minusSeconds(1));
+        assertEquals(List.of(new Start("lobby", OptionalInt.of(1), Reason.MIN_SERVICES),
+                new Start("lobby", OptionalInt.of(2), Reason.MIN_SERVICES),
+                new Start("lobby", OptionalInt.empty(), Reason.MIN_SERVICES),
+                new Start("lobby", OptionalInt.empty(), Reason.MIN_SERVICES)), s.plan(), "cooldown does not apply");
+
+        // Released static services come back at their own index first; max-services caps the batch.
+        Scenario back = new Scenario().task("lobby", "lobby", 2, 3, 3)
+                .service("lobby", 1, TaskMode.STATIC, ServiceState.STOPPED).released("lobby-1")
+                .service("lobby", 2, TaskMode.STATIC, ServiceState.STOPPED).released("lobby-2")
+                .running("lobby", 3, TaskMode.DYNAMIC, 0);
+        assertEquals(List.of(new Start("lobby", OptionalInt.of(1), Reason.MIN_SERVICES),
+                new Start("lobby", OptionalInt.of(2), Reason.MIN_SERVICES)), back.plan());
+
+        // Counter-check: the cooldown still spaces a scale-up by load.
+        Scenario load = new Scenario().task("minigame", TaskMode.DYNAMIC, 1, 3).running("minigame", 1, TaskMode.DYNAMIC, 40);
+        load.lastAction.put("minigame", NOW.minusSeconds(1));
+        assertEquals(List.of(), load.plan());
+    }
+
+    @Test
+    void twoTasksOfOneGroupStartOnlyOneServiceByLoadInARound() {
+        Scenario s = new Scenario().task("lobby", "lobby", 0, 1, 3).task("lobby-eu", "lobby", 0, 1, 3)
+                .running("lobby", 1, TaskMode.DYNAMIC, 40).running("lobby-eu", 2, TaskMode.DYNAMIC, 40);
+        assertEquals(List.of(new Start("lobby", OptionalInt.empty(), Reason.LOAD)), s.plan(),
+                "80 % for the group: one new service, not one per task");
+
+        // Counter-check: two groups each get theirs.
+        Scenario two = new Scenario().task("lobby", "lobby", 0, 1, 3).task("minigame", TaskMode.DYNAMIC, 1, 3)
+                .running("lobby", 1, TaskMode.DYNAMIC, 40).running("minigame", 1, TaskMode.DYNAMIC, 40);
+        assertEquals(List.of(new Start("lobby", OptionalInt.empty(), Reason.LOAD),
+                new Start("minigame", OptionalInt.empty(), Reason.LOAD)), two.plan());
+    }
+
+    @Test
+    void whetherAServiceIsEmptyIsJudgedByTheHigherOfTheBridgesAndTheProxysCount() {
+        // Above max-services: the proxy has just routed a player to minigame-2, the bridge still says 0.
+        Scenario above = new Scenario().task("minigame", TaskMode.DYNAMIC, 0, 1)
+                .running("minigame", 1, TaskMode.DYNAMIC, 50).running("minigame", 2, TaskMode.DYNAMIC, 0)
+                .present("minigame-2", 1);
+        assertEquals(List.of(), above.plan());
+        above.present("minigame-2", 0);
+        assertEquals(List.of(new Drain("minigame", new ServiceId("minigame-2"), Reason.ABOVE_MAX)), above.plan());
+
+        // Low load: 20 + 4 is below 50 % of 50, but 20 + 5 seen by one side is not.
+        Scenario low = surplus().running("minigame", 1, TaskMode.DYNAMIC, 20).running("minigame", 2, TaskMode.DYNAMIC, 4);
+        assertEquals(List.of(new Drain("minigame", new ServiceId("minigame-2"), Reason.LOW_LOAD)), low.plan());
+        low.present("minigame-2", 5);
+        assertEquals(List.of(), low.plan());
     }
 
     // ---------------------------------------------------------------- group load
@@ -471,6 +557,8 @@ class ScalingPlannerTest {
         final Map<String, TaskConfig> tasks = new TreeMap<>();
         final Map<ServiceId, ServiceInfo> services = new java.util.LinkedHashMap<>();
         final Map<ServiceId, Integer> players = new HashMap<>();
+        /** The higher count of bridge and proxy, where it differs from {@link #players}. */
+        final Map<ServiceId, Integer> present = new HashMap<>();
         final Map<String, Instant> lastAction = new HashMap<>();
         final Map<String, Instant> pausedUntil = new HashMap<>();
         final Map<String, Instant> lowSince = new HashMap<>();
@@ -530,6 +618,7 @@ class ScalingPlannerTest {
                     state.hasProcess() ? OptionalLong.of(100 + index) : OptionalLong.empty(),
                     Optional.of(NOW.minus(Duration.ofHours(1))), OptionalInt.empty(), 0));
             players.remove(id);
+            present.remove(id);
             return this;
         }
 
@@ -541,6 +630,11 @@ class ScalingPlannerTest {
 
         Scenario runningUnknown(String task, int index, TaskMode mode) {
             return service(task, index, mode, ServiceState.RUNNING);
+        }
+
+        Scenario present(String id, int count) {
+            present.put(new ServiceId(id), count);
+            return this;
         }
 
         Scenario lowSince(String task, Instant since) {
@@ -569,7 +663,7 @@ class ScalingPlannerTest {
 
         List<Decision> plan() {
             return ScalingPlanner.plan(new ScalingPlanner.Input(snapshot(), "node-1", new ArrayList<>(services.values()),
-                    new ScalingPlanner.Signals(Map.copyOf(players), memory), Map.copyOf(lastAction),
+                    new ScalingPlanner.Signals(Map.copyOf(players), Map.copyOf(present), memory), Map.copyOf(lastAction),
                     Map.copyOf(pausedUntil), Map.copyOf(lowSince), Set.copyOf(released), Set.copyOf(draining), NOW));
         }
     }

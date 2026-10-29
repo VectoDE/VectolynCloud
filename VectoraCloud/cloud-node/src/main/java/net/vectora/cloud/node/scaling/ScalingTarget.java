@@ -60,6 +60,14 @@ public interface ScalingTarget {
     boolean drain(ServiceId service, Duration timeout) throws InterruptedException;
 
     /**
+     * Opens a service on the proxies again that a successful {@link #drain} left closed, when its
+     * stop failed ({@link ChannelBridge#reopen}).
+     *
+     * @param service the service
+     */
+    void reopen(ServiceId service);
+
+    /**
      * The service core and the cloud channel of a node as target.
      *
      * @param services the service core
@@ -73,6 +81,11 @@ public interface ScalingTarget {
             @Override
             public boolean drain(ServiceId service, Duration timeout) throws InterruptedException {
                 return channel.drain(service, timeout);
+            }
+
+            @Override
+            public void reopen(ServiceId service) {
+                channel.reopen(service);
             }
 
             @Override

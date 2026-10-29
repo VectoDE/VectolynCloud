@@ -31,7 +31,6 @@ import net.vectora.cloud.node.scaling.ScalingPlanner.Drain;
 import net.vectora.cloud.node.scaling.ScalingPlanner.Held;
 import net.vectora.cloud.node.scaling.ScalingPlanner.Hold;
 import net.vectora.cloud.node.scaling.ScalingPlanner.Start;
-import net.vectora.cloud.node.scaling.ScalingPlanner.Stop;
 import net.vectora.cloud.node.service.ServiceException;
 import net.vectora.cloud.node.service.ServiceInfo;
 import net.vectora.cloud.node.service.ServiceListener;
@@ -100,6 +99,8 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
     private final Set<ServiceId> draining = new HashSet<>();
     private final Set<ServiceId> released = new HashSet<>();
     private final Set<String> busy = new HashSet<>();
+    /** Running services whose unknown player count was logged; logged again after they reported. */
+    private final Set<ServiceId> unknownCounts = new HashSet<>();
     private final Map<String, Hold> lastHold = new HashMap<>();
     private boolean suspended;
     private boolean closed;
@@ -194,6 +195,7 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
                 return List.of();
             }
             remember(snapshot, services, values, now);
+            warnUnknownCounts(snapshot, services, values);
             // Copies made here, under the lock: the round goes on to change lastAction while the
             // planner's input must stay as it was read.
             input = new ScalingPlanner.Input(snapshot, node, services, values, new HashMap<>(lastAction),
@@ -202,6 +204,9 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
         }
         List<Decision> done = new ArrayList<>();
         Set<String> held = new HashSet<>();
+        // A task below min-services gets several starts in one round; they run one after the other
+        // in one action, so the task still has one action at a time.
+        Map<String, List<Decision>> perTask = new java.util.LinkedHashMap<>();
         for (Decision decision : ScalingPlanner.plan(input)) {
             synchronized (lock) {
                 if (closed || busy.contains(decision.task())) {
@@ -215,16 +220,26 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
                     done.add(decision);
                     continue;
                 }
-                busy.add(decision.task());
-                lastAction.put(decision.task(), now);
-                lastHold.remove(decision.task());
             }
-            done.add(decision);
+            perTask.computeIfAbsent(decision.task(), task -> new ArrayList<>()).add(decision);
+        }
+        for (Map.Entry<String, List<Decision>> entry : perTask.entrySet()) {
+            String task = entry.getKey();
+            List<Decision> batch = List.copyOf(entry.getValue());
+            synchronized (lock) {
+                if (closed) {
+                    break;
+                }
+                busy.add(task);
+                lastAction.put(task, now);
+                lastHold.remove(task);
+            }
+            done.addAll(batch);
             try {
-                actions.execute(() -> carryOut(decision, snapshot));
+                actions.execute(() -> carryOut(task, batch, snapshot));
             } catch (RejectedExecutionException e) {
                 synchronized (lock) {
-                    busy.remove(decision.task());
+                    busy.remove(task);
                 }
             }
         }
@@ -232,6 +247,29 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
             lastHold.keySet().retainAll(held);
         }
         return List.copyOf(done);
+    }
+
+    /**
+     * Names the running services whose player count is unknown, once until they report again: such
+     * a service holds back scaling of its whole group. Holds {@code lock}.
+     */
+    private void warnUnknownCounts(ConfigSnapshot snapshot, List<ServiceInfo> services, ScalingPlanner.Signals values) {
+        Set<ServiceId> now = new HashSet<>();
+        for (ServiceInfo s : services) {
+            TaskConfig task = snapshot.tasks().get(s.task());
+            GroupConfig group = snapshot.groups().get(s.group());
+            if (s.state() != ServiceState.RUNNING || task == null || group == null
+                    || group.software() == net.vectora.cloud.config.model.ServerSoftware.VELOCITY
+                    || values.playersOf(s.id()).isPresent()) {
+                continue;
+            }
+            now.add(s.id());
+            if (unknownCounts.add(s.id())) {
+                LOG.log(System.Logger.Level.WARNING, "Scaling: group {0} is not scaled while {1} reports no player"
+                        + " count (no bridge report within stale-after of monitor.yml)", s.group(), s.id());
+            }
+        }
+        unknownCounts.retainAll(now);
     }
 
     /** Updates what the rounds remember. Holds {@code lock}. */
@@ -261,6 +299,23 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
         pausedWith.keySet().retainAll(pausedUntil.keySet());
     }
 
+    private void carryOut(String task, List<Decision> batch, ConfigSnapshot snapshot) {
+        try {
+            for (Decision decision : batch) {
+                synchronized (lock) {
+                    if (closed) {
+                        return;
+                    }
+                }
+                carryOut(decision, snapshot);
+            }
+        } finally {
+            synchronized (lock) {
+                busy.remove(task);
+            }
+        }
+    }
+
     private void carryOut(Decision decision, ConfigSnapshot snapshot) {
         try {
             if (decision instanceof Start start) {
@@ -269,10 +324,6 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
                         : target.startDynamic(start.task());
                 LOG.log(System.Logger.Level.INFO, "Scaling: {0} of task {1} is started ({2})", info.id(),
                         start.task(), describe(start.reason(), snapshot.tasks().get(start.task())));
-            } else if (decision instanceof Stop stop) {
-                LOG.log(System.Logger.Level.INFO, "Scaling: {0} of task {1} is stopped ({2})", stop.service(),
-                        stop.task(), describe(stop.reason(), snapshot.tasks().get(stop.task())));
-                target.stop(stop.service());
             } else if (decision instanceof Drain drain) {
                 drainAndStop(drain, snapshot);
             }
@@ -282,17 +333,15 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
             if (decision instanceof Start) {
                 failed(decision.task());
             }
-        } finally {
-            synchronized (lock) {
-                busy.remove(decision.task());
-            }
         }
     }
 
     /**
-     * Empties a service, then stops it. If players are left after {@link #DRAIN_TIMEOUT}, the stop
-     * is called off and the service keeps running; nobody is kicked. Either way the task waits
-     * {@code scale-down-after} again before the next attempt.
+     * Closes a service on the proxies, empties it, then stops it; also one that looks empty, since a
+     * player may have been routed there just now. If players are left after {@link #DRAIN_TIMEOUT},
+     * the stop is called off and the service keeps running; nobody is kicked. If the stop fails,
+     * the service is opened again. Either way the task waits {@code scale-down-after} again before
+     * the next attempt.
      */
     private void drainAndStop(Drain drain, ConfigSnapshot snapshot) throws ServiceException {
         synchronized (lock) {
@@ -315,7 +364,13 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
             }
             LOG.log(System.Logger.Level.INFO, "Scaling: {0} of task {1} is empty and is stopped", drain.service(),
                     drain.task());
-            target.stop(drain.service());
+            try {
+                target.stop(drain.service());
+            } catch (ServiceException | RuntimeException e) {
+                // It keeps running: the proxies may send players there again.
+                target.reopen(drain.service());
+                throw e;
+            }
         } finally {
             synchronized (lock) {
                 draining.remove(drain.service());
