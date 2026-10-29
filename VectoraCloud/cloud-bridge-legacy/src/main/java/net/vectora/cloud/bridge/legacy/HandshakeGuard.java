@@ -1,7 +1,10 @@
 package net.vectora.cloud.bridge.legacy;
 
 import com.destroystokyo.paper.event.player.PlayerHandshakeEvent;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.UnaryOperator;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -9,6 +12,7 @@ import net.vectora.cloud.bridge.LogThrottle;
 import net.vectora.cloud.bridge.forwarding.AdmissionTickets;
 import net.vectora.cloud.bridge.forwarding.BungeeGuardCheck;
 import net.vectora.cloud.bridge.forwarding.ForwardingSecret;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -25,8 +29,9 @@ import org.bukkit.event.player.PlayerLoginEvent;
  *   <li>The same at {@code MONITOR}, so that no other plugin can let a refused handshake through
  *       or hand the server the original text, token included, by cancelling the event (a
  *       cancelled event makes PandaSpigot fall back to its own unchecked BungeeCord parsing).</li>
- *   <li>{@link PlayerLoginEvent} at {@code HIGHEST}: only a UUID with a ticket from an accepted
- *       handshake may log in ({@link AdmissionTickets}).</li>
+ *   <li>{@link PlayerLoginEvent} at {@code LOWEST}: only a UUID with a ticket from an accepted
+ *       handshake may log in ({@link AdmissionTickets}). A refused login is refused again at
+ *       {@code MONITOR}, so no other plugin can allow it.</li>
  * </ul>
  *
  * <p>Handshake events run on network threads; the check only computes and touches no server
@@ -41,6 +46,8 @@ public final class HandshakeGuard implements Listener {
     private final AdmissionTickets tickets;
     private final Logger log;
     private final LogThrottle throttle = new LogThrottle(10, 60_000_000_000L);
+    // Logins refused at LOWEST, until MONITOR of the same event. By identity: one entry per event.
+    private final Set<Player> refusedLogins = Collections.synchronizedSet(Collections.newSetFromMap(new IdentityHashMap<>()));
 
     /** A guard with the given check, for tests and {@link #fromEnvironment}. */
     public HandshakeGuard(BungeeGuardCheck check, AdmissionTickets tickets, Logger log) {
@@ -96,9 +103,21 @@ public final class HandshakeGuard implements Listener {
     }
 
     /** Lets only players in whose handshake was accepted. */
-    @EventHandler(priority = EventPriority.HIGHEST)
+    @EventHandler(priority = EventPriority.LOWEST)
     public void onLogin(PlayerLoginEvent event) {
         if (!tickets.consume(event.getPlayer().getUniqueId())) {
+            refusedLogins.add(event.getPlayer());
+            event.disallow(PlayerLoginEvent.Result.KICK_OTHER, FAIL_MESSAGE);
+        }
+    }
+
+    /**
+     * Refuses a login refused at {@code LOWEST} again after every other plugin, so none can let
+     * it through with {@code allow()} (a full-server or whitelist plugin, for example).
+     */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void enforceLogin(PlayerLoginEvent event) {
+        if (refusedLogins.remove(event.getPlayer())) {
             event.disallow(PlayerLoginEvent.Result.KICK_OTHER, FAIL_MESSAGE);
         }
     }

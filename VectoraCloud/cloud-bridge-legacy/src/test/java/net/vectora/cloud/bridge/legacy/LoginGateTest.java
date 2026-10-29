@@ -47,6 +47,30 @@ class LoginGateTest {
     }
 
     @Test
+    void anotherPluginCannotAllowARefusedLogin() throws Exception {
+        PlayerLoginEvent login = login(PLAYER);
+        guard.onLogin(login);
+        login.allow(); // a plugin between LOWEST and MONITOR
+        guard.enforceLogin(login);
+        assertEquals(PlayerLoginEvent.Result.KICK_OTHER, login.getResult());
+        assertEquals(HandshakeGuard.FAIL_MESSAGE, login.getKickMessage());
+
+        // Counter-check: an admitted login is left as the other plugins decided.
+        log.setUseParentHandlers(false);
+        guard.onHandshake(new PlayerHandshakeEvent("127.0.0.1\u0000203.0.113.7\u0000069a79f444e94726a5befca90e38aaf5"
+                + "\u0000[{\"name\":\"bungeeguard-token\",\"value\":\"" + SECRET + "\"}]", "198.51.100.20", false));
+        PlayerLoginEvent admitted = login(PLAYER);
+        guard.onLogin(admitted);
+        admitted.disallow(PlayerLoginEvent.Result.KICK_WHITELIST, "whitelist");
+        guard.enforceLogin(admitted);
+        assertEquals(PlayerLoginEvent.Result.KICK_WHITELIST, admitted.getResult());
+        // The next event of a refused player starts clean as well.
+        PlayerLoginEvent unrelated = login(PLAYER);
+        guard.enforceLogin(unrelated);
+        assertEquals(PlayerLoginEvent.Result.ALLOWED, unrelated.getResult());
+    }
+
+    @Test
     void aRefusedHandshakeLeavesNoTicket() throws Exception {
         log.setUseParentHandlers(false);
         guard.onHandshake(new PlayerHandshakeEvent("127.0.0.1\u0000203.0.113.7\u0000069a79f444e94726a5befca90e38aaf5"
