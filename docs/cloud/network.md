@@ -131,6 +131,8 @@ The names are constants in `CloudClientSettings` (`ENV_HOST`, `ENV_PORT`, `ENV_S
 
 ### Interfaces for the platform bridges (PR 13)
 
+How the bridges use them, and what they add on top (send queue, server registry, player state, BungeeGuard check), is described in [bridges.md](bridges.md).
+
 | Type | Use in a bridge |
 |---|---|
 | `CloudClientSettings.fromEnvironment()` | Read the variables above in `onEnable`. Outside the cloud (variables missing) the bridge logs the message and stays inactive. |

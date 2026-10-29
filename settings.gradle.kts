@@ -23,6 +23,16 @@ dependencyResolutionManagement {
                 includeGroupAndSubgroups("com.velocitypowered")
             }
         }
+        // PandaSpigot API (1.8.8 fork, GPL-3.0) for cloud-bridge-legacy, compile only. The repository
+        // is used for this group only and the group is never looked up anywhere else.
+        exclusiveContent {
+            forRepository {
+                maven("https://repo.hpfxd.com/releases/") { name = "hpfxd" }
+            }
+            filter {
+                includeGroup("com.hpfxd.pandaspigot")
+            }
+        }
     }
 }
 
@@ -42,6 +52,8 @@ include(
     "VectoraCloud:cloud-console",
     "VectoraCloud:cloud-database",
     "VectoraCloud:cloud-node",
+    "VectoraCloud:cloud-bridge-common",
     "VectoraCloud:cloud-bridge-velocity",
     "VectoraCloud:cloud-bridge-paper",
+    "VectoraCloud:cloud-bridge-legacy",
 )

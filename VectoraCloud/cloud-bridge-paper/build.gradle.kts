@@ -4,14 +4,43 @@
 // bytecode 21; vectora.java25-api-conventions switches off Gradle's JVM variant check for it.
 // Paper 26.3 itself needs Java 25, so the bridge only runs there. Tests that load API classes
 // carry @Tag("requires-java25"). Details: docs/java-compatibility.md
+//
+// Thin adapter: the logic is in cloud-bridge-common, which is tested on Java 21 as well.
 
 plugins {
     id("vectora.java25-api-conventions")
 }
 
+base {
+    archivesName = "VectoraCloudBridgePaper"
+}
+
 dependencies {
-    implementation(project(":Vectora-CloudClient"))
+    implementation(project(":VectoraCloud:cloud-bridge-common"))
     compileOnly(libs.paper.api)
 
     testImplementation(libs.paper.api)
+    testImplementation(libs.snakeyaml)
+}
+
+tasks.processResources {
+    val pluginVersion = project.version.toString()
+    inputs.property("pluginVersion", pluginVersion)
+    filesMatching("plugin.yml") {
+        expand("pluginVersion" to pluginVersion)
+    }
+}
+
+// The server loads the plugin jar on its own, so the jar carries the bridge core, the client and
+// the protocol (all Vectora code, no third-party library).
+tasks.jar {
+    val bundled = configurations.runtimeClasspath
+    dependsOn(bundled)
+    from(bundled.map { files -> files.map { if (it.isDirectory) it else zipTree(it) } })
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    exclude("META-INF/MANIFEST.MF")
+}
+
+tasks.test {
+    systemProperty("vectora.expectedVersion", project.version.toString())
 }

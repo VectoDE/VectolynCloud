@@ -2,7 +2,7 @@
 
 VectoraCloud is the Java application behind `java -jar VectoraCloud.jar`. It renders the server templates in `Server-Network/`, downloads and verifies the server software, sets up the database, starts and watches every proxy and server, and offers a console and later an API.
 
-This page describes the module layout. Each module gets its content in its own pull request (see the [roadmap](../wiki/Roadmap.md)). Done so far: [protocol](protocol.md), [configuration](config.md), [templates](template.md), [downloads](download.md), the [launcher](launcher.md), the [cloud channel](network.md) (`cloud-network` and `Vectora-CloudClient`), the [database](database.md), the [node's service core](node.md) and the [console](console.md). The other modules are still empty shells with their final dependencies.
+This page describes the module layout. Each module gets its content in its own pull request (see the [roadmap](../wiki/Roadmap.md)). Done so far: [protocol](protocol.md), [configuration](config.md), [templates](template.md), [downloads](download.md), the [launcher](launcher.md), the [cloud channel](network.md) (`cloud-network` and `Vectora-CloudClient`), the [database](database.md), the [node's service core](node.md), the [console](console.md) and the [bridges](bridges.md). The other modules are still empty shells with their final dependencies.
 
 ## Modules
 
@@ -18,8 +18,10 @@ This page describes the module layout. Each module gets its content in its own p
 | `VectoraCloud/cloud-database` | `net.vectora.cloud.database` | Database setup (managed MariaDB, Docker, external server or H2) and central sizing of the connection pools. See [database](database.md). |
 | `VectoraCloud/cloud-node` | `net.vectora.cloud.node` | The node itself: services, groups and tasks, JRE management, console, setup flow, scaling, monitoring, backups, updates, cluster. See [node.md](node.md). |
 | `VectoraCloud/cloud-launcher` | `net.vectora.cloud.launcher` | Entry point of `VectoraCloud.jar`: arguments, refusal to run as root or administrator (unless `--allow-root` or `VECTORA_ALLOW_ROOT=true`), node startup. See [launcher.md](launcher.md). |
-| `VectoraCloud/cloud-bridge-velocity` | `net.vectora.cloud.bridge.velocity` | Runs inside Velocity: reports state to the cloud, receives commands. Compiles against `velocity-api` (compile only). |
-| `VectoraCloud/cloud-bridge-paper` | `net.vectora.cloud.bridge.paper` | Runs inside Paper and does the same. Compiles against `paper-api` (compile only). On the legacy backends it also does the BungeeGuard check. |
+| `VectoraCloud/cloud-bridge-common` | `net.vectora.cloud.bridge` | Platform-neutral core of the bridges: send queue on a thread of its own, server registry and player state of the proxy, tick meter, the BungeeGuard check for the 1.8.8 backends. No platform API, runs and is tested on Java 21. See [bridges.md](bridges.md). |
+| `VectoraCloud/cloud-bridge-velocity` | `net.vectora.cloud.bridge.velocity` | Runs inside Velocity, the main proxy and the legacy proxy: dynamic servers, player events, status. Compiles against `velocity-api` (compile only). |
+| `VectoraCloud/cloud-bridge-paper` | `net.vectora.cloud.bridge.paper` | Runs inside Paper: ready signal and status. Compiles against `paper-api` (compile only). |
+| `VectoraCloud/cloud-bridge-legacy` | `net.vectora.cloud.bridge.legacy` | Runs inside PandaSpigot 1.8.8: the same plus the check of the legacy proxy's `bungeeguard-token`. Compiles against `pandaspigot-api` (compile only, Java 8 class files). |
 
 From stage 3 on, the Vectora plugin takes over status and messaging from the bridges. It uses `Vectora-CloudClient` as well.
 
@@ -43,8 +45,10 @@ graph TD
     network --> config
     network --> protocol[Vectora-Protocol]
     client[Vectora-CloudClient] --> protocol
-    bvel[cloud-bridge-velocity] --> client
-    bpap[cloud-bridge-paper] --> client
+    bcom[cloud-bridge-common] --> client
+    bvel[cloud-bridge-velocity] --> bcom
+    bpap[cloud-bridge-paper] --> bcom
+    bleg[cloud-bridge-legacy] --> bcom
 ```
 
 The rules behind it:
@@ -64,7 +68,7 @@ The rules behind it:
 | Jackson 3 (`jackson-databind`, `jackson-dataformat-yaml`) | 3.2.4 | `cloud-config`, `cloud-download` | One data model for the YAML files and the JSON API, with explicit `schema-version` handling and exact error positions for broken config files. `cloud-download` also reads the download APIs, `software.lock.yml` and its catalog with it. |
 | MariaDB Connector/J (`mariadb-java-client`) | 4.0.0 | `cloud-database` | Talks to the managed or external MariaDB/MySQL server: creating databases and users, checking the connection, sizing the pools. |
 
-Test only: JUnit 6 and Jazzer 0.30.0 (fuzz tests, see below). Compile only: `velocity-api` 4.3.1 and `paper-api` 26.3 in the bridges. The proxy and the server provide them at runtime.
+Test only: JUnit 6 and Jazzer 0.30.0 (fuzz tests, see below). Compile only: `velocity-api` 4.3.1, `paper-api` 26.3 and `pandaspigot-api` 1.8.8 (with `adventure-api` 4.24.0) in the bridges. The proxy and the server provide them at runtime.
 
 Versions live in `gradle/libs.versions.toml`. Dependabot proposes updates.
 
@@ -80,7 +84,7 @@ The reasons:
 
 ## Java levels
 
-All cloud modules, `Vectora-Protocol` and `Vectora-CloudClient` are built with `--release 21` and run on Java 21 and newer. The bridges also have bytecode 21, but `velocity-api` 4.3 and `paper-api` 26.3 are compiled for Java 25 (class file version 69). The bridges therefore run only where the proxy or server runs, on Java 25. Details in [Java compatibility](../java-compatibility.md).
+All cloud modules, `Vectora-Protocol` and `Vectora-CloudClient` are built with `--release 21` and run on Java 21 and newer. The bridges also have bytecode 21, but `velocity-api` 4.3 and `paper-api` 26.3 are compiled for Java 25 (class file version 69). The Velocity and Paper bridges therefore run only where the proxy or server runs, on Java 25. The legacy bridge runs on PandaSpigot's Java 21. Details in [Java compatibility](../java-compatibility.md).
 
 ## Build setup
 
@@ -89,8 +93,8 @@ The shared Gradle setup lives in the included build `build-logic/` as convention
 | Plugin | Used by | What it does |
 |---|---|---|
 | `vectora.java-conventions` | every Java module | Java 25 toolchain, `--release 21`, `-Xlint:all -Werror` (a module may switch `-Werror` off and has to say why), JUnit, `-PtestJava=21`, reproducible jars. |
-| `vectora.java25-api-conventions` | bridges, `Vectora-Lobby`, `Vectora-PortalBridge` | Everything above, plus `disableAutoTargetJvm()` for the Java 25 server APIs. |
-| `vectora.fuzz-conventions` | modules with fuzz tests (`Vectora-Protocol`, `Vectora-CloudClient`, `cloud-config`, `cloud-template`, `cloud-download`, `cloud-network`, `cloud-database`, `cloud-node`, `cloud-console`) | Adds Jazzer, runs `@FuzzTest` methods in regression mode in every test run; `-Pfuzz` switches to fuzzing mode. |
+| `vectora.java25-api-conventions` | Velocity and Paper bridges, `Vectora-Lobby`, `Vectora-PortalBridge` | Everything above, plus `disableAutoTargetJvm()` for the Java 25 server APIs. |
+| `vectora.fuzz-conventions` | modules with fuzz tests (`Vectora-Protocol`, `Vectora-CloudClient`, `cloud-config`, `cloud-template`, `cloud-download`, `cloud-network`, `cloud-database`, `cloud-node`, `cloud-console`, `cloud-bridge-common`) | Adds Jazzer, runs `@FuzzTest` methods in regression mode in every test run; `-Pfuzz` switches to fuzzing mode. |
 
 ## Fuzz tests
 

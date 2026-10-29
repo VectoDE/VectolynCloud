@@ -15,7 +15,7 @@ The convention plugins in `build-logic/` set the defaults (toolchain 25, release
 | `Build (JDK 25, ubuntu-latest)`, `Build (JDK 25, windows-latest)` | JDK 25, `--release 21` | Java 25 | Full build and every test, on Linux and Windows. Java 25 is the runtime the plugins ship for, because Paper 26.3 needs it. |
 | `Tests on Java 21` | JDK 25, `--release 21` | Java 21 (`-PtestJava=21`) | The compiled code and its resources load and pass their tests on a Java 21 runtime. |
 
-On Java 21 the tests tagged `requires-java25` are skipped. They load paper-api or velocity-api classes (class file version 69), which a Java 21 JVM cannot load. Today these are `PluginDescriptorTest.mainClassIsAJavaPlugin` in both plugin modules, `PortalBridgeTest` (its class under test extends `JavaPlugin`), `PaperBridgeApiTest` and `VelocityBridgeApiTest`. Every module has a `BytecodeLevelTest` that runs on both: it reads a class file without loading it and checks major version 65. The Jazzer fuzz tests in `Vectora-Protocol`, `Vectora-CloudClient`, `cloud-config`, `cloud-template`, `cloud-download`, `cloud-network`, `cloud-database`, `cloud-node` and `cloud-console` run in regression mode on both runtimes, and so do the loopback tests of the cloud channel.
+On Java 21 the tests tagged `requires-java25` are skipped. They load paper-api or velocity-api classes (class file version 69), which a Java 21 JVM cannot load. Today these are `PluginDescriptorTest.mainClassIsAJavaPlugin` in both plugin modules and in `cloud-bridge-paper`, `PortalBridgeTest` (its class under test extends `JavaPlugin`), `VelocityBridgePluginTest.velocityCanCreateAndWireThePlugin` and `VelocityServersTest`. A test class that needs such an API keeps its classes out of field, parameter and return types: JUnit reads the declared methods of every test class during discovery, also on Java 21. The bridge logic itself sits in `cloud-bridge-common`, and `cloud-bridge-legacy` compiles against pandaspigot-api with Java 8 class files, so all of their tests run on both runtimes. Every module has a `BytecodeLevelTest` that runs on both: it reads a class file without loading it and checks major version 65. The Jazzer fuzz tests in `Vectora-Protocol`, `Vectora-CloudClient`, `cloud-config`, `cloud-template`, `cloud-download`, `cloud-network`, `cloud-database`, `cloud-node`, `cloud-console` and `cloud-bridge-common` run in regression mode on both runtimes, and so do the loopback tests of the cloud channel.
 
 Every run uploads the JUnit XML of its tests as an artifact (`junit-xml-ubuntu-latest`, `junit-xml-windows-latest`, `junit-xml-java21`). That shows which tests ran on which runner, including the ones that need POSIX permissions or symlinks and are skipped on Windows.
 
@@ -39,8 +39,10 @@ Locally:
 | `VectoraCloud/cloud-config`, `cloud-template`, `cloud-download`, `cloud-network`, `cloud-database`, `cloud-launcher` | 21 (`Bootstrap` in `cloud-launcher`: 8) | Jackson 3, Netty 4.2, MariaDB Connector/J 4 (all Java 17 or lower) | Java 21 | |
 | `VectoraCloud/cloud-console` | 21 | cloud-config, JLine 3 | Java 21 | JLine `ffm` provider only on Java 22+, see below |
 | `VectoraCloud/cloud-node` | 21 | as above, plus JLine 3 | Java 21 | |
+| `VectoraCloud/cloud-bridge-common` | 21 | Vectora-CloudClient | Java 21 | no platform API; the logic of all three bridges |
 | `VectoraCloud/cloud-bridge-velocity` | 21 | velocity-api 4.3.1 (class files for Java 25) | Java 25 (Velocity 4.3) | uses `disableAutoTargetJvm()` |
 | `VectoraCloud/cloud-bridge-paper` | 21 | paper-api 26.3 (class files for Java 25) | Java 25 (Paper 26.3) | uses `disableAutoTargetJvm()` |
+| `VectoraCloud/cloud-bridge-legacy` | 21 | pandaspigot-api 1.8.8 (class files for Java 8) | Java 21 (PandaSpigot on JRE 21) | no `disableAutoTargetJvm()` needed |
 
 No module currently needs release 25.
 

@@ -1,0 +1,6 @@
+name: VectoraCloudBridge
+version: '${pluginVersion}'
+main: net.vectora.cloud.bridge.paper.PaperBridgePlugin
+api-version: '26.3'
+description: Connects a Paper server to VectoraCloud (ready signal and status).
+author: Vectora

@@ -1,0 +1,7 @@
+name: VectoraCloudBridge
+version: '${pluginVersion}'
+main: net.vectora.cloud.bridge.legacy.LegacyBridgePlugin
+# Enabled before the worlds load, so the bungeeguard-token check is in place as early as possible.
+load: STARTUP
+description: Connects a PandaSpigot 1.8.8 server to VectoraCloud and checks the legacy proxy's bungeeguard-token.
+author: Vectora
