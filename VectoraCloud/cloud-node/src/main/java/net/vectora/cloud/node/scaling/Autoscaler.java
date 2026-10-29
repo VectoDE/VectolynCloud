@@ -186,8 +186,10 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
                 return List.of();
             }
             remember(snapshot, services, values, now);
-            input = new ScalingPlanner.Input(snapshot, node, services, values, lastAction, pausedUntil, emptySince,
-                    released, now);
+            // Copies made here, under the lock: the round goes on to change lastAction while the
+            // planner's input must stay as it was read.
+            input = new ScalingPlanner.Input(snapshot, node, services, values, new HashMap<>(lastAction),
+                    new HashMap<>(pausedUntil), new HashMap<>(emptySince), new HashSet<>(released), now);
         }
         List<Decision> done = new ArrayList<>();
         Set<String> held = new HashSet<>();
