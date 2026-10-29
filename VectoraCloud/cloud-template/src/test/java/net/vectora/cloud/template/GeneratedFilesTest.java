@@ -214,6 +214,26 @@ class GeneratedFilesTest {
     }
 
     @Test
+    void theKeyOfAnEarlierStartIsDeletedOnceTheTemplateDropsFloodgate() throws Exception {
+        Path template = Files.createTempDirectory(runtime, "template");
+        Files.writeString(template.resolve("server.properties"), "server-port={{VECTORA_SERVER_PORT}}\n");
+        Files.createDirectories(template.resolve("plugins/floodgate"));
+        Path out = runtime.resolve("out");
+        TemplateInstaller.install(template, out, ServerPlatform.PAPER, PlaceholderValues.of(Map.of(
+                "VECTORA_SERVER_PORT", "25566", "VECTORA_FLOODGATE_KEY_B64", KEY_B64)), true);
+        assertTrue(Files.isRegularFile(out.resolve("plugins/floodgate/key.pem")));
+        Files.writeString(out.resolve("plugins/floodgate/config.yml"), "kept\n");
+
+        Files.delete(template.resolve("plugins/floodgate"));
+        RenderReport report = TemplateInstaller.install(template, out, ServerPlatform.PAPER,
+                PlaceholderValues.of(Map.of("VECTORA_SERVER_PORT", "25566")), true);
+
+        assertFalse(Files.exists(out.resolve("plugins/floodgate/key.pem")), "the old key stayed behind");
+        assertEquals("kept\n", Files.readString(out.resolve("plugins/floodgate/config.yml")), "only the key goes");
+        assertEquals(java.util.List.of("eula.txt"), report.generated());
+    }
+
+    @Test
     void aTemplateWithoutFloodgateGetsNoKeyAndNeedsNone() throws Exception {
         // A custom Paper template that does not ship Floodgate's folder runs no Floodgate.
         Path template = Files.createTempDirectory(runtime, "template");

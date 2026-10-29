@@ -80,6 +80,8 @@ public final class TemplateInstaller {
         }
         if (floodgateKey != null) {
             generated.add(GeneratedFiles.writeFloodgateKey(runtime, platform, floodgateKey));
+        } else if (platform.floodgateKeyPath().isPresent()) {
+            removeStaleFloodgateKey(runtime, platform.floodgateKeyPath().get());
         }
         if (platform.needsEula()) {
             GeneratedFiles.writeEula(runtime, eulaAccepted).ifPresent(generated::add);
@@ -92,7 +94,7 @@ public final class TemplateInstaller {
      * Whether a template runs Floodgate: its platform can (it has a key path) and the template ships
      * Floodgate's folder there ({@code plugins/floodgate/} or {@code config/floodgate/}, a real folder,
      * not a link). Only then does the runtime folder get the key; a custom template without
-     * Floodgate never holds it.
+     * Floodgate never holds it, and a key of an earlier start is deleted.
      *
      * @param template the template folder
      * @param platform its platform
@@ -105,6 +107,23 @@ public final class TemplateInstaller {
         }
         Path folder = template.resolve(key.get()).getParent();
         return folder != null && Files.isDirectory(folder, LinkOption.NOFOLLOW_LINKS);
+    }
+
+    /**
+     * Deletes the key an earlier start wrote, once the template no longer ships Floodgate, so the
+     * runtime folder does not keep the secret. Only a regular file reached without a link is
+     * deleted; anything else at that path was not written by the cloud and stays.
+     */
+    private static void removeStaleFloodgateKey(Path runtime, String path) throws IOException {
+        Path target;
+        try {
+            target = RuntimePaths.check(runtime, path);
+        } catch (TemplateException e) {
+            return;
+        }
+        if (Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)) {
+            Files.delete(target);
+        }
     }
 
     private static String required(PlaceholderValues values, String name, String file) throws TemplateException {
