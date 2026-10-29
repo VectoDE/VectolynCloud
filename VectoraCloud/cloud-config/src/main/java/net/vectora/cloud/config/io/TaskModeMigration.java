@@ -12,12 +12,16 @@ import tools.jackson.databind.node.ObjectNode;
  *       scaled, as before;</li>
  *   <li>{@code mode: dynamic}: {@code static-services: 0}, min and max stay.</li>
  * </ul>
- * {@code scale-down-below} is not added; a file without it gets the default
- * ({@link net.vectora.cloud.config.model.ScalingConfig#DEFAULT_SCALE_DOWN_BELOW}). Content that is
- * not what version 1 allowed is left as it is, so binding or the validator reports it with its
- * field.
+ * Version 1 had no {@code scale-down-below}. The migration sets it relative to {@code scale-up-at}:
+ * {@code min(50, scale-up-at / 2)}, rounded down, so a task with a low {@code scale-up-at} stays
+ * valid ({@code scale-down-below} must stay below it). A file that already has the field keeps it.
+ * Content that is not what version 1 allowed is left as it is, so binding or the validator reports
+ * it with its field.
  */
 final class TaskModeMigration implements ConfigMigration {
+
+    /** Upper limit of the {@code scale-down-below} the migration sets, in percent. */
+    static final int MAX_MIGRATED_SCALE_DOWN_BELOW = 50;
 
     @Override
     public int fromVersion() {
@@ -40,6 +44,7 @@ final class TaskModeMigration implements ConfigMigration {
         if (!(scaling instanceof ObjectNode section)) {
             return;
         }
+        addScaleDownBelow(section);
         if (!isStatic) {
             section.put("static-services", 0);
             return;
@@ -50,5 +55,30 @@ final class TaskModeMigration implements ConfigMigration {
         }
         section.put("static-services", min.intValue());
         section.put("max-services", min.intValue());
+    }
+
+    /**
+     * {@code scale-down-below = min(50, scale-up-at / 2)} if the file has none and
+     * {@code scale-up-at} is a whole number; otherwise nothing, so binding reports the field.
+     */
+    private static void addScaleDownBelow(ObjectNode section) {
+        if (section.has("scale-down-below")) {
+            return;
+        }
+        JsonNode up = section.get("scale-up-at");
+        if (up == null || !up.isIntegralNumber() || !up.canConvertToInt()) {
+            return;
+        }
+        section.put("scale-down-below", scaleDownBelowFor(up.intValue()));
+    }
+
+    /**
+     * The {@code scale-down-below} a version 1 file gets for its {@code scale-up-at}.
+     *
+     * @param scaleUpAt {@code scale-up-at} of the file
+     * @return {@code min(50, scaleUpAt / 2)}, at least 0
+     */
+    static int scaleDownBelowFor(int scaleUpAt) {
+        return Math.max(0, Math.min(MAX_MIGRATED_SCALE_DOWN_BELOW, scaleUpAt / 2));
     }
 }

@@ -66,8 +66,36 @@ class TaskSchemaMigrationTest {
         assertEquals(2, task.scaling().maxServices(), "a static task never scaled, so max follows min");
         assertFalse(task.scaling().allowsDynamic());
         assertEquals(80, task.scaling().scaleUpAt(), "values of the file stay");
-        assertEquals(ScalingConfig.DEFAULT_SCALE_DOWN_BELOW, task.scaling().scaleDownBelow());
+        assertEquals(40, task.scaling().scaleDownBelow(), "min(50, 80 / 2)");
         assertEquals(List.of(), ConfigValidator.validate(withTask(task)));
+    }
+
+    @Test
+    void migratedScaleDownBelowFollowsScaleUpAt() throws ConfigException {
+        // scale-up-at 50 with the plain default 50 would break scale-down-not-below-up.
+        TaskConfig fifty = read(V1_DYNAMIC.replace("scale-up-at: 80", "scale-up-at: 50")).value();
+        assertEquals(25, fifty.scaling().scaleDownBelow());
+        assertEquals(List.of(), ConfigValidator.validate(withTask(fifty)));
+        TaskConfig one = read(V1_DYNAMIC.replace("scale-up-at: 80", "scale-up-at: 1")).value();
+        assertEquals(0, one.scaling().scaleDownBelow(), "1 / 2 rounds down to 0");
+        assertEquals(List.of(), ConfigValidator.validate(withTask(one)));
+        TaskConfig high = read(V1_DYNAMIC.replace("scale-up-at: 80", "scale-up-at: 75")).value();
+        assertEquals(37, high.scaling().scaleDownBelow());
+        assertEquals(50, read(V1_DYNAMIC.replace("scale-up-at: 80", "scale-up-at: 100")).value().scaling().scaleDownBelow(),
+                "never above 50");
+        // Counter-check: the same file as version 2 without the field gets the plain default and is invalid.
+        TaskConfig plain = read(V2.replace("scale-up-at: 75", "scale-up-at: 50").replace("  scale-down-below: 40\n", ""))
+                .value();
+        assertEquals(ScalingConfig.DEFAULT_SCALE_DOWN_BELOW, plain.scaling().scaleDownBelow());
+        assertEquals(ErrorCode.SCALE_DOWN_NOT_BELOW_UP,
+                ConfigValidator.validate(withTask(plain.withGroup("survival"))).getFirst().code());
+    }
+
+    @Test
+    void v1WithScaleDownBelowKeepsIt() throws ConfigException {
+        String given = V1_DYNAMIC.replace("  scale-down-after:", "  scale-down-below: 10\n  scale-down-after:");
+        assertEquals(10, read(given).value().scaling().scaleDownBelow());
+        assertEquals(40, read(V1_DYNAMIC).value().scaling().scaleDownBelow(), "counter-check: without it the migration sets one");
     }
 
     @Test
@@ -86,7 +114,7 @@ class TaskSchemaMigrationTest {
         String written = new String(ConfigYaml.write(task), StandardCharsets.UTF_8);
         assertTrue(written.contains("schema-version: 2"), written);
         assertTrue(written.contains("static-services: 2"), written);
-        assertTrue(written.contains("scale-down-below: 50"), written);
+        assertTrue(written.contains("scale-down-below: 40"), written);
         assertFalse(written.contains("mode"), written);
         assertEquals(task, read(written).value());
     }
