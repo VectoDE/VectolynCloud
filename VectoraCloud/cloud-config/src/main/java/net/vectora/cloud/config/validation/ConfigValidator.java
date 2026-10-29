@@ -109,6 +109,18 @@ public final class ConfigValidator {
         }
         c.pattern(f, "api.bind", api.bind(), ConfigNames.HOST);
         c.port(f, "api.port", api.port());
+        List<String> origins = api.corsOrigins();
+        c.range(f, "api.cors-origins", origins.size(), 0, ApiConfig.MAX_CORS_ORIGINS);
+        Set<String> seen = new HashSet<>();
+        for (int i = 0; i < origins.size() && i < ApiConfig.MAX_CORS_ORIGINS; i++) {
+            String p = "api.cors-origins[" + i + "]";
+            String origin = origins.get(i);
+            if (origin == null || !ConfigNames.isOrigin(origin)) {
+                c.add(ConfigError.of(f, p, ErrorCode.INVALID_ORIGIN));
+            } else if (!seen.add(origin)) {
+                c.add(ConfigError.of(f, p, ErrorCode.DUPLICATE_ENTRY, origin));
+            }
+        }
         if (!c.required(f, "api.tls", api.tls())) {
             return;
         }

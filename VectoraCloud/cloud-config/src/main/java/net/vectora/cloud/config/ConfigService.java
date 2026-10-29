@@ -19,6 +19,7 @@ import net.vectora.cloud.config.io.ConfigStore;
 import net.vectora.cloud.config.model.ConfigSnapshot;
 import net.vectora.cloud.config.operation.ConfigOperation;
 import net.vectora.cloud.config.validation.ConfigValidator;
+import net.vectora.cloud.config.validation.JvmFlagPolicy;
 
 /**
  * The one configuration layer that console, setup assistant, files and later the REST API and
@@ -77,12 +78,25 @@ public final class ConfigService implements AutoCloseable {
         ConfigStore.Loaded loaded = store.load();
         requireValid(loaded.snapshot());
         persistLoaded(store, loaded, loaded.missingFiles());
+        logWarnings(loaded.snapshot());
         return new ConfigService(store, loaded.snapshot());
     }
 
     /** The current configuration. Never null, never blocks. */
     public ConfigSnapshot snapshot() {
         return current;
+    }
+
+    /**
+     * Problems that do not stop the configuration from loading, for example a JVM flag in a
+     * group file that is not on the allowlist ({@link JvmFlagPolicy#warnings}). The REST API cannot
+     * add such a flag (it checks its changes with {@link JvmFlagPolicy#refusedChanges}); the console,
+     * the setup assistant and the files are the operator's own and may.
+     *
+     * @return the warnings of the current snapshot, empty if there are none
+     */
+    public List<ConfigError> warnings() {
+        return JvmFlagPolicy.warnings(current);
     }
 
     /** The home this service manages. */
@@ -155,6 +169,7 @@ public final class ConfigService implements AutoCloseable {
             }
             Set<String> files = changedFiles(before, after);
             current = after;
+            logWarnings(after);
             ConfigChanged change = new ConfigChanged(before, after, files, ConfigChanged.Origin.FILE, List.of());
             notifyChanged(change);
             return Optional.of(change);
@@ -278,6 +293,18 @@ public final class ConfigService implements AutoCloseable {
     private void ensureOpen() {
         if (closed) {
             throw new IllegalStateException("configuration service is closed");
+        }
+    }
+
+    private static void logWarnings(ConfigSnapshot snapshot) {
+        List<ConfigError> warnings = JvmFlagPolicy.warnings(snapshot);
+        if (!warnings.isEmpty()) {
+            StringBuilder text = new StringBuilder();
+            for (ConfigError warning : warnings) {
+                text.append(System.lineSeparator()).append(warning.describe(snapshot.cloud().language()));
+            }
+            LOG.log(System.Logger.Level.WARNING, "JVM flags outside the allowlist (kept, because they are in the file):{0}",
+                    text);
         }
     }
 

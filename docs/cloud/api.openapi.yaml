@@ -1,0 +1,734 @@
+openapi: 3.1.0
+info:
+  title: VectoraCloud API
+  version: 1.0.0
+  summary: REST API and live events of a VectoraCloud node.
+  description: |
+    JSON over HTTP/1.1. Every request needs a bearer token (`vct_...`) created at the node console
+    with `api token create <name> <scopes>`. Bodies use the records of the YAML configuration with
+    kebab-case names and are read strictly: unknown fields, duplicate fields and wrong types are
+    refused. See docs/cloud/api.md for the full description and docs/cloud/config.md for the
+    configuration records.
+  license:
+    name: GPL-3.0-only
+    identifier: GPL-3.0-only
+servers:
+  - url: http://127.0.0.1:8085/api/v1
+    description: Default, loopback only
+  - url: https://{host}:{port}/api/v1
+    description: Any other bind address (TLS required)
+    variables:
+      host:
+        default: cloud.example.org
+      port:
+        default: "8085"
+security:
+  - bearer: []
+tags:
+  - name: services
+  - name: groups
+  - name: tasks
+  - name: config
+  - name: node
+  - name: backups
+  - name: tokens
+  - name: events
+
+paths:
+  /services:
+    get:
+      tags: [services]
+      summary: List the services of this node
+      description: "Scope: services:read"
+      operationId: listServices
+      responses:
+        "200":
+          description: Every service
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/Service"}
+        default: {$ref: "#/components/responses/Error"}
+    post:
+      tags: [services]
+      summary: Start a service of a task
+      description: "Scope: services:write. Refused while the node shuts down (503 shutting-down)."
+      operationId: startService
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [task]
+              properties:
+                task: {$ref: "#/components/schemas/Name"}
+      responses:
+        "201":
+          description: The new service
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Service"}
+        default: {$ref: "#/components/responses/Error"}
+  /services/{id}:
+    parameters: [{$ref: "#/components/parameters/ServiceId"}]
+    get:
+      tags: [services]
+      summary: One service
+      description: "Scope: services:read"
+      operationId: getService
+      responses:
+        "200":
+          description: The service
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Service"}
+        default: {$ref: "#/components/responses/Error"}
+  /services/{id}/stop:
+    parameters: [{$ref: "#/components/parameters/ServiceId"}]
+    post:
+      tags: [services]
+      summary: Stop a service
+      description: "Scope: services:write"
+      operationId: stopService
+      responses:
+        "200":
+          description: The stopped service
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Service"}
+        default: {$ref: "#/components/responses/Error"}
+  /services/{id}/restart:
+    parameters: [{$ref: "#/components/parameters/ServiceId"}]
+    post:
+      tags: [services]
+      summary: Restart a service
+      description: "Scope: services:write. Refused while the node shuts down."
+      operationId: restartService
+      responses:
+        "200":
+          description: The restarted service
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Service"}
+        default: {$ref: "#/components/responses/Error"}
+  /services/{id}/command:
+    parameters: [{$ref: "#/components/parameters/ServiceId"}]
+    post:
+      tags: [services]
+      summary: Send a console command to a service
+      description: "Scope: services:write"
+      operationId: sendCommand
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [command]
+              properties:
+                command:
+                  type: string
+                  minLength: 1
+                  maxLength: 1024
+                  description: No control characters.
+      responses:
+        "202":
+          description: Sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  service: {type: string}
+                  sent: {type: boolean}
+        default: {$ref: "#/components/responses/Error"}
+
+  /groups:
+    get:
+      tags: [groups]
+      summary: Every group
+      description: "Scope: config:read"
+      operationId: listGroups
+      responses:
+        "200":
+          description: Groups by name
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {$ref: "#/components/schemas/Group"}
+        default: {$ref: "#/components/responses/Error"}
+  /groups/{name}:
+    parameters: [{$ref: "#/components/parameters/Name"}]
+    get:
+      tags: [groups]
+      summary: One group
+      description: "Scope: config:read"
+      operationId: getGroup
+      responses:
+        "200":
+          description: The group
+          headers: {ETag: {$ref: "#/components/headers/ETag"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Group"}
+        default: {$ref: "#/components/responses/Error"}
+    put:
+      tags: [groups]
+      summary: Create or replace a group
+      description: "Scope: config:write. Validated and written through ConfigService.apply."
+      operationId: putGroup
+      parameters: [{$ref: "#/components/parameters/IfMatch"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Group"}
+      responses:
+        "200":
+          description: Replaced
+          headers: {ETag: {$ref: "#/components/headers/ETag"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Group"}
+        "201":
+          description: Created
+          headers: {ETag: {$ref: "#/components/headers/ETag"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Group"}
+        default: {$ref: "#/components/responses/Error"}
+    delete:
+      tags: [groups]
+      summary: Delete a group
+      description: "Scope: config:write. The name must be repeated as ?confirm=<name>."
+      operationId: deleteGroup
+      parameters:
+        - {$ref: "#/components/parameters/Confirm"}
+        - {$ref: "#/components/parameters/IfMatch"}
+      responses:
+        "204": {description: Deleted}
+        default: {$ref: "#/components/responses/Error"}
+  /groups/{name}/wanted:
+    parameters: [{$ref: "#/components/parameters/Name"}]
+    put:
+      tags: [groups]
+      summary: Set the group's own wanted switch
+      description: |
+        Scope: config:write. A group runs only if its own switch and the switch of its server kind
+        in cloud.yml are both on (PandaSpigot on a template of its own: legacy-server); the 1.8.8
+        part also needs legacy-proxy.enabled, and the database template never runs. `runs`
+        applies the whole rule.
+      operationId: setGroupWanted
+      requestBody: {$ref: "#/components/requestBodies/Wanted"}
+      responses:
+        "200": {$ref: "#/components/responses/GroupWanted"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /tasks:
+    get:
+      tags: [tasks]
+      summary: Every task
+      description: "Scope: config:read"
+      operationId: listTasks
+      responses:
+        "200":
+          description: Tasks by name
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {$ref: "#/components/schemas/Task"}
+        default: {$ref: "#/components/responses/Error"}
+  /tasks/{name}:
+    parameters: [{$ref: "#/components/parameters/Name"}]
+    get:
+      tags: [tasks]
+      summary: One task
+      description: "Scope: config:read"
+      operationId: getTask
+      responses:
+        "200":
+          description: The task
+          headers: {ETag: {$ref: "#/components/headers/ETag"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Task"}
+        default: {$ref: "#/components/responses/Error"}
+    put:
+      tags: [tasks]
+      summary: Create or replace a task
+      description: "Scope: config:write"
+      operationId: putTask
+      parameters: [{$ref: "#/components/parameters/IfMatch"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Task"}
+      responses:
+        "200":
+          description: Replaced
+          headers: {ETag: {$ref: "#/components/headers/ETag"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Task"}
+        "201":
+          description: Created
+          headers: {ETag: {$ref: "#/components/headers/ETag"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Task"}
+        default: {$ref: "#/components/responses/Error"}
+    delete:
+      tags: [tasks]
+      summary: Delete a task
+      description: "Scope: config:write. The name must be repeated as ?confirm=<name>."
+      operationId: deleteTask
+      parameters:
+        - {$ref: "#/components/parameters/Confirm"}
+        - {$ref: "#/components/parameters/IfMatch"}
+      responses:
+        "204": {description: Deleted}
+        default: {$ref: "#/components/responses/Error"}
+  /tasks/{name}/wanted:
+    parameters: [{$ref: "#/components/parameters/Name"}]
+    put:
+      tags: [tasks]
+      summary: Set the wanted switch of the task's group
+      description: "Scope: config:write. Tasks have no switch of their own; this affects every task of the group."
+      operationId: setTaskWanted
+      requestBody: {$ref: "#/components/requestBodies/Wanted"}
+      responses:
+        "200": {$ref: "#/components/responses/GroupWanted"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /servers:
+    get:
+      tags: [config]
+      summary: The wanted switch of every server kind
+      description: "Scope: config:read"
+      operationId: getServers
+      responses:
+        "200": {$ref: "#/components/responses/Servers"}
+        default: {$ref: "#/components/responses/Error"}
+  /servers/{kind}:
+    parameters:
+      - name: kind
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [proxy, lobby, survival, creative, mod, end, database, minigame]
+    put:
+      tags: [config]
+      summary: Set the wanted switch of a server kind
+      description: "Scope: config:write"
+      operationId: setServerWanted
+      requestBody: {$ref: "#/components/requestBodies/Wanted"}
+      responses:
+        "200": {$ref: "#/components/responses/Servers"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /config:
+    get:
+      tags: [config]
+      summary: cloud.yml
+      description: "Scope: config:read. Holds no secrets."
+      operationId: getConfig
+      responses:
+        "200":
+          description: The cloud configuration
+          headers: {ETag: {$ref: "#/components/headers/ETag"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/CloudConfig"}
+        default: {$ref: "#/components/responses/Error"}
+    put:
+      tags: [config]
+      summary: Replace cloud.yml
+      description: |
+        Scope: config:write; changing `api` or `database` needs admin (403 missing-scope). The
+        whole configuration is validated; changes to `api:` take effect at the next start of the
+        node.
+      operationId: putConfig
+      parameters: [{$ref: "#/components/parameters/IfMatch"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/CloudConfig"}
+      responses:
+        "200":
+          description: The new cloud configuration
+          headers: {ETag: {$ref: "#/components/headers/ETag"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/CloudConfig"}
+        default: {$ref: "#/components/responses/Error"}
+  /config/reload:
+    post:
+      tags: [config]
+      summary: Read the files of the cloud home again
+      description: "Scope: config:write. Refused while the node shuts down."
+      operationId: reloadConfig
+      responses:
+        "200":
+          description: Result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  changed: {type: boolean}
+                  files:
+                    type: array
+                    items: {type: string}
+        default: {$ref: "#/components/responses/Error"}
+  /config/warnings:
+    get:
+      tags: [config]
+      summary: Warnings of the current configuration
+      description: "Scope: config:read. JVM flags kept from before the allowlist."
+      operationId: getConfigWarnings
+      responses:
+        "200":
+          description: Warnings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  warnings:
+                    type: array
+                    items: {$ref: "#/components/schemas/ConfigError"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /node:
+    get:
+      tags: [node]
+      summary: Status of the node
+      description: "Scope: node:read"
+      operationId: getNode
+      responses:
+        "200":
+          description: Status
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/NodeStatus"}
+        default: {$ref: "#/components/responses/Error"}
+  /setup:
+    get:
+      tags: [node]
+      summary: Setup status
+      description: "Scope: config:read"
+      operationId: getSetup
+      responses:
+        "200":
+          description: Status
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SetupStatus"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /backups:
+    get:
+      tags: [backups]
+      summary: Every backup
+      description: "Scope: backups:read. 501 not-available until the node provides backups."
+      operationId: listBackups
+      responses:
+        "200":
+          description: Backups
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/Backup"}
+        default: {$ref: "#/components/responses/Error"}
+    post:
+      tags: [backups]
+      summary: Create a backup
+      description: "Scope: backups:write. Refused while the node shuts down. Failures of the node answer 503 unavailable with the reason only."
+      operationId: createBackup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                services:
+                  description: Service ids; omitted means every service.
+                  type: array
+                  items: {$ref: "#/components/schemas/ServiceId"}
+                database:
+                  type: boolean
+                  default: true
+                note:
+                  type: string
+                  maxLength: 300
+      responses:
+        "201":
+          description: The backup
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Backup"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /tokens/self:
+    get:
+      tags: [tokens]
+      summary: The calling token
+      description: Any valid token. Never shows the token or its hash.
+      operationId: getOwnToken
+      responses:
+        "200":
+          description: Token information
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Token"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /events:
+    get:
+      tags: [events]
+      summary: Live events (WebSocket)
+      description: |
+        Scope: services:read. Upgrade to a WebSocket; a plain GET answers 426. Browsers pass the
+        token as subprotocol `vectora.bearer.<token>` next to `vectora.v1`; offering subprotocols
+        without `vectora.v1` answers 400 subprotocol-required. Every text frame is an
+        `Event`. Output lines are redacted. Revoking the token closes the stream with 1008,
+        shutdown with 1001.
+      operationId: events
+      parameters:
+        - name: types
+          in: query
+          schema:
+            type: string
+            example: service-state,service-output,player
+        - name: services
+          in: query
+          schema:
+            type: string
+            example: lobby-1,survival-1
+      responses:
+        "101":
+          description: Switching to the WebSocket
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Event"}
+        default: {$ref: "#/components/responses/Error"}
+
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: "vct_ followed by 43 characters [A-Za-z0-9_-]"
+  parameters:
+    ServiceId:
+      name: id
+      in: path
+      required: true
+      schema: {$ref: "#/components/schemas/ServiceId"}
+    Name:
+      name: name
+      in: path
+      required: true
+      schema: {$ref: "#/components/schemas/Name"}
+    Confirm:
+      name: confirm
+      in: query
+      required: true
+      description: The name again.
+      schema: {$ref: "#/components/schemas/Name"}
+    IfMatch:
+      name: If-Match
+      in: header
+      required: false
+      description: ETag from a GET, or `*`; 412 precondition-failed if the document changed.
+      schema: {type: string}
+  headers:
+    ETag:
+      description: Version of the document, for If-Match.
+      schema: {type: string}
+  requestBodies:
+    Wanted:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [wanted]
+            properties:
+              wanted: {type: boolean}
+  responses:
+    GroupWanted:
+      description: The group's switch, the switch of its server kind and whether it runs
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              group: {type: string}
+              wanted: {type: boolean}
+              server-kind: {type: [string, "null"]}
+              server-kind-wanted: {type: boolean}
+              runs: {type: boolean}
+    Servers:
+      description: The wanted switch of every server kind
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: {type: boolean}
+    Error:
+      description: |
+        400 invalid-json, unknown-field, body-required, invalid-value, invalid-target, invalid-path,
+        invalid-query, confirmation-required, subprotocol-required; 401 unauthorized; 403 missing-scope,
+        origin-not-allowed; 404 not-found; 405 method-not-allowed; 409 conflict;
+        412 precondition-failed; 413 body-too-large; 415 unsupported-media-type; 422 invalid-config,
+        invalid; 426 upgrade-required; 429 rate-limited (Retry-After); 500 io-error,
+        internal-error; 501 not-available; 503 shutting-down, busy, unavailable.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+  schemas:
+    ServiceId:
+      type: string
+      pattern: "^[a-z0-9][a-z0-9_-]{0,63}$"
+    Name:
+      type: string
+      pattern: "^[a-z0-9][a-z0-9_-]{0,31}$"
+    Service:
+      type: object
+      required: [id, group, task, index, mode, state, port, restart-attempts]
+      properties:
+        id: {type: string}
+        group: {type: string}
+        task: {type: string}
+        index: {type: integer}
+        mode: {type: string, description: "static or dynamic"}
+        state: {type: string}
+        port: {type: integer}
+        pid: {type: integer, format: int64}
+        started-at: {type: string, format: date-time}
+        exit-code: {type: integer}
+        restart-attempts: {type: integer}
+        players-online: {type: integer}
+        max-players: {type: integer}
+    Group:
+      type: object
+      description: "groups/<name>.yml, see docs/cloud/config.md. Unknown fields are refused."
+    Task:
+      type: object
+      description: "tasks/<name>.yml, see docs/cloud/config.md. Unknown fields are refused."
+    CloudConfig:
+      type: object
+      description: "cloud.yml, see docs/cloud/config.md. Unknown fields are refused."
+    NodeStatus:
+      type: object
+      properties:
+        node-id: {type: string}
+        version: {type: string}
+        java-version: {type: string}
+        os: {type: string}
+        uptime-seconds: {type: integer, format: int64}
+        shutting-down: {type: boolean}
+        services-total: {type: integer}
+        services-running: {type: integer}
+        heap-used-bytes: {type: integer, format: int64}
+        heap-max-bytes: {type: integer, format: int64}
+    SetupStatus:
+      type: object
+      properties:
+        eula-accepted: {type: boolean}
+        setup-complete: {type: boolean}
+        ready: {type: boolean}
+        missing:
+          type: array
+          items: {type: string, enum: [eula, setup]}
+    Backup:
+      type: object
+      properties:
+        id: {type: string}
+        created-at: {type: string, format: date-time}
+        reason: {type: string}
+        services:
+          type: array
+          items: {type: string}
+        database: {type: boolean}
+        size-bytes: {type: integer, format: int64}
+        readable: {type: boolean}
+        problem: {type: string}
+        warnings:
+          type: array
+          items: {type: string}
+    Token:
+      type: object
+      properties:
+        id: {type: string, pattern: "^[0-9a-f]{8}$"}
+        name: {$ref: "#/components/schemas/Name"}
+        scopes:
+          type: array
+          items:
+            type: string
+            enum: [services:read, services:write, config:read, config:write, backups:read,
+                   backups:write, node:read, admin]
+        created-at: {type: string, format: date-time}
+    ConfigError:
+      type: object
+      properties:
+        file: {type: string}
+        path: {type: string}
+        line: {type: integer}
+        code: {type: string}
+        message: {type: string}
+        message-de: {type: string}
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: {type: string}
+        message: {type: string}
+        errors:
+          type: array
+          items: {$ref: "#/components/schemas/ConfigError"}
+    Event:
+      type: object
+      required: [type, time, data]
+      properties:
+        type:
+          type: string
+          enum: [service-state, service-output, player, dropped]
+        time: {type: string, format: date-time}
+        data:
+          oneOf:
+            - title: service-state
+              type: object
+              properties:
+                service: {$ref: "#/components/schemas/Service"}
+                previous: {type: string}
+            - title: service-output
+              type: object
+              properties:
+                service: {type: string}
+                line: {type: string, description: Redacted.}
+            - title: player
+              type: object
+              properties:
+                kind: {type: string}
+                player-id: {type: string}
+                player-name: {type: string}
+                service: {type: string}
+            - title: dropped
+              type: object
+              properties:
+                count: {type: integer}
