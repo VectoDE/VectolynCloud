@@ -260,6 +260,7 @@ public final class ProxyBridge implements CloudClientListener {
      */
     public void playerConnected(Object session, UUID uuid, String name, String server) {
         loads.arrived(uuid);
+        guard.arrived(uuid);
         // Queued under the tracker's lock, so events of different threads keep the tracker's order.
         // Submitting never blocks.
         synchronized (tracker) {

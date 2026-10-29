@@ -177,6 +177,23 @@ class ProxyBridgeTest {
     }
 
     @Test
+    void aRollingRestartSendsThePlayerBackOnceHeReachedTheOtherServer() {
+        lobbies();
+        UUID alex = UUID.randomUUID();
+        UUID steve = UUID.randomUUID();
+        // lobby restarts: both go to lobby-2; only Alex gets there before lobby-2 restarts too.
+        assertEquals(move("lobby-2", null), bridge.kicked(alex, "lobby", SHUTDOWN, false));
+        assertEquals(move("lobby-2", null), bridge.kicked(steve, "lobby", SHUTDOWN, false));
+        bridge.playerConnected(new Object(), alex, "Alex", "lobby-2");
+        assertEquals(move("lobby", null), bridge.kicked(alex, "lobby-2", SHUTDOWN, false),
+                "lobby is back and free for him again");
+        // Counter-check: without the arrival lobby stays excluded and Steve has nowhere to go.
+        assertEquals(KickOutcome.disconnect(TransferMessages.lost(null)),
+                bridge.kicked(steve, "lobby-2", SHUTDOWN, false));
+        sender.close(Duration.ofSeconds(5));
+    }
+
+    @Test
     void aKickThatArrivesAfterTheServerWasWithdrawnStaysInItsGroup() {
         lobbies();
         bedwars2();

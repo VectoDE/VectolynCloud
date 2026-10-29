@@ -137,6 +137,23 @@ class KickGuardTest {
     }
 
     @Test
+    void reachingABackendFreesTheServersButKeepsTheLimit() {
+        guard.rescued(alex, "lobby-1", "lobby-2");
+        guard.arrived(alex);
+        assertEquals(Set.of(), guard.tried(alex), "lobby-1 may take him again");
+        guard.rescued(alex, "lobby-2", "lobby-1");
+        guard.rescued(alex, "lobby-1", "lobby-2");
+        guard.arrived(alex);
+        assertFalse(guard.mayRescue(alex), "three caught kicks still count");
+        // Counter-check: without an arrival the servers stay excluded.
+        UUID steve = UUID.randomUUID();
+        guard.rescued(steve, "lobby-1", "lobby-2");
+        assertEquals(Set.of("lobby-1", "lobby-2"), guard.tried(steve));
+        guard.arrived(UUID.randomUUID());
+        assertEquals(Set.of("lobby-1", "lobby-2"), guard.tried(steve), "per player");
+    }
+
+    @Test
     void leavingTheProxyEndsEverything() {
         for (int i = 0; i < KickGuard.MAX_RESCUES; i++) {
             guard.rescued(alex, "s" + i, "t" + i);

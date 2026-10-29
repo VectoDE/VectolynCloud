@@ -19,7 +19,8 @@ import java.util.function.Function;
  *
  * <ul>
  *   <li>Per incident every server once: the servers a player was kicked from and sent to stay
- *       excluded until {@link #WINDOW} after the last caught kick.</li>
+ *       excluded until {@link #WINDOW} after the last caught kick, or until the player reached a
+ *       backend ({@link #arrived}).</li>
  *   <li>At most {@link #MAX_RESCUES} caught kicks per player within {@link #WINDOW}; after that the
  *       player is disconnected with the original reason.</li>
  *   <li>Leaving the proxy ends both.</li>
@@ -131,6 +132,21 @@ public final class KickGuard {
         /** Checks the parts. */
         public Attempt {
             Objects.requireNonNull(result, "result");
+        }
+    }
+
+    /**
+     * The player reached a backend: the servers of the incident are free again, the caught kicks
+     * still count for the limit. A rolling restart (lobby-1, then lobby-2 a little later) then
+     * sends a player who got onto lobby-2 back to lobby-1 instead of disconnecting him, while a
+     * loop between two servers still ends after {@link #MAX_RESCUES} kicks.
+     *
+     * @param player the player
+     */
+    public synchronized void arrived(UUID player) {
+        Incident incident = current(player);
+        if (incident != null) {
+            incident.servers.clear();
         }
     }
 
