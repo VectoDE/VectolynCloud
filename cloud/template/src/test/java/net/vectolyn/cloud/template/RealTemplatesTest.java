@@ -443,9 +443,17 @@ class RealTemplatesTest {
             assertEquals(64, header.getInt(), server);
             assertEquals(64, header.getInt(), server);
             String velocity = Files.readString(runtime.resolve("velocity.toml"));
-            assertTrue(velocity.contains("motd = \"              <#00E5FF><bold>VECTOLYN</bold><#FFD23F><bold>.NET"
-                    + "</bold>"), server);
+            // The main proxy uses the hex brand colours; the legacy proxy only has 1.8 clients, so it uses
+            // the named 1.8 colours. Both show the network-wide version range (branding/motd.txt).
+            String brand = server.equals("Proxy")
+                    ? "<#00E5FF><bold>VECTOLYN</bold><#FFD23F><bold>.NET</bold>"
+                    : "<aqua><bold>VECTOLYN</bold><gold><bold>.NET</bold>";
+            assertTrue(velocity.contains("motd = \"              " + brand), server);
+            assertTrue(velocity.contains("<white><bold>1.8 - 26.3</bold>"), server);
         }
+        String legacy = Files.readString(out.resolve("Legacy-Proxy").resolve("velocity.toml"));
+        assertTrue(legacy.contains("<white><bold>LEGACY 1.8</bold><dark_gray> • <gold><bold>JAVA & BEDROCK</bold>\""),
+                legacy);
     }
 
     @Test
