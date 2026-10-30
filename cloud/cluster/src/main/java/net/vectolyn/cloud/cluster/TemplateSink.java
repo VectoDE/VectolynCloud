@@ -64,6 +64,7 @@ final class TemplateSink {
     }
 
     private final Path templatesDir;
+    private final Path workDir;
     private final Path staging;
     private final Path old;
     private final Path stateFile;
@@ -79,6 +80,7 @@ final class TemplateSink {
      */
     TemplateSink(Path templatesDir, Path workDir, Path stateFile) {
         this.templatesDir = Objects.requireNonNull(templatesDir, "templatesDir");
+        this.workDir = workDir;
         this.staging = workDir.resolve("staging");
         this.old = workDir.resolve("old");
         this.stateFile = Objects.requireNonNull(stateFile, "stateFile");
@@ -102,6 +104,7 @@ final class TemplateSink {
      * @throws IOException if a folder cannot be moved or deleted
      */
     void recover() throws IOException {
+        requireRealWorkDir();
         deleteTree(staging);
         if (RegularPaths.kind(old) != RegularPaths.Kind.DIRECTORY) {
             return;
@@ -116,6 +119,17 @@ final class TemplateSink {
             } else {
                 deleteTree(left);
             }
+        }
+    }
+
+    /**
+     * Fails unless {@code local/templates}, {@code local/.cluster-sync}, its {@code staging} and
+     * {@code old} are real folders or missing: a link or junction there would point the deletes and
+     * moves of the sync at another folder.
+     */
+    private void requireRealWorkDir() throws IOException {
+        for (Path dir : List.of(templatesDir, workDir, staging, old)) {
+            RegularPaths.requireDirectoryOrMissing(dir);
         }
     }
 
@@ -135,6 +149,7 @@ final class TemplateSink {
         } catch (ProtocolException e) {
             throw new MirrorException("invalid template list");
         }
+        requireRealWorkDir();
         Set<String> folded = new HashSet<>();
         long total = 0;
         for (TemplateEntry template : list.templates()) {
@@ -250,6 +265,12 @@ final class TemplateSink {
                 MirrorPaths.MAX_TEMPLATE_BYTES);
         if (!MessageDigest.isEqual(listing.digest(), template.digest())) {
             throw new MirrorException("changed on the head while it was synced");
+        }
+        // The list's totals bound the disk space of all templates together; the manifest must keep
+        // to them, or the head could list small templates and send large ones.
+        long bytes = listing.entries().stream().mapToLong(FileEntry::size).sum();
+        if (listing.entries().size() != template.files() || bytes != template.bytes()) {
+            throw new MirrorException("the manifest does not match the template list");
         }
         Set<String> files = new HashSet<>();
         listing.entries().forEach(entry -> files.add(entry.path()));
@@ -388,7 +409,11 @@ final class TemplateSink {
         return entries;
     }
 
-    /** Deletes a folder and everything in it; links are deleted, never followed. */
+    /**
+     * Deletes a folder and everything in it; links and junctions are deleted, never followed. A
+     * Windows junction can report itself as a folder that is also "other", and the file walk
+     * would descend into it, so every folder is checked before the walk enters it.
+     */
     static void deleteTree(Path root) throws IOException {
         if (RegularPaths.kind(root) == RegularPaths.Kind.MISSING) {
             return;
@@ -398,6 +423,16 @@ final class TemplateSink {
             return;
         }
         Files.walkFileTree(root, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attributes) throws IOException {
+                if (!dir.equals(root) && (attributes.isSymbolicLink() || attributes.isOther()
+                        || RegularPaths.kind(dir) != RegularPaths.Kind.DIRECTORY)) {
+                    Files.delete(dir); // removes the link or junction itself, not what it points to
+                    return FileVisitResult.SKIP_SUBTREE;
+                }
+                return FileVisitResult.CONTINUE;
+            }
+
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
                 Files.delete(file);

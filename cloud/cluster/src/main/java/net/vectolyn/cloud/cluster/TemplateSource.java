@@ -38,7 +38,8 @@ import net.vectolyn.protocol.PacketReader;
  * The head's side of the template sync: every folder directly under {@code local/templates/} is a
  * template. A scan walks each without following links and offers only regular files with a safe
  * path ({@link MirrorPaths#isSafePath}); links, junctions and special files, files that look like
- * secrets ({@link MirrorPaths#looksSecret}) and anything in a {@code secrets} folder are left out.
+ * secrets ({@link MirrorPaths#looksSecret}) and folders such as {@code secrets} or {@code .git}
+ * ({@link MirrorPaths#isSecretFolder}) are left out.
  * A template above a limit is not offered at all. SHA-256s are cached by size and modification
  * time, so a rescan reads only files that changed.
  *
@@ -75,6 +76,7 @@ final class TemplateSource {
     }
 
     private final Path templatesDir;
+    private final Opener opener;
     private final Map<Path, Cached> hashes = new HashMap<>();
     private volatile Map<String, Template> catalog = Map.of();
     /**
@@ -90,7 +92,22 @@ final class TemplateSource {
      * @param templatesDir {@code local/templates}
      */
     TemplateSource(Path templatesDir) {
+        this(templatesDir, file -> Files.newByteChannel(file, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS));
+    }
+
+    /**
+     * Creates the source with the way files are opened for their SHA-256 (tests use it to make a
+     * file unreadable on every system).
+     */
+    TemplateSource(Path templatesDir, Opener opener) {
         this.templatesDir = Objects.requireNonNull(templatesDir, "templatesDir");
+        this.opener = Objects.requireNonNull(opener, "opener");
+    }
+
+    /** Opens a template file for reading, without following links. */
+    @FunctionalInterface
+    interface Opener {
+        SeekableByteChannel open(Path file) throws IOException;
     }
 
     /** The templates offered now. */
@@ -192,8 +209,9 @@ final class TemplateSource {
                             return FileVisitResult.CONTINUE;
                         }
                         String relative = relative(root, dir);
-                        boolean secrets = dir.getFileName().toString().toLowerCase(Locale.ROOT).equals("secrets");
-                        if (secrets || !attributes.isDirectory() || attributes.isSymbolicLink()
+                        // A Windows junction can report itself as a folder that is also "other".
+                        if (MirrorPaths.isSecretFolder(dir.getFileName().toString())
+                                || !attributes.isDirectory() || attributes.isSymbolicLink() || attributes.isOther()
                                 || !MirrorPaths.isSafePath(relative)) {
                             skipped[0]++;
                             return FileVisitResult.SKIP_SUBTREE;
@@ -274,7 +292,7 @@ final class TemplateSource {
         }
         MessageDigest sha = MirrorMessages.sha256();
         long read = 0;
-        try (SeekableByteChannel channel = Files.newByteChannel(file, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
+        try (SeekableByteChannel channel = opener.open(file)) {
             ByteBuffer buffer = ByteBuffer.allocate(64 * 1024);
             int n;
             while ((n = channel.read(buffer)) >= 0) {

@@ -38,6 +38,8 @@ public final class MirrorMessages {
     public static final int CHUNK = 48 * 1024;
     /** Length of a SHA-256. */
     public static final int SHA256_BYTES = 32;
+    /** Highest config revision (18 digits, as {@code state/cluster/config-applied} stores it). */
+    public static final long MAX_REVISION = 999_999_999_999_999_999L;
     /** Entries in one page of a config manifest. */
     public static final int CONFIG_PAGE = 256;
     /** Entries in one page of a template manifest. */
@@ -126,8 +128,8 @@ public final class MirrorMessages {
 
         /** Checks the value. */
         public Changed {
-            if (revision < 0) {
-                throw new IllegalArgumentException("negative revision");
+            if (revision < 0 || revision > MAX_REVISION) {
+                throw new IllegalArgumentException("invalid revision");
             }
         }
 
@@ -284,7 +286,7 @@ public final class MirrorMessages {
         public Manifest {
             Objects.requireNonNull(digest, "digest");
             entries = List.copyOf(entries);
-            if (revision < 0 || digest.length != SHA256_BYTES || total < 0 || page < 0 || page >= MAX_PAGES
+            if (revision < 0 || revision > MAX_REVISION || digest.length != SHA256_BYTES || total < 0 || page < 0 || page >= MAX_PAGES
                     || entries.size() > Math.max(CONFIG_PAGE, TEMPLATE_PAGE)) {
                 throw new IllegalArgumentException("invalid manifest");
             }

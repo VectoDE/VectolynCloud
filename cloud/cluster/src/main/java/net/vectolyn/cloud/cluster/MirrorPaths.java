@@ -1,6 +1,7 @@
 package net.vectolyn.cloud.cluster;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -14,7 +15,8 @@ import net.vectolyn.cloud.config.validation.ConfigNames;
  *
  * <p>A path is relative, with {@code /} between its segments, and must be usable on every system
  * the cloud runs on: no {@code ..}, {@code .} or empty segment, no leading {@code /}, no
- * backslash, colon, control character or {@code <>"|?*}, no segment that ends in a dot or space,
+ * backslash, colon, {@code <>"|?*}, no control, format (bidi, zero-width), private-use or
+ * unassigned character, no separator other than the space, no segment that ends in a dot or space,
  * no Windows device name ({@code CON}, {@code NUL}, {@code COM1}, ... also with an extension), at
  * most {@link #MAX_PATH_BYTES} bytes and {@link #MAX_DEPTH} segments.
  */
@@ -47,7 +49,11 @@ public final class MirrorPaths {
 
     private static final Pattern TEMPLATE = Pattern.compile(ConfigNames.TEMPLATE);
     private static final Pattern DEVICE = Pattern.compile("(?i)(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(\\..*)?");
-    private static final Set<String> SECRET_NAMES = Set.of("forwarding.secret", "key.pem", "vectolyn.env", ".env");
+    private static final Set<String> SECRET_NAMES = Set.of("forwarding.secret", "key.pem", "vectolyn.env", ".env",
+            "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", ".netrc", ".git-credentials", ".pgpass");
+    private static final List<String> SECRET_SUFFIXES = List.of(".env", ".secret", ".pem", ".key", ".p12", ".pfx",
+            ".jks", ".keystore", ".kdbx");
+    private static final Set<String> SECRET_FOLDERS = Set.of("secrets", ".git", ".ssh", ".gnupg");
 
     private MirrorPaths() {
     }
@@ -81,10 +87,24 @@ public final class MirrorPaths {
         }
         for (int i = 0; i < segment.length(); i++) {
             char c = segment.charAt(i);
-            boolean brokenSurrogate = Character.isSurrogate(c) && !validSurrogate(segment, i);
-            if (c < 0x20 || c == 0x7f || "\\:<>\"|?*".indexOf(c) >= 0 || brokenSurrogate) {
+            if (Character.isSurrogate(c) && !validSurrogate(segment, i)) {
                 return false;
             }
+            if ("\\:<>\"|?*".indexOf(c) >= 0) {
+                return false;
+            }
+        }
+        // No control (C0, DEL, C1), format (bidi overrides, zero-width), separator other than the
+        // space, private-use or unassigned character: names reach logs and the console.
+        for (int i = 0; i < segment.length(); ) {
+            int cp = segment.codePointAt(i);
+            int type = Character.getType(cp);
+            if (type == Character.CONTROL || type == Character.FORMAT || type == Character.PRIVATE_USE
+                    || type == Character.UNASSIGNED || type == Character.LINE_SEPARATOR
+                    || type == Character.PARAGRAPH_SEPARATOR || (type == Character.SPACE_SEPARATOR && cp != ' ')) {
+                return false;
+            }
+            i += Character.charCount(cp);
         }
         char last = segment.charAt(segment.length() - 1);
         return last != '.' && last != ' ' && !DEVICE.matcher(segment).matches();
@@ -107,21 +127,44 @@ public final class MirrorPaths {
     }
 
     /**
-     * Whether a template file looks like a secret, which the head never offers: {@code forwarding.secret},
-     * {@code key.pem}, {@code vectolyn.env}, any {@code *.env} or {@code *.secret}, and anything in a
-     * folder named {@code secrets}.
+     * Whether a template file looks like a secret, which the head never offers and a member never
+     * accepts: {@code forwarding.secret}, {@code vectolyn.env}, SSH and credential files
+     * ({@code id_rsa}, {@code .netrc}, ...), any {@code .env.*}, any name ending in {@code .env},
+     * {@code .secret}, {@code .pem}, {@code .key}, {@code .p12}, {@code .pfx}, {@code .jks},
+     * {@code .keystore} or {@code .kdbx}, also with a further extension ({@code forwarding.secret.bak}),
+     * and anything in a folder {@link #isSecretFolder}. Case is ignored. Secrets inside an ordinary
+     * file (an RCON password in {@code server.properties}) are not detected; they do not belong in a
+     * template.
      *
      * @param path relative path inside the template
      */
     public static boolean looksSecret(String path) {
-        String[] segments = path.toLowerCase(Locale.ROOT).split("/", -1);
+        String[] segments = path.split("/", -1);
         for (int i = 0; i < segments.length - 1; i++) {
-            if (segments[i].equals("secrets")) {
+            if (isSecretFolder(segments[i])) {
                 return true;
             }
         }
-        String name = segments[segments.length - 1];
-        return SECRET_NAMES.contains(name) || name.endsWith(".env") || name.endsWith(".secret");
+        String name = segments[segments.length - 1].toLowerCase(Locale.ROOT);
+        if (SECRET_NAMES.contains(name) || name.startsWith(".env.")) {
+            return true;
+        }
+        for (String suffix : SECRET_SUFFIXES) {
+            if (name.endsWith(suffix) || name.contains(suffix + ".")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether a folder of a template is left out as a whole: {@code secrets}, {@code .git},
+     * {@code .ssh} and {@code .gnupg}, case ignored.
+     *
+     * @param name the folder's name
+     */
+    public static boolean isSecretFolder(String name) {
+        return SECRET_FOLDERS.contains(name.toLowerCase(Locale.ROOT));
     }
 
     /**

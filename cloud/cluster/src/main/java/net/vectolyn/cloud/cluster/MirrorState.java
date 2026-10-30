@@ -23,8 +23,10 @@ import net.vectolyn.cloud.config.io.RegularPaths;
  * templates           member: name and digest of every template it synced
  * </pre>
  *
- * A file that cannot be read counts as missing; the mirror then starts over, which costs a
- * download but never trusts a broken record.
+ * A broken {@code config-revision} or {@code templates} counts as missing; the mirror then starts
+ * over, which costs a download but never trusts a broken record. A broken {@code config-applied}
+ * stops the config mirror instead, because without it a member could not refuse an older
+ * revision; deleting it lets the member take over the head's config again.
  */
 final class MirrorState {
 

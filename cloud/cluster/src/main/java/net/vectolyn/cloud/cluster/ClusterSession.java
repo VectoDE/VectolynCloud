@@ -11,6 +11,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.RejectedExecutionException;
@@ -129,7 +130,8 @@ public final class ClusterSession {
             pending.put(id, future);
         }
         future.orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS).whenComplete((value, error) -> {
-            if (error instanceof TimeoutException) {
+            // Timed out or given up by the caller: the slot is free again, a late answer is dropped.
+            if (error instanceof TimeoutException || error instanceof CancellationException) {
                 synchronized (lock) {
                     if (pending.remove(id, future)) {
                         rememberTimedOut(id);

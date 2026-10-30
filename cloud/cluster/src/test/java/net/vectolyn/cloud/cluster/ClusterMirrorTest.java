@@ -38,6 +38,7 @@ import net.vectolyn.cloud.config.operation.SetLanguage;
 import net.vectolyn.cloud.config.operation.SetNetworkName;
 import net.vectolyn.protocol.NodeId;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -215,6 +216,7 @@ class ClusterMirrorTest {
         assertFalse(Files.exists(mirrored.resolve("forwarding.secret")));
         assertFalse(Files.exists(mirrored.resolve("vectolyn.env")));
         assertFalse(Files.exists(mirrored.resolve("secrets")));
+        // tryLink fails the test where a link must be possible; only Windows may skip this check.
         if (links) {
             assertFalse(Files.exists(mirrored.resolve("link.txt"), java.nio.file.LinkOption.NOFOLLOW_LINKS));
         }
@@ -246,13 +248,40 @@ class ClusterMirrorTest {
         }
     }
 
-    /** A symbolic link, if this system lets the test make one (Windows needs a privilege). */
+    static final boolean WINDOWS = System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT)
+            .startsWith("windows");
+
+    /**
+     * A symbolic link, if this system lets the test make one. Only Windows may refuse (it needs
+     * Developer Mode or an administrator); everywhere else a refusal fails the test, so the Linux
+     * CI jobs always run the link checks.
+     */
     static boolean tryLink(Path link, Path target) {
         try {
             Files.createSymbolicLink(link, target);
             return true;
         } catch (IOException | UnsupportedOperationException e) {
+            if (!WINDOWS) {
+                throw new AssertionError("this system must allow symbolic links for the link tests", e);
+            }
             return false;
         }
+    }
+
+    /**
+     * A symbolic link, or the test is skipped where only Windows may refuse one (see
+     * {@link #tryLink}).
+     */
+    static void link(Path link, Path target) {
+        Assumptions.assumeTrue(tryLink(link, target), "Windows refuses symbolic links without Developer Mode or an "
+                + "administrator; the Linux CI jobs run this test");
+    }
+
+    /** A Windows directory junction (needs no privilege), made with {@code mklink /J}. */
+    static void junction(Path link, Path target) throws IOException, InterruptedException {
+        Process process = new ProcessBuilder("cmd.exe", "/c", "mklink", "/J", link.toString(), target.toString())
+                .redirectErrorStream(true).start();
+        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        assertEquals(0, process.waitFor(), output);
     }
 }

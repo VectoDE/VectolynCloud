@@ -54,7 +54,7 @@ final class ConfigMirrorSink {
         this.stateFile = Objects.requireNonNull(stateFile, "stateFile");
     }
 
-    /** The revision taken over last, if any (also if its record cannot be read). */
+    /** The revision taken over last, if any, for the status (empty also if its record cannot be read). */
     Optional<MirrorState.Revision> applied() {
         try {
             return MirrorState.readRevision(stateFile);
@@ -88,7 +88,14 @@ final class ConfigMirrorSink {
         if (!nodes) {
             throw new MirrorException("the head sent no nodes.yml");
         }
-        Optional<MirrorState.Revision> applied = applied();
+        Optional<MirrorState.Revision> applied;
+        try {
+            applied = MirrorState.readRevision(stateFile);
+        } catch (IOException e) {
+            // Taking over anything now would switch the stale check off; the operator decides.
+            throw new MirrorException("state/cluster/config-applied cannot be read (" + e.getMessage()
+                    + "); delete it to take over the head's config again");
+        }
         if (applied.isPresent()) {
             long last = applied.get().revision();
             boolean same = applied.get().sameDigest(listing.digest());

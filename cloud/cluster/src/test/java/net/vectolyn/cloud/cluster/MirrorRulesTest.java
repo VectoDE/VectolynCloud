@@ -25,6 +25,8 @@ import net.vectolyn.protocol.PacketReader;
 import net.vectolyn.protocol.PacketWriter;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
@@ -56,9 +58,15 @@ class MirrorRulesTest {
     /** A head that offers one template "Lobby" with the given manifest and chunk answers. */
     private static ClusterHandlers head(byte[] digest, ClusterHandlers.RequestHandler manifest,
                                         ClusterHandlers.RequestHandler chunk) {
+        return head(digest, 1, 5, manifest, chunk);
+    }
+
+    /** The same, with the file count and size the list gives for "Lobby". */
+    private static ClusterHandlers head(byte[] digest, int files, long bytes, ClusterHandlers.RequestHandler manifest,
+                                        ClusterHandlers.RequestHandler chunk) {
         return ClusterHandlers.builder()
                 .request(MirrorMessages.TEMPLATE_LIST, (peer, payload) ->
-                        new TemplateList(List.of(new TemplateEntry("Lobby", digest, 1, 5))).write())
+                        new TemplateList(List.of(new TemplateEntry("Lobby", digest, files, bytes))).write())
                 .request(MirrorMessages.TEMPLATE_MANIFEST, manifest)
                 .request(MirrorMessages.TEMPLATE_CHUNK, chunk)
                 .build();
@@ -68,11 +76,13 @@ class MirrorRulesTest {
     void unsafePathsAreRefused() {
         for (String path : List.of("../evil", "a/../../evil", "/etc/passwd", "a\\b", "C:/x", "a/./b", "a//b", "",
                 "CON", "nul.txt", "a/LPT1", "trailing.", "trailing ", "tab\there", "nul\0byte", "a|b", "x".repeat(121),
-                "a/".repeat(16) + "b", "ü".repeat(121))) {
+                "a/".repeat(16) + "b", "ü".repeat(121), "bidi‮txt.exe", "zero​width", "isolate⁦x",
+                "c1\u009Bcontrol", "del\u007f", "privateuse", "nbsp x", "line break", "bom﻿",
+                "broken\uD800surrogate")) {
             assertFalse(MirrorPaths.isSafePath(path), path);
         }
         for (String path : List.of("server.properties", "plugins/Lux/config.yml", "world/region/r.0.0.mca",
-                "a b/c-d_e.f", "ümlaut.txt", "a/".repeat(15) + "b")) {
+                "a b/c-d_e.f", "ümlaut.txt", "a/".repeat(15) + "b", "日本語.yml", "emoji😀.txt")) {
             assertTrue(MirrorPaths.isSafePath(path), path);
         }
         assertFalse(MirrorPaths.isTemplateName(".hidden"));
@@ -179,16 +189,102 @@ class MirrorRulesTest {
 
     @Test
     void secretLookingFilesAndFilesInsideFilesAreRefused() throws Exception {
-        for (List<FileEntry> entries : List.of(List.of(new FileEntry("forwarding.secret", 5, sha("hello"))),
-                List.of(new FileEntry("a", 5, sha("hello")), new FileEntry("a/b", 5, sha("hello"))))) {
+        Map<List<FileEntry>, String> cases = Map.of(
+                List.of(new FileEntry("forwarding.secret", 5, sha("hello"))), "looks like a secret",
+                List.of(new FileEntry(".git/config", 5, sha("hello"))), "looks like a secret",
+                List.of(new FileEntry("a", 5, sha("hello")), new FileEntry("a/b", 5, sha("hello"))), "inside a file");
+        for (Map.Entry<List<FileEntry>, String> test : cases.entrySet()) {
+            List<FileEntry> entries = test.getKey();
             byte[] digest = MirrorMessages.digest(entries);
-            try (SessionPair pair = new SessionPair(ClusterHandlers.NONE, head(digest,
-                    (peer, payload) -> new Manifest(0, digest, entries.size(), 0, entries).write(),
+            try (SessionPair pair = new SessionPair(ClusterHandlers.NONE, head(digest, entries.size(),
+                    5L * entries.size(), (peer, payload) -> new Manifest(0, digest, entries.size(), 0, entries).write(),
                     (peer, payload) -> "hello".getBytes(StandardCharsets.UTF_8)))) {
-                assertThrows(MirrorException.class, () -> sink().sync(pair.member));
+                MirrorException e = assertThrows(MirrorException.class, () -> sink().sync(pair.member));
+                assertTrue(e.getMessage().contains(test.getValue()), e.getMessage());
             }
         }
         assertFalse(Files.exists(dir.resolve("local/templates/Lobby")));
+    }
+
+    @Test
+    void secretLookingNamesAreRecognised() {
+        for (String path : List.of("forwarding.secret", "Forwarding.Secret", "forwarding.secret.bak", "vectolyn.env",
+                ".env", ".env.local", "prod.env", "plugins/x/key.pem", "cert.PEM", "server.key", "store.p12",
+                "store.pfx", "keystore.jks", "a.keystore", "db.kdbx", "id_rsa", "home/id_ed25519", ".netrc",
+                ".git-credentials", ".pgpass", "secrets/a.txt", "a/Secrets/b.txt", ".git/config", "x/.ssh/known_hosts",
+                ".gnupg/pubring.kbx")) {
+            assertTrue(MirrorPaths.looksSecret(path), path);
+        }
+        for (String path : List.of("server.properties", "plugins/LuckPerms/config.yml", "environment.yml",
+                "keys/readme.txt", "secret-garden.yml", "plugins/a.jar", "world/level.dat", "git/notes.txt")) {
+            assertFalse(MirrorPaths.looksSecret(path), path);
+        }
+        assertTrue(MirrorPaths.isSecretFolder(".GIT"));
+        assertFalse(MirrorPaths.isSecretFolder("plugins"));
+    }
+
+    @Test
+    void aManifestThatDoesNotMatchTheListIsRefused() throws Exception {
+        // The list says 5 bytes, the manifest has 10: a head must not list small and send large.
+        List<FileEntry> entries = List.of(new FileEntry("a.txt", 5, sha("hello")),
+                new FileEntry("b.txt", 5, sha("hello")));
+        byte[] digest = MirrorMessages.digest(entries);
+        for (int[] list : new int[][] {{1, 10}, {2, 5}}) {
+            try (SessionPair pair = new SessionPair(ClusterHandlers.NONE, head(digest, list[0], list[1],
+                    (peer, payload) -> new Manifest(0, digest, entries.size(), 0, entries).write(),
+                    (peer, payload) -> "hello".getBytes(StandardCharsets.UTF_8)))) {
+                MirrorException e = assertThrows(MirrorException.class, () -> sink().sync(pair.member));
+                assertTrue(e.getMessage().contains("does not match the template list"), e.getMessage());
+            }
+        }
+        assertFalse(Files.exists(dir.resolve("local/templates/Lobby")));
+        assertFalse(Files.exists(dir.resolve("local/.cluster-sync/staging/Lobby")));
+        // With the right totals the same template is taken.
+        try (SessionPair pair = new SessionPair(ClusterHandlers.NONE, head(digest, 2, 10,
+                (peer, payload) -> new Manifest(0, digest, entries.size(), 0, entries).write(),
+                (peer, payload) -> "hello".getBytes(StandardCharsets.UTF_8)))) {
+            assertEquals(1, sink().sync(pair.member).updated());
+        }
+        assertEquals("hello", Files.readString(dir.resolve("local/templates/Lobby/b.txt")));
+    }
+
+    @Test
+    void anUnreadableTemplateOnTheHeadKeepsItsLastCatalogEntry() throws Exception {
+        Path root = Files.createDirectories(dir.resolve("head/Lobby"));
+        Files.writeString(root.resolve("a.txt"), "hello");
+        Files.writeString(root.resolve("b.txt"), "world");
+        java.util.concurrent.atomic.AtomicBoolean broken = new java.util.concurrent.atomic.AtomicBoolean();
+        TemplateSource source = new TemplateSource(dir.resolve("head"), file -> {
+            if (broken.get() && file.getFileName().toString().equals("b.txt")) {
+                throw new java.nio.file.AccessDeniedException(file.toString());
+            }
+            return Files.newByteChannel(file);
+        });
+        assertTrue(source.rescan());
+        TemplateSource.Template before = source.catalog().get("Lobby");
+        assertEquals(2, before.entries().size());
+
+        // b.txt changes and cannot be read: the template is offered as it was, not without b.txt.
+        Files.writeString(root.resolve("b.txt"), "world, changed");
+        broken.set(true);
+        assertFalse(source.rescan(), "nothing changed for the members");
+        assertTrue(java.util.Arrays.equals(before.digest(), source.catalog().get("Lobby").digest()));
+        assertEquals(2, source.catalog().get("Lobby").entries().size());
+
+        // Readable again: the change is offered.
+        broken.set(false);
+        assertTrue(source.rescan());
+        assertFalse(java.util.Arrays.equals(before.digest(), source.catalog().get("Lobby").digest()));
+    }
+
+    @Test
+    void anUnreadableNewTemplateIsNotOffered() throws Exception {
+        Files.writeString(Files.createDirectories(dir.resolve("head/Lobby")).resolve("a.txt"), "hello");
+        TemplateSource source = new TemplateSource(dir.resolve("head"), file -> {
+            throw new java.nio.file.AccessDeniedException(file.toString());
+        });
+        assertFalse(source.rescan());
+        assertTrue(source.catalog().isEmpty());
     }
 
     @Test
@@ -284,14 +380,69 @@ class MirrorRulesTest {
 
         Path outside = Files.writeString(dir.resolve("outside.txt"), "HELLO");
         Files.delete(root.resolve("a.txt"));
-        if (ClusterMirrorTest.tryLink(root.resolve("a.txt"), outside)) {
-            byte[] chunk = new MirrorMessages.ChunkRequest("Lobby", template.digest(), "a.txt", 0, 5).write();
-            assertEquals(ClusterRpcException.CHANGED,
-                    assertThrows(ClusterRpcException.class, () -> source.chunk(chunk)).code(),
-                    "a file replaced by a link after the scan is not read");
+        ClusterMirrorTest.link(root.resolve("a.txt"), outside);
+        byte[] chunk = new MirrorMessages.ChunkRequest("Lobby", template.digest(), "a.txt", 0, 5).write();
+        assertEquals(ClusterRpcException.CHANGED,
+                assertThrows(ClusterRpcException.class, () -> source.chunk(chunk)).code(),
+                "a file replaced by a link after the scan is not read");
+        assertTrue(source.rescan());
+        assertTrue(source.catalog().get("Lobby").entries().isEmpty(), "a rescan leaves the link out");
+    }
+
+    @Test
+    void theHeadNeverScansThroughALinkedFolder() throws Exception {
+        Path outside = Files.createDirectories(dir.resolve("outside"));
+        Files.writeString(outside.resolve("private.txt"), "private");
+        Path root = Files.createDirectories(dir.resolve("head/Lobby/plugins"));
+        Files.writeString(root.resolve("a.txt"), "hello");
+        ClusterMirrorTest.link(root.resolve("linked"), outside);
+        TemplateSource source = new TemplateSource(dir.resolve("head"));
+        assertTrue(source.rescan());
+        assertEquals(List.of("plugins/a.txt"),
+                source.catalog().get("Lobby").entries().stream().map(FileEntry::path).toList());
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    void theHeadNeverScansThroughAJunction() throws Exception {
+        Path outside = Files.createDirectories(dir.resolve("outside"));
+        Files.writeString(outside.resolve("private.txt"), "private");
+        Path root = Files.createDirectories(dir.resolve("head/Lobby/plugins"));
+        Files.writeString(root.resolve("a.txt"), "hello");
+        ClusterMirrorTest.junction(root.resolve("joined"), outside);
+        try {
+            TemplateSource source = new TemplateSource(dir.resolve("head"));
             assertTrue(source.rescan());
-            assertTrue(source.catalog().get("Lobby").entries().isEmpty(), "a rescan leaves the link out");
+            assertEquals(List.of("plugins/a.txt"),
+                    source.catalog().get("Lobby").entries().stream().map(FileEntry::path).toList());
+        } finally {
+            Files.delete(root.resolve("joined"));
         }
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    void deletingATemplateNeverFollowsANestedJunction() throws Exception {
+        Path keep = Files.createDirectories(dir.resolve("keep"));
+        Files.writeString(keep.resolve("precious.txt"), "precious");
+        Path template = Files.createDirectories(dir.resolve("local/templates/Gone/plugins"));
+        Files.writeString(template.resolve("a.txt"), "a");
+        ClusterMirrorTest.junction(template.resolve("shared"), keep);
+        TemplateSink.deleteTree(dir.resolve("local/templates/Gone"));
+        assertFalse(Files.exists(dir.resolve("local/templates/Gone")));
+        assertEquals("precious", Files.readString(keep.resolve("precious.txt")));
+    }
+
+    @Test
+    void aLinkedSyncFolderIsRefused() throws Exception {
+        Path elsewhere = Files.createDirectories(dir.resolve("elsewhere"));
+        Path old = Files.createDirectories(elsewhere.resolve("old/Lobby"));
+        Files.writeString(old.resolve("a.txt"), "not the sync's");
+        Files.createDirectories(dir.resolve("local/templates/Lobby"));
+        Files.createDirectories(dir.resolve("local"));
+        ClusterMirrorTest.link(dir.resolve("local/.cluster-sync"), elsewhere);
+        assertThrows(IOException.class, () -> sink().recover());
+        assertEquals("not the sync's", Files.readString(old.resolve("a.txt")));
     }
 
     @Test
@@ -299,11 +450,12 @@ class MirrorRulesTest {
         Path keep = Files.createDirectories(dir.resolve("keep"));
         Files.writeString(keep.resolve("precious.txt"), "precious");
         Path template = Files.createDirectories(dir.resolve("local/templates/Gone"));
-        if (ClusterMirrorTest.tryLink(template.resolve("link"), keep)) {
-            TemplateSink.deleteTree(template);
-            assertFalse(Files.exists(template));
-            assertEquals("precious", Files.readString(keep.resolve("precious.txt")));
-        }
+        Files.createDirectories(template.resolve("nested"));
+        ClusterMirrorTest.link(template.resolve("link"), keep);
+        ClusterMirrorTest.link(template.resolve("nested/link"), keep);
+        TemplateSink.deleteTree(template);
+        assertFalse(Files.exists(template));
+        assertEquals("precious", Files.readString(keep.resolve("precious.txt")));
     }
 
     @Test
@@ -350,6 +502,47 @@ class MirrorRulesTest {
             assertEquals(ConfigSnapshot.defaults().nodes(), config.snapshot().nodes(), "nothing taken over");
             assertFalse(Files.exists(dir.resolve("member/state/cluster/config-applied")));
             assertTrue(config.snapshot().groups().isEmpty());
+        }
+    }
+
+    @Test
+    void revisionsAboveWhatTheMemberCanStoreAreRefused() {
+        byte[] digest = new byte[32];
+        assertThrows(IllegalArgumentException.class,
+                () -> new Manifest(MirrorMessages.MAX_REVISION + 1, digest, 0, 0, List.of()));
+        assertThrows(IllegalArgumentException.class, () -> new MirrorMessages.Changed(MirrorMessages.MAX_REVISION + 1));
+        byte[] raw = new PacketWriter().writeVarLong(Long.MAX_VALUE).writeByteArray(digest, 32).writeVarInt(0)
+                .writeVarInt(0).writeVarInt(0).toByteArray();
+        assertThrows(net.vectolyn.protocol.ProtocolException.class, () -> Manifest.read(new PacketReader(raw)));
+        assertEquals(MirrorMessages.MAX_REVISION,
+                new Manifest(MirrorMessages.MAX_REVISION, digest, 0, 0, List.of()).revision());
+    }
+
+    @Test
+    void aBrokenRecordOfTheAppliedRevisionStopsTheConfigMirror() throws Exception {
+        try (ConfigService config = ConfigService.open(CloudHome.of(dir.resolve("member")))) {
+            config.mirrorMode(true);
+            Path state = dir.resolve("member/state/cluster/config-applied");
+            Files.createDirectories(state.getParent());
+            Files.writeString(state, "revision=garbage\n");
+            ConfigMirrorSink sink = new ConfigMirrorSink(config, state);
+            byte[] nodes = ConfigMirrorSource.render(ConfigSnapshot.defaults()).get(CloudHome.NODES_FILE);
+            List<FileEntry> entries = List.of(new FileEntry(CloudHome.NODES_FILE, nodes.length,
+                    MirrorMessages.sha256(nodes)));
+            byte[] digest = MirrorMessages.digest(entries);
+            ClusterHandlers head = ClusterHandlers.builder()
+                    .request(MirrorMessages.CONFIG_MANIFEST, (peer, payload) ->
+                            new Manifest(1, digest, entries.size(), 0, entries).write())
+                    .request(MirrorMessages.CONFIG_CHUNK, (peer, payload) -> nodes)
+                    .build();
+            try (SessionPair pair = new SessionPair(ClusterHandlers.NONE, head)) {
+                MirrorException e = assertThrows(MirrorException.class, () -> sink.sync(pair.member));
+                assertTrue(e.getMessage().contains("config-applied cannot be read"), e.getMessage());
+                // Deleting the record lets the member take over the head's config again.
+                Files.delete(state);
+                sink.sync(pair.member);
+            }
+            assertTrue(Files.readString(state).startsWith("revision=1\n"));
         }
     }
 }

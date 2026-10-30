@@ -132,6 +132,29 @@ class ClusterSessionTest {
     }
 
     @Test
+    void aCancelledRequestFreesItsSlotAndItsLateAnswerIsDropped() throws Exception {
+        List<Envelope> sent = new CopyOnWriteArrayList<>();
+        ClusterSession session = new ClusterSession(new NodeId("node-1"), ClusterHandlers.NONE, e -> sent.add(e));
+        try {
+            // A peer that never answers: cancelling must free the slots, or the session stays busy.
+            for (int round = 0; round < 3; round++) {
+                List<CompletableFuture<byte[]>> open = new ArrayList<>();
+                for (int i = 0; i < ClusterSession.MAX_PENDING; i++) {
+                    open.add(session.request(ECHO, new byte[0], TIMEOUT));
+                }
+                open.forEach(future -> future.cancel(false));
+            }
+            CompletableFuture<byte[]> next = session.request(ECHO, new byte[0], TIMEOUT);
+            assertFalse(next.isDone(), "not busy after cancelled requests");
+            assertTrue(session.receive(new Envelope(sent.getFirst().requestId(),
+                    new Response(Response.Status.OK, new byte[0]))), "a late answer to a cancelled one is dropped");
+            next.cancel(false);
+        } finally {
+            session.close();
+        }
+    }
+
+    @Test
     void aFailedSendFailsTheRequest() throws Exception {
         ClusterSession session = new ClusterSession(new NodeId("node-1"), ClusterHandlers.NONE, e -> false);
         try {

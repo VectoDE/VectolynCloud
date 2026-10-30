@@ -730,9 +730,14 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
             case HEAD -> {
                 CompletableFuture<Void> done = new CompletableFuture<>();
                 runMirror(() -> {
-                    refreshConfig();
-                    rescanTemplates(true);
-                    done.complete(null);
+                    try {
+                        refreshConfig();
+                        rescanTemplates(true);
+                        done.complete(null);
+                    } catch (RuntimeException e) {
+                        done.completeExceptionally(e);
+                        throw e;
+                    }
                 });
                 yield done;
             }
@@ -780,11 +785,15 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
         }
     }
 
+    /**
+     * Tells every member, each from its own virtual thread: a member that stops reading blocks only
+     * the push to itself (until its session ends), never the mirror's worker or the other members.
+     */
     private void pushAll(ChannelName channel, byte[] payload) {
         ClusterServer running = server;
         if (running != null) {
             for (ClusterSession session : running.sessions()) {
-                session.push(channel, payload);
+                Thread.ofVirtual().name("vectolyn-cluster-push").start(() -> session.push(channel, payload));
             }
         }
     }
