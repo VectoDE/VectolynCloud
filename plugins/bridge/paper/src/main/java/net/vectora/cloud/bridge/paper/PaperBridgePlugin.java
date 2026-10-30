@@ -25,6 +25,7 @@ import net.kyori.adventure.text.TranslatableComponent;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import net.vectora.cloud.bridge.BridgeConnection;
 import net.vectora.cloud.bridge.BridgeSender;
+import net.vectora.cloud.bridge.CommandBlocks;
 import net.vectora.cloud.bridge.KickClassifier;
 import net.vectora.cloud.bridge.KickCommandWatch;
 import net.vectora.cloud.bridge.OwnKick;
@@ -68,6 +69,8 @@ import org.bukkit.plugin.java.JavaPlugin;
  *       root, {@code execute ... run kick}, {@code dispatchCommand}, {@code performCommand} and
  *       aliases of {@code commands.yml} run it too. The command line watch ({@link KickCommandWatch})
  *       stays for the {@code kick} commands of other plugins and as a fallback.</li>
+ *   <li>Command blocks: removed and kept out of the server ({@link CommandBlockGuard}), always,
+ *       also when the cloud did not start the server.</li>
  * </ul>
  *
  * <p>Network-wide player events ({@code PlayerJoin} and so on) are reported by the proxy only, so
@@ -86,6 +89,7 @@ public final class PaperBridgePlugin extends JavaPlugin implements Listener {
 
     @Override
     public void onEnable() {
+        guardCommandBlocks();
         Optional<CloudClientSettings> settings = BridgeConnection.settings();
         if (settings.isEmpty()) {
             getLogger().info("Not started by VectoraCloud (no connection settings): the bridge stays idle");
@@ -141,6 +145,21 @@ public final class PaperBridgePlugin extends JavaPlugin implements Listener {
         BridgeSender ready = sender;
         getServer().getScheduler().runTask(this, ready::markReady);
         getServer().getScheduler().runTaskTimer(this, () -> report(0), STATUS_PERIOD_TICKS, STATUS_PERIOD_TICKS);
+    }
+
+    /**
+     * Command blocks are removed network-wide ({@link CommandBlockGuard}), whether or not the cloud
+     * started this server and with no setting to turn it off.
+     */
+    private void guardCommandBlocks() {
+        CommandBlockGuard guard = new CommandBlockGuard(new CommandBlocks(getLogger()::info));
+        getServer().getPluginManager().registerEvents(guard, this);
+        // The plugin is enabled after the worlds load: their spawn chunks are loaded already.
+        guard.purgeLoaded(getServer().getWorlds(), "already loaded at start");
+        getServer().getScheduler().runTaskTimer(this, () -> getServer().getOnlinePlayers().forEach(guard::sweep),
+                CommandBlockGuard.PLAYER_SWEEP_TICKS, CommandBlockGuard.PLAYER_SWEEP_TICKS);
+        getServer().getScheduler().runTaskTimer(this, () -> guard.purgeLoaded(getServer().getWorlds(), "found by the sweep"),
+                CommandBlockGuard.WORLD_SWEEP_TICKS, CommandBlockGuard.WORLD_SWEEP_TICKS);
     }
 
     @Override

@@ -12,12 +12,15 @@ import java.util.List;
 import java.util.UUID;
 import net.vectora.protocol.AuthToken;
 import net.vectora.protocol.ChannelName;
+import net.vectora.protocol.GroupName;
 import net.vectora.protocol.Protocol;
 import net.vectora.protocol.ProtocolVersion;
 import net.vectora.protocol.ServiceId;
 import net.vectora.protocol.message.Message;
 import net.vectora.protocol.message.NetworkKick;
+import net.vectora.protocol.message.RegisterServer;
 import net.vectora.protocol.message.ServerCapacity;
+import net.vectora.protocol.message.ServiceReady;
 import net.vectora.protocol.message.TransferPlayer;
 import net.vectora.protocol.message.UnregisterServer;
 import net.vectora.protocol.VarInts;
@@ -102,12 +105,18 @@ class ConnectionPipelineTest {
         }
     }
 
-    /** Only the cloud moves players: a service that sends TransferPlayer or ServerCapacity is cut off. */
+    /**
+     * Only the cloud moves players and fills the proxies' server lists: a service that sends
+     * TransferPlayer, ServerCapacity, RegisterServer or UnregisterServer is cut off, so no backend
+     * can reach a proxy with them (rights audit, docs/cloud/rights-audit.md).
+     */
     @Test
-    void transferAndCapacityFromAServiceAreProtocolViolations() {
+    void transferCapacityAndServerListsFromAServiceAreProtocolViolations() {
         for (Message forbidden : List.of(
                 new TransferPlayer(UUID.randomUUID(), new ServiceId("lobby-2"), TransferPlayer.Reason.SCALE_DOWN),
-                new ServerCapacity(new ServiceId("lobby-2"), 50, true))) {
+                new ServerCapacity(new ServiceId("lobby-2"), 50, true),
+                new RegisterServer(new ServiceId("lobby-2"), "127.0.0.1", 30001, new GroupName("lobby"), false),
+                new UnregisterServer(new ServiceId("lobby-2")))) {
             try (EmbeddedConnection connection = new EmbeddedConnection(server)) {
                 connection.receive(CODEC.encode(Envelope.of(new Hello(Protocol.PROTOCOL_VERSION, LOBBY, token))));
                 connection.receive(CODEC.encode(Envelope.of(forbidden)));
@@ -142,6 +151,20 @@ class ConnectionPipelineTest {
             connection.receive(CODEC.encode(Envelope.of(new Hello(Protocol.PROTOCOL_VERSION, LOBBY, token))));
             connection.receive(CODEC.encode(Envelope.of(
                     new NetworkKick(UUID.randomUUID(), new ServiceId("lobby-2"), "Spam"))));
+            List<Envelope> sent = connection.sent();
+            assertEquals(Envelope.of(new Disconnect(Disconnect.Reason.PROTOCOL_ERROR)), sent.get(sent.size() - 1));
+            assertFalse(connection.isOpen());
+        }
+    }
+
+    /** A service reports only that it is ready itself: a ServiceReady for another service cuts it off. */
+    @Test
+    void readyOnlyForTheSenderItself() {
+        try (EmbeddedConnection connection = new EmbeddedConnection(server)) {
+            connection.receive(CODEC.encode(Envelope.of(new Hello(Protocol.PROTOCOL_VERSION, LOBBY, token))));
+            connection.receive(CODEC.encode(Envelope.of(new ServiceReady(LOBBY))));
+            assertTrue(connection.isOpen(), "counter-check: its own ready");
+            connection.receive(CODEC.encode(Envelope.of(new ServiceReady(new ServiceId("lobby-2")))));
             List<Envelope> sent = connection.sent();
             assertEquals(Envelope.of(new Disconnect(Disconnect.Reason.PROTOCOL_ERROR)), sent.get(sent.size() - 1));
             assertFalse(connection.isOpen());

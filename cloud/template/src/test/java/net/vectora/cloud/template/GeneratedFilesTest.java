@@ -206,12 +206,14 @@ class GeneratedFilesTest {
 
         RenderReport report = TemplateInstaller.install(template, out, ServerPlatform.PAPER, values, true);
 
-        assertEquals("server-port=25566\n", Files.readString(out.resolve("server.properties")));
+        // Command blocks are always off; the template did not say so, so the node adds the line.
+        assertEquals("server-port=25566\nenable-command-block=false\n", Files.readString(out.resolve("server.properties")));
         assertArrayEquals(KEY, Files.readAllBytes(out.resolve("plugins/floodgate/key.pem")));
         assertTrue(Files.exists(out.resolve("eula.txt")));
         assertFalse(Files.exists(out.resolve("forwarding.secret")));
         // The template has no spigot.yml, so the node writes one with Spigot's restart turned off.
-        assertEquals(java.util.List.of("eula.txt", "plugins/floodgate/key.pem", "spigot.yml"), report.generated());
+        assertEquals(java.util.List.of("eula.txt", "plugins/floodgate/key.pem", "server.properties", "spigot.yml"),
+                report.generated());
     }
 
     @Test
@@ -231,8 +233,9 @@ class GeneratedFilesTest {
 
         assertFalse(Files.exists(out.resolve("plugins/floodgate/key.pem")), "the old key stayed behind");
         assertEquals("kept\n", Files.readString(out.resolve("plugins/floodgate/config.yml")), "only the key goes");
-        // spigot.yml of the first install is right already and is not written again.
-        assertEquals(java.util.List.of("eula.txt"), report.generated());
+        // spigot.yml of the first install is right already and is not written again; server.properties
+        // is rendered again from the template and gets enable-command-block=false again.
+        assertEquals(java.util.List.of("eula.txt", "server.properties"), report.generated());
     }
 
     @Test
@@ -247,7 +250,7 @@ class GeneratedFilesTest {
 
         assertFalse(Files.exists(out.resolve("plugins/floodgate/key.pem")));
         assertFalse(Files.exists(out.resolve("plugins/floodgate")), "not even the folder");
-        assertEquals(java.util.List.of("eula.txt", "spigot.yml"), report.generated());
+        assertEquals(java.util.List.of("eula.txt", "server.properties", "spigot.yml"), report.generated());
 
         // Counter-check: a file named like the folder is no Floodgate folder either.
         Files.createDirectories(template.resolve("plugins"));

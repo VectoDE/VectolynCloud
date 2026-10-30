@@ -23,6 +23,8 @@ You will not have to run all of them. In the VectoraCloud setup wizard or the cl
 
 Restarts belong to the cloud alone. The Paper and PandaSpigot templates leave Spigot's `restart-script` empty, and the cloud enforces that for your own templates too. `/restart` and the watchdog therefore only stop the server, and the cloud starts it again.
 
+Command blocks do not exist on the network, and no setting turns them back on. The cloud writes `enable-command-block=false` into every `server.properties` it renders and logs a warning if it had to overwrite another value. The bridges on Paper and 1.8.8 also keep command blocks and command block minecarts out of every inventory, refuse placing and using them, and remove the ones in a world when its chunks load. Staff commands such as the network kick work only for the console, RCON and players with the permission; the full list is the [rights audit](https://github.com/VectoDE/VectoraCloud/blob/main/docs/cloud/rights-audit.md).
+
 Until stage 2 the existing servers run locally from `runtime/` via the Windows start scripts. To try VectoraCloud from a checkout, run `./gradlew :cloud:node:runLocal`: the network then runs in `run/` in the repository root, which Git ignores. A production network gets its own cloud home outside the checkout ([Operations](Operations)).
 
 ## Planned content per server

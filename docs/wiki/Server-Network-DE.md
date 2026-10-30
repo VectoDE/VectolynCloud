@@ -23,6 +23,8 @@ Du musst nicht alle betreiben. Im Einrichtungsassistenten von VectoraCloud oder 
 
 Neustarts übernimmt allein die Cloud. Die Paper- und PandaSpigot-Templates lassen Spigots `restart-script` leer, und die Cloud setzt das auch bei eigenen Templates durch. `/restart` und der Watchdog halten den Server deshalb nur an, die Cloud startet ihn wieder.
 
+Command-Blöcke gibt es im Netzwerk nicht, und keine Einstellung schaltet sie wieder ein. Die Cloud schreibt in jede `server.properties`, die sie rendert, `enable-command-block=false` und warnt im Log, wenn sie einen anderen Wert überschreiben musste. Die Bridges auf Paper und 1.8.8 halten Command-Blöcke und Command-Block-Loren außerdem aus jedem Inventar heraus, verhindern Setzen und Benutzen und entfernen vorhandene, sobald ihre Chunks laden. Team-Befehle wie der Netzwerk-Kick wirken nur für die Konsole, RCON und Spieler mit der Berechtigung; die vollständige Liste steht im [Rechte-Audit](https://github.com/VectoDE/VectoraCloud/blob/main/docs/cloud/rights-audit.md).
+
 Bis Etappe 2 laufen die vorhandenen Server lokal aus `runtime/` über die Windows-Startskripte. Um VectoraCloud aus einem Checkout auszuprobieren, startest du `./gradlew :cloud:node:runLocal`. Das Netzwerk läuft dann in `run/` im Wurzelverzeichnis des Repositorys, das Git ignoriert. Ein Produktivnetzwerk bekommt sein eigenes Cloud-Home außerhalb des Checkouts ([Betrieb](Operations-DE)).
 
 ## Geplante Inhalte je Server

@@ -329,6 +329,36 @@ class RealTemplatesTest {
                 "Minigame-Server", "Survival-Server")), checked.toString());
     }
 
+    /**
+     * No template ships command blocks turned on: every Minecraft template says
+     * {@code enable-command-block=false} itself, so the node never has to fix it, and no other
+     * template has a {@code server.properties} at all.
+     */
+    @Test
+    void noTemplateShipsCommandBlocks() throws Exception {
+        List<String> checked = new ArrayList<>();
+        for (Path template : templates()) {
+            String server = template.getFileName().toString();
+            Path file = template.resolve("server.properties");
+            if (!platformOf(template).readsServerProperties()) {
+                assertFalse(Files.exists(file), server + " has a server.properties nobody reads");
+                continue;
+            }
+            Properties properties = new Properties();
+            try (InputStream in = Files.newInputStream(file)) {
+                properties.load(in);
+            }
+            assertEquals("false", properties.getProperty("enable-command-block"), server);
+            RenderReport report = TemplateInstaller.install(template, out.resolve(server), platformOf(template),
+                    values(ALL_BUT_SURVIVAL), true);
+            assertFalse(report.generated().contains("server.properties"), server + ": the node had to fix it");
+            assertEquals(List.of(), report.warnings(), server);
+            checked.add(server);
+        }
+        assertEquals(List.of("Creative-Server", "End-Server", "Legacy-Server", "Lobby-Server", "Minigame-Server",
+                "Mod-Server", "Survival-Server"), checked);
+    }
+
     @ParameterizedTest(name = "storage method {0}")
     @ValueSource(strings = {"mariadb", "h2"})
     void luckPermsTakesStorageMethodAndPoolSizeFromTheCloud(String method) throws Exception {

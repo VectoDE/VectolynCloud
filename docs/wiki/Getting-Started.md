@@ -99,7 +99,7 @@ Install on the Lobby server.
 - On the first start it builds the sky-island lobby around `0, 100, 0` in the server's first world, then writes `built: true` to `plugins/VectoraLobby/config.yml`. Set it back to `false` to build the island again on the next start; existing blocks in that area are overwritten.
 - On every start it turns off the daylight and weather cycle in that world and sets the spawn point onto the platform.
 - Players are teleported to the spawn when they join. They take no damage and get no hunger.
-- Breaking and placing blocks is blocked unless the player has the permission `vectora.lobby.build`. The permission is not declared in `plugin.yml`, so only operators or players who get it from a permission plugin have it.
+- Breaking and placing blocks is blocked unless the player has the permission `vectora.lobby.build`. `plugin.yml` gives it to operators only (`default: op`); other players need it from a permission plugin.
 
 ### VectoraPortalBridge
 
