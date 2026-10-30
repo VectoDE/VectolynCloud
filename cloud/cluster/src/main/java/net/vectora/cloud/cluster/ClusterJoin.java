@@ -7,6 +7,7 @@ import java.time.Duration;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLHandshakeException;
+import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSocket;
 import net.vectora.cloud.cluster.ClusterMessages.JoinReply;
 import net.vectora.cloud.cluster.ClusterMessages.JoinRequest;
@@ -63,7 +64,12 @@ public final class ClusterJoin {
         SSLContext context = ClusterTls.context(null, ClusterTrust.pinned(pin, headId, found));
         int timeout = (int) TIMEOUT.toMillis();
         try (SSLSocket socket = (SSLSocket) context.getSocketFactory().createSocket()) {
-            ClusterTls.configure(socket);
+            // TLS 1.3 only, endpoint identification on: the pinned trust manager identifies the
+            // head by the node id in its certificate (ClusterTrust.pinned).
+            SSLParameters parameters = socket.getSSLParameters();
+            parameters.setProtocols(new String[] {ClusterTls.PROTOCOL});
+            parameters.setEndpointIdentificationAlgorithm(ClusterTls.ENDPOINT_IDENTIFICATION);
+            socket.setSSLParameters(parameters);
             socket.connect(head, timeout);
             socket.setSoTimeout(timeout);
             try {

@@ -6,7 +6,6 @@ import javax.net.ssl.KeyManager;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLServerSocket;
-import javax.net.ssl.SSLSocket;
 import javax.net.ssl.X509ExtendedTrustManager;
 
 /**
@@ -19,6 +18,15 @@ public final class ClusterTls {
 
     /** The only protocol the cluster port speaks. */
     public static final String PROTOCOL = "TLSv1.3";
+
+    /**
+     * Endpoint identification of the client sockets (set where each socket is made, before its
+     * handshake). With an {@link X509ExtendedTrustManager}, JSSE leaves the identification to the
+     * trust manager: the cluster's ({@link ClusterTrust}) identifies the peer by the node id in its
+     * certificate (the head named in {@code cluster.yml} or in the join line), not by the host
+     * name, which a node certificate does not carry.
+     */
+    public static final String ENDPOINT_IDENTIFICATION = "HTTPS";
 
     private ClusterTls() {
     }
@@ -38,20 +46,6 @@ public final class ClusterTls {
         } catch (GeneralSecurityException e) {
             throw new IllegalStateException("TLS 1.3 is not available in this Java", e);
         }
-    }
-
-    /**
-     * Limits a client socket to TLS 1.3 and switches endpoint identification on. With an
-     * {@link X509ExtendedTrustManager}, JSSE leaves the identification to the trust manager: the
-     * cluster's ({@link ClusterTrust}) identifies the peer by the node id in its certificate (the
-     * head named in {@code cluster.yml} or in the join line), not by the host name, which a node
-     * certificate does not carry.
-     */
-    public static void configure(SSLSocket socket) {
-        SSLParameters parameters = socket.getSSLParameters();
-        parameters.setProtocols(new String[] {PROTOCOL});
-        parameters.setEndpointIdentificationAlgorithm("HTTPS");
-        socket.setSSLParameters(parameters);
     }
 
     /** Limits a server socket to TLS 1.3 and asks for (does not require) a client certificate. */

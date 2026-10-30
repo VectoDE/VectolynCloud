@@ -14,6 +14,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSocket;
 import net.vectora.cloud.cluster.ClusterMessages.HelloOutcome;
 import net.vectora.cloud.cluster.ClusterMessages.NodeHello;
@@ -197,7 +198,12 @@ public final class ClusterLink implements AutoCloseable {
             if (closed.get()) {
                 return HelloOutcome.ACCEPTED;
             }
-            ClusterTls.configure(socket);
+            // TLS 1.3 only, endpoint identification on: the trust manager (ClusterTrust.peers)
+            // identifies the head by the node id in its certificate.
+            SSLParameters parameters = socket.getSSLParameters();
+            parameters.setProtocols(new String[] {ClusterTls.PROTOCOL});
+            parameters.setEndpointIdentificationAlgorithm(ClusterTls.ENDPOINT_IDENTIFICATION);
+            socket.setSSLParameters(parameters);
             socket.connect(settings.head(), timeout);
             socket.setSoTimeout(timeout);
             socket.setTcpNoDelay(true);

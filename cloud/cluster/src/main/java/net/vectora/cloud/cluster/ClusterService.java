@@ -70,24 +70,24 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
         MEMBER
     }
 
-    /** What the cluster tells the node; {@link #NONE} ignores everything. */
+    /** What the cluster tells the node; {@link #DEBUG_LOG} only writes it to the debug log. */
     public interface Events {
 
-        /** Events that nobody listens to. */
-        Events NONE = new Events() {
+        /** Events that nobody else listens to: each one goes to the debug log. */
+        Events DEBUG_LOG = new Events() {
             @Override
             public void memberConnected(NodeId member) {
-                // nobody listens
+                LOG.log(System.Logger.Level.DEBUG, "Cluster: session of member {0} started", member);
             }
 
             @Override
             public void memberDisconnected(NodeId member) {
-                // nobody listens
+                LOG.log(System.Logger.Level.DEBUG, "Cluster: session of member {0} ended", member);
             }
 
             @Override
             public void versionMismatch(String own, String head) {
-                // nobody listens
+                LOG.log(System.Logger.Level.DEBUG, "Cluster: version {0} differs from the head''s {1}", own, head);
             }
         };
 
@@ -146,7 +146,7 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
     private final Object joinLock = new Object();
     private final java.util.concurrent.atomic.AtomicLong refusedJoins = new java.util.concurrent.atomic.AtomicLong();
     private final java.util.concurrent.atomic.AtomicLong refusedHellos = new java.util.concurrent.atomic.AtomicLong();
-    private volatile Events events = Events.NONE;
+    private volatile Events events = Events.DEBUG_LOG;
     private volatile ClusterConfig cluster;
     private volatile ClusterServer server;
     private volatile ClusterLink link;
