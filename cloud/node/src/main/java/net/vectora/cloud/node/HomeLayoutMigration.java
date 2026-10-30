@@ -300,11 +300,20 @@ final class HomeLayoutMigration {
             for (Path child : children) {
                 Matcher m = RUNTIME.matcher(child.getFileName().toString());
                 if (m.matches() && Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)) {
-                    result.put(m.group(1) == null ? 1 : Integer.parseInt(m.group(1)), child);
+                    result.put(m.group(1) == null ? 1 : runtimeIndex(m.group(1)), child);
                 }
             }
         }
         return result;
+    }
+
+    /** The digits of {@code runtime-<n>}, at most four by {@link #RUNTIME}, read without parsing. */
+    private static int runtimeIndex(String digits) {
+        int index = 0;
+        for (int i = 0; i < digits.length(); i++) {
+            index = index * 10 + Character.digit(digits.charAt(i), 10);
+        }
+        return index;
     }
 
     /** An old file next to the new layout is not touched, only reported. */
