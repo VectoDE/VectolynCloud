@@ -77,9 +77,15 @@ final class TemplateSource {
     private final Path templatesDir;
     private final Map<Path, Cached> hashes = new HashMap<>();
     private volatile Map<String, Template> catalog = Map.of();
+    /**
+     * Whether a scan of {@code local/templates/} finished. Until then the list is refused
+     * ({@link ClusterRpcException#NOT_READY}): an empty list would tell the members that the head
+     * has no templates, and they would remove the ones they synced.
+     */
+    private volatile boolean ready;
 
     /**
-     * Creates the source; nothing is offered until {@link #rescan()}.
+     * Creates the source; nothing is offered until {@link #rescan()} finished once.
      *
      * @param templatesDir {@code local/templates}
      */
@@ -125,9 +131,22 @@ final class TemplateSource {
                             + "synced", MirrorPaths.MAX_TEMPLATES, name);
                     break;
                 }
-                Template template = scan(name, folder, seen);
+                Template template;
+                try {
+                    template = scan(name, folder, seen);
+                } catch (IOException e) {
+                    LOG.log(System.Logger.Level.WARNING, "Cluster: template {0} cannot be read completely ({1}); "
+                            + "it is offered as it was before", name, e.getMessage());
+                    template = null;
+                }
                 if (template == null) {
-                    continue;
+                    // Over a limit or not readable: a template offered before stays offered as it
+                    // was, so a passing problem on the head never makes the members delete it.
+                    // A file that changed fails its SHA-256 check on the member, which keeps its copy.
+                    template = catalog.get(name);
+                    if (template == null) {
+                        continue;
+                    }
                 }
                 if (total + template.bytes() > MirrorPaths.MAX_TEMPLATES_BYTES) {
                     LOG.log(System.Logger.Level.WARNING, "Cluster: the templates are larger than {0} bytes together; "
@@ -154,6 +173,7 @@ final class TemplateSource {
             changed |= old == null || !Arrays.equals(old.digest(), entry.getValue().digest());
         }
         catalog = Map.copyOf(next);
+        ready = true;
         return changed;
     }
 
@@ -162,6 +182,7 @@ final class TemplateSource {
         List<FileEntry> entries = new ArrayList<>();
         long[] bytes = {0};
         int[] skipped = {0};
+        int[] unreadable = {0};
         boolean[] over = {false};
         Files.walkFileTree(root, EnumSet.noneOf(FileVisitOption.class), MirrorPaths.MAX_DEPTH + 1,
                 new SimpleFileVisitor<>() {
@@ -197,8 +218,8 @@ final class TemplateSource {
                         seen.add(absolute);
                         byte[] sha = hash(absolute, attributes);
                         if (sha == null) {
-                            skipped[0]++;
-                            return FileVisitResult.CONTINUE;
+                            unreadable[0]++;
+                            return FileVisitResult.TERMINATE;
                         }
                         entries.add(new FileEntry(relative, attributes.size(), sha));
                         bytes[0] += attributes.size();
@@ -211,10 +232,15 @@ final class TemplateSource {
 
                     @Override
                     public FileVisitResult visitFileFailed(Path file, IOException e) {
-                        skipped[0]++;
-                        return FileVisitResult.CONTINUE;
+                        unreadable[0]++;
+                        return FileVisitResult.TERMINATE;
                     }
                 });
+        if (unreadable[0] > 0) {
+            // Leaving the file out would offer the template without it, and the members would
+            // delete their copy of it.
+            throw new IOException("a file could not be read or changed while it was read");
+        }
         if (over[0]) {
             LOG.log(System.Logger.Level.WARNING, "Cluster: template {0} is above a limit (at most {1} files, {2} bytes "
                     + "per file, {3} bytes in total); it is not synced", name, MirrorPaths.MAX_TEMPLATE_FILES,
@@ -285,6 +311,9 @@ final class TemplateSource {
         ManifestRequest request = ConfigMirrorSource.read(() -> ManifestRequest.read(new PacketReader(payload)));
         if (!request.template().isEmpty() || request.page() != 0) {
             throw new ClusterRpcException(ClusterRpcException.BAD_REQUEST);
+        }
+        if (!ready) {
+            throw new ClusterRpcException(ClusterRpcException.NOT_READY);
         }
         List<TemplateEntry> entries = new ArrayList<>();
         new TreeMap<>(catalog).values().forEach(t -> entries.add(t.entry()));

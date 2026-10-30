@@ -609,11 +609,13 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
         LOG.log(System.Logger.Level.INFO, "Cluster: head, cluster port {0}:{1,number,#} (mutual TLS 1.3)",
                 bound.getHostString(), bound.getPort());
         // The mirror: the first render and scan off this thread (hashing large templates takes a
-        // while); every change of the config and every rescan that finds a change is pushed.
+        // while); every change of the config and every rescan that finds a change is pushed. Until
+        // the first scan is done the template list is refused (not-ready), so a member that asked
+        // early keeps its templates; the first scan always tells the members to ask again.
         config.addListener(configListener);
         runMirror(() -> {
             refreshConfig();
-            rescanTemplates(false);
+            rescanTemplates(true);
         });
         long rescan = TEMPLATE_RESCAN.toMillis();
         mirrorTimer.scheduleWithFixedDelay(() -> runMirror(() -> rescanTemplates(false)), rescan, rescan,

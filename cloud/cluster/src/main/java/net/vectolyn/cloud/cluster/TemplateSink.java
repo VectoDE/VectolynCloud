@@ -50,6 +50,8 @@ import net.vectolyn.protocol.ProtocolException;
 final class TemplateSink {
 
     private static final System.Logger LOG = System.getLogger(TemplateSink.class.getName());
+    /** The largest share of the synced templates one listing may remove (more than one). */
+    static final double MAX_REMOVED_SHARE = 0.5;
 
     /**
      * What a sync did.
@@ -165,7 +167,7 @@ final class TemplateSink {
                 }
             }
         }
-        int removed = removeOthers(list, synced);
+        int removed = removeOthers(list, synced, now, problems);
         MirrorState.writeTemplates(stateFile, now);
         if (!problems.isEmpty()) {
             throw new MirrorException(String.join("; ", problems));
@@ -173,13 +175,21 @@ final class TemplateSink {
         return new Outcome(list.templates().size(), updated, removed);
     }
 
-    private int removeOthers(TemplateList list, Map<String, byte[]> synced) throws IOException {
+    /**
+     * Deletes the synced templates the head no longer lists. A listing that would take away more
+     * than {@link #MAX_REMOVED_SHARE} of them at once (more than one), or every one of them, is
+     * not followed: that looks like a head whose templates are missing (a lost mount, a wrong
+     * home), not like an operator who deleted some. They stay, keep their place in the state, and
+     * the problem is reported until the head lists them again or the operator deletes them here.
+     */
+    private int removeOthers(TemplateList list, Map<String, byte[]> synced, Map<String, byte[]> now,
+                             List<String> problems) throws IOException {
         if (RegularPaths.kind(templatesDir) != RegularPaths.Kind.DIRECTORY) {
             return 0;
         }
         Set<String> wanted = new HashSet<>();
         list.templates().forEach(t -> wanted.add(t.name()));
-        int removed = 0;
+        List<Path> gone = new ArrayList<>();
         for (Path folder : list(templatesDir)) {
             String name = folder.getFileName().toString();
             if (wanted.contains(name) || !MirrorPaths.isTemplateName(name)
@@ -187,16 +197,50 @@ final class TemplateSink {
                 continue;
             }
             if (synced.containsKey(name)) {
-                deleteTree(folder);
-                LOG.log(System.Logger.Level.INFO, "Cluster: template {0} removed, the head no longer has it", name);
-                removed++;
+                gone.add(folder);
             } else if (unmanagedLogged.add(name)) {
                 // A built-in template the node wrote for one of its wanted servers, or the
                 // operator's own folder: not the mirror's, so it stays.
                 LOG.log(System.Logger.Level.INFO, "Cluster: template {0} is not on the head; left as it is", name);
             }
         }
+        if (!removalAllowed(gone.size(), synced.size(), list.templates().isEmpty())) {
+            for (Path folder : gone) {
+                String name = folder.getFileName().toString();
+                now.put(name, synced.get(name));
+            }
+            LOG.log(System.Logger.Level.WARNING, "Cluster: the head no longer lists {0} of the {1} templates synced "
+                    + "here; they are kept, because that many at once looks like a problem on the head. Delete them "
+                    + "here by hand if they are meant to go.", gone.size(), synced.size());
+            problems.add("the head no longer lists " + gone.size() + " of " + synced.size()
+                    + " synced templates; kept");
+            return 0;
+        }
+        int removed = 0;
+        for (Path folder : gone) {
+            String name = folder.getFileName().toString();
+            deleteTree(folder);
+            LOG.log(System.Logger.Level.INFO, "Cluster: template {0} removed, the head no longer has it", name);
+            removed++;
+        }
         return removed;
+    }
+
+    /**
+     * Whether one listing may remove {@code gone} of the {@code synced} templates.
+     *
+     * @param gone   synced templates the listing no longer has
+     * @param synced templates synced before
+     * @param empty  whether the listing has no template at all
+     */
+    static boolean removalAllowed(int gone, int synced, boolean empty) {
+        if (gone == 0) {
+            return true;
+        }
+        if (empty) {
+            return false;
+        }
+        return gone == 1 || gone <= synced * MAX_REMOVED_SHARE;
     }
 
     /** Downloads one template into staging and swaps it into place. */

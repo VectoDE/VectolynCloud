@@ -5,11 +5,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 import net.vectolyn.cloud.cluster.MirrorMessages.FileEntry;
 import net.vectolyn.cloud.cluster.MirrorMessages.Manifest;
@@ -18,6 +21,7 @@ import net.vectolyn.cloud.cluster.MirrorMessages.TemplateList;
 import net.vectolyn.cloud.config.CloudHome;
 import net.vectolyn.cloud.config.ConfigService;
 import net.vectolyn.cloud.config.model.ConfigSnapshot;
+import net.vectolyn.protocol.PacketReader;
 import net.vectolyn.protocol.PacketWriter;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -185,6 +189,79 @@ class MirrorRulesTest {
             }
         }
         assertFalse(Files.exists(dir.resolve("local/templates/Lobby")));
+    }
+
+    @Test
+    void theHeadRefusesTheListUntilItsFirstScanFinished() throws Exception {
+        Files.writeString(Files.createDirectories(dir.resolve("head/Lobby")).resolve("a.txt"), "hello");
+        TemplateSource source = new TemplateSource(dir.resolve("head"));
+        byte[] request = new MirrorMessages.ManifestRequest("", new byte[0], 0).write();
+        assertEquals(ClusterRpcException.NOT_READY,
+                assertThrows(ClusterRpcException.class, () -> source.list(request)).code());
+        source.rescan();
+        assertEquals(List.of("Lobby"), TemplateList.read(new PacketReader(source.list(request)))
+                .templates().stream().map(TemplateEntry::name).toList());
+    }
+
+    @Test
+    void aHeadThatIsNotReadyMakesTheMemberRemoveNothing() throws Exception {
+        Path lobby = Files.createDirectories(dir.resolve("local/templates/Lobby"));
+        Files.writeString(lobby.resolve("a.txt"), "old");
+        MirrorState.writeTemplates(dir.resolve("state/cluster/templates"), Map.of("Lobby", new byte[32]));
+        TemplateSource notScanned = new TemplateSource(dir.resolve("head"));
+        ClusterHandlers head = ClusterHandlers.builder()
+                .request(MirrorMessages.TEMPLATE_LIST, (peer, payload) -> notScanned.list(payload))
+                .build();
+        try (SessionPair pair = new SessionPair(ClusterHandlers.NONE, head)) {
+            assertThrows(IOException.class, () -> sink().sync(pair.member));
+        }
+        assertEquals("old", Files.readString(lobby.resolve("a.txt")));
+    }
+
+    @Test
+    void aListingWithoutMostSyncedTemplatesRemovesNothing() throws Exception {
+        Map<String, byte[]> synced = new TreeMap<>();
+        for (String name : List.of("Lobby", "Proxy", "Game")) {
+            Files.writeString(Files.createDirectories(dir.resolve("local/templates/" + name)).resolve("a.txt"), name);
+            synced.put(name, sha(name));
+        }
+        Path state = dir.resolve("state/cluster/templates");
+        MirrorState.writeTemplates(state, synced);
+        for (List<TemplateEntry> listing : List.of(List.<TemplateEntry>of(),
+                List.of(new TemplateEntry("Lobby", sha("Lobby"), 1, 5)))) {
+            ClusterHandlers head = ClusterHandlers.builder()
+                    .request(MirrorMessages.TEMPLATE_LIST, (peer, payload) -> new TemplateList(listing).write())
+                    .build();
+            try (SessionPair pair = new SessionPair(ClusterHandlers.NONE, head)) {
+                MirrorException e = assertThrows(MirrorException.class, () -> sink().sync(pair.member));
+                assertTrue(e.getMessage().contains("kept"), e.getMessage());
+            }
+            for (String name : synced.keySet()) {
+                assertTrue(Files.isDirectory(dir.resolve("local/templates/" + name)), name);
+            }
+            assertEquals(synced.keySet(), MirrorState.readTemplates(state).keySet(), "still known as synced");
+        }
+        // One of three may go: an operator who deleted a template on the head.
+        ClusterHandlers head = ClusterHandlers.builder()
+                .request(MirrorMessages.TEMPLATE_LIST, (peer, payload) -> new TemplateList(List.of(
+                        new TemplateEntry("Lobby", sha("Lobby"), 1, 5), new TemplateEntry("Proxy", sha("Proxy"), 1, 5)))
+                        .write())
+                .build();
+        try (SessionPair pair = new SessionPair(ClusterHandlers.NONE, head)) {
+            assertEquals(1, sink().sync(pair.member).removed());
+        }
+        assertFalse(Files.exists(dir.resolve("local/templates/Game")));
+        assertTrue(Files.isDirectory(dir.resolve("local/templates/Lobby")));
+    }
+
+    @Test
+    void theShareOfTemplatesOneListingMayRemoveIsLimited() {
+        assertTrue(TemplateSink.removalAllowed(0, 0, true));
+        assertTrue(TemplateSink.removalAllowed(1, 1, false));
+        assertFalse(TemplateSink.removalAllowed(1, 1, true), "an empty listing removes nothing");
+        assertTrue(TemplateSink.removalAllowed(2, 4, false));
+        assertFalse(TemplateSink.removalAllowed(3, 4, false));
+        assertFalse(TemplateSink.removalAllowed(2, 3, false));
     }
 
     @Test

@@ -21,6 +21,8 @@ public final class ClusterRpcException extends IOException {
     public static final String NOT_FOUND = "not-found";
     /** What the request names changed since the peer asked for it; start over. */
     public static final String CHANGED = "changed";
+    /** The peer cannot answer yet (for example its first scan is still running); ask again later. */
+    public static final String NOT_READY = "not-ready";
     /** The handler failed; its node's log has the reason. */
     public static final String FAILED = "failed";
     /** No answer within the timeout. */
