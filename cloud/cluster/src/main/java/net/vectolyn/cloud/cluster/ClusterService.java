@@ -650,7 +650,7 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
         ClusterLink created = new ClusterLink(ClusterLink.Settings.of(self, version,
                 new InetSocketAddress(current.head().host(), current.head().port())), context, new ClusterLink.Listener() {
                     @Override
-                    public void connected(NodeId node, ClusterSession session) {
+                    public void connected(NodeId node) {
                         LOG.log(System.Logger.Level.INFO, "Cluster: connected to the head {0}", node);
                         // on the mirror's worker: this thread reads the answers
                         requestSync();

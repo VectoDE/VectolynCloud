@@ -59,13 +59,12 @@ public final class ClusterLink implements AutoCloseable {
     public interface Listener {
 
         /**
-         * The session with the head started. Runs on the link's reader thread: it must not wait
-         * for an answer on the session.
+         * The session with the head started ({@link ClusterLink#session()}). Runs on the link's
+         * reader thread: it must not wait for an answer on the session.
          *
-         * @param head    the head
-         * @param session requests and pushes to the head
+         * @param head the head
          */
-        void connected(NodeId head, ClusterSession session);
+        void connected(NodeId head);
 
         /**
          * The head refused this node.
@@ -258,7 +257,7 @@ public final class ClusterLink implements AutoCloseable {
                     Envelope.of(new Ping(ThreadLocalRandom.current().nextLong()))), ping, ping, TimeUnit.MILLISECONDS);
             try {
                 // The listener must not wait for an answer here: this thread reads the answers.
-                listener.connected(welcome.head(), session);
+                listener.connected(welcome.head());
                 while (!closed.get()) {
                     Envelope envelope = stream.read(Protocol.MAX_FRAME_SIZE);
                     if (envelope.message() instanceof Pong) {
