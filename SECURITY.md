@@ -5,21 +5,21 @@ _Deutsch: siehe [unten](#deutsch)._
 ## Reporting a vulnerability
 
 Please report vulnerabilities privately through GitHub:
-**[Report a vulnerability](https://github.com/VectoDE/VectoraCloud/security/advisories/new)**
+**[Report a vulnerability](https://github.com/VectoDE/VectolynCloud/security/advisories/new)**
 (repository tab *Security* → *Report a vulnerability*).
 
 Do not open a public issue, discussion or pull request for a security problem.
 
 Useful details:
 
-- affected component (VectoraCloud, Vectora plugin, a server template, a workflow ...)
+- affected component (VectolynCloud, Vectolyn plugin, a server template, a workflow ...)
 - version, tag or commit
 - steps to reproduce or a proof of concept
 - impact as you see it
 
 ## What happens next
 
-Vectora is maintained by one person in their spare time. These are targets, not guarantees:
+Vectolyn is maintained by one person in their spare time. These are targets, not guarantees:
 
 - first reply within 7 days
 - an assessment (accepted, needs more info, not a vulnerability) within 14 days
@@ -41,24 +41,24 @@ Until 1.0, only the latest release and the `main` branch receive security fixes.
 
 In scope: code and configuration templates in this repository, the GitHub workflows and the release artifacts.
 
-Out of scope: third-party software that Vectora runs (Paper, Velocity, Fabric, Geyser, Floodgate, ViaVersion and others). Report those to their projects. If Vectora's way of using them creates the problem, report it here.
+Out of scope: third-party software that Vectolyn runs (Paper, Velocity, Fabric, Geyser, Floodgate, ViaVersion and others). Report those to their projects. If Vectolyn's way of using them creates the problem, report it here.
 
 Never test against servers you do not own or have no written permission to test.
 
 ## Verifying releases
 
-A release contains `VectoraCloud.jar`, one archive with start scripts for Windows and one for Linux and macOS, `SHA256SUMS`, a Sigstore bundle per file (`*.sigstore.json`) and SLSA provenance (`*.intoto.jsonl`). The container image on GHCR is signed as well. Example:
+A release contains `VectolynCloud.jar`, one archive with start scripts for Windows and one for Linux and macOS, `SHA256SUMS`, a Sigstore bundle per file (`*.sigstore.json`) and SLSA provenance (`*.intoto.jsonl`). The container image on GHCR is signed as well. Example:
 
 ```sh
 sha256sum --check --ignore-missing SHA256SUMS
-cosign verify-blob VectoraCloud.jar \
-  --bundle VectoraCloud.jar.sigstore.json \
-  --certificate-identity-regexp '^https://github[.]com/VectoDE/VectoraCloud/[.]github/workflows/release[.]yml@refs/tags/v' \
+cosign verify-blob VectolynCloud.jar \
+  --bundle VectolynCloud.jar.sigstore.json \
+  --certificate-identity-regexp '^https://github[.]com/VectoDE/VectolynCloud/[.]github/workflows/release[.]yml@refs/tags/v' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
-gh attestation verify VectoraCloud.jar --repo VectoDE/VectoraCloud
+gh attestation verify VectolynCloud.jar --repo VectoDE/VectolynCloud
 ```
 
-The repository was called `VectoDE/Vectora-Network` until 2026-10-29. v0.1.0 is signed under that name: verify it with `--certificate-identity-regexp '^https://github[.]com/VectoDE/Vectora-Network/[.]github/workflows/release[.]yml@refs/tags/v'` and `gh attestation verify ... --repo VectoDE/Vectora-Network`. Later releases use `VectoDE/VectoraCloud` as above.
+v0.1.0 is verified against the owner instead of the repository: `--certificate-identity-regexp '^https://github[.]com/VectoDE/[A-Za-z0-9._-]+/[.]github/workflows/release[.]yml@refs/tags/v0[.]1[.]0$'` and `gh attestation verify ... --owner VectoDE`. This is weaker than a repository pin: it accepts `release.yml` of any `VectoDE` repository at that tag. Later releases use `VectoDE/VectolynCloud` as above.
 
 All steps, including the image: [docs/cloud/operations.md](docs/cloud/operations.md#verifying-a-release).
 
@@ -67,12 +67,12 @@ All steps, including the image: [docs/cloud/operations.md](docs/cloud/operations
 ## Deutsch
 
 Sicherheitslücken bitte privat über GitHub melden:
-**[Sicherheitslücke melden](https://github.com/VectoDE/VectoraCloud/security/advisories/new)**
+**[Sicherheitslücke melden](https://github.com/VectoDE/VectolynCloud/security/advisories/new)**
 (Reiter *Security* → *Report a vulnerability*). Bitte kein öffentliches Issue, keine Discussion und keinen Pull Request.
 
 Hilfreich sind die betroffene Komponente, Version oder Commit, Schritte zum Nachstellen und deine Einschätzung der Auswirkung.
 
-Ein Mensch pflegt Vectora in seiner Freizeit. Deshalb sind das Zielwerte, keine Zusagen: erste Antwort innerhalb von 7 Tagen, Einschätzung innerhalb von 14 Tagen, Behebung so schnell, wie es die Schwere verlangt. Den Veröffentlichungstermin stimmen wir mit dir ab. Nach der Behebung erscheint ein GitHub Security Advisory, auf Wunsch mit Nennung deines Namens.
+Ein Mensch pflegt Vectolyn in seiner Freizeit. Deshalb sind das Zielwerte, keine Zusagen: erste Antwort innerhalb von 7 Tagen, Einschätzung innerhalb von 14 Tagen, Behebung so schnell, wie es die Schwere verlangt. Den Veröffentlichungstermin stimmen wir mit dir ab. Nach der Behebung erscheint ein GitHub Security Advisory, auf Wunsch mit Nennung deines Namens.
 
 Unterstützt werden `main` und das jeweils neueste Release.
 

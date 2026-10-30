@@ -1,6 +1,6 @@
-"""Checks cloud/dist/pterodactyl/egg-vectora-cloud.json (operations.yml).
+"""Checks cloud/dist/pterodactyl/egg-vectolyn-cloud.json (operations.yml).
 
-    python3 -I .github/scripts/check-egg.py cloud/dist/pterodactyl/egg-vectora-cloud.json
+    python3 -I .github/scripts/check-egg.py cloud/dist/pterodactyl/egg-vectolyn-cloud.json
 
 Checks the PTDL_v2 structure the panel imports, that every {{...}} in the startup command and in
 config.files names an egg variable, that every default value passes its own rules, that the

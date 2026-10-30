@@ -1,10 +1,10 @@
-name: VectoraCloudBridge
+name: VectolynCloudBridge
 version: '${pluginVersion}'
-main: net.vectora.cloud.bridge.paper.PaperBridgePlugin
+main: net.vectolyn.cloud.bridge.paper.PaperBridgePlugin
 api-version: '26.3'
-description: Connects a Paper server to VectoraCloud (ready signal, status and network kicks).
-author: Vectora
+description: Connects a Paper server to VectolynCloud (ready signal, status and network kicks).
+author: Vectolyn
 permissions:
-  vectora.moderation.kick:
+  vectolyn.moderation.kick:
     description: A /kick of this player takes the target off the whole network instead of to another server.
     default: op

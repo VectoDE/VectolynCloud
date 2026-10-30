@@ -1,8 +1,8 @@
-# Running VectoraCloud
+# Running VectolynCloud
 
 Deutsch: [operations.de.md](operations.de.md)
 
-This page covers how to run `VectoraCloud.jar` on Windows, Linux (VPS or dedicated server, with systemd), macOS, Docker and Pterodactyl, and how to check that a download really comes from this repository. We do not host anything: every network built with Vectora runs on its operator's own machine.
+This page covers how to run `VectolynCloud.jar` on Windows, Linux (VPS or dedicated server, with systemd), macOS, Docker and Pterodactyl, and how to check that a download really comes from this repository. We do not host anything: every network built with Vectolyn runs on its operator's own machine.
 
 The files are in [`cloud/dist/`](../../cloud/dist):
 
@@ -10,9 +10,9 @@ The files are in [`cloud/dist/`](../../cloud/dist):
 |---|---|
 | `start.sh` | start script for Linux and macOS (bash 3.2 or later) |
 | `start.bat`, `start.ps1` | start scripts for Windows (Command Prompt, Windows PowerShell 5.1 or PowerShell 7) |
-| `systemd/vectora-cloud.service` | systemd unit with a dedicated user and hardening |
+| `systemd/vectolyn-cloud.service` | systemd unit with a dedicated user and hardening |
 | `docker/Dockerfile`, `docker/compose.yml`, `docker/setup.example.yml` | container image and a compose file with MariaDB |
-| `pterodactyl/egg-vectora-cloud.json` | Pterodactyl egg |
+| `pterodactyl/egg-vectolyn-cloud.json` | Pterodactyl egg |
 | `package.sh` | builds the release archives (used by the release workflow) |
 
 ## What a release contains
@@ -21,31 +21,31 @@ The release workflow ([`release.yml`](../../.github/workflows/release.yml)) runs
 
 | File | Content |
 |---|---|
-| `VectoraCloud.jar` | the cloud, for `java -jar`, Docker and Pterodactyl |
-| `VectoraCloud-<version>-windows.zip` | `VectoraCloud.jar`, `start.bat`, `start.ps1` |
-| `VectoraCloud-<version>-linux-macos.tar.gz` | `VectoraCloud.jar`, `start.sh` (executable) |
+| `VectolynCloud.jar` | the cloud, for `java -jar`, Docker and Pterodactyl |
+| `VectolynCloud-<version>-windows.zip` | `VectolynCloud.jar`, `start.bat`, `start.ps1` |
+| `VectolynCloud-<version>-linux-macos.tar.gz` | `VectolynCloud.jar`, `start.sh` (executable) |
 | `SHA256SUMS` | SHA-256 of the three files above |
 | `<file>.sigstore.json` | cosign signature bundle for each file and for `SHA256SUMS` |
-| `vectora.intoto.jsonl` | SLSA build provenance for every file in `SHA256SUMS`, as the Sigstore bundle of the GitHub attestation |
+| `vectolyn.intoto.jsonl` | SLSA build provenance for every file in `SHA256SUMS`, as the Sigstore bundle of the GitHub attestation |
 
 Before a tag is pushed, and at the end of every stage, the cleanup check in [docs/openssf.md](../openssf.md#the-cleanup-check) runs: no open pull requests, nothing fixable left under *Security and quality*, and CI, CodeQL, Dependency Review and Scorecard run again on `main` until that holds.
 
 The start scripts come in one archive per operating system rather than as loose files: a downloaded `start.sh` loses its executable bit, while the tar keeps it; the zip keeps the CRLF line ends the Windows scripts need; and each archive is a single download with the matching jar. The jar is attached on its own as well. The archives are reproducible (fixed file order, owner and time stamps), so building the same tag twice gives the same SHA-256.
 
-The container image goes to `ghcr.io/vectode/vectora-cloud`, tagged with the version (`0.2.0`, without `v`). `latest` is set only for stable releases; `v0.*` versions and tags with a suffix (`v1.0.0-rc.1`) are pre-releases and do not move `latest`. The image contains the very `VectoraCloud.jar` of the release: the workflow passes the signed jar into the image build instead of compiling it again, and checks its SHA-256 against `SHA256SUMS` first.
+The container image goes to `ghcr.io/vectode/vectolyn-cloud`, tagged with the version (`0.2.0`, without `v`). `latest` is set only for stable releases; `v0.*` versions and tags with a suffix (`v1.0.0-rc.1`) are pre-releases and do not move `latest`. The image contains the very `VectolynCloud.jar` of the release: the workflow passes the signed jar into the image build instead of compiling it again, and checks its SHA-256 against `SHA256SUMS` first.
 
 ## Requirements
 
 - **Java 21 or later** for the cloud itself. The servers it starts get the Java version their Minecraft version needs; if no installed Java fits, the cloud downloads a Temurin JRE into `<home>/storage/jre/` (see [node.md](node.md#java-runtimes)).
 - A normal user account. The cloud refuses to start as root or administrator (see [below](#never-as-root-or-administrator)).
-- Memory: the cloud's own heap (`VECTORA_XMX`, default 512M) plus the heap of every server it runs.
+- Memory: the cloud's own heap (`VECTOLYN_XMX`, default 512M) plus the heap of every server it runs.
 - **Internet access on the first start of a group.** The cloud then downloads the server software (Paper, Velocity, Fabric, PandaSpigot) and the plugins and mods of the catalog: Geyser and Floodgate for Bedrock, ViaVersion, ViaBackwards and ViaRewind so Java clients from 1.8 to 26.3 can join, LuckPerms, the Fabric performance mods. Every file is checked against its checksum and pinned in `config/software.lock.yml`; later starts take it from `storage/artifacts/` without the network ([download.md](download.md#what-the-node-installs)).
 
 ## First start: what lands in each server
 
 The templates come out of the jar: for every server that is wanted, the first start writes `local/templates/<Server>/default/`, and a folder you already have is never touched ([node.md](node.md#built-in-templates)). A server you switch off leaves no template folder behind.
 
-Before each start the node fills the server's folder: the server jar, the plugins (or mods on Fabric) its group needs, and the VectoraCloud bridge of its platform. It notes what it put there in `plugins/.vectora-managed` (`mods/` on Fabric) and removes those files again once the group no longer wants them; plugins you copy in yourself stay. A PandaSpigot 1.8.8 server does not start without its bridge, because only the bridge checks the legacy proxy's token. Details: [node.md](node.md#server-software).
+Before each start the node fills the server's folder: the server jar, the plugins (or mods on Fabric) its group needs, and the VectolynCloud bridge of its platform. It notes what it put there in `plugins/.vectolyn-managed` (`mods/` on Fabric) and removes those files again once the group no longer wants them; plugins you copy in yourself stay. A PandaSpigot 1.8.8 server does not start without its bridge, because only the bridge checks the legacy proxy's token. Details: [node.md](node.md#server-software).
 
 ## Start scripts
 
@@ -55,17 +55,17 @@ start.bat [arguments]                  # Windows, Command Prompt
 powershell -ExecutionPolicy Bypass -File .\start.ps1 [arguments]   # Windows PowerShell
 ```
 
-Every argument is passed to `VectoraCloud.jar` unchanged: `--non-interactive`, `--setup-file <file>`, `--lang de|en`, `--allow-root`, `--home <path>`, `--help`, `--version` ([launcher.md](launcher.md#arguments)).
+Every argument is passed to `VectolynCloud.jar` unchanged: `--non-interactive`, `--setup-file <file>`, `--lang de|en`, `--allow-root`, `--home <path>`, `--help`, `--version` ([launcher.md](launcher.md#arguments)).
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `VECTORA_HOME` | folder of the script | cloud home; the script changes into it, so relative paths in arguments (`--setup-file setup.yml`) are relative to the home |
-| `VECTORA_JAR` | `VectoraCloud.jar` next to the script | path of the jar |
-| `VECTORA_XMX` | `512M` | maximum heap of the cloud process, digits plus `K`, `M` or `G` |
+| `VECTOLYN_HOME` | folder of the script | cloud home; the script changes into it, so relative paths in arguments (`--setup-file setup.yml`) are relative to the home |
+| `VECTOLYN_JAR` | `VectolynCloud.jar` next to the script | path of the jar |
+| `VECTOLYN_XMX` | `512M` | maximum heap of the cloud process, digits plus `K`, `M` or `G` |
 | `JAVA_HOME` | (unset) | Java to use. If it has no `bin/java`, the script says so and uses `java` from the `PATH` |
 | `JDK_JAVA_OPTIONS` | (unset) | further JVM options; read by the `java` launcher itself |
 
-How Java is found: `JAVA_HOME` first, then the `PATH`. Without any Java the script prints where to get one (<https://adoptium.net/temurin/releases/>) and exits with 3. The version is checked by `VectoraCloud.jar` itself: its first class is compiled for Java 8, so Java 8 to 20 print "VectoraCloud needs Java 21 or newer" with the version and path found, instead of a class file error. For the same reason the scripts pass no JVM flag that old Java versions reject; native access for the console is declared in the jar's manifest (`Enable-Native-Access: ALL-UNNAMED`).
+How Java is found: `JAVA_HOME` first, then the `PATH`. Without any Java the script prints where to get one (<https://adoptium.net/temurin/releases/>) and exits with 3. The version is checked by `VectolynCloud.jar` itself: its first class is compiled for Java 8, so Java 8 to 20 print "VectolynCloud needs Java 21 or newer" with the version and path found, instead of a class file error. For the same reason the scripts pass no JVM flag that old Java versions reject; native access for the console is declared in the jar's manifest (`Enable-Native-Access: ALL-UNNAMED`).
 
 Safety of the scripts:
 
@@ -74,7 +74,7 @@ Safety of the scripts:
 - `start.ps1` has no `Invoke-Expression` and no command string; arguments go to Java as an array. It passes PSScriptAnalyzer.
 - None of them uses `sudo` or asks for elevation.
 
-The CI workflow [`operations.yml`](../../.github/workflows/operations.yml) runs every script on Linux, macOS and Windows: version and help, a Java 17 that is too old, no Java at all, a `JAVA_HOME` without Java, a missing jar, a broken `VECTORA_XMX`, values with `&` and quotes in the environment, a folder name with spaces, parentheses, `&` and `!`, a root start with and without `--allow-root`, and the scripts from the release archives.
+The CI workflow [`operations.yml`](../../.github/workflows/operations.yml) runs every script on Linux, macOS and Windows: version and help, a Java 17 that is too old, no Java at all, a `JAVA_HOME` without Java, a missing jar, a broken `VECTOLYN_XMX`, values with `&` and quotes in the environment, a folder name with spaces, parentheses, `&` and `!`, a root start with and without `--allow-root`, and the scripts from the release archives.
 
 ### Exit codes
 
@@ -86,13 +86,13 @@ The CI workflow [`operations.yml`](../../.github/workflows/operations.yml) runs 
 | 3 | no Java found, or Java older than 21 |
 | 4 | an embedded library is missing or has the wrong SHA-256 |
 | 5 | no node entry point in this build |
-| 64 | invalid argument, or `VECTORA_XMX` is not a size |
-| 66 | `VectoraCloud.jar` or the home folder not found (start scripts) |
+| 64 | invalid argument, or `VECTOLYN_XMX` is not a size |
+| 66 | `VectolynCloud.jar` or the home folder not found (start scripts) |
 | 143 | ended by SIGTERM (systemd, `docker stop`) after the clean shutdown |
 
 ### Never as root or administrator
 
-The cloud downloads and runs server software. With root or administrator rights a bug or a tampered download would hit the whole machine, so the launcher refuses such a start with exit code 2 and explains what to do instead ([launcher.md](launcher.md#root-and-administrator-check)). `--allow-root` or `VECTORA_ALLOW_ROOT=true` allow it anyway and print a warning on every start; use that only where no other way exists.
+The cloud downloads and runs server software. With root or administrator rights a bug or a tampered download would hit the whole machine, so the launcher refuses such a start with exit code 2 and explains what to do instead ([launcher.md](launcher.md#root-and-administrator-check)). `--allow-root` or `VECTOLYN_ALLOW_ROOT=true` allow it anyway and print a warning on every start; use that only where no other way exists.
 
 ## First start: the setup
 
@@ -102,7 +102,7 @@ Until `cloud.yml` says `setup-complete: true`, the cloud starts no server. With 
 ./start.sh --non-interactive --setup-file setup.yml
 ```
 
-Format and rules: [setup.md](setup.md). The file holds no secret; a database password comes from a file (`database.password-file`) or from `secrets/vectora.env`. Once the setup is complete, the file is ignored.
+Format and rules: [setup.md](setup.md). The file holds no secret; a database password comes from a file (`database.password-file`) or from `secrets/vectolyn.env`. Once the setup is complete, the file is ignored.
 
 ## What is where, and upgrading from an older home
 
@@ -120,14 +120,14 @@ Everything the cloud keeps is below the home ([layout](architecture.md#cloud-hom
 
 **Upgrading.** A home from before this layout (`cloud.yml`, `groups/`, `<Server>/template`, `<Server>/runtime`, `cache/` at the top) is moved on the first start of the new version. The cloud makes a copy of the configuration, the templates and `state/services.json` in `backups/home-layout-migration-<time>/` first and moves worlds, database and downloads by rename, so even a large world takes seconds. Stop the old cloud, with its servers, before you start the new one: the migration refuses to run while a server of the previous run is still alive. What it does step by step, and what happens if a folder cannot be assigned, is in [node.md](node.md#home-layout-migration). Do not delete the backup folder until the network ran fine once.
 
-**Windows console.** `start.bat` and `start.ps1` switch the console to UTF-8 (`chcp 65001`) and start Java with `-Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8`, so umlauts in the log are right. If you start `java -jar VectoraCloud.jar` by hand in an old console, set the same.
+**Windows console.** `start.bat` and `start.ps1` switch the console to UTF-8 (`chcp 65001`) and start Java with `-Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8`, so umlauts in the log are right. If you start `java -jar VectolynCloud.jar` by hand in an old console, set the same.
 
 **Logs.** `logs/cloud.log` is the log of the cloud itself, in UTF-8 with the full stack traces (secrets redacted); each start begins a new file and keeps the last five as `cloud.1.log` to `cloud.5.log`. The log of each server is `logs/services/<id>.log`. What a start prints on screen: [node.md](node.md#start-output).
 
 ## Windows
 
 1. Install Java 21 or later (Temurin from <https://adoptium.net/temurin/releases/>, or any other build).
-2. Unpack `VectoraCloud-<version>-windows.zip` into a folder of its own, for example `C:\Vectora`. That folder becomes the home.
+2. Unpack `VectolynCloud-<version>-windows.zip` into a folder of its own, for example `C:\Vectolyn`. That folder becomes the home.
 3. Open a normal Command Prompt or PowerShell (not "Run as administrator") and run `start.bat`.
 
 PowerShell blocks scripts downloaded from the internet with the default execution policy. Either run `Unblock-File .\start.ps1` once, or start it with `powershell -ExecutionPolicy Bypass -File .\start.ps1`. `start.bat` needs neither.
@@ -140,72 +140,72 @@ To run it permanently, use a dedicated local account without administrator right
 
 ```sh
 # as root, once
-useradd --system --user-group --home-dir /opt/vectora --create-home --shell /usr/sbin/nologin vectora
-tar -xzf VectoraCloud-<version>-linux-macos.tar.gz
-install -o vectora -g vectora -m 0644 VectoraCloud-<version>-linux-macos/VectoraCloud.jar /opt/vectora/
-install -o vectora -g vectora -m 0755 VectoraCloud-<version>-linux-macos/start.sh /opt/vectora/
-install -o root -g root -m 0644 vectora-cloud.service /etc/systemd/system/
+useradd --system --user-group --home-dir /opt/vectolyn --create-home --shell /usr/sbin/nologin vectolyn
+tar -xzf VectolynCloud-<version>-linux-macos.tar.gz
+install -o vectolyn -g vectolyn -m 0644 VectolynCloud-<version>-linux-macos/VectolynCloud.jar /opt/vectolyn/
+install -o vectolyn -g vectolyn -m 0755 VectolynCloud-<version>-linux-macos/start.sh /opt/vectolyn/
+install -o root -g root -m 0644 vectolyn-cloud.service /etc/systemd/system/
 systemctl daemon-reload
 
-# first start with questions, as the vectora user; end with "shutdown"
-sudo -u vectora /opt/vectora/start.sh
+# first start with questions, as the vectolyn user; end with "shutdown"
+sudo -u vectolyn /opt/vectolyn/start.sh
 
-systemctl enable --now vectora-cloud
-journalctl -u vectora-cloud -f
+systemctl enable --now vectolyn-cloud
+journalctl -u vectolyn-cloud -f
 ```
 
-Java: any Java 21+ on the `PATH`, for example the distribution's `openjdk-21-jre-headless` or Temurin from the Adoptium repository. For a Java outside the `PATH`, set `JAVA_HOME` in a drop-in (`systemctl edit vectora-cloud`):
+Java: any Java 21+ on the `PATH`, for example the distribution's `openjdk-21-jre-headless` or Temurin from the Adoptium repository. For a Java outside the `PATH`, set `JAVA_HOME` in a drop-in (`systemctl edit vectolyn-cloud`):
 
 ```ini
 [Service]
 Environment=JAVA_HOME=/usr/lib/jvm/temurin-25-jre-amd64
-Environment=VECTORA_XMX=1G
+Environment=VECTOLYN_XMX=1G
 ```
 
-Instead of the questions, a setup file works too: put it into `/opt/vectora/setup.yml` and use the second `ExecStart` line from the unit in a drop-in.
+Instead of the questions, a setup file works too: put it into `/opt/vectolyn/setup.yml` and use the second `ExecStart` line from the unit in a drop-in.
 
 What the unit does and why:
 
-- **Dedicated user** `vectora`, never root. The cloud would refuse root anyway.
+- **Dedicated user** `vectolyn`, never root. The cloud would refuse root anyway.
 - **Stop:** `KillMode=mixed` sends SIGTERM to the cloud only. The cloud then stops every server with its own stop command and waits for it, stops the managed database last and exits. With the default `control-group`, every server would get SIGTERM at the same moment. `TimeoutStopSec=5min` leaves room for that; raise it if you run many servers with long saves. Exit code 143 after SIGTERM counts as success.
 - **Restart** on failure after 15 s, but not for exit codes a restart cannot fix (2, 3, 4, 5, 64, 66), and at most five times in ten minutes.
-- **Hardening:** `NoNewPrivileges`, `ProtectSystem=strict` with `ReadWritePaths=/opt/vectora` (the cloud and its servers may write only to their home), `ProtectHome`, `PrivateTmp`, `PrivateDevices`, kernel and control group protection, an empty capability set, `SystemCallFilter=@system-service`, and `UMask=0027`. `MemoryDenyWriteExecute` is not set because the JVM's JIT compiler needs writable and executable memory. `systemd-analyze security vectora-cloud` shows the resulting exposure score.
+- **Hardening:** `NoNewPrivileges`, `ProtectSystem=strict` with `ReadWritePaths=/opt/vectolyn` (the cloud and its servers may write only to their home), `ProtectHome`, `PrivateTmp`, `PrivateDevices`, kernel and control group protection, an empty capability set, `SystemCallFilter=@system-service`, and `UMask=0027`. `MemoryDenyWriteExecute` is not set because the JVM's JIT compiler needs writable and executable memory. `systemd-analyze security vectolyn-cloud` shows the resulting exposure score.
 - **MariaDB socket and `PrivateTmp`:** the managed MariaDB puts its socket into the temp directory. `PrivateTmp` gives the whole unit one private `/tmp`, shared by the cloud, its servers and MariaDB, so the socket works between them; the servers connect over TCP on `127.0.0.1` anyway. An external MariaDB on the same host is reached over TCP as well, so the private `/tmp` does not hide its socket from anything that needs it.
 - **Limits:** `LimitNOFILE=65536` and `TasksMax=8192`; every thread of every server JVM counts as a task.
 
-Under systemd the cloud has no console: stdin is empty and the cloud keeps running. Commands without a console come with the API ([architecture.md](architecture.md)). Until then, run it in `tmux` or `screen` as the `vectora` user when you need the console.
+Under systemd the cloud has no console: stdin is empty and the cloud keeps running. Commands without a console come with the API ([architecture.md](architecture.md)). Until then, run it in `tmux` or `screen` as the `vectolyn` user when you need the console.
 
 The CI installs this unit on a real systemd exactly as above, starts it, waits for the cloud channel, checks the user and stops it again with a clean result.
 
 ## macOS
 
 1. Install Java 21 or later (Temurin `.pkg` from Adoptium, or `brew install --cask temurin`).
-2. Unpack the tar: `tar -xzf VectoraCloud-<version>-linux-macos.tar.gz`, then `cd` into the folder and run `./start.sh`.
+2. Unpack the tar: `tar -xzf VectolynCloud-<version>-linux-macos.tar.gz`, then `cd` into the folder and run `./start.sh`.
 
 MariaDB publishes no server build for macOS, so the managed database mode falls back to the embedded H2 database and says so in the log ([database.md](database.md)). For a shared database, use `external` (for example MariaDB from Homebrew) or Docker. The repository ships no launchd file.
 
 ## Docker
 
 ```sh
-docker run -it --init -v vectora:/data -p 25565:25565 -p 19132:19132/udp \
-  ghcr.io/vectode/vectora-cloud:<version>
+docker run -it --init -v vectolyn:/data -p 25565:25565 -p 19132:19132/udp \
+  ghcr.io/vectode/vectolyn-cloud:<version>
 ```
 
 Without questions:
 
 ```sh
-docker run -d --init --name vectora -v vectora:/data -v ./setup.yml:/data/setup.yml:ro \
+docker run -d --init --name vectolyn -v vectolyn:/data -v ./setup.yml:/data/setup.yml:ro \
   -p 25565:25565 -p 19132:19132/udp --stop-timeout 300 \
-  ghcr.io/vectode/vectora-cloud:<version> --non-interactive --setup-file /data/setup.yml
+  ghcr.io/vectode/vectolyn-cloud:<version> --non-interactive --setup-file /data/setup.yml
 ```
 
 The image:
 
-- is built in stages: a JDK 25 stage builds `VectoraCloud.jar` from source, the runtime stage is `eclipse-temurin:25-jre-noble`. Both base images are pinned by digest and updated by Dependabot;
-- runs as user `vectora` with UID and GID 1000. `/data` is the home and a volume; all of it (`config/`, `local/`, `database/`, `storage/`, `secrets/`, `state/`) lives in that one volume, so an update that replaces the container keeps it, and an old volume is migrated at the first start ([upgrading](#what-is-where-and-upgrading-from-an-older-home)), which needs free space for the backup copy of the configuration only; the jar and the start script in `/opt/vectora` belong to root and are read-only for the cloud. A bind mount instead of a volume must belong to UID 1000 (`chown -R 1000:1000 ./data`);
-- uses `start.sh` as its entry point; arguments after the image name go to the cloud. `VECTORA_XMX` sets the heap of the cloud;
+- is built in stages: a JDK 25 stage builds `VectolynCloud.jar` from source, the runtime stage is `eclipse-temurin:25-jre-noble`. Both base images are pinned by digest and updated by Dependabot;
+- runs as user `vectolyn` with UID and GID 1000. `/data` is the home and a volume; all of it (`config/`, `local/`, `database/`, `storage/`, `secrets/`, `state/`) lives in that one volume, so an update that replaces the container keeps it, and an old volume is migrated at the first start ([upgrading](#what-is-where-and-upgrading-from-an-older-home)), which needs free space for the backup copy of the configuration only; the jar and the start script in `/opt/vectolyn` belong to root and are read-only for the cloud. A bind mount instead of a volume must belong to UID 1000 (`chown -R 1000:1000 ./data`);
+- uses `start.sh` as its entry point; arguments after the image name go to the cloud. `VECTOLYN_XMX` sets the heap of the cloud;
 - stops with SIGTERM. Give it time with `--stop-timeout 300` (or `stop_grace_period` in compose), otherwise Docker kills the servers after 10 s;
-- has a health check without curl or netcat: bash opens a TCP connection to the cloud channel on `127.0.0.1:7010` (`VECTORA_HEALTHCHECK_PORT` if you moved it in `config/nodes.yml`) and closes it before the channel's handshake timeout, so no log line is written;
+- has a health check without curl or netcat: bash opens a TCP connection to the cloud channel on `127.0.0.1:7010` (`VECTOLYN_HEALTHCHECK_PORT` if you moved it in `config/nodes.yml`) and closes it before the channel's handshake timeout, so no log line is written;
 - needs no Docker socket, no capability and no privileged mode. The `docker` database mode is for a cloud on a host with Docker; inside the container use `managed`, `external` (as in compose below) or `h2`;
 - exists for `linux/amd64` and `linux/arm64`. On arm64 the managed database falls back to H2.
 
@@ -214,7 +214,7 @@ The image:
 Build it yourself from a checkout (the build context is the repository root):
 
 ```sh
-docker build -f cloud/dist/docker/Dockerfile -t vectora-cloud .
+docker build -f cloud/dist/docker/Dockerfile -t vectolyn-cloud .
 ```
 
 ### Docker Compose with MariaDB
@@ -240,23 +240,23 @@ docker compose logs -f cloud
 
 ## Pterodactyl
 
-1. In the admin area, under Nests, import [`egg-vectora-cloud.json`](../../cloud/dist/pterodactyl/egg-vectora-cloud.json) (PTDL_v2).
+1. In the admin area, under Nests, import [`egg-vectolyn-cloud.json`](../../cloud/dist/pterodactyl/egg-vectolyn-cloud.json) (PTDL_v2).
 2. Create a server with the egg. Give it **one allocation per port**: the primary allocation is the Java port, plus one for Bedrock (UDP) and, if you turn it on, one for the legacy proxy. Enter those ports in the variables.
 3. Set "Accept the Minecraft EULA" to `true` if you accept it, then start the server.
 
-The installer (in `ghcr.io/pterodactyl/installers:alpine`) downloads `VectoraCloud.jar` of the chosen release (`latest` is the newest release including pre-releases) and checks it against the release's `SHA256SUMS`; on a mismatch it stops and keeps nothing. The server runs in the Pterodactyl Java image (`yolks:java_25` or `java_21`) as the panel's unprivileged user, so the root check passes.
+The installer (in `ghcr.io/pterodactyl/installers:alpine`) downloads `VectolynCloud.jar` of the chosen release (`latest` is the newest release including pre-releases) and checks it against the release's `SHA256SUMS`; on a mismatch it stops and keeps nothing. The server runs in the Pterodactyl Java image (`yolks:java_25` or `java_21`) as the panel's unprivileged user, so the root check passes.
 
 How the egg works:
 
 | Part | Value |
 |---|---|
-| Startup | `java -Xms128M -Xmx{{CLOUD_HEAP}} -jar VectoraCloud.jar --non-interactive --setup-file setup.yml --lang {{CLOUD_LANGUAGE}}` |
+| Startup | `java -Xms128M -Xmx{{CLOUD_HEAP}} -jar VectolynCloud.jar --non-interactive --setup-file setup.yml --lang {{CLOUD_LANGUAGE}}` |
 | Setup file | Wings writes `setup.yml` from the variables before every start (`config.files`, parser `yaml`): `schema-version`, `eula`, `language`, `network-name`, `network.bind`, `network.java-port` (the primary allocation), `network.bedrock-port`, `network.legacy-port`, `servers.legacy-proxy`, `database.mode`. It counts only for the first setup. |
 | Started when | the log shows `Cloud channel listens on` |
 | Stop | the console command `shutdown`: every server gets its stop command, then the cloud ends |
 | Variables | version, cloud heap, EULA, language, network name, Bedrock port, legacy proxy on/off, legacy proxy port, database mode |
 
-- **Database:** `managed` (the cloud runs its own MariaDB inside the server; works on x86_64 because the Pterodactyl images are glibc-based), `external` (a database from the panel's database tab) or `h2`. The `docker` mode is not offered: the server is a container without Docker, and the setup refuses it there too. For `external`, open `setup.yml` in the file manager and add under `database:` the keys `host`, `port`, `name`, `user` and `password-file: db-password.txt`, and put the password into `db-password.txt`; Wings only replaces the keys it manages and keeps the others. Alternatively put `VECTORA_DB_PASSWORD=...` into `secrets/vectora.env` ([setup.md](setup.md#pterodactyl)).
+- **Database:** `managed` (the cloud runs its own MariaDB inside the server; works on x86_64 because the Pterodactyl images are glibc-based), `external` (a database from the panel's database tab) or `h2`. The `docker` mode is not offered: the server is a container without Docker, and the setup refuses it there too. For `external`, open `setup.yml` in the file manager and add under `database:` the keys `host`, `port`, `name`, `user` and `password-file: db-password.txt`, and put the password into `db-password.txt`; Wings only replaces the keys it manages and keeps the others. Alternatively put `VECTOLYN_DB_PASSWORD=...` into `secrets/vectolyn.env` ([setup.md](setup.md#pterodactyl)).
 - **Files:** the server's file manager shows the whole home: `config/` for the configuration, `local/services/<id>` for the worlds, `logs/cloud.log` for the log. An egg installation from before the layout change is migrated at the first start of the new version; stop the server in the panel first so no Minecraft server is still running.
 - **Memory:** the server's memory limit covers the cloud and every Minecraft server it starts. The setup warns when the heaps add up to more than `SERVER_MEMORY`. Keep the cloud heap small (512M) and give the servers the rest.
 - **PID limit:** Wings limits every server container to **512 processes and threads** by default (`docker.container_pid_limit` in `/etc/pterodactyl/config.yml`). Each Minecraft server JVM uses roughly 50 to 150 threads, the proxy and MariaDB more, so several servers in one Pterodactyl server run into this limit and then fail with "unable to create native thread" or `OutOfMemoryError`. Raise it (for example to 4096) in the Wings configuration and restart Wings; that needs access to the node, not only to the panel.
@@ -267,7 +267,7 @@ How the egg works:
 A cluster is one head and its members; the details, the trust model and the commands are in [cluster.md](cluster.md). What operations has to know:
 
 - **Database:** every node needs a MariaDB server that all nodes reach: `database.mode: external` with an address of the cluster network. With `h2` the head refuses tokens and joins. `managed` and `docker` bind MariaDB to 127.0.0.1, so with them only nodes on the same machine can join; their binding to the cluster network follows with the next step of the cluster.
-- **Same version:** every node runs the head's VectoraCloud version. A node on another version does not join, or gets no session, until it is updated.
+- **Same version:** every node runs the head's VectolynCloud version. A node on another version does not join, or gets no session, until it is updated.
 - **Firewall:** the head's cluster port (TCP 7011 by default) open for the other nodes only. In Docker publish it as well (`-p 7011:7011`) and give `cluster init` the host's address. The ports for proxies and backends across nodes come with the next step of the cluster.
 - **Backup:** `secrets/cluster/` of the head holds the cluster CA; it is part of the backup of `secrets/`. Without it no node can join any more.
 - **Removing a node:** `cluster remove <node-id>` on the head revokes its certificate at once. Joining again needs a new token.
@@ -275,50 +275,50 @@ A cluster is one head and its members; the details, the trust model and the comm
 
 ## Verifying a release
 
-Every file of a release is signed with cosign keyless (Sigstore, the GitHub Actions identity of `release.yml`). The three files in `SHA256SUMS` also have a GitHub build provenance attestation (SLSA provenance, signed with Sigstore). `vectora.intoto.jsonl` is the same attestation as a file, so it can be checked without asking GitHub; `SHA256SUMS` itself is covered by its signature. Replace `v0.2.0` with the tag you downloaded.
+Every file of a release is signed with cosign keyless (Sigstore, the GitHub Actions identity of `release.yml`). The three files in `SHA256SUMS` also have a GitHub build provenance attestation (SLSA provenance, signed with Sigstore). `vectolyn.intoto.jsonl` is the same attestation as a file, so it can be checked without asking GitHub; `SHA256SUMS` itself is covered by its signature. Replace `v0.2.0` with the tag you downloaded.
 
-The repository was renamed from `VectoDE/Vectora-Network` to `VectoDE/VectoraCloud` on 2026-10-29. Signatures and provenance record the repository name at build time, so the two names apply to different releases:
+v0.1.0 is checked differently from later releases:
 
-- **v0.1.0** was signed as `VectoDE/Vectora-Network`. Use the certificate identity `https://github.com/VectoDE/Vectora-Network/.github/workflows/release.yml@refs/tags/v0.1.0`, `gh attestation verify ... --repo VectoDE/Vectora-Network` and `slsa-verifier ... --source-uri github.com/VectoDE/Vectora-Network`. v0.1.0 contains the plugin jars and `SHA256SUMS`, not `VectoraCloud.jar`.
-- **Every later release** is signed as `VectoDE/VectoraCloud`, as in the commands below.
+- **v0.1.0**: check it against the owner, not the repository: certificate identity regexp `^https://github[.]com/VectoDE/[A-Za-z0-9._-]+/[.]github/workflows/release[.]yml@refs/tags/v0[.]1[.]0$`, `gh attestation verify ... --owner VectoDE`. This owner check is weaker than a repository pin: it accepts `release.yml` of any `VectoDE` repository at tag v0.1.0. For `slsa-verifier`, read the source from the provenance file with `jq -r .payload <file> | base64 -d | jq -r .predicate.invocation.configSource.uri` and use it as `--source-uri` without the `git+https://` prefix and the `@refs/...` suffix; it must start with `github.com/VectoDE/`. v0.1.0 contains the plugin jars and `SHA256SUMS`, not `VectolynCloud.jar`.
+- **Every later release** is signed as `VectoDE/VectolynCloud`, as in the commands below.
 
-Up to v0.1.0, `vectora.intoto.jsonl` came from slsa-github-generator and is checked with `slsa-verifier verify-artifact ... --provenance-path vectora.intoto.jsonl --source-uri github.com/VectoDE/Vectora-Network --source-tag v0.1.0`. Later releases build the provenance with `actions/attest-build-provenance` in the build job: the SLSA generator can only be referenced by tag, and the release workflow pins every action to a commit SHA. The file is then a Sigstore bundle, which `gh attestation verify --bundle` reads.
+Up to v0.1.0, the provenance file (the release asset ending in `.intoto.jsonl`) came from slsa-github-generator and is checked with `slsa-verifier verify-artifact ... --provenance-path <that file> --source-uri <source from the provenance> --source-tag v0.1.0`. Later releases build the provenance with `actions/attest-build-provenance` in the build job: the SLSA generator can only be referenced by tag, and the release workflow pins every action to a commit SHA. The file is then a Sigstore bundle, which `gh attestation verify --bundle` reads.
 
 ```sh
 # 1. Checksums (only integrity: SHA256SUMS comes from the same place)
 sha256sum --check --ignore-missing SHA256SUMS
 
 # 2. cosign: signed by release.yml of this repository at this tag
-cosign verify-blob VectoraCloud.jar \
-  --bundle VectoraCloud.jar.sigstore.json \
-  --certificate-identity "https://github.com/VectoDE/VectoraCloud/.github/workflows/release.yml@refs/tags/v0.2.0" \
+cosign verify-blob VectolynCloud.jar \
+  --bundle VectolynCloud.jar.sigstore.json \
+  --certificate-identity "https://github.com/VectoDE/VectolynCloud/.github/workflows/release.yml@refs/tags/v0.2.0" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
 # 3. GitHub attestation (build provenance)
-gh attestation verify VectoraCloud.jar --repo VectoDE/VectoraCloud
+gh attestation verify VectolynCloud.jar --repo VectoDE/VectolynCloud
 
 # 4. The same provenance from the release file, without fetching it from GitHub
-gh attestation verify VectoraCloud.jar --repo VectoDE/VectoraCloud \
-  --bundle vectora.intoto.jsonl \
-  --signer-workflow VectoDE/VectoraCloud/.github/workflows/release.yml \
+gh attestation verify VectolynCloud.jar --repo VectoDE/VectolynCloud \
+  --bundle vectolyn.intoto.jsonl \
+  --signer-workflow VectoDE/VectolynCloud/.github/workflows/release.yml \
   --source-ref refs/tags/v0.2.0
 ```
 
 The container image, always by digest or tag of a release:
 
 ```sh
-cosign verify ghcr.io/vectode/vectora-cloud:0.2.0 \
-  --certificate-identity "https://github.com/VectoDE/VectoraCloud/.github/workflows/release.yml@refs/tags/v0.2.0" \
+cosign verify ghcr.io/vectode/vectolyn-cloud:0.2.0 \
+  --certificate-identity "https://github.com/VectoDE/VectolynCloud/.github/workflows/release.yml@refs/tags/v0.2.0" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
-gh attestation verify oci://ghcr.io/vectode/vectora-cloud:0.2.0 --repo VectoDE/VectoraCloud
+gh attestation verify oci://ghcr.io/vectode/vectolyn-cloud:0.2.0 --repo VectoDE/VectolynCloud
 
 # SBOM and BuildKit provenance stored with the image
-docker buildx imagetools inspect ghcr.io/vectode/vectora-cloud:0.2.0 --format '{{ json .SBOM }}'
-docker buildx imagetools inspect ghcr.io/vectode/vectora-cloud:0.2.0 --format '{{ json .Provenance }}'
+docker buildx imagetools inspect ghcr.io/vectode/vectolyn-cloud:0.2.0 --format '{{ json .SBOM }}'
+docker buildx imagetools inspect ghcr.io/vectode/vectolyn-cloud:0.2.0 --format '{{ json .Provenance }}'
 ```
 
-To check that the image carries the released jar: `docker run --rm --entrypoint sha256sum ghcr.io/vectode/vectora-cloud:0.2.0 /opt/vectora/VectoraCloud.jar` must print the line from `SHA256SUMS`.
+To check that the image carries the released jar: `docker run --rm --entrypoint sha256sum ghcr.io/vectode/vectolyn-cloud:0.2.0 /opt/vectolyn/VectolynCloud.jar` must print the line from `SHA256SUMS`.
 
 ## What is tested where
 

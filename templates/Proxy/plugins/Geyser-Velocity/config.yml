@@ -19,19 +19,19 @@ bedrock:
 
   # The port that Geyser will listen on for incoming Bedrock connections.
   # Built-in signaling uses this port over TCP (and UDP if "webrtc-port" is not set), and RakNet uses it over UDP.
-  port: {{VECTORA_BEDROCK_PORT}}
+  port: {{VECTOLYN_BEDROCK_PORT}}
 
   # The UDP port used for NetherNet connections. When set to 0, Geyser uses the "port" value set above.
   # Players connect to it directly, so forward it when behind a router. With "nxs" signaling and
   # assisted-joins off, they cannot connect otherwise.
-  # VectoraCloud: always the port after "port", because "both" needs its own UDP port for NetherNet.
-  webrtc-port: {{VECTORA_BEDROCK_NETHERNET_PORT}}
+  # VectolynCloud: always the port after "port", because "both" needs its own UDP port for NetherNet.
+  webrtc-port: {{VECTOLYN_BEDROCK_NETHERNET_PORT}}
 
   # How Bedrock players can connect. Changes require a restart.
   # "nethernet": the new connection method for Bedrock Edition. It needs signaling, see "signaling" below.
   # "both": accepts NetherNet and RakNet. Each needs its own UDP port, see "port" and "webrtc-port".
   # "raknet": the old connection method. Bedrock Edition will stop supporting it in a future version.
-  # VectoraCloud: "both", so current clients join over NetherNet and RakNet keeps answering
+  # VectolynCloud: "both", so current clients join over NetherNet and RakNet keeps answering
   # server list pings, LAN discovery and clients without NetherNet.
   transport: both
 
@@ -97,8 +97,8 @@ java:
 motd:
   # The MOTD that will be broadcasted to Minecraft: Bedrock Edition clients. This is irrelevant if "passthrough-motd" is set to true.
   # If either of these are empty, the respective string will default to "Geyser"
-  primary-motd: "§8» §b§lVECTORA§6§l.NET §8« §7[1.8 - 26.3]"
-  secondary-motd: "§c§lNEUE LOBBY §8• §a§lJAVA & BEDROCK"
+  primary-motd: "§8» §b§lVECTOLYN§6§l.NET §8« §7[1.8 - 26.3]"
+  secondary-motd: "§c§lNEW LOBBY §8• §a§lJAVA & BEDROCK"
 
   # Whether Geyser should relay the MOTD from the Java server to Bedrock players.
   passthrough-motd: false

@@ -14,7 +14,7 @@ on:
     branches: [main]
     paths:
       - .github/workflows/network-smoke.yml
-      - cloud/download/src/test/java/net/vectora/cloud/download/LiveSmokeTest.java
+      - cloud/download/src/test/java/net/vectolyn/cloud/download/LiveSmokeTest.java
 
 permissions:
   contents: read

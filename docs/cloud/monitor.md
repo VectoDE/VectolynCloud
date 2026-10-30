@@ -1,8 +1,8 @@
-# VectoraCloud monitoring
+# VectolynCloud monitoring
 
-Module `cloud/monitor`, package `net.vectora.cloud.monitor`. It samples every service and the node at a fixed interval, keeps a history, evaluates alert rules with hysteresis and debounce, and reports alerts to the log, to listeners and, if the operator switches it on, to a webhook. An optional Prometheus endpoint exposes the same values on loopback.
+Module `cloud/monitor`, package `net.vectolyn.cloud.monitor`. It samples every service and the node at a fixed interval, keeps a history, evaluates alert rules with hysteresis and debounce, and reports alerts to the log, to listeners and, if the operator switches it on, to a webhook. An optional Prometheus endpoint exposes the same values on loopback.
 
-Nothing is sent anywhere by default. Notifications and the Prometheus endpoint are off until the operator enables them in `monitor.yml` and enters the webhook URL in `secrets/vectora.env`.
+Nothing is sent anywhere by default. Notifications and the Prometheus endpoint are off until the operator enables them in `monitor.yml` and enters the webhook URL in `secrets/vectolyn.env`.
 
 The module does not depend on `cloud/node`. The node plugs it in through a small interface and two calls (see [Hooking it into the node](#hooking-it-into-the-node)); `cloud/node` does that in `CloudNode` with `ops.NodeMonitoring` (service list and state changes) and the channel's status reports, and registers `monitor` and `alerts`. The origin of notifications is the node id; `MonitorRuntime.open` refuses anything that is not a valid node id.
 
@@ -33,7 +33,7 @@ A value that cannot be measured is shown as `-` and counts as missing for the ru
 
 ### What the bridges report, and what the monitor expects
 
-The bridges (`plugins/bridge/paper`, `plugins/bridge/legacy`, `plugins/bridge/velocity`) already do all of this; the list is the contract for any later client such as the Vectora plugin.
+The bridges (`plugins/bridge/paper`, `plugins/bridge/legacy`, `plugins/bridge/velocity`) already do all of this; the list is the contract for any later client such as the Vectolyn plugin.
 
 - `CloudClient.reportStatus(online, max, tps, mspt)` at least once per `sample-interval` (default 10 s). The bridges report every 5 s. A report older than `stale-after` (default 60 s) counts as missing.
 - Paper and PandaSpigot report on the main thread every 100 ticks. On a lagging server that takes longer than 5 s: at 3.3 TPS it is 30 s, which is why `stale-after` defaults to 60 s (covers down to about 1.7 TPS). A server that hardly ticks at all stops reporting; its TPS then counts as missing. A `low-tps` alert that already fires stays active, because missing values never clear an alert.
@@ -67,7 +67,7 @@ rules:                     # missing: the default rules below; []: no rules
 notifications:
   webhook:
     enabled: false
-    url-secret: VECTORA_MONITOR_WEBHOOK_URL   # key in secrets/vectora.env
+    url-secret: VECTOLYN_MONITOR_WEBHOOK_URL   # key in secrets/vectolyn.env
     format: discord        # discord, slack or json
     timeout: 10s           # 1s to 60s
     send-resolved: true
@@ -134,19 +134,19 @@ Each firing alert gets a number (`#1`, `#2`, ... per run of the cloud). The log 
 The built-in `WebhookNotifier` posts JSON to a URL the operator enters:
 
 1. Create the webhook yourself, for example in Discord under channel settings, Integrations, Webhooks.
-2. Put the URL into `secrets/vectora.env`: `VECTORA_MONITOR_WEBHOOK_URL=https://discord.com/api/webhooks/...`
+2. Put the URL into `secrets/vectolyn.env`: `VECTOLYN_MONITOR_WEBHOOK_URL=https://discord.com/api/webhooks/...`
 3. Set `notifications.webhook.enabled: true` in `monitor.yml` and restart the cloud.
 
 Rules of the webhook:
 
 | Rule | How |
 |---|---|
-| The URL is a secret | It lives in `vectora.env` (owner-only), not in `monitor.yml`. `WebhookUrl.toString()` prints `***`; log lines go through the secret filter as well. Errors name the HTTP status or the kind of network error, never the URL or the host. |
+| The URL is a secret | It lives in `vectolyn.env` (owner-only), not in `monitor.yml`. `WebhookUrl.toString()` prints `***`; log lines go through the secret filter as well. Errors name the HTTP status or the kind of network error, never the URL or the host. |
 | HTTPS only | `http://`, other schemes, user info before the host, fragments, spaces and non-ASCII characters are refused when the cloud starts. The JDK trust store checks the certificate. |
 | No redirects | Redirects are never followed, so a post cannot be sent on to another host. A 3xx answer is a failure. |
 | Time limit | `timeout` applies to connecting and to the answer. |
 | Content | Rule names, service ids and numbers only. Discord posts set `allowed_mentions` to none, so a post cannot ping `@everyone`. The chat formats escape their markup on top: `discord` puts a backslash before `\`, `*`, `_`, `~`, `` ` ``, `\|`, `<`, `>` and `@`, `slack` writes `&`, `<` and `>` as `&amp;`, `&lt;` and `&gt;`. `json` sends the raw values; a receiver of your own escapes them for its output. |
-| Target address | The cloud does not check where the URL points. A receiver on your own network (a bot, a relay, a ticket system) is a valid use, so private and loopback addresses are allowed. The URL comes only from `vectora.env`, which only the operator can write; whoever can edit that file can point the cloud at any host the node reaches. |
+| Target address | The cloud does not check where the URL points. A receiver on your own network (a bot, a relay, a ticket system) is a valid use, so private and loopback addresses are allowed. The URL comes only from `vectolyn.env`, which only the operator can write; whoever can edit that file can point the cloud at any host the node reaches. |
 
 An enabled webhook whose key is missing or whose URL breaks a rule is logged as a warning when the cloud starts; monitoring runs without it.
 
@@ -199,7 +199,7 @@ With `prometheus.enabled: true` the cloud serves `GET /metrics` in the Prometheu
 - Limits: one handler thread and a backlog of 16 connections; request bodies are never read and the answer is built from memory. The JDK server sets no further limit on connections or on slow requests, so this endpoint trusts every local process. Leave it off on a machine shared with users you do not trust, or put a reverse proxy with limits in front of it.
 - It uses the JDK's `jdk.httpserver` module, no extra library.
 
-`PrometheusFormat.render(monitor)` builds the text without any I/O, so the API (PR 15) can serve the same output on its own server and this endpoint can go. Series: `vectora_node_cpu_percent`, `vectora_node_memory_used_bytes`, `vectora_node_memory_total_bytes`, `vectora_node_disk_free_bytes`, `vectora_node_disk_total_bytes`, and per service with the labels `service` and `group`: `vectora_service_running`, `_restart_attempts`, `_crashes_total`, `_players`, `_max_players`, `_tps`, `_mspt`, `_heap_used_bytes`, `_heap_max_bytes`, `_cpu_percent`, `_rss_bytes`; finally `vectora_alerts_active{severity}`. Values that were not measured are left out.
+`PrometheusFormat.render(monitor)` builds the text without any I/O, so the API (PR 15) can serve the same output on its own server and this endpoint can go. Series: `vectolyn_node_cpu_percent`, `vectolyn_node_memory_used_bytes`, `vectolyn_node_memory_total_bytes`, `vectolyn_node_disk_free_bytes`, `vectolyn_node_disk_total_bytes`, and per service with the labels `service` and `group`: `vectolyn_service_running`, `_restart_attempts`, `_crashes_total`, `_players`, `_max_players`, `_tps`, `_mspt`, `_heap_used_bytes`, `_heap_max_bytes`, `_cpu_percent`, `_rss_bytes`; finally `vectolyn_alerts_active{severity}`. Values that were not measured are left out.
 
 ## Hooking it into the node
 
@@ -219,7 +219,7 @@ With `prometheus.enabled: true` the cloud serves `GET /metrics` in the Prometheu
 
 `ServicePhase` has the same names as `ServiceState` in `cloud/node`, so the mapping is `valueOf(state.name())`. The calls return at once and are safe from Netty and node threads.
 
-Sampling runs on the daemon thread `vectora-monitor`, the process probe (CPU and memory of the server processes) on `vectora-monitor-probe`, notifications on `vectora-monitor-notify`, the endpoint on `vectora-monitor-prometheus`. The probe runs every `sample-interval` like the rounds, but a round never waits for it: it takes the newest finished probe result, and none (`-` for CPU and RSS) once that result is older than `stale-after`. A helper program that takes 30 s therefore makes CPU and RSS lag behind; player counts, TPS and the samples the autoscaler reads stay on time. A change to `monitor.yml` takes effect at the next start of the cloud; `Monitor.replaceRules` is there for a reload hook later.
+Sampling runs on the daemon thread `vectolyn-monitor`, the process probe (CPU and memory of the server processes) on `vectolyn-monitor-probe`, notifications on `vectolyn-monitor-notify`, the endpoint on `vectolyn-monitor-prometheus`. The probe runs every `sample-interval` like the rounds, but a round never waits for it: it takes the newest finished probe result, and none (`-` for CPU and RSS) once that result is older than `stale-after`. A helper program that takes 30 s therefore makes CPU and RSS lag behind; player counts, TPS and the samples the autoscaler reads stay on time. A change to `monitor.yml` takes effect at the next start of the cloud; `Monitor.replaceRules` is there for a reload hook later.
 
 ## Platform notes
 
@@ -230,7 +230,7 @@ Sampling runs on the daemon thread `vectora-monitor`, the process probe (CPU and
 | macOS, BSD | `ProcessHandle` | `/bin/ps -o pid=,rss= -p ...`, one call per 100 processes | MXBean |
 | anything else | `ProcessHandle` if the JDK supports it | not measured (`-`) | MXBean if present |
 
-Helper programs run by absolute path, without a shell and without the node's `VECTORA_*` variables, with a 30 s time limit (`tasklist` took more than 20 s on a busy Windows machine) and at most 4 MiB of output. A helper that runs out of time is killed and reported as a time-out, not by its exit code. A failing helper is logged once; `rss` stays unknown until it works again.
+Helper programs run by absolute path, without a shell and without the node's `VECTOLYN_*` variables, with a 30 s time limit (`tasklist` took more than 20 s on a busy Windows machine) and at most 4 MiB of output. A helper that runs out of time is killed and reported as a time-out, not by its exit code. A failing helper is logged once; `rss` stays unknown until it works again.
 
 ## Tests
 
@@ -251,7 +251,7 @@ Helper programs run by absolute path, without a shell and without the node's `VE
 They run on Java 25 and, with `-PtestJava=21`, on Java 21, on Linux and Windows in CI.
 
 ```sh
-./gradlew :cloud:monitor:test --tests 'net.vectora.cloud.monitor.alert.RuleParserFuzzTest.parseFailsOnlyWithSyntaxErrorsAndRoundTrips' -Pfuzz -PfuzzMaxDuration=5m
+./gradlew :cloud:monitor:test --tests 'net.vectolyn.cloud.monitor.alert.RuleParserFuzzTest.parseFailsOnlyWithSyntaxErrorsAndRoundTrips' -Pfuzz -PfuzzMaxDuration=5m
 ```
 
 ## Limits today

@@ -1,8 +1,8 @@
-# Only the settings Vectora needs. PandaSpigot adds every other setting with its default value on
+# Only the settings Vectolyn needs. PandaSpigot adds every other setting with its default value on
 # the first start.
 settings:
   # Accept the BungeeCord handshake the legacy proxy sends (player-info-forwarding-mode
-  # "bungeeguard"). The bungeeguard-token in it is checked by the Vectora bridge, because
+  # "bungeeguard"). The bungeeguard-token in it is checked by the Vectolyn bridge, because
   # PandaSpigot does not check it itself (see docs/cloud/legacy-1.8.8.md).
   bungeecord: true
   # Restarts are the node's job. With a script here, /restart and a watchdog crash would start a

@@ -2,7 +2,7 @@
 
 Deutsch: [setup.de.md](setup.de.md)
 
-VectoraCloud has one entry point: `java -jar VectoraCloud.jar`. As long as `config/cloud.yml` has `setup-complete: false`, the node runs the setup before it starts any server. There are three ways to answer, and all of them write through the same `ConfigService` as the console commands and hand edits:
+VectolynCloud has one entry point: `java -jar VectolynCloud.jar`. As long as `config/cloud.yml` has `setup-complete: false`, the node runs the setup before it starts any server. There are three ways to answer, and all of them write through the same `ConfigService` as the console commands and hand edits:
 
 | Way | When | How |
 |---|---|---|
@@ -12,7 +12,7 @@ VectoraCloud has one entry point: `java -jar VectoraCloud.jar`. As long as `conf
 
 The dashboard will be a fourth way later and will use the same layer.
 
-The code is in `cloud/setup` (`net.vectora.cloud.setup`).
+The code is in `cloud/setup` (`net.vectolyn.cloud.setup`).
 
 ## The questions
 
@@ -49,7 +49,7 @@ The assistant asks in this order. Every question shows its default in brackets; 
 
 Then it prints a summary: every answer, the generated secrets (as "hidden"), and the files it would write. You choose `save`, `change` (all questions again, your answers are the new defaults) or `cancel`. Only `save` writes. If the checks find a problem, `save` is not offered until you change the answer.
 
-After saving it says who can read `secrets/vectora.env` (see [below](#who-can-read-the-secrets)).
+After saving it says who can read `secrets/vectolyn.env` (see [below](#who-can-read-the-secrets)).
 
 ### The password of an external database
 
@@ -57,7 +57,7 @@ Secrets never appear on the screen and never go into the console history.
 
 - **The console hides input** (JLine on a real terminal): the password is asked like any other question, but masked. On a later run Enter keeps the stored one.
 - **The console shows input** (plain stdin, for example some IDEs or `docker attach` without a TTY): the assistant says so and offers three ways:
-  - `file`: you put `VECTORA_DB_PASSWORD=...` into `secrets/vectora.env` yourself (it prints the full path), then confirm. The assistant checks the file and asks again until it finds a value.
+  - `file`: you put `VECTOLYN_DB_PASSWORD=...` into `secrets/vectolyn.env` yourself (it prints the full path), then confirm. The assistant checks the file and asks again until it finds a value.
   - `type`: you type it anyway, knowing that it is visible.
   - `keep`: keeps the stored password (only offered if there is one).
 
@@ -72,14 +72,14 @@ The console command `setup` runs the questions again. The current configuration 
 For starts without questions:
 
 ```sh
-java -jar VectoraCloud.jar --non-interactive --setup-file /data/setup.yml
+java -jar VectolynCloud.jar --non-interactive --setup-file /data/setup.yml
 ```
 
 ```yaml
 schema-version: 1
 eula: true                    # required; you accept https://aka.ms/MinecraftEULA
 language: en                  # en or de
-network-name: Vectora
+network-name: Vectolyn
 servers:                      # every switch is optional and keeps its default
   proxy: true
   lobby: true
@@ -120,7 +120,7 @@ database:
   port: 3306
   name: luckperms
   user: luckperms
-  password-file: /run/secrets/vectora-db   # optional, see below
+  password-file: /run/secrets/vectolyn-db  # optional, see below
   # docker-image: mariadb:12.3              only with mode: docker
 ```
 
@@ -131,7 +131,7 @@ Rules:
 - `memory` and `minigames` may only name groups that exist or that the setup creates. `services` may only name tasks that exist or that the setup creates; the proxies are not among them, they always run one service. Each entry is checked like a typed answer (`static ≤ min ≤ max`, max from 1 to 1000). `drain-timeout` may only name groups that exist or that the setup creates; the console assistant asks for it under advanced settings, `group set <name> drain-timeout` changes it later.
 - `node` changes the node this cloud runs as (`node-id` in `cloud.yml`), checked like `nodes.yml`. The console assistant asks for it under advanced settings; `node set` changes it later. `max-memory: auto` removes the limit; any other text than a size is refused.
 - The file is used only while `setup-complete` is false. Once the setup is done, a file that stays mounted is ignored, so it cannot undo later changes made with `config set` or the dashboard.
-- The file holds no secret. The password of an external database comes from `secrets/vectora.env` (`VECTORA_DB_PASSWORD`) or from `database.password-file`: a regular file (a link to one is fine; a FIFO or device is refused) with the password on one line (a trailing line break is dropped), at most 4 KiB, UTF-8, relative to the home or absolute. That fits Docker and Kubernetes secrets.
+- The file holds no secret. The password of an external database comes from `secrets/vectolyn.env` (`VECTOLYN_DB_PASSWORD`) or from `database.password-file`: a regular file (a link to one is fine; a FIFO or device is refused) with the password on one line (a trailing line break is dropped), at most 4 KiB, UTF-8, relative to the home or absolute. That fits Docker and Kubernetes secrets.
 
 ### Why a file and not environment variables
 
@@ -145,17 +145,17 @@ Platforms that think in variables can still write the file from them, see Pterod
 ### Docker
 
 ```sh
-docker run -it -v vectora:/data <image>   # questions in the terminal
-docker run -v vectora:/data -v ./setup.yml:/data/setup.yml:ro <image> --non-interactive --setup-file /data/setup.yml
+docker run -it -v vectolyn:/data <image>   # questions in the terminal
+docker run -v vectolyn:/data -v ./setup.yml:/data/setup.yml:ro <image> --non-interactive --setup-file /data/setup.yml
 ```
 
-`<image>` is any image with Java 21 or later and `VectoraCloud.jar`. For an external database, mount the password as a secret file (Compose `secrets:`, Kubernetes secret volume) and name it in `database.password-file`.
+`<image>` is any image with Java 21 or later and `VectolynCloud.jar`. For an external database, mount the password as a secret file (Compose `secrets:`, Kubernetes secret volume) and name it in `database.password-file`.
 
 With `-it` the questions run in the terminal. Without a TTY the console shows input, so the assistant offers the file way for the password (see above).
 
 ### Pterodactyl
 
-The questions work in the panel console. Its input is visible to everyone who can open the console, so the assistant offers to put the password into `secrets/vectora.env` through the file manager instead.
+The questions work in the panel console. Its input is visible to everyone who can open the console, so the assistant offers to put the password into `secrets/vectolyn.env` through the file manager instead.
 
 For an egg without questions, let Wings write the setup file from egg variables with `config.files` and the `yaml` parser, and add `--non-interactive --setup-file setup.yml` to the startup command:
 
@@ -169,7 +169,7 @@ For an egg without questions, let Wings write the setup file from egg variables 
 
 ## Who can read the secrets
 
-`secrets/vectora.env` is restricted to the account that runs the cloud (see [config](config.md#generation-and-storage)). After saving, the assistant says who else can still get at it:
+`secrets/vectolyn.env` is restricted to the account that runs the cloud (see [config](config.md#generation-and-storage)). After saving, the assistant says who else can still get at it:
 
 - **Linux and macOS:** the owner and root.
 - **Windows:** the owner, and members of the local Administrators group. They are not on the access list, but Windows always lets them take ownership of a file and then read it. The group name is localized (`BUILTIN\Administrators`, `VORDEFINIERT\Administratoren`, …), so the assistant looks it up with `%SystemRoot%\System32\whoami.exe /groups` and always adds its SID `S-1-5-32-544`, which is the same on every Windows. Keep that group small on a server that runs the cloud.
@@ -202,4 +202,4 @@ If step 2 or 3 fails, the configuration goes back to the state before (groups an
 
 ## Tests
 
-`cloud/setup/src/test`: the questions through a scripted terminal (order, defaults, cancel at any point, EOF, Ctrl+C, declined EULA, Pterodactyl, masked and visible password input, reserved ports, `change`, rerun with no and with one change, changes through the API or console while the questions run, German texts, the `setup` command), the setup file (every rule above, `ensureComplete`, only regular files up to the limit), the writer (`SetupApplierTest`: declined EULA, rollback after a failed secret write, no secret after a failed configuration write), password files (also FIFOs and devices), the Administrators group, the environment, and a check that no text opens with "No" or "Not", including the `setup` command's description, the labels of the port hint and the problems of cloud-config that the setup passes on. Jazzer fuzz tests: `SetupFileFuzzTest.setupFileFailsOnlyWithReadableProblems` and `SetupFileFuzzTest.passwordFileGivesASecretOrAProblem`, seeds in `src/test/resources/net/vectora/cloud/setup/SetupFileFuzzTestInputs/`.
+`cloud/setup/src/test`: the questions through a scripted terminal (order, defaults, cancel at any point, EOF, Ctrl+C, declined EULA, Pterodactyl, masked and visible password input, reserved ports, `change`, rerun with no and with one change, changes through the API or console while the questions run, German texts, the `setup` command), the setup file (every rule above, `ensureComplete`, only regular files up to the limit), the writer (`SetupApplierTest`: declined EULA, rollback after a failed secret write, no secret after a failed configuration write), password files (also FIFOs and devices), the Administrators group, the environment, and a check that no text opens with "No" or "Not", including the `setup` command's description, the labels of the port hint and the problems of cloud-config that the setup passes on. Jazzer fuzz tests: `SetupFileFuzzTest.setupFileFailsOnlyWithReadableProblems` and `SetupFileFuzzTest.passwordFileGivesASecretOrAProblem`, seeds in `src/test/resources/net/vectolyn/cloud/setup/SetupFileFuzzTestInputs/`.

@@ -1,10 +1,10 @@
-name: VectoraLobby
+name: VectolynLobby
 version: '${pluginVersion}'
-main: net.vectora.lobby.VectoraLobby
+main: net.vectolyn.lobby.VectolynLobby
 api-version: '26.3'
-description: Builds and protects the Vectora sky-island lobby.
-author: Vectora
+description: Builds and protects the Vectolyn sky-island lobby.
+author: Vectolyn
 permissions:
-  vectora.lobby.build:
+  vectolyn.lobby.build:
     description: Lets a player break and place blocks in the lobby. Staff only.
     default: op

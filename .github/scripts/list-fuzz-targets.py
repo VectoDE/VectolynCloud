@@ -2,7 +2,7 @@
 
 Output (stdout): JSON list of {"project", "test", "name"}:
   project  Gradle path of the module, e.g. ":common:protocol"
-  test     test filter for --tests, e.g. "net.vectora.protocol.VarIntsFuzzTest.roundTrip"
+  test     test filter for --tests, e.g. "net.vectolyn.protocol.VarIntsFuzzTest.roundTrip"
   name     short label for the job name
 
 Only reads source files; the build is not run.

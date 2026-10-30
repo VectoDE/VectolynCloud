@@ -1,7 +1,7 @@
 @echo off
-title Vectora Netzwerk Steuerzentrum
+title Vectolyn Netzwerk Steuerzentrum
 chcp 65001 > nul
-rem Transitional launcher until VectoraCloud (stage 2) takes over.
+rem Transitional launcher until VectolynCloud (stage 2) takes over.
 rem Copy it into a separate network folder outside the repository; every server
 rem then runs from <network folder>\<Server>\runtime.
 set "SN=%~dp0"
@@ -9,7 +9,7 @@ cls
 
 :menu
 echo ===================================================
-echo       VECTORA NETZWERK STEUERZENTRUM
+echo       VECTOLYN NETZWERK STEUERZENTRUM
 echo ===================================================
 echo.
 echo  [1] Alles starten (Datenbank + Proxy + Backends)
@@ -59,7 +59,7 @@ goto menu
 
 :db
 echo Starte Datenbank...
-start "Vectora MariaDB" /D "%SN%Database\runtime" cmd /c start-vectora-database.cmd
+start "Vectolyn MariaDB" /D "%SN%Database\runtime" cmd /c start-vectolyn-database.cmd
 exit /b 0
 
 :proxy

@@ -1,0 +1,3 @@
+[servers]
+{{VECTOLYN_PROXY_SERVERS}}
+try = [ ]

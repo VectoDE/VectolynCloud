@@ -1,4 +1,4 @@
-# VectoraCloud-REST-API
+# VectolynCloud-REST-API
 
 Modul `cloud/api`. Eine JSON-API über HTTP/1.1 und ein WebSocket für Live-Events, gedacht für das Dashboard (Etappe 8) und für Skripte. Die maschinenlesbare Beschreibung steht in [`api.openapi.yaml`](api.openapi.yaml), die ausführliche englische Seite in [api.md](api.md).
 
@@ -24,10 +24,10 @@ Jede Anfrage braucht ein Token. Ohne Token, mit einem falschen oder einem widerr
 Tokens verwaltet man an der Konsole des Nodes. Der ganze Befehl `api` gilt als sensibel, keine seiner Zeilen landet in der History.
 
 ```text
-vectora> api token create dashboard services:read,config:read,node:read
-vectora> api token list
-vectora> api token revoke dashboard          # oder die ID; Aliase: delete, remove
-vectora> api scopes
+vectolyn> api token create dashboard services:read,config:read,node:read
+vectolyn> api token list
+vectolyn> api token revoke dashboard          # oder die ID; Aliase: delete, remove
+vectolyn> api scopes
 ```
 
 - Format: `vct_` und 43 Zeichen aus `[A-Za-z0-9_-]` (32 Zufallsbytes aus `SecureRandom`, Base64url).
@@ -38,7 +38,7 @@ vectora> api scopes
 - Höchstens 100 Tokens. Namen folgen der Regel für Gruppennamen `[a-z0-9][a-z0-9_-]{0,31}`.
 - Wo das angezeigte Token landet: Der Befehl schreibt auf die Konsole, nicht ins Log. Logdateien und Journal bekommen es also nicht. Unter systemd hat die Cloud gar keine Konsole, lege Tokens dann in einer `tmux`- oder `screen`-Sitzung an ([Betrieb](operations.de.md)). In Docker ist die Konsole eines angehängten Containers (`docker attach`) seine Standardausgabe, `docker logs` behält das Token also. Leere oder rotiere diese Logs, oder widerrufe das Token und lege ein neues an, wenn die Logs geteilt werden.
 
-Das Token geht als `Authorization: Bearer vct_...` mit. Browser können am WebSocket keine Header setzen. Deshalb nimmt der Event-Stream das Token auch als Subprotokoll `vectora.bearer.<token>` neben `vectora.v1` an. Der Server antwortet nur mit `vectora.v1` und gibt das Token nie zurück. Bietet ein Upgrade Subprotokolle an, aber nicht `vectora.v1`, kommt `400 subprotocol-required`.
+Das Token geht als `Authorization: Bearer vct_...` mit. Browser können am WebSocket keine Header setzen. Deshalb nimmt der Event-Stream das Token auch als Subprotokoll `vectolyn.bearer.<token>` neben `vectolyn.v1` an. Der Server antwortet nur mit `vectolyn.v1` und gibt das Token nie zurück. Bietet ein Upgrade Subprotokolle an, aber nicht `vectolyn.v1`, kommt `400 subprotocol-required`.
 
 ### Scopes
 
@@ -110,7 +110,7 @@ Ein WebSocket mit Textframes. Filter sind optional: `?types=service-state,servic
 {"type": "service-output", "time": "2026-10-29T10:00:00Z", "data": {"service": "lobby-1", "line": "Done (3.2s)!"}}
 ```
 
-- Ausgabezeilen werden geschwärzt, bevor sie den Node verlassen. Jedes Secret aus `vectora.env` wird zu `***`, genau wie in der Konsole.
+- Ausgabezeilen werden geschwärzt, bevor sie den Node verlassen. Jedes Secret aus `vectolyn.env` wird zu `***`, genau wie in der Konsole.
 - Ein langsamer Client bremst den Node nicht. Solange sein Socket nicht beschreibbar ist, werden Events für ihn verworfen und gezählt. Danach kommt ein einzelnes Event `dropped` mit der Anzahl.
 - Der Server pingt alle 30 s und schließt einen Stream, von dem 90 s lang nichts kam. Ein Widerruf schließt mit `1008`, das Herunterfahren mit `1001`.
 - Ein Handshake aus dem Browser mit einem `Origin`, der nicht in `api.cors-origins` steht, wird mit `403` abgelehnt.
@@ -124,7 +124,7 @@ Standard ist `127.0.0.1`. Jede Adresse außerhalb von Loopback, auch `0.0.0.0`, 
 
 Mit TLS spricht der Server nur TLS 1.3 und 1.2 und sendet `Strict-Transport-Security`. Zum Keystore (`api.tls.keystore`, PKCS#12, relativ zum Home):
 
-- **Eigenes Zertifikat:** Die PKCS#12-Datei an diesen Pfad legen und das Passwort in `secrets/vectora.env` als `VECTORA_API_KEYSTORE_PASSWORD` eintragen. Fehlt das Passwort, startet der Node die API nicht und nennt den fehlenden Schlüssel.
+- **Eigenes Zertifikat:** Die PKCS#12-Datei an diesen Pfad legen und das Passwort in `secrets/vectolyn.env` als `VECTOLYN_API_KEYSTORE_PASSWORD` eintragen. Fehlt das Passwort, startet der Node die API nicht und nennt den fehlenden Schlüssel.
 - **Selbst erzeugt:** Gibt es die Datei nicht, erzeugt der Node mit `keytool` aus dem JDK ein selbstsigniertes Zertifikat. Es nutzt EC P-256, gilt 825 Tage und enthält die Namen `localhost`, `127.0.0.1`, `::1` und die Bind-Adresse, sofern sie keine Wildcard ist. Das Keystore-Passwort ist zufällig und liegt in `secrets/api-keystore.password` (nur für den Besitzer lesbar). `keytool` bekommt es über eine Umgebungsvariable, nie über die Kommandozeile. Bei jedem Start loggt der Node den SHA-256-Fingerprint, damit ein Client ihn pinnen kann.
 
 ### CORS
@@ -148,7 +148,7 @@ Bei einem Limit kommt `429 rate-limited` mit `Retry-After` in Sekunden.
 
 ### Was nie in einer Antwort steht
 
-Passwörter, das Datenbankpasswort, Tokens und ihre Hashes, das Keystore-Passwort und der Inhalt von `vectora.env`. `cloud.yml`, Gruppen und Tasks enthalten grundsätzlich keine Secrets.
+Passwörter, das Datenbankpasswort, Tokens und ihre Hashes, das Keystore-Passwort und der Inhalt von `vectolyn.env`. `cloud.yml`, Gruppen und Tasks enthalten grundsätzlich keine Secrets.
 
 ### JVM-Flags
 

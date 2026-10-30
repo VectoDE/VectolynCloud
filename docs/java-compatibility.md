@@ -2,11 +2,11 @@
 
 ## Policy
 
-- Bytecode target for every Vectora module is **Java 21** (`--release 21`). The compiler always runs on a Java 25 toolchain. The one exception is the class `Bootstrap` in `cloud/launcher`, which is built with `--release 8` (see below).
+- Bytecode target for every Vectolyn module is **Java 21** (`--release 21`). The compiler always runs on a Java 25 toolchain. The one exception is the class `Bootstrap` in `cloud/launcher`, which is built with `--release 8` (see below).
 - A module may only raise its release target when a dependency makes 21 impossible. Such a module is marked with a comment in its `build.gradle.kts` and listed in the table below.
 - Code that needs Java 25 at runtime is annotated with `@RequiresJava25`, checks the running version, and always has a Java 21 path. The annotation arrives with the core module in stage 3; no current code needs Java 25 APIs.
 
-The convention plugins in `build-logic/` set the defaults (toolchain 25, release 21); every module applies `vectora.java-conventions` or `vectora.java25-api-conventions`. JDKs are taken from the local machine; if one is missing, the Foojay resolver in `settings.gradle.kts` downloads it.
+The convention plugins in `build-logic/` set the defaults (toolchain 25, release 21); every module applies `vectolyn.java-conventions` or `vectolyn.java25-api-conventions`. JDKs are taken from the local machine; if one is missing, the Foojay resolver in `settings.gradle.kts` downloads it.
 
 ## What CI tests
 
@@ -51,13 +51,13 @@ No module currently needs release 25.
 
 ## Exception: `Bootstrap` in `cloud-launcher` is built for Java 8
 
-`net.vectora.cloud.launcher.Bootstrap` is the `Main-Class` of `VectoraCloud.jar`. It lives in its own source set `bootstrap` and is compiled with `--release 8`; everything else in the module stays at 21.
+`net.vectolyn.cloud.launcher.Bootstrap` is the `Main-Class` of `VectolynCloud.jar`. It lives in its own source set `bootstrap` and is compiled with `--release 8`; everything else in the module stays at 21.
 
-The reason: an admin who starts the cloud on Java 8 to 20 has to see a readable "Java too old" message in German or English, with the version found and where to get Java 21, and exit code 3. If the first class the JVM loads had class file version 65, an old runtime would stop with `UnsupportedClassVersionError` before any Vectora code runs. So `Bootstrap` uses only Java 8 API, checks `java.specification.version` and calls `Launcher.main` by reflection once the version is fine. `BootstrapTest` checks major version 52. The build file turns off javac's "release 8 is obsolete" lint for this source set only, because `-Werror` would fail on it. Details in [the launcher page](cloud/launcher.md).
+The reason: an admin who starts the cloud on Java 8 to 20 has to see a readable "Java too old" message in German or English, with the version found and where to get Java 21, and exit code 3. If the first class the JVM loads had class file version 65, an old runtime would stop with `UnsupportedClassVersionError` before any Vectolyn code runs. So `Bootstrap` uses only Java 8 API, checks `java.specification.version` and calls `Launcher.main` by reflection once the version is fine. `BootstrapTest` checks major version 52. The build file turns off javac's "release 8 is obsolete" lint for this source set only, because `-Werror` would fail on it. Details in [the launcher page](cloud/launcher.md).
 
-Right after the Java check the launcher refuses to run as root or administrator. If it cannot tell whether the process is elevated (state UNKNOWN), it starts anyway and prints a clearly framed warning that tells an administrator or root to stop and restart as a normal user (maintainer decision of 2026-10-28). A start that is known to be elevated still needs `--allow-root` or `VECTORA_ALLOW_ROOT=true`. See [Root and administrator check](cloud/launcher.md#root-and-administrator-check).
+Right after the Java check the launcher refuses to run as root or administrator. If it cannot tell whether the process is elevated (state UNKNOWN), it starts anyway and prints a clearly framed warning that tells an administrator or root to stop and restart as a normal user (maintainer decision of 2026-10-28). A start that is known to be elevated still needs `--allow-root` or `VECTOLYN_ALLOW_ROOT=true`. See [Root and administrator check](cloud/launcher.md#root-and-administrator-check).
 
-VectoraCloud itself (`java -jar VectoraCloud.jar`) runs on Java 21. The servers it starts get their own JRE per group, so the cloud's runtime does not limit them. See [JREs for the servers](#jres-for-the-servers).
+VectolynCloud itself (`java -jar VectolynCloud.jar`) runs on Java 21. The servers it starts get their own JRE per group, so the cloud's runtime does not limit them. See [JREs for the servers](#jres-for-the-servers).
 
 ## JREs for the servers
 
@@ -81,7 +81,7 @@ JLine 3 talks to the terminal through a provider. `jline-terminal-ffm` uses the 
 - **Java 22+:** `ffm` first. The choice is a check of the running version (`Runtime.version().feature() >= 22`), never class-path order, so the ffm classes are not even touched on Java 21.
 - **Java 21 path:** `jni` (native helper bundled for Windows, Linux and macOS). If no native provider loads, JLine's `dumb` terminal. Without a terminal at all (Docker without TTY, Pterodactyl, systemd) the console reads stdin line by line.
 - **Tests:** `TerminalSelectorTest.ffmProviderLoadsOnJava25` is tagged `requires-java25` and is skipped on Java 21. On Java 21, `ffmProviderCannotLoadOnJava21` proves the ffm classes do not load there and `detectInATestRunNeverPicksFfmBelowJava22` that the selector never picks them; `jniProviderLoadsOnEveryRuntime` runs on both. The selection logic itself is tested for every combination of version, request and available providers.
-- Both native providers warn on Java 24+ unless native access is allowed. `VectoraCloud.jar` carries `Enable-Native-Access: ALL-UNNAMED` in its manifest (checked by `CloudJarTest`; a command-line flag would break the Java-8 bootstrap message); the console tests pass `--enable-native-access=ALL-UNNAMED`.
+- Both native providers warn on Java 24+ unless native access is allowed. `VectolynCloud.jar` carries `Enable-Native-Access: ALL-UNNAMED` in its manifest (checked by `CloudJarTest`; a command-line flag would break the Java-8 bootstrap message); the console tests pass `--enable-native-access=ALL-UNNAMED`.
 
 See [console.md](cloud/console.md#terminal).
 
@@ -93,7 +93,7 @@ Checked on 2026-10-28 with `paper-api 26.3.build.226-stable` (the same holds for
 2. Its Gradle module metadata declares `org.gradle.jvm.version = 25`. With release 21, Gradle refuses to resolve it: *"Dependency resolution is looking for a library compatible with JVM runtime version 21, but 'io.papermc.paper:paper-api:26.3.build.226-stable' is only compatible with JVM runtime version 25 or newer."*
 3. javac from JDK 25 reads version-69 class files on the classpath even with `--release 21`. A test compile against paper-api with `--release 21` succeeded, and so does the full Gradle build of both modules once the variant check is switched off.
 
-So these modules apply `vectora.java25-api-conventions`, which calls `java { disableAutoTargetJvm() }`. This only turns off Gradle's variant check; the bytecode stays at 21 (verified: class file major version 65 in the built jars).
+So these modules apply `vectolyn.java25-api-conventions`, which calls `java { disableAutoTargetJvm() }`. This only turns off Gradle's variant check; the bytecode stays at 21 (verified: class file major version 65 in the built jars).
 
 What this does not change: Paper 26.3 itself needs Java 25, so these jars still run only on a Java 25 server. Bytecode 21 just means the code does not use Java 22+ language or library features, so it can be reused for older Paper versions later.
 
@@ -101,10 +101,10 @@ Risk to keep in mind: if a future paper-api exposes Java 22+ types in signatures
 
 ## Plan for stage 3: Java 21 core plus version adapters
 
-Stage 3 builds the Vectora plugin base so that one plugin supports MC 1.8.8 up to 26.3:
+Stage 3 builds the Vectolyn plugin base so that one plugin supports MC 1.8.8 up to 26.3:
 
 - **Core** (platform-independent logic, messaging, permissions model): release 21, no dependency on a specific Paper version.
 - **Adapters**, one per MC version range: each compiles against the matching server API and uses the lowest release target that API allows. Adapters for modern Paper (26.x) compile against a Java 25 API, adapters for older versions run on Java 21 or lower.
-- The platform jars (`Vectora-Paper.jar`, `Vectora-Velocity.jar`, `Vectora-Fabric.jar`) bundle the core and pick the adapter at runtime.
+- The platform jars (`Vectolyn-Paper.jar`, `Vectolyn-Velocity.jar`, `Vectolyn-Fabric.jar`) bundle the core and pick the adapter at runtime.
 
 Until then the two existing modules stay as they are, with release 21 and the variant check disabled.

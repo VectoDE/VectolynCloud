@@ -74,7 +74,7 @@ Sobald ein Branch fremde Commits hat, rebaset Dependabot ihn nicht mehr von selb
 Gradle kann auch PGP-Signaturen prüfen und die öffentlichen Schlüssel im Repository ablegen. Wir haben das am 2026-10-29 ausprobiert (`--write-verification-metadata pgp,sha256 --export-keys`) und uns vorerst dagegen entschieden:
 
 - **Gerade die riskantesten Artefakte sind nicht signiert.** paper-api, velocity-api, brigadier (Mojang), die md-5-Artefakte, pandaspigot-api und die Marker-Dateien der Gradle-Plugins haben keine Signaturen. Sie kommen aus Repositories außerhalb von Maven Central, eines davon betreibt eine Einzelperson. Für sie gäbe es ohnehin nur Prüfsummen.
-- **Viele Schlüssel sind nicht abrufbar.** 13 Signaturschlüssel lagen weder auf keys.openpgp.org noch auf keyserver.ubuntu.com. Ihre 84 Artefakte, darunter Netty, JLine, Jazzer, SLF4J und Teile von Adventure, fielen ebenfalls auf Prüfsummen zurück. Von den Bibliotheken, die VectoraCloud ausliefert, wären nur Jackson, der MariaDB-Treiber und SnakeYAML per Signatur geprüft worden.
+- **Viele Schlüssel sind nicht abrufbar.** 13 Signaturschlüssel lagen weder auf keys.openpgp.org noch auf keyserver.ubuntu.com. Ihre 84 Artefakte, darunter Netty, JLine, Jazzer, SLF4J und Teile von Adventure, fielen ebenfalls auf Prüfsummen zurück. Von den Bibliotheken, die VectolynCloud ausliefert, wären nur Jackson, der MariaDB-Treiber und SnakeYAML per Signatur geprüft worden.
 - **Auch vertrauenswürdige Schlüssel wären Trust on First Use.** Gradle vertraut jedem Schlüssel, den es herunterlädt, und weitet das Vertrauen auf ganze Gruppen aus (zum Beispiel ein Schlüssel für alles unter `com.google.*`). Stärker als Prüfsummen wird das erst, wenn man jeden Fingerprint mit dem veröffentlichten Schlüssel des jeweiligen Projekts abgleicht, und das für mehr als 40 Schlüssel.
 - **Im Review ist weniger zu sehen.** Mit einem vertrauenswürdigen Schlüssel ändert ein Versionssprung nichts an der Datei. Mit Prüfsummen taucht jedes neue Artefakt im Diff auf.
 - **Abhängigkeit vom Netz.** Das Schreiben der Datei hinge in jedem Dependabot-Lauf von Key-Servern ab.
@@ -87,7 +87,7 @@ pandaspigot-api gibt es nur als Snapshot, deshalb legt der Build einen eindeutig
 
 ## Verwundbare transitive Versionen
 
-OpenSSF Scorecard (Check *Vulnerabilities*) liest die Artefakte in `gradle/verification-metadata.xml`. Eine Version, die nur eine Server-API als Compile- oder Test-Abhängigkeit mitbringt, zählt deshalb mit. `vectora.java-conventions` hebt diese Bibliotheken in jeder Konfiguration auf eine gepatchte Version an, wenn eine API eine ältere verlangt: Guava 33.7.2, Gson 2.14.0, commons-lang3 3.18.0, log4j-api 2.26.1, plexus-utils 3.6.1. Die Regel hebt nur an, nie ab. Einen Eintrag entfernen, sobald die APIs selbst eine behobene Version liefern.
+OpenSSF Scorecard (Check *Vulnerabilities*) liest die Artefakte in `gradle/verification-metadata.xml`. Eine Version, die nur eine Server-API als Compile- oder Test-Abhängigkeit mitbringt, zählt deshalb mit. `vectolyn.java-conventions` hebt diese Bibliotheken in jeder Konfiguration auf eine gepatchte Version an, wenn eine API eine ältere verlangt: Guava 33.7.2, Gson 2.14.0, commons-lang3 3.18.0, log4j-api 2.26.1, plexus-utils 3.6.1. Die Regel hebt nur an, nie ab. Einen Eintrag entfernen, sobald die APIs selbst eine behobene Version liefern.
 
 Lokal prüfen mit `osv-scanner scan source -L gradle/verification-metadata.xml`. Zwei Funde bleiben:
 

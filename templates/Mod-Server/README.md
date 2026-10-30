@@ -6,13 +6,13 @@ Software: Fabric Loader 0.20.1 on MC 26.3 with Fabric API, FabricProxy-Lite, Flo
 
 ## Placeholders
 
-- `{{VECTORA_SERVER_PORT}}`, `{{VECTORA_SERVER_HOST}}`, `{{VECTORA_MANAGEMENT_SECRET}}` in `server.properties`
-- `{{VECTORA_FORWARDING_SECRET}}` in `config/FabricProxy-Lite.toml`
-- `{{VECTORA_DB_HOST}}`, `{{VECTORA_DB_PORT}}`, `{{VECTORA_DB_NAME}}`, `{{VECTORA_DB_USER}}`, `{{VECTORA_DB_PASSWORD}}` in `config/luckperms/luckperms.conf`
-- `{{VECTORA_DB_STORAGE_METHOD}}` (`mariadb`, `mysql` or `h2`) and `{{VECTORA_DB_POOL_SIZE}}` (pool size set centrally by the cloud, normally 4) in `config/luckperms/luckperms.conf`
-- `{{VECTORA_XMS}}`, `{{VECTORA_XMX}}` in `start.bat`
-- Generated file: `config/floodgate/key.pem` from `VECTORA_FLOODGATE_KEY_B64`
+- `{{VECTOLYN_SERVER_PORT}}`, `{{VECTOLYN_SERVER_HOST}}`, `{{VECTOLYN_MANAGEMENT_SECRET}}` in `server.properties`
+- `{{VECTOLYN_FORWARDING_SECRET}}` in `config/FabricProxy-Lite.toml`
+- `{{VECTOLYN_DB_HOST}}`, `{{VECTOLYN_DB_PORT}}`, `{{VECTOLYN_DB_NAME}}`, `{{VECTOLYN_DB_USER}}`, `{{VECTOLYN_DB_PASSWORD}}` in `config/luckperms/luckperms.conf`
+- `{{VECTOLYN_DB_STORAGE_METHOD}}` (`mariadb`, `mysql` or `h2`) and `{{VECTOLYN_DB_POOL_SIZE}}` (pool size set centrally by the cloud, normally 4) in `config/luckperms/luckperms.conf`
+- `{{VECTOLYN_XMS}}`, `{{VECTOLYN_XMX}}` in `start.bat`
+- Generated file: `config/floodgate/key.pem` from `VECTOLYN_FLOODGATE_KEY_B64`
 
 ## Wanted or not
 
-Whether this server exists at all is decided in the VectoraCloud setup: only servers marked as wanted are rendered from this template into their own folder under `local/services/` and started. An unwanted server is never created and is not referenced by the proxy or the lobby. See [`../placeholders.md`](../placeholders.md) for every placeholder.
+Whether this server exists at all is decided in the VectolynCloud setup: only servers marked as wanted are rendered from this template into their own folder under `local/services/` and started. An unwanted server is never created and is not referenced by the proxy or the lobby. See [`../placeholders.md`](../placeholders.md) for every placeholder.

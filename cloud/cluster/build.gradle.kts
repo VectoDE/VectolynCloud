@@ -1,15 +1,15 @@
-// Cluster of several VectoraCloud nodes: own CA (made with the JDK's keytool), join tokens,
+// Cluster of several VectolynCloud nodes: own CA (made with the JDK's keytool), join tokens,
 // mutual TLS 1.3 on a dedicated cluster port, NodeId in the certificate, revocation list. Plain
 // JSSE and blocking sockets: a cluster has few nodes, so no Netty here. Reads frames and join
 // requests from the network, so the payload decoders have Jazzer fuzz tests.
 // Details: docs/cloud/cluster.md
 
 plugins {
-    id("vectora.java-conventions")
-    id("vectora.fuzz-conventions")
+    id("vectolyn.java-conventions")
+    id("vectolyn.fuzz-conventions")
 }
 
-vectora {
+vectolyn {
     artifactName = "cloud-cluster"
 }
 

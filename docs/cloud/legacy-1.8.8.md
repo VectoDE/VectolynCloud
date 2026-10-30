@@ -69,7 +69,7 @@ What it does have is a backport of Paper's `PlayerHandshakeEvent`, under Paper's
 Options for checking the token:
 
 1. **BungeeGuard backend plugin** ([lucko/BungeeGuard](https://github.com/lucko/BungeeGuard), MIT, latest release v1.4.0 from 2025-06-02). It picks `PaperHandshakeListener` when `PlayerHandshakeEvent` exists and falls back to ProtocolLib otherwise ([`BungeeGuardBackendPlugin`](https://github.com/lucko/BungeeGuard/blob/master/bungeeguard-spigot/src/main/java/me/lucko/bungeeguard/spigot/BungeeGuardBackendPlugin.java)). Because PandaSpigot keeps the Paper class name, the Paper path should be used. Not installed or tested in this spike.
-2. **Own bridge plugin.** Listen to `PlayerHandshakeEvent`, parse the forwarded handshake, compare `bungeeguard-token` against the configured secrets in constant time, call `setFailed(true)` on a mismatch and `setServerHostname(...)` otherwise. This is the same approach as option 1 without a third-party jar and lets the Vectora config hand out the secret.
+2. **Own bridge plugin.** Listen to `PlayerHandshakeEvent`, parse the forwarded handshake, compare `bungeeguard-token` against the configured secrets in constant time, call `setFailed(true)` on a mismatch and `setServerHostname(...)` otherwise. This is the same approach as option 1 without a third-party jar and lets the Vectolyn config hand out the secret.
 
 Option 2 is implemented in `plugins/bridge/legacy` (stage 2, PR 13), without a third-party plugin: see [Bridges](bridges.md#legacy-bridge-bungeeguard-check). It also refuses every login whose handshake it has not accepted, which covers connections that arrive before the plugin is enabled.
 
@@ -94,6 +94,6 @@ Conclusion: best effort, not a supported target. If Bedrock access to 1.8.8 grou
 
 ## Licence and EULA
 
-PandaSpigot is GPL-3.0, like this project. Vectora does not redistribute the jar; the cloud and the workflow download it from the official API and check the sha256.
+PandaSpigot is GPL-3.0, like this project. Vectolyn does not redistribute the jar; the cloud and the workflow download it from the official API and check the sha256.
 
 Starting the server requires accepting the Minecraft EULA. The workflow writes `eula=true` only into its throwaway workspace for the smoke test. Operators accept the EULA for their own servers.

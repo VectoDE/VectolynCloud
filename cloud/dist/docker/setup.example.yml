@@ -5,7 +5,7 @@ schema-version: 1
 # Required. Set to true only if you accept the Minecraft EULA: https://aka.ms/MinecraftEULA
 eula: false
 language: en
-network-name: Vectora
+network-name: Vectolyn
 network:
   bind: 0.0.0.0
   java-port: 25565
@@ -16,4 +16,4 @@ database:
   port: 3306
   name: luckperms
   user: luckperms
-  password-file: /run/secrets/vectora-db
+  password-file: /run/secrets/vectolyn-db

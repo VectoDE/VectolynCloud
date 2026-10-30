@@ -3,7 +3,7 @@
     Smoke test of cloud/dist/start.bat, start.ps1 and the windows archive (operations.yml).
 
 .DESCRIPTION
-    .github/scripts/smoke-start-windows.ps1 -Dist <folder with VectoraCloud.jar and the archives>
+    .github/scripts/smoke-start-windows.ps1 -Dist <folder with VectolynCloud.jar and the archives>
         -Java25 <Java 21+ home> -Java17 <Java home older than 21>
 
     GitHub's Windows runners run elevated, so a start without --allow-root must be refused there
@@ -19,11 +19,11 @@ Set-StrictMode -Version 3.0
 $ErrorActionPreference = 'Stop'
 
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).ProviderPath
-$work = Join-Path ([System.IO.Path]::GetTempPath()) ("vectora-smoke-" + [guid]::NewGuid().ToString('N'))
+$work = Join-Path ([System.IO.Path]::GetTempPath()) ("vectolyn-smoke-" + [guid]::NewGuid().ToString('N'))
 # A folder with a space, parentheses, an ampersand and an exclamation mark: quoting mistakes show up here.
-$dir = Join-Path $work 'vectora home (a&b!)'
+$dir = Join-Path $work 'vectolyn home (a&b!)'
 New-Item -ItemType Directory -Path $dir -Force | Out-Null
-Copy-Item -LiteralPath (Join-Path $Dist 'VectoraCloud.jar') -Destination $dir
+Copy-Item -LiteralPath (Join-Path $Dist 'VectolynCloud.jar') -Destination $dir
 Copy-Item -LiteralPath (Join-Path $repo 'cloud\dist\start.bat') -Destination $dir
 Copy-Item -LiteralPath (Join-Path $repo 'cloud\dist\start.ps1') -Destination $dir
 $bat = Join-Path $dir 'start.bat'
@@ -35,7 +35,7 @@ Write-Output "Elevated: $elevated"
 
 $script:failures = 0
 $saved = @{}
-foreach ($name in 'JAVA_HOME', 'PATH', 'VECTORA_XMX', 'VECTORA_JAR', 'VECTORA_HOME', 'VECTORA_ALLOW_ROOT') {
+foreach ($name in 'JAVA_HOME', 'PATH', 'VECTOLYN_XMX', 'VECTOLYN_JAR', 'VECTOLYN_HOME', 'VECTOLYN_ALLOW_ROOT') {
     $saved[$name] = [Environment]::GetEnvironmentVariable($name)
 }
 
@@ -108,21 +108,21 @@ $noJavaPath = Join-Path $env:SystemRoot 'System32'
 
 $pwned = Join-Path $work 'pwned.txt'
 foreach ($kind in 'bat', 'ps1') {
-    Invoke-Case -Name "$kind version" -Code 0 -Text 'VectoraCloud' -Kind $kind -Arguments '--allow-root --version'
+    Invoke-Case -Name "$kind version" -Code 0 -Text 'VectolynCloud' -Kind $kind -Arguments '--allow-root --version'
     Invoke-Case -Name "$kind help" -Code 0 -Text '--setup-file' -Kind $kind -Arguments '--allow-root --help'
     Invoke-Case -Name "$kind elevation check" -Code $refused -Kind $kind -Arguments '--lang en --version'
-    Invoke-Case -Name "$kind VECTORA_ALLOW_ROOT" -Code 0 -Environment @{ VECTORA_ALLOW_ROOT = 'true' } -Kind $kind -Arguments '--version'
+    Invoke-Case -Name "$kind VECTOLYN_ALLOW_ROOT" -Code 0 -Environment @{ VECTOLYN_ALLOW_ROOT = 'true' } -Kind $kind -Arguments '--version'
     Invoke-Case -Name "$kind unknown argument" -Code 64 -Text '--bogus' -Kind $kind -Arguments '--allow-root --lang en --bogus'
     Invoke-Case -Name "$kind java too old" -Code 3 -Text '21' -Environment @{ JAVA_HOME = $Java17 } -Kind $kind -Arguments '--allow-root --lang en --version'
     Invoke-Case -Name "$kind no java" -Code 3 -Text 'adoptium.net' -Environment @{ JAVA_HOME = $null; PATH = $noJavaPath } -Kind $kind -Arguments '--version'
     Invoke-Case -Name "$kind JAVA_HOME without java falls back to PATH" -Code 0 -Text 'from the PATH' `
         -Environment @{ JAVA_HOME = (Join-Path $work 'missing'); PATH = "$Java25\bin;$noJavaPath" } -Kind $kind -Arguments '--allow-root --version'
-    Invoke-Case -Name "$kind VECTORA_XMX injection is not run" -Code 64 -Text 'VECTORA_XMX' `
-        -Environment @{ VECTORA_XMX = "1G&echo INJECTED>`"$pwned`"" } -Kind $kind -Arguments '--version'
-    Invoke-Case -Name "$kind JAVA_HOME injection is not run" -Code 0 -Text 'VectoraCloud' `
+    Invoke-Case -Name "$kind VECTOLYN_XMX injection is not run" -Code 64 -Text 'VECTOLYN_XMX' `
+        -Environment @{ VECTOLYN_XMX = "1G&echo INJECTED>`"$pwned`"" } -Kind $kind -Arguments '--version'
+    Invoke-Case -Name "$kind JAVA_HOME injection is not run" -Code 0 -Text 'VectolynCloud' `
         -Environment @{ JAVA_HOME = "C:\nope (x86)&echo INJECTED>`"$pwned`""; PATH = "$Java25\bin;$noJavaPath" } -Kind $kind -Arguments '--allow-root --version'
-    Invoke-Case -Name "$kind missing jar" -Code 66 -Text 'not found' -Environment @{ VECTORA_JAR = (Join-Path $work 'none.jar') } -Kind $kind -Arguments '--version'
-    Invoke-Case -Name "$kind missing home" -Code 66 -Text 'cloud home' -Environment @{ VECTORA_HOME = (Join-Path $work 'none') } -Kind $kind -Arguments '--version'
+    Invoke-Case -Name "$kind missing jar" -Code 66 -Text 'not found' -Environment @{ VECTOLYN_JAR = (Join-Path $work 'none.jar') } -Kind $kind -Arguments '--version'
+    Invoke-Case -Name "$kind missing home" -Code 66 -Text 'cloud home' -Environment @{ VECTOLYN_HOME = (Join-Path $work 'none') } -Kind $kind -Arguments '--version'
 }
 if (Test-Path -LiteralPath $pwned) {
     Write-Output '::error::a value from the environment was run as a command'
@@ -130,7 +130,7 @@ if (Test-Path -LiteralPath $pwned) {
 }
 
 # The release archive: CRLF scripts and the same jar.
-$archive = Get-ChildItem -LiteralPath $Dist -Filter 'VectoraCloud-*-windows.zip' | Select-Object -First 1
+$archive = Get-ChildItem -LiteralPath $Dist -Filter 'VectolynCloud-*-windows.zip' | Select-Object -First 1
 if (-not $archive) {
     Write-Output "::error::no windows archive in $Dist"
     $script:failures++
@@ -143,7 +143,7 @@ if (-not $archive) {
         Write-Output '::error::start.bat in the archive does not have CRLF line ends'
         $script:failures++
     }
-    Invoke-Case -Name 'archive start.bat' -Code 0 -Text 'VectoraCloud' -Kind $archiveBat.FullName -Arguments '--allow-root --version'
+    Invoke-Case -Name 'archive start.bat' -Code 0 -Text 'VectolynCloud' -Kind $archiveBat.FullName -Arguments '--allow-root --version'
 }
 
 Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue

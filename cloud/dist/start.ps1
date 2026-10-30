@@ -1,20 +1,20 @@
 <#
 .SYNOPSIS
-    Starts VectoraCloud (Windows PowerShell 5.1 and PowerShell 7).
+    Starts VectolynCloud (Windows PowerShell 5.1 and PowerShell 7).
 
 .DESCRIPTION
     .\start.ps1 [launcher arguments]     for example: .\start.ps1 --non-interactive --setup-file setup.yml
 
     Environment:
-      VECTORA_HOME      cloud home and working directory (default: the folder of this script)
-      VECTORA_JAR       path of VectoraCloud.jar (default: next to this script)
-      VECTORA_XMX       maximum heap of the cloud itself, e.g. 512M or 1G (default: 512M)
+      VECTOLYN_HOME     cloud home and working directory (default: the folder of this script)
+      VECTOLYN_JAR      path of VectolynCloud.jar (default: next to this script)
+      VECTOLYN_XMX      maximum heap of the cloud itself, e.g. 512M or 1G (default: 512M)
       JAVA_HOME         Java installation to use; otherwise java from the PATH
       JDK_JAVA_OPTIONS  further JVM options, read by the java launcher itself (Java 9 and later)
 
-    Every argument is passed to VectoraCloud unchanged (--allow-root, --setup-file, --lang, ...).
-    The Java version (21 or later) is checked by VectoraCloud.jar itself. Exit codes: see
-    docs/cloud/operations.md. Do not use "Run as administrator": VectoraCloud refuses an elevated
+    Every argument is passed to VectolynCloud unchanged (--allow-root, --setup-file, --lang, ...).
+    The Java version (21 or later) is checked by VectolynCloud.jar itself. Exit codes: see
+    docs/cloud/operations.md. Do not use "Run as administrator": VectolynCloud refuses an elevated
     start unless --allow-root is given.
 
     The script has no param() block on purpose: PowerShell would otherwise try to bind arguments
@@ -31,8 +31,8 @@ function Exit-WithMessage {
         [Parameter(Mandatory)] [string] $English,
         [Parameter(Mandatory)] [string] $German
     )
-    [Console]::Error.WriteLine("VectoraCloud: $English")
-    [Console]::Error.WriteLine("VectoraCloud: $German")
+    [Console]::Error.WriteLine("VectolynCloud: $English")
+    [Console]::Error.WriteLine("VectolynCloud: $German")
     exit $Code
 }
 
@@ -66,24 +66,24 @@ $scriptDir = $PSScriptRoot
 $onWindows = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
 $javaName = if ($onWindows) { 'java.exe' } else { 'java' }
 
-# VectoraCloud.jar, made absolute before the working directory changes.
-$jarSetting = Get-EnvironmentValue -Name 'VECTORA_JAR'
+# VectolynCloud.jar, made absolute before the working directory changes.
+$jarSetting = Get-EnvironmentValue -Name 'VECTOLYN_JAR'
 if (-not $jarSetting) {
-    $jarSetting = Join-Path $scriptDir 'VectoraCloud.jar'
+    $jarSetting = Join-Path $scriptDir 'VectolynCloud.jar'
 }
 $jar = Resolve-ExistingFile -Path $jarSetting
 if (-not $jar) {
-    Exit-WithMessage -Code 66 -English "VectoraCloud.jar not found: $jarSetting" `
-        -German "VectoraCloud.jar nicht gefunden: $jarSetting"
+    Exit-WithMessage -Code 66 -English "VectolynCloud.jar not found: $jarSetting" `
+        -German "VectolynCloud.jar nicht gefunden: $jarSetting"
 }
 
-$xmx = Get-EnvironmentValue -Name 'VECTORA_XMX'
+$xmx = Get-EnvironmentValue -Name 'VECTOLYN_XMX'
 if (-not $xmx) {
     $xmx = '512M'
 }
 if ($xmx -notmatch '^[0-9]{1,7}[kKmMgG]?$') {
-    Exit-WithMessage -Code 64 -English "VECTORA_XMX must be a size such as 512M or 2G, not: $xmx" `
-        -German "VECTORA_XMX muss eine Groesse wie 512M oder 2G sein, nicht: $xmx"
+    Exit-WithMessage -Code 64 -English "VECTOLYN_XMX must be a size such as 512M or 2G, not: $xmx" `
+        -German "VECTOLYN_XMX muss eine Groesse wie 512M oder 2G sein, nicht: $xmx"
 }
 
 # Java: JAVA_HOME first, then the PATH.
@@ -92,8 +92,8 @@ $javaHome = Get-EnvironmentValue -Name 'JAVA_HOME'
 if ($javaHome) {
     $java = Resolve-ExistingFile -Path ($javaHome.TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar + 'bin' + [System.IO.Path]::DirectorySeparatorChar + $javaName)
     if (-not $java) {
-        [Console]::Error.WriteLine("VectoraCloud: JAVA_HOME ($javaHome) has no bin\$javaName, trying java from the PATH.")
-        [Console]::Error.WriteLine("VectoraCloud: JAVA_HOME ($javaHome) enthaelt kein bin\$javaName, versuche java aus dem PATH.")
+        [Console]::Error.WriteLine("VectolynCloud: JAVA_HOME ($javaHome) has no bin\$javaName, trying java from the PATH.")
+        [Console]::Error.WriteLine("VectolynCloud: JAVA_HOME ($javaHome) enthaelt kein bin\$javaName, versuche java aus dem PATH.")
     }
 }
 if (-not $java) {
@@ -108,7 +108,7 @@ if (-not $java) {
         -German 'Kein Java gefunden. Installiere Java 21 oder neuer (z. B. https://adoptium.net/de/temurin/releases/) und nimm es in den PATH auf oder setze JAVA_HOME.'
 }
 
-$cloudHome = Get-EnvironmentValue -Name 'VECTORA_HOME'
+$cloudHome = Get-EnvironmentValue -Name 'VECTOLYN_HOME'
 if (-not $cloudHome) {
     $cloudHome = $scriptDir
 }

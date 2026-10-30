@@ -1,7 +1,7 @@
 // Java release target: 21 (project default, see build-logic/).
 //
 // velocity-api 4.3 is compiled for Java 25 (class file version 69). The module still builds
-// bytecode 21; vectora.java25-api-conventions switches off Gradle's JVM variant check for it.
+// bytecode 21; vectolyn.java25-api-conventions switches off Gradle's JVM variant check for it.
 // Velocity 4.3 itself needs Java 25, so the bridge only runs there. Tests that load API classes
 // carry @Tag("requires-java25"). Details: docs/java-compatibility.md
 //
@@ -11,16 +11,16 @@
 // build runs no processor from a compile-only dependency.
 
 plugins {
-    id("vectora.java25-api-conventions")
+    id("vectolyn.java25-api-conventions")
 }
 
-vectora {
+vectolyn {
     // Jar and manifest name from before the repository layout change.
     artifactName = "cloud-bridge-velocity"
 }
 
 base {
-    archivesName = "VectoraCloudBridgeVelocity"
+    archivesName = "VectolynCloudBridgeVelocity"
 }
 
 dependencies {
@@ -39,7 +39,7 @@ tasks.processResources {
 }
 
 // The proxy loads the plugin jar on its own, so the jar carries the bridge core, the client and
-// the protocol (all Vectora code, no third-party library).
+// the protocol (all Vectolyn code, no third-party library).
 tasks.jar {
     val bundled = configurations.runtimeClasspath
     dependsOn(bundled)
@@ -49,5 +49,5 @@ tasks.jar {
 }
 
 tasks.test {
-    systemProperty("vectora.expectedVersion", project.version.toString())
+    systemProperty("vectolyn.expectedVersion", project.version.toString())
 }

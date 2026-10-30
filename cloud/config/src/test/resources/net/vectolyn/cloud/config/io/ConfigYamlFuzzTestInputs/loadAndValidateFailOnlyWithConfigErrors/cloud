@@ -1,0 +1,34 @@
+0schema-version: 1
+network-name: Vectolyn
+language: en
+eula-accepted: false
+setup-complete: false
+node-id: node-1
+servers:
+  proxy: true
+  lobby: true
+  survival: true
+  creative: true
+  mod: true
+  end: true
+  database: true
+  minigame: true
+proxy:
+  bind: 0.0.0.0
+  port: 25565
+  bedrock-port: 19132
+legacy-proxy:
+  enabled: false
+  port: 25564
+database:
+  mode: managed
+  host: 127.0.0.1
+  port: 3307
+  name: luckperms
+  user: luckperms
+api:
+  enabled: false
+  bind: 127.0.0.1
+  port: 8085
+  tls:
+    enabled: false

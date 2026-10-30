@@ -7,7 +7,7 @@ name: CI
 #   (-PtestJava=21). Tests tagged "requires-java25" load paper-api classes (class file
 #   version 69) and are skipped there; everything else, including the bytecode-level check,
 #   must pass on 21.
-# - "Integration" covers VectoraCloud end to end. It does real work only when cloud-related paths
+# - "Integration" covers VectolynCloud end to end. It does real work only when cloud-related paths
 #   change (or on the nightly schedule), but it always reports a result, so it can become a
 #   required check without blocking unrelated pull requests. See the "changes" job.
 
@@ -255,7 +255,7 @@ jobs:
         if: needs.changes.outputs.cloud != 'true'
         run: echo "Nothing under cloud/, common/, plugins/bridge/, templates/ or the build setup changed. Integration is not needed."
 
-      # VectoraCloud.jar in an empty folder, as its own process, without network: setup file,
+      # VectolynCloud.jar in an empty folder, as its own process, without network: setup file,
       # built-in templates, every default server (fake server jars that log in like a bridge),
       # Java 21 for PandaSpigot and 25 for the rest, the proxies' server lists and the shutdown.
       # See docs/cloud/node.md#end-to-end-test.
@@ -281,7 +281,7 @@ jobs:
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
-      - name: End-to-end test of VectoraCloud.jar
+      - name: End-to-end test of VectolynCloud.jar
         if: needs.changes.outputs.cloud == 'true'
         run: >-
           bash ./gradlew :cloud:node:e2eTest --no-daemon --stacktrace

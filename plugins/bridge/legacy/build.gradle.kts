@@ -4,7 +4,7 @@
 // (docs/cloud/legacy-1.8.8.md) and its API is compiled for Java 8, so unlike the Paper and Velocity
 // bridges this module needs no Java 25 API and all of its tests also run with -PtestJava=21.
 //
-// pandaspigot-api comes from the project's own repository (repo.hpfxd.com, GPL-3.0 like Vectora);
+// pandaspigot-api comes from the project's own repository (repo.hpfxd.com, GPL-3.0 like Vectolyn);
 // settings.gradle.kts limits that repository to this one group. It is compile only and not
 // transitive: the server provides the API at runtime, and the bridge uses none of the libraries
 // the API declares (Guava, Gson, ebean, ...). Only adventure-api is added, in the version the API
@@ -12,16 +12,16 @@
 // javac needs those to compile calls on them. Reasons in docs/cloud/bridges.md.
 
 plugins {
-    id("vectora.java-conventions")
+    id("vectolyn.java-conventions")
 }
 
-vectora {
+vectolyn {
     // Jar and manifest name from before the repository layout change.
     artifactName = "cloud-bridge-legacy"
 }
 
 base {
-    archivesName = "VectoraCloudBridgeLegacy"
+    archivesName = "VectolynCloudBridgeLegacy"
 }
 
 dependencies {
@@ -43,7 +43,7 @@ tasks.processResources {
 }
 
 // The server loads the plugin jar on its own, so the jar carries the bridge core, the client and
-// the protocol (all Vectora code, no third-party library).
+// the protocol (all Vectolyn code, no third-party library).
 tasks.jar {
     val bundled = configurations.runtimeClasspath
     dependsOn(bundled)
@@ -53,5 +53,5 @@ tasks.jar {
 }
 
 tasks.test {
-    systemProperty("vectora.expectedVersion", project.version.toString())
+    systemProperty("vectolyn.expectedVersion", project.version.toString())
 }

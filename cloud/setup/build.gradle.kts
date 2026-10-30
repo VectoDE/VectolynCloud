@@ -1,4 +1,4 @@
-// Setup assistant of VectoraCloud: the questions on the first start, the same answers from a setup
+// Setup assistant of VectolynCloud: the questions on the first start, the same answers from a setup
 // file for Docker, Pterodactyl and CI, and the "setup" command to change them later. Every change
 // goes through cloud-config, the layer that the console commands, hand-edited files and later the
 // dashboard use as well.
@@ -6,11 +6,11 @@
 // Details: docs/cloud/setup.md
 
 plugins {
-    id("vectora.java-conventions")
-    id("vectora.fuzz-conventions")
+    id("vectolyn.java-conventions")
+    id("vectolyn.fuzz-conventions")
 }
 
-vectora {
+vectolyn {
     // Jar and manifest name from before the repository layout change.
     artifactName = "cloud-setup"
 }

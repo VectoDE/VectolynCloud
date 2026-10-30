@@ -74,7 +74,7 @@ Once a branch has commits from others, Dependabot no longer rebases it on its ow
 Gradle can also check PGP signatures and keep the public keys in the repository. We tried it on 2026-10-29 (`--write-verification-metadata pgp,sha256 --export-keys`) and decided against it for now:
 
 - **The riskiest artifacts are unsigned.** paper-api, velocity-api, brigadier (Mojang), the md-5 artifacts, pandaspigot-api and the Gradle plugin marker files have no signatures. These come from repositories outside Maven Central, one of them run by a single person. They could only ever get checksums.
-- **Many keys cannot be fetched.** 13 signing keys were on neither keys.openpgp.org nor keyserver.ubuntu.com. Their 84 artifacts, among them Netty, JLine, Jazzer, SLF4J and parts of Adventure, fell back to checksums as well. Of the libraries VectoraCloud ships, only Jackson, the MariaDB driver and SnakeYAML would have been checked by signature.
+- **Many keys cannot be fetched.** 13 signing keys were on neither keys.openpgp.org nor keyserver.ubuntu.com. Their 84 artifacts, among them Netty, JLine, Jazzer, SLF4J and parts of Adventure, fell back to checksums as well. Of the libraries VectolynCloud ships, only Jackson, the MariaDB driver and SnakeYAML would have been checked by signature.
 - **Trusted keys would be trust on first use too.** Gradle trusts whatever key it downloads and widens the trust to whole groups (one key for all of `com.google.*`, for example). It only becomes stronger than checksums once every fingerprint is checked against the project's own published key, for more than 40 keys.
 - **Fewer things to see in review.** With a trusted key, a version bump changes nothing in the file. With checksums, every new artifact shows up in the diff.
 - **Network dependence.** Writing the file would depend on key servers in every Dependabot run.
@@ -87,7 +87,7 @@ pandaspigot-api is only published as a snapshot, so the build pins one unique sn
 
 ## Vulnerable transitive versions
 
-OpenSSF Scorecard (check *Vulnerabilities*) reads the artifacts in `gradle/verification-metadata.xml`, so a version that only a server API pulls in as a compile-only or test-only dependency still counts. `vectora.java-conventions` raises these libraries to a patched release in every configuration when an API requests an older one: Guava 33.7.2, Gson 2.14.0, commons-lang3 3.18.0, log4j-api 2.26.1, plexus-utils 3.6.1. The rule only raises, never lowers. Remove an entry once the APIs ship a fixed version themselves.
+OpenSSF Scorecard (check *Vulnerabilities*) reads the artifacts in `gradle/verification-metadata.xml`, so a version that only a server API pulls in as a compile-only or test-only dependency still counts. `vectolyn.java-conventions` raises these libraries to a patched release in every configuration when an API requests an older one: Guava 33.7.2, Gson 2.14.0, commons-lang3 3.18.0, log4j-api 2.26.1, plexus-utils 3.6.1. The rule only raises, never lowers. Remove an entry once the APIs ship a fixed version themselves.
 
 Check locally with `osv-scanner scan source -L gradle/verification-metadata.xml`. Two findings stay:
 

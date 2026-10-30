@@ -1,31 +1,31 @@
-# VectoraCloud
+# VectolynCloud
 
-[![CI](https://github.com/VectoDE/VectoraCloud/actions/workflows/ci.yml/badge.svg)](https://github.com/VectoDE/VectoraCloud/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/VectoDE/VectoraCloud/actions/workflows/codeql.yml/badge.svg)](https://github.com/VectoDE/VectoraCloud/actions/workflows/codeql.yml)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/VectoDE/VectoraCloud/badge)](https://scorecard.dev/viewer/?uri=github.com/VectoDE/VectoraCloud)
+[![CI](https://github.com/VectoDE/VectolynCloud/actions/workflows/ci.yml/badge.svg)](https://github.com/VectoDE/VectolynCloud/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/VectoDE/VectolynCloud/actions/workflows/codeql.yml/badge.svg)](https://github.com/VectoDE/VectolynCloud/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/VectoDE/VectolynCloud/badge)](https://scorecard.dev/viewer/?uri=github.com/VectoDE/VectolynCloud)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/16026/badge)](https://www.bestpractices.dev/projects/16026)
-[![Lizenz: GPL-3.0](https://img.shields.io/github/license/VectoDE/VectoraCloud)](LICENSE)
+[![Lizenz: GPL-3.0](https://img.shields.io/github/license/VectoDE/VectolynCloud)](LICENSE)
 
 [English](README.md) · **Deutsch**
 
-Vectora ist ein Open-Source-Baukasten (GPL-3.0), mit dem du dein eigenes Minecraft-Netzwerk betreibst. Darauf spielen Java-Spieler (1.8 bis 26.3) und Bedrock-Spieler zusammen.
+Vectolyn ist ein Open-Source-Baukasten (GPL-3.0), mit dem du dein eigenes Minecraft-Netzwerk betreibst. Darauf spielen Java-Spieler (1.8 bis 26.3) und Bedrock-Spieler zusammen.
 
 Wir selbst betreiben kein Netzwerk: Es gibt keinen offiziellen Server, keine Domain und keine gehostete Website, keinen Discord-Bot und keinen Store. Website, Discord-Bot und Store liegen als Code in diesem Repository. Du konfigurierst sie mit deinem eigenen Bot-Token und deinem eigenen Stripe-Konto und hostest sie selbst.
 
-Das langfristige Ziel: Du startest `java -jar VectoraCloud.jar` unter Windows, Linux, macOS, in Docker oder auf Pterodactyl, beantwortest einen Einrichtungsassistenten, und danach läuft das komplette Netzwerk mit Datenbank, Proxy, Lobby, Spielmodi und Minigames. Ein Release wird `VectoraCloud.jar`, Startskripte für Windows, Linux und macOS und ein Docker-Image auf GHCR enthalten, alles signiert und mit Provenance. Plugin-Jars hängen nicht am Release. Dockerfile, compose-Datei und Pterodactyl-Egg liegen in diesem Repository.
+Das langfristige Ziel: Du startest `java -jar VectolynCloud.jar` unter Windows, Linux, macOS, in Docker oder auf Pterodactyl, beantwortest einen Einrichtungsassistenten, und danach läuft das komplette Netzwerk mit Datenbank, Proxy, Lobby, Spielmodi und Minigames. Ein Release wird `VectolynCloud.jar`, Startskripte für Windows, Linux und macOS und ein Docker-Image auf GHCR enthalten, alles signiert und mit Provenance. Plugin-Jars hängen nicht am Release. Dockerfile, compose-Datei und Pterodactyl-Egg liegen in diesem Repository.
 
 ## Stand
 
-**Etappe 2 von 8: VectoraCloud-Kern.** Etappe 1, das Fundament, ist fertig und als signiertes Pre-Release [v0.1.0](https://github.com/VectoDE/VectoraCloud/releases/tag/v0.1.0) erschienen. In Etappe 2 entsteht die Cloud Modul für Modul; die Aufgabenliste steht in [#11](https://github.com/VectoDE/VectoraCloud/issues/11), der Gesamtplan auf der Roadmap. Ein nutzbares Cloud-Release gibt es noch nicht, v0.1.0 enthält nur das Fundament. Vieles unter *Architektur* ist noch Plan, kein fertiger Code.
+**Etappe 2 von 8: VectolynCloud-Kern.** Etappe 1, das Fundament, ist fertig und als signiertes Pre-Release [v0.1.0](https://github.com/VectoDE/VectolynCloud/releases/tag/v0.1.0) erschienen. In Etappe 2 entsteht die Cloud Modul für Modul; die Aufgabenliste steht in [#11](https://github.com/VectoDE/VectolynCloud/issues/11), der Gesamtplan auf der Roadmap. Ein nutzbares Cloud-Release gibt es noch nicht, v0.1.0 enthält nur das Fundament. Vieles unter *Architektur* ist noch Plan, kein fertiger Code.
 
-- Roadmap und Fortschritt: [Vectora Roadmap](https://github.com/users/VectoDE/projects/11)
-- Aktuelle Etappe: [#11 Stage 2: VectoraCloud core](https://github.com/VectoDE/VectoraCloud/issues/11)
+- Roadmap und Fortschritt: [Vectolyn Roadmap](https://github.com/users/VectoDE/projects/11)
+- Aktuelle Etappe: [#11 Stage 2: VectolynCloud core](https://github.com/VectoDE/VectolynCloud/issues/11)
 
 | Etappe | Inhalt |
 |---|---|
 | 1 | Fundament: Repository, Build, Konfigurationsfehler |
-| 2 | VectoraCloud-Kern |
-| 3 | Vectora-Plugin-Basis: Core, Rechte, Messaging, Portale/End, Sync, Versionsadapter |
+| 2 | VectolynCloud-Kern |
+| 3 | Vectolyn-Plugin-Basis: Core, Rechte, Messaging, Portale/End, Sync, Versionsadapter |
 | 4 | Lobby |
 | 5 | Survival, Creative, Mod-Server |
 | 6 | Minigames und Anti-Cheat |
@@ -51,27 +51,27 @@ Das langfristige Ziel: Du startest `java -jar VectoraCloud.jar` unter Windows, L
                     │
                 MariaDB
 
- VectoraCloud (geplant) startet, skaliert und überwacht alles oben.
+ VectolynCloud (geplant) startet, skaliert und überwacht alles oben.
 ```
 
 - **Proxy:** Velocity ist der einzige Einstieg. Geyser und Floodgate lassen Bedrock-Clients herein, die Via-Plugins übersetzen ältere Java-Versionen. Die Backends laufen auf der neuesten Minecraft-Version.
 - **Backends:** Paper für Lobby, Survival, Creative, End und später die Minigames. Fabric für den Mod-Server.
 - **Keine Command-Blöcke:** Sie sind auf jedem Server aus und lassen sich nicht wieder einschalten; die Bridges für Paper und 1.8.8 entfernen sie außerdem aus den Welten. Team-Befehle wirken nur für die Konsole und Spieler mit der Berechtigung; das [Rechte-Audit](docs/cloud/rights-audit.md) listet jeden auf.
-- **VectoraCloud** (geplant, Etappe 2): ein Java-Node mit Konsole und Einrichtungsassistent. Er lädt Server-Software herunter und prüft sie, verwaltet JREs und Datenbank, erzeugt Secrets, skaliert Minigame-Server und bietet eine REST-/WebSocket-API. Die Einrichtung läuft wie bei CloudNet: Assistent in der Konsole beim ersten Start, danach Konfigurationsdateien und Konsolenbefehle (Etappe 2). Später soll das Web-Dashboard das alles auch können, einschließlich der Ersteinrichtung (Etappe 8). Im Assistenten, in der Konfiguration oder später im Dashboard markierst du jeden der sieben Server und jede Minigame-Gruppe als gewollt oder nicht. Die Cloud baut nur gewollte Server: Sie kopiert die Vorlage des Servers (`templates/<Server>/` in diesem Repository) nach `runtime/`, lädt die Software, setzt die Secrets ein und startet sie. Nicht gewollte Server legt sie gar nicht an, und weder Proxy noch Lobby verweisen auf sie.
-- **Ein Vectora-Plugin** (geplant, Etappe 3): mehrere Gradle-Module (Core, Rechte, Soziales, Moderation, Statistiken, Economy, Lobby, Portale und weitere), gebündelt zu einer Jar pro Plattform: `Vectora-Paper.jar`, `Vectora-Velocity.jar`, `Vectora-Fabric.jar`. Es ersetzt LuckPerms, TAB, WorldEdit, WorldGuard, PlaceholderAPI, ProxyPortal und Chunky.
+- **VectolynCloud** (geplant, Etappe 2): ein Java-Node mit Konsole und Einrichtungsassistent. Er lädt Server-Software herunter und prüft sie, verwaltet JREs und Datenbank, erzeugt Secrets, skaliert Minigame-Server und bietet eine REST-/WebSocket-API. Die Einrichtung läuft wie bei CloudNet: Assistent in der Konsole beim ersten Start, danach Konfigurationsdateien und Konsolenbefehle (Etappe 2). Später soll das Web-Dashboard das alles auch können, einschließlich der Ersteinrichtung (Etappe 8). Im Assistenten, in der Konfiguration oder später im Dashboard markierst du jeden der sieben Server und jede Minigame-Gruppe als gewollt oder nicht. Die Cloud baut nur gewollte Server: Sie kopiert die Vorlage des Servers (`templates/<Server>/` in diesem Repository) nach `runtime/`, lädt die Software, setzt die Secrets ein und startet sie. Nicht gewollte Server legt sie gar nicht an, und weder Proxy noch Lobby verweisen auf sie.
+- **Ein Vectolyn-Plugin** (geplant, Etappe 3): mehrere Gradle-Module (Core, Rechte, Soziales, Moderation, Statistiken, Economy, Lobby, Portale und weitere), gebündelt zu einer Jar pro Plattform: `Vectolyn-Paper.jar`, `Vectolyn-Velocity.jar`, `Vectolyn-Fabric.jar`. Es ersetzt LuckPerms, TAB, WorldEdit, WorldGuard, PlaceholderAPI, ProxyPortal und Chunky.
 
 Fremdsoftware beschränkt sich auf das Nötigste: Paper, Velocity, Fabric und Fabric API, Geyser, Floodgate, ViaVersion, ViaBackwards, ViaRewind, die Performance-Mods Lithium, FerriteCore, ServerCore und FabricProxy-Lite sowie MariaDB/MySQL.
 
-Mehr dazu: [Architektur im Wiki](https://github.com/VectoDE/VectoraCloud/wiki/Architecture-DE).
+Mehr dazu: [Architektur im Wiki](https://github.com/VectoDE/VectolynCloud/wiki/Architecture-DE).
 
 ## Aufbau des Repositorys
 
 ```
-VectoraCloud/
-  cloud/                  VectoraCloud, je Teil ein Gradle-Modul: launcher, node, config, api,
+VectolynCloud/
+  cloud/                  VectolynCloud, je Teil ein Gradle-Modul: launcher, node, config, api,
                           console, setup, database, download, template, network, backup, monitor,
                           cluster
-    dist/                 Startskripte, Docker, Pterodactyl-Egg, systemd-Unit, vectora.env.example
+    dist/                 Startskripte, Docker, Pterodactyl-Egg, systemd-Unit, vectolyn.env.example
   common/
     protocol/             Leitungsformat des Cloud-Kanals
     client/               Client, über den die Plugins mit der Cloud sprechen
@@ -82,26 +82,26 @@ VectoraCloud/
     portal/paper/         Portale und End
   templates/<Server>/     Server-Configs mit Platzhaltern, in Git
   services/               Dashboard, Website, Discord-Bot, Store (geplant)
-  resourcepack/           Vectora-Resourcepack (geplant)
+  resourcepack/           Vectolyn-Resourcepack (geplant)
   docs/                   Projektdoku; docs/wiki/ wird ins GitHub-Wiki gespiegelt
   build-logic/, gradle/   Gradle-Konventionen, Versionskatalog, Abhängigkeitsprüfung
   .github/                Workflows, Issue-Formulare, Dependabot
 ```
 
-Server-Laufzeiten (Jars, Welten, Logs) und Secrets gehören nicht ins Repository. Sie liegen im Cloud-Home, dem Ordner, in dem VectoraCloud läuft: `config/` enthält die Konfiguration, `local/` die Vorlagen und die Welten der statischen Dienste, `storage/` die Downloads, `secrets/` die Secrets (Aufbau: [architecture](docs/cloud/architecture.md#cloud-home), Englisch). Bei der lokalen Entwicklung ist das `run/` im Wurzelverzeichnis des Repositorys (siehe [Lokal starten](#lokal-starten)); `.gitignore` hält den ganzen Ordner aus Git heraus.
+Server-Laufzeiten (Jars, Welten, Logs) und Secrets gehören nicht ins Repository. Sie liegen im Cloud-Home, dem Ordner, in dem VectolynCloud läuft: `config/` enthält die Konfiguration, `local/` die Vorlagen und die Welten der statischen Dienste, `storage/` die Downloads, `secrets/` die Secrets (Aufbau: [architecture](docs/cloud/architecture.md#cloud-home), Englisch). Bei der lokalen Entwicklung ist das `run/` im Wurzelverzeichnis des Repositorys (siehe [Lokal starten](#lokal-starten)); `.gitignore` hält den ganzen Ordner aus Git heraus.
 
-## Schnellstart (Übergang, bis es VectoraCloud gibt)
+## Schnellstart (Übergang, bis es VectolynCloud gibt)
 
-Bis Etappe 2 laufen die Server unter Windows aus einem Netzwerk-Ordner außerhalb des Repositorys (zum Beispiel `C:\Vectora`, das spätere Cloud-Home) über Startskripte. Welche Server laufen sollen, wählst du erst mit VectoraCloud aus; das heutige Startskript startet alle. Du brauchst Java 25 im `PATH` (Paper 26.3 setzt es voraus) und die portable MariaDB 11.8.9 für Windows.
+Bis Etappe 2 laufen die Server unter Windows aus einem Netzwerk-Ordner außerhalb des Repositorys (zum Beispiel `C:\Vectolyn`, das spätere Cloud-Home) über Startskripte. Welche Server laufen sollen, wählst du erst mit VectolynCloud aus; das heutige Startskript startet alle. Du brauchst Java 25 im `PATH` (Paper 26.3 setzt es voraus) und die portable MariaDB 11.8.9 für Windows.
 
 1. Repository klonen.
 2. Jeden Ordner `templates/<Server>/` nach `<Netzwerk-Ordner>\<Server>\runtime\` kopieren.
-3. `cloud/dist/secrets/vectora.env.example` nach `<Netzwerk-Ordner>\secrets\vectora.env` kopieren und eigene Werte eintragen. Diese Datei nie committen.
-4. In den `runtime/`-Ordnern jeden Platzhalter `{{VECTORA_…}}` durch deine Werte ersetzen und die erzeugten Dateien anlegen (`forwarding.secret`, Floodgate-`key.pem`, `eula.txt`). Alle Platzhalter stehen in [`templates/placeholders.md`](templates/placeholders.md). Diesen Schritt übernimmt später VectoraCloud.
+3. `cloud/dist/secrets/vectolyn.env.example` nach `<Netzwerk-Ordner>\secrets\vectolyn.env` kopieren und eigene Werte eintragen. Diese Datei nie committen.
+4. In den `runtime/`-Ordnern jeden Platzhalter `{{VECTOLYN_…}}` durch deine Werte ersetzen und die erzeugten Dateien anlegen (`forwarding.secret`, Floodgate-`key.pem`, `eula.txt`). Alle Platzhalter stehen in [`templates/placeholders.md`](templates/placeholders.md). Diesen Schritt übernimmt später VectolynCloud.
 5. Server-Software in jeden `runtime/`-Ordner legen, das Repository liefert keine Jars mit. Die Startskripte erwarten `velocity.jar`, `paper.jar` und `fabric-server.jar`; genaue Versionen und Plugin-Dateien stehen unter [Erste Schritte](docs/wiki/Getting-Started-DE.md).
-6. `start-network.bat` und `start-vectora-database.cmd` aus `cloud/dist/manual/` in den Netzwerk-Ordner kopieren, dort `start-network.bat` starten und wählen:
+6. `start-network.bat` und `start-vectolyn-database.cmd` aus `cloud/dist/manual/` in den Netzwerk-Ordner kopieren, dort `start-network.bat` starten und wählen:
    - `1` alles: Datenbank, danach Proxy und alle fünf Backends
-   - `2` nur Datenbank (wie `start-vectora-database.cmd`)
+   - `2` nur Datenbank (wie `start-vectolyn-database.cmd`)
    - `3` nur Proxy
    - `4` nur Backends (Lobby, Survival, Mod, Creative, End)
    - `5` beenden
@@ -141,7 +141,7 @@ Unter Windows `gradlew.bat build`. Der Gradle-Wrapper lädt Gradle selbst herunt
 ./gradlew :cloud:node:runLocal
 ```
 
-Das baut `VectoraCloud.jar` und startet es mit `run/` im Wurzelverzeichnis des Repositorys als Cloud-Home. Beim ersten Start wird der Ordner angelegt. Der Einrichtungsassistent stellt seine Fragen im selben Terminal, danach lädt die Cloud die Server-Software herunter und startet das Netzwerk. Konfiguration, Secrets, Welten, Logs und Downloads bleiben alle in `run/`, und Git ignoriert den Ordner vollständig. Wer neu anfangen will, löscht ihn einfach.
+Das baut `VectolynCloud.jar` und startet es mit `run/` im Wurzelverzeichnis des Repositorys als Cloud-Home. Beim ersten Start wird der Ordner angelegt. Der Einrichtungsassistent stellt seine Fragen im selben Terminal, danach lädt die Cloud die Server-Software herunter und startet das Netzwerk. Konfiguration, Secrets, Welten, Logs und Downloads bleiben alle in `run/`, und Git ignoriert den Ordner vollständig. Wer neu anfangen will, löscht ihn einfach.
 
 Unter Gradle hat die Cloud kein echtes Terminal. Die Konsole liest deshalb einfache Zeilen ohne Bearbeitung und Vervollständigung, und Secrets, die du im Einrichtungsassistenten eintippst, bleiben sichtbar. Mit `--console=plain` kommt dir die Fortschrittszeile von Gradle nicht in die Quere. Beende das Netzwerk mit `shutdown` in der Konsole: Strg+C bricht Gradle ab, und unter Windows endet die Cloud dann ohne sauberes Herunterfahren. Details in [docs/cloud/launcher.md](docs/cloud/launcher.md#local-start-from-the-repository).
 
@@ -151,10 +151,10 @@ Als root oder Administrator verweigert der Launcher den Start. Läuft deine Entw
 
 ## Doku und Community
 
-- [Wiki](https://github.com/VectoDE/VectoraCloud/wiki) (Deutsch und Englisch, Quellen in `docs/wiki/`)
-- [Discussions](https://github.com/VectoDE/VectoraCloud/discussions) für Fragen, Ideen und Ankündigungen
+- [Wiki](https://github.com/VectoDE/VectolynCloud/wiki) (Deutsch und Englisch, Quellen in `docs/wiki/`)
+- [Discussions](https://github.com/VectoDE/VectolynCloud/discussions) für Fragen, Ideen und Ankündigungen
 - [Mitmachen](CONTRIBUTING.de.md) · [Verhaltenskodex](CODE_OF_CONDUCT.md) · [Sicherheit](SECURITY.md)
 
 ## Lizenz
 
-[GPL-3.0](LICENSE). Minecraft ist eine Marke von Mojang Synergies AB. Vectora steht in keiner Verbindung zu Mojang oder Microsoft.
+[GPL-3.0](LICENSE). Minecraft ist eine Marke von Mojang Synergies AB. Vectolyn steht in keiner Verbindung zu Mojang oder Microsoft.

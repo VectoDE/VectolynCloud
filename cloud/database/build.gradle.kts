@@ -1,10 +1,10 @@
 plugins {
-    id("vectora.java-conventions")
+    id("vectolyn.java-conventions")
     // ServerVersion parses text the database server sends; SqlQuoting guards every setup statement.
-    id("vectora.fuzz-conventions")
+    id("vectolyn.fuzz-conventions")
 }
 
-vectora {
+vectolyn {
     // Jar and manifest name from before the repository layout change.
     artifactName = "cloud-database"
 }
@@ -38,8 +38,8 @@ val mariadbTest by tasks.registering(Test::class) {
         includeTags("mariadb")
     }
     // Keeps the downloaded archive between local runs; CI starts empty.
-    systemProperty("vectora.mariadb.cache", layout.buildDirectory.dir("mariadb-cache").get().asFile.absolutePath)
-    providers.gradleProperty("mariadbVersion").orNull?.let { systemProperty("vectora.mariadb.version", it) }
+    systemProperty("vectolyn.mariadb.cache", layout.buildDirectory.dir("mariadb-cache").get().asFile.absolutePath)
+    providers.gradleProperty("mariadbVersion").orNull?.let { systemProperty("vectolyn.mariadb.version", it) }
     outputs.upToDateWhen { false }
     outputs.cacheIf { false }
 }

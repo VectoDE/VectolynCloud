@@ -1,22 +1,22 @@
 import java.security.MessageDigest
 
 plugins {
-    id("vectora.java-conventions")
+    id("vectolyn.java-conventions")
 }
 
-vectora {
+vectolyn {
     // Jar and manifest name from before the repository layout change.
     artifactName = "cloud-launcher"
 }
 
 dependencies {
-    // Only so that cloud-node and its libraries end up in VectoraCloud.jar (see cloudJar below).
+    // Only so that cloud-node and its libraries end up in VectolynCloud.jar (see cloudJar below).
     // The launcher code itself never references a node class at compile time; it loads
-    // net.vectora.cloud.node.NodeMain by name, after the Java, root and argument checks.
+    // net.vectolyn.cloud.node.NodeMain by name, after the Java, root and argument checks.
     implementation(project(":cloud:node"))
 }
 
-// Bootstrap source set: the Main-Class of VectoraCloud.jar, compiled with --release 8.
+// Bootstrap source set: the Main-Class of VectolynCloud.jar, compiled with --release 8.
 //
 // Deliberate exception to the release-21 policy in docs/java-compatibility.md, and the only one:
 // the first class the JVM loads must be readable by an old runtime, otherwise a user on Java 8 to
@@ -38,18 +38,18 @@ dependencies {
 }
 
 /**
- * Writes the index of the libraries embedded in VectoraCloud.jar: one line per jar,
+ * Writes the index of the libraries embedded in VectolynCloud.jar: one line per jar,
  * "<sha256 hex>  <file name>", the same layout as sha256sum. The launcher reads it at startup,
  * unpacks the jars to <home>/storage/libs/<version> and checks every hash before loading anything.
  */
 abstract class EmbeddedLibrariesIndex : DefaultTask() {
 
-    /** The jars that go into META-INF/vectora/libs/. */
+    /** The jars that go into META-INF/vectolyn/libs/. */
     @get:InputFiles
     @get:PathSensitive(PathSensitivity.NAME_ONLY)
     abstract val libraries: ConfigurableFileCollection
 
-    /** The index file; cloudJar stores it as META-INF/vectora/libs.index. */
+    /** The index file; cloudJar stores it as META-INF/vectolyn/libs.index. */
     @get:OutputFile
     abstract val indexFile: RegularFileProperty
 
@@ -74,7 +74,7 @@ abstract class EmbeddedLibrariesIndex : DefaultTask() {
         val target = indexFile.get().asFile
         target.parentFile.mkdirs()
         target.writeText(
-            "# VectoraCloud embedded libraries, format 1: <sha256>  <file name>\n" +
+            "# VectolynCloud embedded libraries, format 1: <sha256>  <file name>\n" +
                 lines.joinToString("") { "$it\n" },
             Charsets.UTF_8,
         )
@@ -83,31 +83,31 @@ abstract class EmbeddedLibrariesIndex : DefaultTask() {
 
 val embeddedLibraries: FileCollection = configurations.named("runtimeClasspath").get()
 val embeddedLibrariesIndex = tasks.register<EmbeddedLibrariesIndex>("embeddedLibrariesIndex") {
-    description = "Writes META-INF/vectora/libs.index for VectoraCloud.jar."
+    description = "Writes META-INF/vectolyn/libs.index for VectolynCloud.jar."
     libraries.from(embeddedLibraries)
-    indexFile = layout.buildDirectory.file("generated/vectora-libs-index/libs.index")
+    indexFile = layout.buildDirectory.file("generated/vectolyn-libs-index/libs.index")
 }
 
-// VectoraCloud.jar: bootstrap and launcher classes at the top level, cloud-node and every runtime
-// library as plain jars under META-INF/vectora/libs/ plus their index. This replaces a shaded
+// VectolynCloud.jar: bootstrap and launcher classes at the top level, cloud-node and every runtime
+// library as plain jars under META-INF/vectolyn/libs/ plus their index. This replaces a shaded
 // fat jar (Shadow plugin); the reasons are in docs/cloud/launcher.md.
 val cloudJar = tasks.register<Jar>("cloudJar") {
-    description = "Assembles VectoraCloud.jar with the embedded node and its libraries."
+    description = "Assembles VectolynCloud.jar with the embedded node and its libraries."
     group = BasePlugin.BUILD_GROUP
-    archiveFileName = "VectoraCloud.jar"
+    archiveFileName = "VectolynCloud.jar"
     destinationDirectory = layout.buildDirectory.dir("cloud")
     from(sourceSets.main.map { it.output })
     from(bootstrap.output)
     from(embeddedLibrariesIndex) {
-        into("META-INF/vectora")
+        into("META-INF/vectolyn")
     }
     from(embeddedLibraries) {
-        into("META-INF/vectora/libs")
+        into("META-INF/vectolyn/libs")
     }
     manifest {
         attributes(
-            "Main-Class" to "net.vectora.cloud.launcher.Bootstrap",
-            "Implementation-Title" to "VectoraCloud",
+            "Main-Class" to "net.vectolyn.cloud.launcher.Bootstrap",
+            "Implementation-Title" to "VectolynCloud",
             "Implementation-Version" to project.version.toString(),
             // JLine's jni and ffm terminal providers call native code; Java 24+ warns unless it is
             // allowed. The node's class loader is an unnamed module too, so ALL-UNNAMED covers it.
@@ -130,11 +130,11 @@ val cloudJarElements: Configuration = configurations.create("cloudJarElements") 
 }
 artifacts.add(cloudJarElements.name, cloudJar)
 
-// CloudJarTest opens the real VectoraCloud.jar (manifest and layout).
+// CloudJarTest opens the real VectolynCloud.jar (manifest and layout).
 tasks.named<Test>("test") {
     val jar = cloudJar.flatMap { it.archiveFile }
     inputs.file(jar).withPathSensitivity(PathSensitivity.NONE).withPropertyName("cloudJar")
     jvmArgumentProviders.add(CommandLineArgumentProvider {
-        listOf("-Dvectora.cloudJar=${jar.get().asFile.absolutePath}")
+        listOf("-Dvectolyn.cloudJar=${jar.get().asFile.absolutePath}")
     })
 }

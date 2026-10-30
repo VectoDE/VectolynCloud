@@ -70,7 +70,7 @@ velocity-ping-save: true
 #  servername: protocolversion
 # You can find protocol ids on https://minecraft.wiki/w/Protocol_version
 # It will fall back to the default option if none found.
-# Vectora: no fixed server names here. The template must not refer to servers that may not be
+# Vectolyn: no fixed server names here. The template must not refer to servers that may not be
 # wanted; ViaVersion learns each backend's protocol through the ping above.
 velocity-servers:
   default: 393

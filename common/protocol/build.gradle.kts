@@ -1,12 +1,12 @@
-// Wire format of the cloud channel, shared by VectoraCloud, common/client and the bridges.
+// Wire format of the cloud channel, shared by VectolynCloud, common/client and the bridges.
 // Deliberately without any dependency: it ends up on the class path of every proxy and server.
 
 plugins {
-    id("vectora.java-conventions")
-    id("vectora.fuzz-conventions")
+    id("vectolyn.java-conventions")
+    id("vectolyn.fuzz-conventions")
 }
 
-vectora {
+vectolyn {
     // Jar and manifest name from before the repository layout change.
-    artifactName = "Vectora-Protocol"
+    artifactName = "Vectolyn-Protocol"
 }

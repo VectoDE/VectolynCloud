@@ -1,4 +1,4 @@
-# VectoraCloud REST API
+# VectolynCloud REST API
 
 Module `cloud/api`. A JSON API over HTTP/1.1 plus a WebSocket for live events, for the dashboard (stage 8) and for scripts. The machine-readable description is [`api.openapi.yaml`](api.openapi.yaml). German: [api.de.md](api.de.md).
 
@@ -24,13 +24,13 @@ Every request needs a token. Without one, with a wrong one or with a revoked one
 Tokens are managed at the node console. The whole `api` command is sensitive, so none of its lines is written to the console history.
 
 ```text
-vectora> api token create dashboard services:read,config:read,node:read
+vectolyn> api token create dashboard services:read,config:read,node:read
 Token dashboard (3f9a01c2) created with services:read, config:read, node:read.
   vct_...
 Copy it now: it is shown only this once and is not stored. Lost tokens are revoked and created again.
-vectora> api token list
-vectora> api token revoke dashboard          # or the id; aliases: delete, remove
-vectora> api scopes
+vectolyn> api token list
+vectolyn> api token revoke dashboard          # or the id; aliases: delete, remove
+vectolyn> api scopes
 ```
 
 - Format: `vct_` followed by 43 characters `[A-Za-z0-9_-]` (32 random bytes from `SecureRandom`, Base64url).
@@ -41,7 +41,7 @@ vectora> api scopes
 - At most 100 tokens. Names follow the group name rule `[a-z0-9][a-z0-9_-]{0,31}`.
 - Where the printed token ends up: the command writes to the console, not to the log, so the log files and the journal do not get it. Under systemd the cloud has no console at all; create tokens in a `tmux` or `screen` session ([operations](operations.md)). In Docker, the console of an attached container (`docker attach`) is the container's standard output, so `docker logs` keeps the token. Clear or rotate those logs, or revoke the token and create a new one if the logs are shared.
 
-Send the token as `Authorization: Bearer vct_...`. Browsers cannot set headers on a WebSocket, so the event stream also takes it as the subprotocol `vectora.bearer.<token>` next to `vectora.v1`; the server answers with `vectora.v1` only and never echoes the token. An upgrade that offers subprotocols but not `vectora.v1` is refused with `400 subprotocol-required`.
+Send the token as `Authorization: Bearer vct_...`. Browsers cannot set headers on a WebSocket, so the event stream also takes it as the subprotocol `vectolyn.bearer.<token>` next to `vectolyn.v1`; the server answers with `vectolyn.v1` only and never echoes the token. An upgrade that offers subprotocols but not `vectolyn.v1` is refused with `400 subprotocol-required`.
 
 ### Scopes
 
@@ -170,7 +170,7 @@ A WebSocket (text frames). Optional filters as query: `?types=service-state,serv
 {"type": "dropped", "time": "...", "data": {"count": 12}}
 ```
 
-- Output lines are redacted before they leave the node: every secret of `vectora.env` becomes `***`, as in the console.
+- Output lines are redacted before they leave the node: every secret of `vectolyn.env` becomes `***`, as in the console.
 - A slow client does not slow the node down: while its socket is not writable, events for it are dropped and counted, then reported in one `dropped` event.
 - The server pings every 30 s and closes a stream that has been silent for 90 s. Revoking the token closes the stream with `1008`, shutting down with `1001`.
 - A browser handshake with an `Origin` that is not in `api.cors-origins` is refused with `403`.
@@ -184,7 +184,7 @@ The default bind is `127.0.0.1`. Any address that is not loopback, including `0.
 
 With TLS the server speaks TLS 1.3 and 1.2 only, and sends `Strict-Transport-Security`. The keystore (`api.tls.keystore`, PKCS#12, relative to the home):
 
-- **Own certificate.** Put the PKCS#12 file at that path and its password into `secrets/vectora.env` as `VECTORA_API_KEYSTORE_PASSWORD`. Without the password the node does not start the API and says which key is missing.
+- **Own certificate.** Put the PKCS#12 file at that path and its password into `secrets/vectolyn.env` as `VECTOLYN_API_KEYSTORE_PASSWORD`. Without the password the node does not start the API and says which key is missing.
 - **Generated.** If the file does not exist, the node creates a self-signed certificate with the JDK's `keytool`: EC P-256, valid for 825 days, subject names `localhost`, `127.0.0.1`, `::1` and the bind address (unless it is a wildcard). The keystore password is random and is kept in `secrets/api-keystore.password` (owner only); it is passed to `keytool` through an environment variable, never on the command line. The node logs the SHA-256 fingerprint at every start, so a client can pin it.
 
 ### CORS
@@ -213,7 +213,7 @@ Every answer has `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, `
 
 ### What is never in an answer
 
-Passwords, the database password, tokens and token hashes, the keystore password and the contents of `vectora.env`. `cloud.yml`, groups and tasks hold no secrets by design ([config.md](config.md#secrets)).
+Passwords, the database password, tokens and token hashes, the keystore password and the contents of `vectolyn.env`. `cloud.yml`, groups and tasks hold no secrets by design ([config.md](config.md#secrets)).
 
 ### JVM flags
 
@@ -227,7 +227,7 @@ Groups can be written through the API, so `process.jvm-flags` has an allowlist: 
 2. If `api.enabled`:
    ```java
    ApiConfig api = config.snapshot().cloud().api();
-   // keystorePassword: VECTORA_API_KEYSTORE_PASSWORD from secrets/vectora.env, if set
+   // keystorePassword: VECTOLYN_API_KEYSTORE_PASSWORD from secrets/vectolyn.env, if set
    Optional<ApiTls.Material> tls = api.tls() != null && api.tls().enabled()
            ? Optional.of(ApiTls.prepare(home, api.tls(), api.bind(), keystorePassword))
            : Optional.empty();
@@ -247,11 +247,11 @@ Groups can be written through the API, so `process.jvm-flags` has an allowlist: 
 
 ## Tests
 
-`ApiServerTest`, `EventStreamTest`, `ApiTlsTest`, `ApiTokensTest`, `RateLimiterTest`, `RouterTest` and `ApiCommandsTest` run against a real server on `127.0.0.1` with a random port. `ApiServerTest.aPortInUseLeavesNoEventLoopThreadBehind` binds to a taken port and checks that no `vectora-api` thread is left; `ApiCommandsTest.aBrokenTokenFileIsReportedUntilItIsRepaired` covers the commands on a broken file. `NodeRobustnessTest` in `cloud/node` checks the same on the whole node: a broken token file with the API off and on, and a taken API port. Fuzz targets (Jazzer, see [architecture](architecture.md#fuzz-tests)):
+`ApiServerTest`, `EventStreamTest`, `ApiTlsTest`, `ApiTokensTest`, `RateLimiterTest`, `RouterTest` and `ApiCommandsTest` run against a real server on `127.0.0.1` with a random port. `ApiServerTest.aPortInUseLeavesNoEventLoopThreadBehind` binds to a taken port and checks that no `vectolyn-api` thread is left; `ApiCommandsTest.aBrokenTokenFileIsReportedUntilItIsRepaired` covers the commands on a broken file. `NodeRobustnessTest` in `cloud/node` checks the same on the whole node: a broken token file with the API off and on, and a taken API port. Fuzz targets (Jazzer, see [architecture](architecture.md#fuzz-tests)):
 
 - `RouterFuzzTest.resolveNeverThrowsAndOnlyPassesCleanValues`: any request target resolves without an exception, and a found route only carries parameters and query values from the strict alphabets.
 - `ApiJsonFuzzTest.readFailsOnlyWithBadRequest`: any body becomes a value or fails with a `400` whose message has no control characters.
 
 ```sh
-./gradlew :cloud:api:test --tests 'net.vectora.cloud.api.http.RouterFuzzTest.resolveNeverThrowsAndOnlyPassesCleanValues' -Pfuzz -PfuzzMaxDuration=5m
+./gradlew :cloud:api:test --tests 'net.vectolyn.cloud.api.http.RouterFuzzTest.resolveNeverThrowsAndOnlyPassesCleanValues' -Pfuzz -PfuzzMaxDuration=5m
 ```

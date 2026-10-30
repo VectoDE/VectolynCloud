@@ -1,11 +1,11 @@
 # Cloud channel: network and client
 
-Every proxy and server that VectoraCloud starts keeps one TCP connection to its node. Over it the service reports that it is ready, sends its status and player events, and exchanges channel messages and requests with the cloud and with other services. The wire format is described in [protocol.md](protocol.md). This page covers the two ends:
+Every proxy and server that VectolynCloud starts keeps one TCP connection to its node. Over it the service reports that it is ready, sends its status and player events, and exchanges channel messages and requests with the cloud and with other services. The wire format is described in [protocol.md](protocol.md). This page covers the two ends:
 
 | Module | Package | Side |
 |---|---|---|
-| `cloud/network` | `net.vectora.cloud.network` | Netty server inside the cloud (`CloudNetworkServer`) |
-| `common/client` | `net.vectora.cloud.client` | Client inside every proxy and server (`CloudClient`) |
+| `cloud/network` | `net.vectolyn.cloud.network` | Netty server inside the cloud (`CloudNetworkServer`) |
+| `common/client` | `net.vectolyn.cloud.client` | Client inside every proxy and server (`CloudClient`) |
 
 ## Security model
 
@@ -53,7 +53,7 @@ CloudNetworkServer server = CloudNetworkServer.builder(NetworkSettings.forNode(n
         .build();
 server.start();
 
-AuthToken token = tokens.issue(serviceId); // before starting the process, goes into VECTORA_SERVICE_TOKEN
+AuthToken token = tokens.issue(serviceId); // before starting the process, goes into VECTOLYN_SERVICE_TOKEN
 // ...
 tokens.remove(serviceId, token);           // after the process has ended; false if a newer token replaced it
 server.close();                            // Disconnect(SHUTDOWN) to everyone
@@ -121,12 +121,12 @@ The cloud starts every service process with these variables. A system property w
 
 | Variable | System property | Default | Content |
 |---|---|---|---|
-| `VECTORA_CLOUD_HOST` | `vectora.cloud.host` | `127.0.0.1` | Host of the cloud channel |
-| `VECTORA_CLOUD_PORT` | `vectora.cloud.port` | `7010` | Port of the cloud channel |
-| `VECTORA_SERVICE_ID` | `vectora.service.id` | required | Id of this service, for example `lobby-1` |
-| `VECTORA_SERVICE_TOKEN` | `vectora.service.token` | required | Token from `ServiceTokens.issue` |
+| `VECTOLYN_CLOUD_HOST` | `vectolyn.cloud.host` | `127.0.0.1` | Host of the cloud channel |
+| `VECTOLYN_CLOUD_PORT` | `vectolyn.cloud.port` | `7010` | Port of the cloud channel |
+| `VECTOLYN_SERVICE_ID` | `vectolyn.service.id` | required | Id of this service, for example `lobby-1` |
+| `VECTOLYN_SERVICE_TOKEN` | `vectolyn.service.token` | required | Token from `ServiceTokens.issue` |
 
-The names are constants of `net.vectora.protocol.ServiceEnvironment` (`CLOUD_HOST`, `CLOUD_PORT`, `SERVICE_ID`, `SERVICE_TOKEN`; `CloudClientSettings.ENV_*` point at them). `cloud/node` sets them from the same constants, so both sides use one definition; the bridges read them in PR 13. A missing or invalid value fails with a message that names the variable and never contains the token.
+The names are constants of `net.vectolyn.protocol.ServiceEnvironment` (`CLOUD_HOST`, `CLOUD_PORT`, `SERVICE_ID`, `SERVICE_TOKEN`; `CloudClientSettings.ENV_*` point at them). `cloud/node` sets them from the same constants, so both sides use one definition; the bridges read them in PR 13. A missing or invalid value fails with a message that names the variable and never contains the token.
 
 ### Behaviour
 
@@ -134,7 +134,7 @@ The names are constants of `net.vectora.protocol.ServiceEnvironment` (`CLOUD_HOS
 - **State after a reconnect:** `ServiceReady` (if `markReady` was called) and the last status report are sent again. Player events and channel messages sent while disconnected are lost; the methods return `false`. Requests fail at once with `NotConnectedException`, open requests fail when the connection drops.
 - **Heartbeat:** `Ping` every 10 s. If nothing arrives for 30 s, the client sends `Disconnect(TIMEOUT)` and reconnects.
 - **Handshake:** 5 s for connect plus `AuthResult`. Until `AuthResult(ACCEPTED)` and the `SessionTicket` behind it the client also accepts frames of 4 KiB at most.
-- **Ticket:** the first `Hello` carries the token from `VECTORA_SERVICE_TOKEN`, every later one the ticket of the last accepted connection. The ticket stays in the client's memory; a `SessionTicket` outside the handshake is a protocol error and never reaches a listener.
+- **Ticket:** the first `Hello` carries the token from `VECTOLYN_SERVICE_TOKEN`, every later one the ticket of the last accepted connection. The ticket stays in the client's memory; a `SessionTicket` outside the handshake is a protocol error and never reaches a listener.
 - **Status values:** `reportStatus(int, int, double, double)` clamps values into the protocol's ranges (NaN counts as 0) and fills in the heap. `heapMax` is `-1` when the JVM has no limit (`Runtime.maxMemory()` returns `Long.MAX_VALUE`).
 - **Threads:** one daemon thread reads the socket, one runs timers, one delivers events. Listener, subscriber and handler calls run on the event thread, one at a time and never on a server thread. A bridge that has to touch the server hands the work to the server's scheduler.
 
