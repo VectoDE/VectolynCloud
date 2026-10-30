@@ -53,7 +53,7 @@ database:
   port: 3307
   name: luckperms
   user: luckperms
-  # docker-image: mariadb:11.8   only and required with mode: docker
+  # docker-image: mariadb:12.3   only and required with mode: docker
 api:
   enabled: false
   bind: 127.0.0.1            # anything except loopback needs TLS

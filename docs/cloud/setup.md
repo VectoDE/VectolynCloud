@@ -121,7 +121,7 @@ database:
   name: luckperms
   user: luckperms
   password-file: /run/secrets/vectora-db   # optional, see below
-  # docker-image: mariadb:11.8              only with mode: docker
+  # docker-image: mariadb:12.3              only with mode: docker
 ```
 
 Rules:

@@ -199,7 +199,7 @@ docker build -f cloud/dist/docker/Dockerfile -t vectora-cloud .
 
 ### Docker Compose with MariaDB
 
-[`compose.yml`](../../cloud/dist/docker/compose.yml) starts the cloud and MariaDB 11.8 as an external database:
+[`compose.yml`](../../cloud/dist/docker/compose.yml) starts the cloud and MariaDB 12.3 (the current long-term-support series, the same one managed mode downloads) as an external database. A data volume from an earlier compose file with MariaDB 11.8 is upgraded on the first start (`MARIADB_AUTO_UPGRADE`); take a backup before that start, because the files cannot go back to 11.8:
 
 ```sh
 cd cloud/dist/docker
