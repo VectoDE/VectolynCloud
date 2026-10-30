@@ -6,7 +6,10 @@ bind = "{{VECTORA_PROXY_BIND}}:{{VECTORA_PROXY_PORT}}"
 
 # What should be the MOTD? This gets displayed when the player adds your server to
 # their server list. Only MiniMessage format is accepted.
-motd = "<dark_gray>◆ <gradient:#00E5FF:#7C4DFF><bold>V E C T O R A</bold></gradient> <dark_gray>◆ <gray>Dein Netzwerk. Deine Welt.\n<dark_gray>➥ <#55FF55>Java & Bedrock <dark_gray>• <white>Starte dein nächstes Abenteuer <dark_gray>✦ <yellow>vectora.net"
+# Layout: two lines, each centered with leading spaces (about 270 px wide, 4 px per space).
+# Line 1: network name and version range, line 2: current highlight. Bedrock gets its own
+# text from Geyser (see plugins/Geyser-Velocity/config.yml). Change vectora.net to your domain.
+motd = "             <dark_gray>» <gradient:#00E5FF:#7C4DFF><bold>VECTORA</bold></gradient><#FFD23F><bold>.NET</bold> <dark_gray>« <gray>[1.8 - 26.3]\n           <#FF5555><bold>NEUE LOBBY</bold> <dark_gray>• <#55FF55><bold>JAVA & BEDROCK</bold>"
 
 # What should we display for the maximum number of players? (Velocity does not support a cap
 # on the number of players online.)

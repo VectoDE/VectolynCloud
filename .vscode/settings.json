@@ -1,0 +1,30 @@
+{
+  "files.watcherExclude": {
+    "**/run/**": true,
+    "**/.claude/worktrees/**": true,
+    "**/build/**": true,
+    "**/.gradle/**": true,
+    "**/.kotlin/**": true
+  },
+  "search.exclude": {
+    "**/run": true,
+    "**/.claude/worktrees": true,
+    "**/build": true,
+    "**/.gradle": true,
+    "**/.kotlin": true
+  },
+  "files.exclude": {
+    "**/.claude/worktrees": true
+  },
+  "git.detectSubmodules": false,
+  "git.detectWorktrees": false,
+  "git.repositoryScanIgnoredFolders": ["run", "build", ".gradle", ".claude"],
+  "java.import.exclusions": [
+    "**/node_modules/**",
+    "**/.metadata/**",
+    "**/archetype-resources/**",
+    "**/META-INF/maven/**",
+    "**/run/**",
+    "**/.claude/worktrees/**"
+  ]
+}
