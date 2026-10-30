@@ -63,6 +63,11 @@ class MessageValidationTest {
         assertFalse(hello.toString().contains(SampleMessages.TOKEN.value()));
     }
 
+    @Test
+    void sessionTicketDoesNotPrintTheTicket() {
+        assertFalse(new SessionTicket(SampleMessages.TOKEN).toString().contains(SampleMessages.TOKEN.value()));
+    }
+
     @ParameterizedTest
     @ValueSource(ints = {0, -1, 65_536})
     void rejectsInvalidPorts(int port) {

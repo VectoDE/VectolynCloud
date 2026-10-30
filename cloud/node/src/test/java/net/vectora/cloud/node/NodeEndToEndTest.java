@@ -58,7 +58,9 @@ class NodeEndToEndTest {
             ServiceInfo info = node.services().find(lobby).orElseThrow();
             Path folder = info.workDirectory();
             String token = Files.readString(folder.resolve("token.txt"), StandardCharsets.UTF_8);
-            assertEquals(AuthResult.Outcome.ACCEPTED, auth(node, lobby, token));
+            // The fake server has connected with it, so the token from its environment is used up:
+            // a copy of it gets nobody in (issue #73).
+            assertEquals(AuthResult.Outcome.INVALID_TOKEN, auth(node, lobby, token), "used up by the connection");
             assertTrue(NodeFixture.read(folder.resolve("server.properties")).contains("db-pool=4"),
                     "pool size placeholder from the connection budget");
             Path log = fixture.home.resolve("logs/services/lobby-1.log");

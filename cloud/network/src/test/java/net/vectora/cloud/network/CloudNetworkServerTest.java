@@ -142,8 +142,21 @@ class CloudNetworkServerTest {
 
     @Test
     void refusesAnAuthenticatorThatThrows() throws Exception {
-        server = CloudNetworkServer.builder(testSettings(), (peer, token) -> {
-            throw new IllegalStateException("broken");
+        server = CloudNetworkServer.builder(testSettings(), new ServiceAuthenticator() {
+            @Override
+            public AuthResult.Outcome authenticate(net.vectora.protocol.PeerId peer, AuthToken token) {
+                throw new IllegalStateException("broken");
+            }
+
+            @Override
+            public Admission admit(net.vectora.protocol.PeerId peer, AuthToken token) {
+                throw new IllegalStateException("broken");
+            }
+
+            @Override
+            public void ticketNotTaken(net.vectora.protocol.PeerId peer, AuthToken presented, AuthToken ticket) {
+                throw new IllegalStateException("broken");
+            }
         }).build();
         address = server.start();
         try (TestPeer peer = TestPeer.connect(address)) {
@@ -324,7 +337,7 @@ class CloudNetworkServerTest {
         }
         awaitOpenConnections(0);
         try (TestPeer again = TestPeer.connect(address)) {
-            assertEquals(AuthResult.Outcome.ACCEPTED, again.hello(LOBBY, lobbyToken).outcome());
+            assertEquals(AuthResult.Outcome.ACCEPTED, again.hello(LOBBY, tokens.issue(LOBBY)).outcome());
         }
     }
 
@@ -337,6 +350,74 @@ class CloudNetworkServerTest {
                 assertTrue(second.closedWithin(SHORT));
             }
             assertEquals(AuthResult.Outcome.ACCEPTED, first.hello(LOBBY, lobbyToken).outcome());
+        }
+    }
+
+    /** Connections without Hello have their own, smaller limit; an accepted one no longer counts. */
+    @Test
+    void limitsUnauthenticatedConnectionsSeparately() throws Exception {
+        start(testSettings().withLimits(10, 10, 16).withUnauthenticatedLimits(2, 2));
+        try (TestPeer first = TestPeer.connect(address); TestPeer second = TestPeer.connect(address)) {
+            awaitOpenConnections(2);
+            assertEquals(2, server.unauthenticatedConnections());
+            try (TestPeer third = TestPeer.connect(address)) {
+                assertTrue(third.closedWithin(SHORT), "third connection without Hello");
+            }
+            assertTrue(server.refusedConnections() >= 1);
+            // Once one has authenticated, its slot is free for a new unauthenticated connection.
+            assertEquals(AuthResult.Outcome.ACCEPTED, first.hello(LOBBY, lobbyToken).outcome());
+            assertEquals(1, server.unauthenticatedConnections());
+            try (TestPeer fourth = TestPeer.connect(address)) {
+                awaitOpenConnections(3);
+                assertEquals(AuthResult.Outcome.ACCEPTED, fourth.hello(SURVIVAL, survivalToken).outcome());
+            }
+            assertEquals(1, server.unauthenticatedConnections(), "only the second is still silent");
+            assertFalse(second.closedWithin(Duration.ofMillis(100)), "the silent one is within the limit");
+        }
+        awaitOpenConnections(0);
+        assertEquals(0, server.unauthenticatedConnections());
+    }
+
+    @Test
+    void limitsUnauthenticatedConnectionsPerAddress() throws Exception {
+        start(testSettings().withLimits(10, 10, 16).withUnauthenticatedLimits(10, 1));
+        try (TestPeer first = TestPeer.connect(address)) {
+            awaitOpenConnections(1);
+            try (TestPeer second = TestPeer.connect(address)) {
+                assertTrue(second.closedWithin(SHORT), "second silent connection from the same address");
+            }
+            assertEquals(AuthResult.Outcome.ACCEPTED, first.hello(LOBBY, lobbyToken).outcome());
+        }
+    }
+
+    /** A refused Hello frees the slot as well: the connection is closed. */
+    @Test
+    void aRefusedHelloGivesItsSlotBack() throws Exception {
+        start(testSettings().withUnauthenticatedLimits(1, 1));
+        for (int i = 0; i < 3; i++) {
+            try (TestPeer peer = TestPeer.connect(address)) {
+                assertEquals(AuthResult.Outcome.INVALID_TOKEN, peer.hello(LOBBY, survivalToken).outcome());
+                assertTrue(peer.closedWithin(SHORT));
+            }
+            awaitOpenConnections(0);
+        }
+        assertEquals(0, server.unauthenticatedConnections());
+    }
+
+    // ---- tokens are valid for one connection ----
+
+    @Test
+    void aCopiedTokenIsRefusedOnARealSocket() throws Exception {
+        start();
+        try (TestPeer bridge = TestPeer.authenticated(address, LOBBY, lobbyToken)) {
+            assertEquals("connected lobby-1", listener.next());
+            try (TestPeer thief = TestPeer.connect(address)) {
+                assertEquals(AuthResult.Outcome.INVALID_TOKEN, thief.hello(LOBBY, new AuthToken(lobbyToken.value())).outcome());
+                assertTrue(thief.closedWithin(SHORT));
+            }
+            assertTrue(server.isConnected(LOBBY), "the bridge stays connected");
+            bridge.send(new Ping(3));
+            assertEquals(3, bridge.readUntil(Pong.class).nonce());
         }
     }
 
@@ -372,7 +453,8 @@ class CloudNetworkServerTest {
         start();
         try (TestPeer old = TestPeer.authenticated(address, LOBBY, lobbyToken)) {
             assertEquals("connected lobby-1", listener.next());
-            try (TestPeer fresh = TestPeer.authenticated(address, LOBBY, lobbyToken)) {
+            // A reconnect presents the ticket of the connection before, not the used-up token.
+            try (TestPeer fresh = TestPeer.authenticated(address, LOBBY, old.ticket())) {
                 assertEquals("connected lobby-1", listener.next());
                 assertEquals(Disconnect.Reason.REPLACED, old.readUntil(Disconnect.class).reason());
                 assertTrue(old.closedWithin(SHORT));
@@ -396,7 +478,7 @@ class CloudNetworkServerTest {
             for (int i = 0; i < 256; i++) {
                 server.send(LOBBY, new ChannelMessage(new ChannelName("fill"), payload));
             }
-            try (TestPeer fresh = TestPeer.authenticated(address, LOBBY, lobbyToken)) {
+            try (TestPeer fresh = TestPeer.authenticated(address, LOBBY, old.ticket())) {
                 assertEquals("connected lobby-1", listener.next());
                 fresh.send(new Ping(7));
                 // Cut after the close grace of one second, long before the idle timeout of ten.

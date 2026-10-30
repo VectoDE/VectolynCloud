@@ -19,14 +19,19 @@ import net.vectora.cloud.config.model.NodeConfig;
  * @param pingInterval the server sends {@code Ping} when it has written nothing for this long;
  *     shorter than {@code idleTimeout}
  * @param maxConnections open connections in total, authenticated or not
- * @param maxConnectionsPerAddress open connections from one IP address. On a single node every
- *     service connects from the loopback address, so this is high by default
+ * @param maxConnectionsPerAddress open connections from one address: one IPv4 address or one /64
+ *     of IPv6 (see {@link AddressKey}). On a single node every service connects from the loopback
+ *     address, so this is high by default
  * @param maxPendingRequests requests a connection may have open at a time, in each direction
  * @param requestTimeout how long the cloud waits for the response to its own requests
+ * @param maxUnauthenticated open connections in total that have not been accepted yet; smaller
+ *     than {@code maxConnections}
+ * @param maxUnauthenticatedPerAddress open connections from one address that have not been
+ *     accepted yet
  */
 public record NetworkSettings(String bindHost, int port, Duration handshakeTimeout, Duration idleTimeout,
         Duration pingInterval, int maxConnections, int maxConnectionsPerAddress, int maxPendingRequests,
-        Duration requestTimeout) {
+        Duration requestTimeout, int maxUnauthenticated, int maxUnauthenticatedPerAddress) {
 
     /** Default handshake timeout: 10 seconds. */
     public static final Duration DEFAULT_HANDSHAKE_TIMEOUT = Duration.ofSeconds(10);
@@ -49,6 +54,12 @@ public record NetworkSettings(String bindHost, int port, Duration handshakeTimeo
     /** Default request timeout: 10 seconds. */
     public static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(10);
 
+    /** Default limit of connections that have not authenticated yet, in total. */
+    public static final int DEFAULT_MAX_UNAUTHENTICATED = 128;
+
+    /** Default limit of connections that have not authenticated yet, per address. */
+    public static final int DEFAULT_MAX_UNAUTHENTICATED_PER_ADDRESS = 32;
+
     /**
      * Checks the settings.
      *
@@ -70,8 +81,13 @@ public record NetworkSettings(String bindHost, int port, Duration handshakeTimeo
         if (pingInterval.compareTo(idleTimeout) >= 0) {
             throw new IllegalArgumentException("ping interval must be shorter than the idle timeout");
         }
-        if (maxConnections < 1 || maxConnectionsPerAddress < 1 || maxPendingRequests < 1) {
+        if (maxConnections < 1 || maxConnectionsPerAddress < 1 || maxPendingRequests < 1 || maxUnauthenticated < 1
+                || maxUnauthenticatedPerAddress < 1) {
             throw new IllegalArgumentException("connection and request limits must be at least 1");
+        }
+        if (maxUnauthenticated > maxConnections || maxUnauthenticatedPerAddress > maxUnauthenticated) {
+            throw new IllegalArgumentException("the limits for unauthenticated connections must not exceed the "
+                    + "connection limit, and the one per address not the total");
         }
     }
 
@@ -85,25 +101,37 @@ public record NetworkSettings(String bindHost, int port, Duration handshakeTimeo
         Objects.requireNonNull(node, "node");
         return new NetworkSettings(node.host(), node.port(), DEFAULT_HANDSHAKE_TIMEOUT, DEFAULT_IDLE_TIMEOUT,
                 DEFAULT_PING_INTERVAL, DEFAULT_MAX_CONNECTIONS, DEFAULT_MAX_CONNECTIONS_PER_ADDRESS,
-                DEFAULT_MAX_PENDING_REQUESTS, DEFAULT_REQUEST_TIMEOUT);
+                DEFAULT_MAX_PENDING_REQUESTS, DEFAULT_REQUEST_TIMEOUT, DEFAULT_MAX_UNAUTHENTICATED,
+                DEFAULT_MAX_UNAUTHENTICATED_PER_ADDRESS);
     }
 
     /** A copy that listens on another address. */
     public NetworkSettings withAddress(String host, int newPort) {
         return new NetworkSettings(host, newPort, handshakeTimeout, idleTimeout, pingInterval, maxConnections,
-                maxConnectionsPerAddress, maxPendingRequests, requestTimeout);
+                maxConnectionsPerAddress, maxPendingRequests, requestTimeout, maxUnauthenticated,
+                maxUnauthenticatedPerAddress);
     }
 
     /** A copy with other timeouts. */
     public NetworkSettings withTimeouts(Duration handshake, Duration idle, Duration ping, Duration request) {
         return new NetworkSettings(bindHost, port, handshake, idle, ping, maxConnections, maxConnectionsPerAddress,
-                maxPendingRequests, request);
+                maxPendingRequests, request, maxUnauthenticated, maxUnauthenticatedPerAddress);
     }
 
-    /** A copy with other limits. */
+    /**
+     * A copy with other limits. The limits for unauthenticated connections are lowered to
+     * {@code total} if they were higher.
+     */
     public NetworkSettings withLimits(int total, int perAddress, int pendingRequests) {
+        int unauthenticated = Math.min(maxUnauthenticated, total);
         return new NetworkSettings(bindHost, port, handshakeTimeout, idleTimeout, pingInterval, total, perAddress,
-                pendingRequests, requestTimeout);
+                pendingRequests, requestTimeout, unauthenticated, Math.min(maxUnauthenticatedPerAddress, unauthenticated));
+    }
+
+    /** A copy with other limits for connections that have not authenticated yet. */
+    public NetworkSettings withUnauthenticatedLimits(int total, int perAddress) {
+        return new NetworkSettings(bindHost, port, handshakeTimeout, idleTimeout, pingInterval, maxConnections,
+                maxConnectionsPerAddress, maxPendingRequests, requestTimeout, total, perAddress);
     }
 
     private static void positive(Duration value, String what) {

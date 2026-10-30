@@ -124,6 +124,34 @@ class CloudClientEndToEndTest {
         awaitTrue(client::isConnected);
     }
 
+    /**
+     * A second client with the token from the environment (a plugin that read it, a copied
+     * environment) is refused, while the real bridge keeps its connection and reconnects with
+     * its ticket.
+     */
+    @Test
+    void aSecondClientWithTheSameStartTokenIsRefused() throws Exception {
+        CloudNetworkServer server = startServer(0);
+        CloudClient bridge = client(server.localAddress(), LOBBY, lobbyToken);
+        bridge.start();
+        assertEquals("connected lobby-1", listener.next());
+        awaitTrue(bridge::isConnected);
+
+        CloudClient copy = client(server.localAddress(), LOBBY, new AuthToken(lobbyToken.value()));
+        Events events = new Events();
+        copy.addListener(events);
+        copy.start();
+        assertEquals("rejected INVALID_TOKEN", events.next());
+        assertFalse(copy.isConnected());
+        copy.close();
+        assertTrue(bridge.isConnected());
+
+        server.disconnect(LOBBY, Disconnect.Reason.NORMAL);
+        assertEquals("disconnected lobby-1 NORMAL", listener.next());
+        assertEquals("connected lobby-1", listener.next(), "the bridge reconnects with its ticket");
+        awaitTrue(bridge::isConnected);
+    }
+
     @Test
     void wrongTokenIsReportedAndNeverConnects() throws Exception {
         CloudNetworkServer server = startServer(0);

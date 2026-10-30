@@ -54,7 +54,10 @@ import net.vectora.protocol.message.ServiceStatus;
  *   <li>{@code Hello} with the service token, checked by a {@link ServiceAuthenticator} in
  *       constant time; the token is never logged.</li>
  *   <li>Handshake timeout, idle timeout and heartbeat ({@code Ping} when nothing else was sent).</li>
- *   <li>Limits for open connections in total and per IP address.</li>
+ *   <li>Limits for open connections in total and per address (IPv4 address or IPv6 /64), and
+ *       smaller ones for connections that have not authenticated yet.</li>
+ *   <li>One connection per token: an accepted {@code Hello} uses its token up, and the
+ *       service gets a {@code SessionTicket} for its next connection.</li>
  *   <li>{@code Disconnect(PROTOCOL_ERROR)} and close on any protocol violation.</li>
  *   <li>Requests in both directions with request ids and timeouts, and channel messages: a
  *       message a service publishes goes to the cloud's {@link #subscribe subscribers} of that
@@ -96,6 +99,8 @@ public final class CloudNetworkServer implements AutoCloseable {
     private final Map<ChannelName, RequestHandler> requestHandlers = new ConcurrentHashMap<>();
     private final Map<ChannelName, List<ChannelSubscriber>> subscribers = new ConcurrentHashMap<>();
     private final AtomicLong droppedChannelMessages = new AtomicLong();
+    private final AtomicLong refusedConnections = new AtomicLong();
+    private final AtomicLong refusedHellos = new AtomicLong();
 
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
@@ -107,7 +112,8 @@ public final class CloudNetworkServer implements AutoCloseable {
         this.authenticator = builder.authenticator;
         this.listener = builder.listener;
         this.customizer = builder.customizer;
-        this.limiter = new ConnectionLimiter(settings.maxConnections(), settings.maxConnectionsPerAddress());
+        this.limiter = new ConnectionLimiter(settings.maxConnections(), settings.maxConnectionsPerAddress(),
+                settings.maxUnauthenticated(), settings.maxUnauthenticatedPerAddress());
     }
 
     /** Starts a builder. */
@@ -215,6 +221,16 @@ public final class CloudNetworkServer implements AutoCloseable {
         return limiter.open();
     }
 
+    /** Returns the number of open connections that have not authenticated yet. */
+    public int unauthenticatedConnections() {
+        return limiter.unauthenticated();
+    }
+
+    /** Returns how many connections were refused at the accept because a connection limit was reached. */
+    public long refusedConnections() {
+        return refusedConnections.get();
+    }
+
     /** Returns how many channel messages were skipped because a service did not read fast enough. */
     public long droppedChannelMessages() {
         return droppedChannelMessages.get();
@@ -308,18 +324,31 @@ public final class CloudNetworkServer implements AutoCloseable {
     /** Applies the limits and builds the pipeline of a new connection. */
     void acceptConnection(Channel channel) {
         InetSocketAddress remote = (InetSocketAddress) channel.remoteAddress();
-        if (remote == null || !limiter.tryAcquire(remote.getAddress())) {
-            LOG.log(Level.WARNING, "Refusing connection from {0}: connection limit reached",
-                    remote == null ? "an unknown address" : remote.getAddress().getHostAddress());
+        ConnectionLimiter.Slot slot = remote == null || remote.getAddress() == null
+                ? null : limiter.tryAcquire(remote.getAddress());
+        if (slot == null) {
+            // Debug, not a warning per refused connection: a flood would otherwise flood the log.
+            LOG.log(Level.DEBUG, "Refusing connection from {0}: connection limit reached",
+                    remote == null || remote.getAddress() == null ? "an unknown address"
+                            : remote.getAddress().getHostAddress());
+            long refused = refusedConnections.incrementAndGet();
+            if (refused == 1 || refused % 1000 == 0) {
+                LOG.log(Level.WARNING, "Refused {0} connection(s) so far: connection limit reached",
+                        String.valueOf(refused));
+            }
             channel.close();
             return;
         }
-        channel.closeFuture().addListener(closed -> limiter.release(remote.getAddress()));
-        initPipeline(channel);
+        channel.closeFuture().addListener(closed -> slot.release());
+        initPipeline(channel, slot);
     }
 
     /** Adds the cloud's handlers to {@code channel}; also used by the tests with an embedded channel. */
     void initPipeline(Channel channel) {
+        initPipeline(channel, null);
+    }
+
+    private void initPipeline(Channel channel, ConnectionLimiter.Slot slot) {
         if (customizer != null) {
             customizer.customize(channel);
         }
@@ -329,16 +358,28 @@ public final class CloudNetworkServer implements AutoCloseable {
                 .addLast(FRAME_ENCODER, encoder)
                 .addLast(IDLE_HANDLER, new IdleStateHandler(settings.idleTimeout().toMillis(),
                         settings.pingInterval().toMillis(), 0, TimeUnit.MILLISECONDS))
-                .addLast(CONNECTION_HANDLER, new ConnectionHandler(this, decoder));
+                .addLast(CONNECTION_HANDLER, new ConnectionHandler(this, decoder, slot));
     }
 
-    AuthResult.Outcome authenticate(PeerId peer, AuthToken token) {
+    ServiceAuthenticator.Admission admit(PeerId peer, AuthToken token) {
         try {
-            return Objects.requireNonNull(authenticator.authenticate(peer, token), "outcome");
+            return Objects.requireNonNull(authenticator.admit(peer, token), "admission");
         } catch (RuntimeException e) {
             LOG.log(Level.ERROR, "Authenticator failed for " + peer.role() + " " + peer.value(), e);
-            return AuthResult.Outcome.UNKNOWN_PEER;
+            return ServiceAuthenticator.Admission.refused(AuthResult.Outcome.UNKNOWN_PEER);
         }
+    }
+
+    void ticketNotTaken(PeerId peer, AuthToken presented, AuthToken ticket) {
+        try {
+            authenticator.ticketNotTaken(peer, presented, ticket);
+        } catch (RuntimeException e) {
+            LOG.log(Level.ERROR, "Authenticator failed for " + peer.role() + " " + peer.value(), e);
+        }
+    }
+
+    long countRefusedHello() {
+        return refusedHellos.incrementAndGet();
     }
 
     ServiceSession newSession(ServiceId service, Channel channel, ProtocolVersion version) {
