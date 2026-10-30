@@ -15,7 +15,6 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.CreatureSpawnEvent;
-import org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
 import org.bukkit.event.entity.FoodLevelChangeEvent;
@@ -68,11 +67,6 @@ public final class VectoraLobby extends JavaPlugin implements Listener {
         for (Entity entity : world.getEntities()) {
             if (isHostile(entity)) entity.remove();
         }
-    }
-
-    /** Only plugins (NPCs and the like) may create creatures; everything else is blocked. */
-    static boolean blocksSpawn(SpawnReason reason) {
-        return reason != SpawnReason.CUSTOM;
     }
 
     static boolean isHostile(Entity entity) {
@@ -199,7 +193,7 @@ public final class VectoraLobby extends JavaPlugin implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onCreatureSpawn(CreatureSpawnEvent event) {
-        if (blocksSpawn(event.getSpawnReason())) event.setCancelled(true);
+        if (SpawnPolicy.blocks(event.getSpawnReason().name())) event.setCancelled(true);
     }
 
     @EventHandler
