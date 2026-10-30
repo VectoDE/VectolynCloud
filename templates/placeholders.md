@@ -1,6 +1,6 @@
 # Template placeholders
 
-Every template `templates/<Server>/` (in the cloud home `<Server>/template/`) holds configuration with placeholders of the form `{{VECTORA_NAME}}`. VectoraCloud (stage 2) renders a template into `runtime/` by replacing each placeholder with its value. Until then the existing `runtime/` folders are run directly through `start-network.bat` (`cloud/dist/manual/`).
+Every template `templates/<Server>/` (in the cloud home `local/templates/<Server>/default/`) holds configuration with placeholders of the form `{{VECTORA_NAME}}`. VectoraCloud (stage 2) renders a template into the folder of a service (`local/services/<id>`, or `temp/services/<id>_<run>` for a dynamic service) by replacing each placeholder with its value. Until then the existing `runtime/` folders of the manual setup are run directly through `start-network.bat` (`cloud/dist/manual/`).
 
 ## Only wanted servers are rendered
 
@@ -16,8 +16,8 @@ These come from `secrets/vectora.env` in the cloud home (never in the repository
 
 | Placeholder | Meaning | Used in |
 |---|---|---|
-| `VECTORA_FORWARDING_SECRET` | Velocity modern-forwarding secret. Must be identical on the proxy and every backend. | `config/paper-global.yml` (Paper), `config/FabricProxy-Lite.toml` (Mod), and the generated `Proxy/runtime/forwarding.secret` |
-| `VECTORA_LEGACY_FORWARDING_SECRET` | Forwarding secret of the legacy proxy (`bungeeguard` token for the 1.8.8 servers). Generated on its own and never equal to `VECTORA_FORWARDING_SECRET`. | the generated `Legacy-Proxy/runtime/forwarding.secret` |
+| `VECTORA_FORWARDING_SECRET` | Velocity modern-forwarding secret. Must be identical on the proxy and every backend. | `config/paper-global.yml` (Paper), `config/FabricProxy-Lite.toml` (Mod), and the generated `forwarding.secret` of the proxy (`local/services/proxy-1/`) |
+| `VECTORA_LEGACY_FORWARDING_SECRET` | Forwarding secret of the legacy proxy (`bungeeguard` token for the 1.8.8 servers). Generated on its own and never equal to `VECTORA_FORWARDING_SECRET`. | the generated `forwarding.secret` of the legacy proxy (`local/services/legacy-proxy-1/`) |
 | `VECTORA_DB_HOST` | Host of the MariaDB server, also the host part of the LuckPerms DB user. | LuckPerms configs, `vectora-mariadb.ini`, `init.sql` |
 | `VECTORA_DB_PORT` | MariaDB port (3307 locally). | LuckPerms configs, `vectora-mariadb.ini`, DB start script |
 | `VECTORA_DB_NAME` | LuckPerms database name. | LuckPerms configs, `init.sql` |
@@ -74,15 +74,15 @@ Its `forwarding.secret` holds `VECTORA_LEGACY_FORWARDING_SECRET`, never `VECTORA
 | `Legacy-Proxy` | Velocity, `bungeeguard` forwarding, in front of the 1.8.8 groups | `VELOCITY_LEGACY` (own forwarding secret, no Floodgate key) |
 | `Legacy-Server` | PandaSpigot 1.8.8, behind the legacy proxy | `PANDASPIGOT` (EULA only, no Floodgate key) |
 
-The new templates (`Minigame-Server`, `Legacy-Proxy`, `Legacy-Server`) have a `README.md` in English and a `README.de.md` in German. Markdown files are never copied into `runtime/`. `runtime/` folders live in the cloud home, never in the repository.
+The new templates (`Minigame-Server`, `Legacy-Proxy`, `Legacy-Server`) have a `README.md` in English and a `README.de.md` in German. Markdown files are never copied into a service folder. Service folders live in the cloud home, never in the repository.
 
 ## Files the cloud creates instead of copying
 
-- `Proxy/runtime/forwarding.secret` from `VECTORA_FORWARDING_SECRET`; `Legacy-Proxy/runtime/forwarding.secret` from `VECTORA_LEGACY_FORWARDING_SECRET`.
+- `forwarding.secret` of the proxy from `VECTORA_FORWARDING_SECRET`; `forwarding.secret` of the legacy proxy from `VECTORA_LEGACY_FORWARDING_SECRET` (both in the service folder, for example `local/services/proxy-1/`).
 - `key.pem` for Floodgate from `VECTORA_FLOODGATE_KEY_B64` (same file on the proxy and on every backend, including the Fabric Mod-Server). The legacy proxy and the 1.8.8 servers get none, because Floodgate does not run there (yet).
 - `eula.txt` only after the operator accepted the Minecraft EULA in the setup assistant.
 - Server jars, plugin and mod jars, MariaDB binaries: downloaded and checksum-verified by the cloud, never stored in the repository.
 
 ## Not in templates
 
-Worlds, logs, caches, libraries, LuckPerms H2 files, `usercache.json`, `ops.json`, `whitelist.json`, `banned-*.json`, bStats server IDs, Geyser's `nethernet/identity.pem`, TAB player data and the MariaDB data directory stay in `runtime/` only.
+Worlds, logs, caches, libraries, LuckPerms H2 files, `usercache.json`, `ops.json`, `whitelist.json`, `banned-*.json`, bStats server IDs, Geyser's `nethernet/identity.pem`, TAB player data and the MariaDB data directory stay in the service folder (`local/services/<id>`, the data directory in `database/`) only.

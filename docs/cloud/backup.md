@@ -1,6 +1,6 @@
 # Backups
 
-`cloud/backup` (`net.vectora.cloud.backup`) backs up the static services (worlds and configs from their `runtime/` folder) and the database into zip archives under `backups/`. It writes a manifest with a SHA-256 hash per file, prunes old archives, runs on a schedule and restores a single stopped service. It also defines the `backup` console command.
+`cloud/backup` (`net.vectora.cloud.backup`) backs up the static services (worlds and configs from their folder `local/services/<id>`) and the database into zip archives under `backups/`. It writes a manifest with a SHA-256 hash per file, prunes old archives, runs on a schedule and restores a single stopped service. It also defines the `backup` console command.
 
 The module does not start or stop services. `cloud/node` hands it the static services and their control through three small interfaces (see [What cloud-node provides](#what-cloud-node-provides)). `cloud/node` implements them in `ops.NodeBackups` and wires the module in `CloudNode`: `recoverInterruptedOperations()` before the first start, the schedule, and the `backup` command (see [node.md](node.md#start-order)). The hold of a stopped service is `ServiceManager.holdStopped`, checked under the lock that guards every start. With `database.mode: managed` the dump tool comes from the installed MariaDB under `Database/runtime/`.
 
@@ -32,7 +32,7 @@ The archive is written as `.vectora-backup-<id>.zip.partial`, forced to disk and
 Layout inside the archive:
 
 ```text
-services/<service-id>/...           files of the service, relative to its runtime folder
+services/<service-id>/...           files of the service, relative to its folder in local/services
 database/luckperms.sql              dump of the managed or external MariaDB
 database/<service-id>-luckperms-h2.sql   SCRIPT TO of a LuckPerms H2 file (h2 mode)
 manifest.json                       always the last entry
@@ -40,13 +40,13 @@ manifest.json                       always the last entry
 
 ## What goes into a backup
 
-For every static service, everything under its runtime folder except:
+For every static service, everything under its folder `local/services/<id>` except:
 
 - folders `logs`, `cache`, `crash-reports`, `debug`, `libraries`, `versions`, `bundler`, `.paper-remapped`, `.fabric`, `.mixin.out` and every folder called `secrets`;
 - files `session.lock`, `.env`, `*.jar`, `*.log`, `*.log.gz`, `*.lock.db`, `*.trace.db`, `*.tmp`, and key or secret files (`*.secret`, `*.key`, `*.pem`, `*.p12`, `*.jks`, `*.env`). These come from the templates and `secrets/vectora.env` again, and a backup should not spread them;
-- the template files the cloud renders with a secret in them, at exactly these places in the runtime folder (any case): `server.properties` (`management-server-secret`), `config/paper-global.yml` and `config/FabricProxy-Lite.toml` (forwarding secret), `plugins/LuckPerms/config.yml` (also the proxy's `plugins/luckperms/config.yml`) and `config/luckperms/luckperms.conf` (database password).
+- the template files the cloud renders with a secret in them, at exactly these places in the service folder (any case): `server.properties` (`management-server-secret`), `config/paper-global.yml` and `config/FabricProxy-Lite.toml` (forwarding secret), `plugins/LuckPerms/config.yml` (also the proxy's `plugins/luckperms/config.yml`) and `config/luckperms/luckperms.conf` (database password).
 
-So no archive holds a secret from `secrets/vectora.env`: not the forwarding secrets (`forwarding.secret`, `paper-global.yml`, `FabricProxy-Lite.toml`), not the Floodgate `key.pem`, not the management secret and not the database password. Every start renders the template into the runtime folder again ([node](node.md), [template](template.md#template-to-runtime)), so a restored service gets these files back with the secrets that are current then, also after a secret was rotated. Settings changed by hand in one of these files are lost on every start anyway; change them in the template. A custom template that writes a secret into another file must add it here (`BackupFilter.RENDERED_SECRET_FILES`).
+So no archive holds a secret from `secrets/vectora.env`: not the forwarding secrets (`forwarding.secret`, `paper-global.yml`, `FabricProxy-Lite.toml`), not the Floodgate `key.pem`, not the management secret and not the database password. Every start renders the template into the service folder again ([node](node.md), [template](template.md#template-to-service-folder)), so a restored service gets these files back with the secrets that are current then, also after a secret was rotated. Settings changed by hand in one of these files are lost on every start anyway; change them in the template. A custom template that writes a secret into another file must add it here (`BackupFilter.RENDERED_SECRET_FILES`).
 
 Symbolic links are never followed and never stored. Files whose names would not unpack on Windows and Linux alike (reserved names such as `CON`, characters such as `:` or `\`, a trailing dot) are listed in the manifest under `skipped`. So are files that cannot be read.
 
@@ -58,7 +58,7 @@ Symbolic links are never followed and never stored. Files whose names would not 
 | running, a Minecraft server | `save-off`, then `save-all flush`, copy, then always `save-on` (also after errors and when the backup is interrupted) | `saved` |
 | running, a proxy (no worlds) | copied as it is | `live` |
 | starting or stopping | left out with a warning; a strict backup fails | `skipped` |
-| no runtime folder yet | nothing to copy | `missing` |
+| no service folder yet | nothing to copy | `missing` |
 
 The cloud waits for the confirmation line of each command (Paper and the 1.8.8 fork both print one), at most `save-timeout`. Without it, a scheduled backup leaves the service out with a warning, a strict one fails (`SAVE_FAILED`). Strict means: a backup of named services, the backup before a restore and the backup before a version change.
 
@@ -73,13 +73,13 @@ The cloud waits for the confirmation line of each command (Paper and the 1.8.8 f
 | `docker` | no dump. The cloud prints the command to run on the host instead (below). `status: manual` |
 | `h2` | per service: when the service is stopped, LuckPerms' H2 file is exported with `SCRIPT TO` through `org.h2.tools.Script` from the driver LuckPerms downloaded (`plugins/LuckPerms/libs/h2*.jar`), read-only. A running service only gets its files copied, with a warning. `status: per-service` |
 
-The password is never a process argument. The cloud writes an option file (`[client] user, password, host, port, protocol=TCP`) into a private folder under `temp/backup/`, created owner-only and checked before use, passes it with `--defaults-extra-file` (the first option, otherwise the tool ignores it) and deletes it in a `finally` block. The dump runs with `--single-transaction --quick --skip-lock-tables --no-tablespaces --hex-blob --default-character-set=utf8mb4`, so LuckPerms keeps running. It only counts when the tool exits with 0 and the file ends with `-- Dump completed`. The tool's environment has no `VECTORA_*`, `MYSQL_PWD` or `MYSQL_HOST`, and its output is redacted before it shows up in a message.
+The password is never a process argument. The cloud writes an option file (`[client] user, password, host, port, protocol=TCP`) into a private folder under `temp/backup/` (the work folder of the backups), created owner-only and checked before use, passes it with `--defaults-extra-file` (the first option, otherwise the tool ignores it) and deletes it in a `finally` block. The dump runs with `--single-transaction --quick --skip-lock-tables --no-tablespaces --hex-blob --default-character-set=utf8mb4`, so LuckPerms keeps running. It only counts when the tool exits with 0 and the file ends with `-- Dump completed`. The tool's environment has no `VECTORA_*`, `MYSQL_PWD` or `MYSQL_HOST`, and its output is redacted before it shows up in a message.
 
 Hint for Docker (the password stays a variable inside the container):
 
 ```bash
-cd <home>/Database/runtime
-docker compose --env-file ../../secrets/vectora.env -f compose.database.yml exec -T vectora-database \
+cd <home>/database
+docker compose --env-file ../secrets/vectora.env -f compose.database.yml exec -T vectora-database \
   sh -c 'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" exec mariadb-dump -uroot --single-transaction --routines --events --triggers --databases luckperms' \
   > luckperms.sql
 ```
@@ -121,12 +121,12 @@ The hashes detect damage and an archive whose content does not match its manifes
 
 1. The node must report the service as stopped, and `ServiceControl.holdStopped` keeps it from starting until the restore is done. A running, starting or stopping service is refused (`SERVICE_RUNNING`, `SERVICE_BUSY`).
 2. The manifest is read and checked (above). The archive must contain files of that service.
-3. The archive is unpacked with `SafeExtractor` into an owner-only staging folder (`.vectora-restore-staging-*`) next to the runtime folder, with limits derived from the manifest. The file system must have room for the content the manifest lists plus 256 MiB, otherwise nothing is unpacked. A runtime folder that is a symbolic link or junction is refused; restore such a setup by hand.
+3. The archive is unpacked with `SafeExtractor` into an owner-only staging folder (`.vectora-restore-staging-*`) next to the service folder (in `local/services`), with limits derived from the manifest. The file system must have room for the content the manifest lists plus 256 MiB, otherwise nothing is unpacked. A service folder that is a symbolic link or junction is refused; restore such a setup by hand.
 4. Every unpacked file of the service is compared with the manifest: the same set of files, the same size and SHA-256. Any difference stops the restore (`HASH_MISMATCH` or `CORRUPT`) before anything is touched.
 5. A safety backup of the current state is taken (`pre-restore`, without database). Its id is shown.
-6. The runtime folder is swapped by renames: the current folder moves aside, the staged one takes its place, then the paths a backup never contains (excluded folders and files such as jars, logs, secrets and the rendered secret files, links, non-portable names) move back from the old folder. Then the old folder is deleted. The next start renders the template files again.
+6. The service folder is swapped by renames: the current folder moves aside, the staged one takes its place, then the paths a backup never contains (excluded folders and files such as jars, logs, secrets and the rendered secret files, links, non-portable names) move back from the old folder. Then the old folder is deleted. The next start renders the template files again.
 
-While the folders are swapped, the old one is called `.vectora-restore-old-<folder>-<random>`. If the cloud dies right between the two renames, `BackupService.recoverInterruptedOperations()` moves it back; an old folder next to an existing runtime folder still holds files that were not moved back and is only reported. The same call deletes staging folders, `.partial` archives and dump and option files (with the database password) of an interrupted backup. A restore runs the folder part for its own parent folder first.
+While the folders are swapped, the old one is called `.vectora-restore-old-<folder>-<random>`. If the cloud dies right between the two renames, `BackupService.recoverInterruptedOperations()` moves it back; an old folder next to an existing service folder still holds files that were not moved back and is only reported. The same call deletes staging folders, `.partial` archives and dump and option files (with the database password) of an interrupted backup. A restore runs the folder part for its own parent folder first.
 
 The database is not touched (see [Database](#database)).
 
@@ -145,7 +145,7 @@ Only `manual` and `scheduled` backups are pruned. Safety backups from a restore 
 
 ## Configuration
 
-`backup.yml` in the cloud home. A missing file means the defaults; `BackupConfigFile.writeIfMissing()` writes them with a comment header. It is read with the same strict reader and error messages as `cloud.yml` (see [configuration](config.md)), so the file lives on its own and the shared `cloud.yml` model stays unchanged.
+`config/backup.yml` in the cloud home. A missing file means the defaults; `BackupConfigFile.writeIfMissing()` writes them with a comment header. It is read with the same strict reader and error messages as `cloud.yml` (see [configuration](config.md)), so the file lives on its own and the shared `cloud.yml` model stays unchanged.
 
 ```yaml
 schema-version: 1
@@ -169,7 +169,7 @@ database:
 | Key | Default | Rule |
 |---|---|---|
 | `schema-version` | `1` | must be 1 |
-| `directory` | `backups` | relative to the home (not under `secrets/`, `groups/`, `tasks/`, `state/`, `logs/`, `cache/`) or absolute, for example a second disk. Neither inside a runtime folder nor around one: a backup fails with `CONFIG` then. Only local folders; there are no paid cloud targets. |
+| `directory` | `backups` | relative to the home (not under `config/`, `local/`, `temp/`, `database/`, `storage/`, `secrets/`, `state/`, `logs/`, `groups/`, `tasks/`, `cache/` or `jre/`) or absolute, for example a second disk. Neither inside a service folder nor around one: a backup fails with `CONFIG` then. Only local folders; there are no paid cloud targets. |
 | `schedule.enabled` | `false` | `true` needs `cron` or `interval` |
 | `schedule.cron` | none | five fields, see above; not together with `interval` |
 | `schedule.interval` | none | `5m` to `7d` |
@@ -196,13 +196,13 @@ Alias `backups`. Backup ids and service names complete with Tab. Texts exist in 
 
 | Interface | Methods | Meaning |
 |---|---|---|
-| `BackupTargets` | `List<BackupTarget> staticServices()` | the static services: id, group, Minecraft version, runtime folder, and whether it saves worlds (Paper and 1.8.8: yes, proxies: no) |
+| `BackupTargets` | `List<BackupTarget> staticServices()` | the static services: id, group, Minecraft version, service folder, and whether it saves worlds (Paper and 1.8.8: yes, proxies: no) |
 | `ServiceControl` | `State state(id)` | `STOPPED`, `RUNNING` or `BUSY` (starting, stopping) |
 | | `boolean execute(id, command, confirmation, timeout)` | sends a console command and waits for a log line that matches `confirmation`. It must listen before it sends. |
 | | `Hold holdStopped(id)` | blocks starts of a stopped service until `close()`, fails with `BackupException` if it is not stopped. Used for the copy of a stopped service and for a restore (whose safety backup does not ask a second time) |
 | `DatabaseSource` | `Optional<DatabaseAccess> access()` | usually `DatabaseAccess.of(cloud.yml database section, secrets/vectora.env, installed MariaDB folder)` |
 
-The node then builds one `BackupService`, calls `recoverInterruptedOperations()` once before it starts any service (otherwise a start would render a fresh template into a runtime folder that a crash left aside), starts a `BackupScheduler`, registers `BackupCommands` and may call `BackupConfigFile.writeIfMissing()` during setup.
+The node then builds one `BackupService`, calls `recoverInterruptedOperations()` once before it starts any service (otherwise a start would render a fresh template into a service folder that a crash left aside), starts a `BackupScheduler`, registers `BackupCommands` and may call `BackupConfigFile.writeIfMissing()` during setup.
 
 ### Backup before a Minecraft version change
 

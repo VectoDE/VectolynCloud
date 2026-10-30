@@ -21,4 +21,4 @@ PandaSpigot prüft den `bungeeguard-token` nicht selbst. Bis die Vectora-Bridge 
 
 ## Gewollt oder nicht
 
-Nur als gewollt markierte Gruppen rendert die Cloud aus dieser Vorlage nach `runtime/` und startet sie. Diese README ist reine Doku, die Cloud kopiert sie nie nach `runtime/`. Alle Platzhalter: [`../placeholders.md`](../placeholders.md).
+Nur als gewollt markierte Gruppen rendert die Cloud aus dieser Vorlage in einen eigenen Ordner unter `local/services/` und startet sie. Diese README ist reine Doku, die Cloud kopiert sie nie in einen Dienst-Ordner. Alle Platzhalter: [`../placeholders.md`](../placeholders.md).

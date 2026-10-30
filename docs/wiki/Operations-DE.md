@@ -35,6 +35,10 @@ Du brauchst Java 21 oder neuer. Ein älteres Java bekommt eine klare Meldung sta
 
 Ohne Terminal (systemd, Docker, Pterodactyl) braucht die Cloud eine Setup-Datei: `--non-interactive --setup-file setup.yml`. Egg und `compose.yml` geben sie bereits mit.
 
+## Wo die Dateien liegen
+
+Alles liegt unter dem Cloud-Home: `config/` (Konfiguration), `local/` (Vorlagen und Welten der statischen Dienste), `database/`, `storage/` (Downloads und Java-Runtimes), `secrets/`, `backups/`, `logs/` und `state/`. Sichere `config/`, `local/` und `secrets/`; `storage/`, `temp/` und `logs/` entstehen von selbst neu. Ein Home aus einer älteren Version wird beim ersten Start einer neuen Version in diesen Aufbau umgezogen, nach einer Kopie der Konfiguration in `backups/`. Beende vorher die alte Cloud samt Servern. Details: [Update](https://github.com/VectoDE/VectoraCloud/blob/main/docs/cloud/operations.md#what-is-where-and-upgrading-from-an-older-home) (Englisch).
+
 ## Einen Download prüfen
 
 ```sh

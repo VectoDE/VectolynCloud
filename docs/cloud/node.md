@@ -7,21 +7,68 @@
 `NodeMain.start(Map<String, String>)` is called by the launcher (settings in [launcher.md](launcher.md#node-entry-point)). It:
 
 1. checks the settings (`NodeSettings.parse`: `home` absolute, `language` `de` or `en`, booleans `true` or `false`);
-2. takes the [home lock](#home-lock) and removes what an interrupted run left behind: unfinished downloads (`cache/artifacts/download-*.part`, `ArtifactCache.removeStalePartFiles`) and unfinished Java installs (`jre/.staging-*`, `jre/.old-*`, `JreInstaller.removeLeftovers`);
-3. opens the configuration (`ConfigService`) and generates missing secrets in `secrets/vectora.env`;
+2. takes the [home lock](#home-lock), sets up the log handler for the [start output](#start-output) and runs the [home layout migration](#home-layout-migration) (nothing happens in a home that is already on the current layout). Then it removes what an interrupted run left behind: unfinished downloads (`storage/artifacts/download-*.part`, `ArtifactCache.removeStalePartFiles`) and unfinished Java installs (`storage/jre/.staging-*`, `storage/jre/.old-*`, `JreInstaller.removeLeftovers`);
+3. opens the configuration (`ConfigService`, files in `config/`) and generates missing secrets in `secrets/vectora.env`;
 4. builds the parts (`CloudNode.open`) and registers the shutdown hook `vectora-shutdown` before anything starts, so a `SIGTERM` or Ctrl+C while the database is set up or the servers start still stops what has been started: the service core with the [Java runtimes](#java-runtimes) and the [database](#database) as start gate and placeholder source, the [cloud channel](network.md) server with the tokens of the service core, and the [console](console.md);
-5. writes every [built-in template](#built-in-templates) the home does not have yet, then starts watching the configuration files and reconciles on every change (see [Reload](#reload));
+5. writes the [built-in templates](#built-in-templates) of the wanted servers that the home does not have yet (step "Templates" of the [start output](#start-output)), then starts watching the configuration files and reconciles on every change (see [Reload](#reload));
 6. starts the cloud channel on host and port of this node in `nodes.yml`; services get the bound address in `VECTORA_CLOUD_HOST` and `VECTORA_CLOUD_PORT`;
 7. starts the [monitoring](monitor.md) (`MonitorRuntime`, opened in step 4 with the node id as origin; an invalid `monitor.yml` fails the start there);
 8. prepares the console: log records go through it with the secret filter (`logHandler(RedactingFilter::redact)`), the built-in commands get the real shutdown, and the [`service` commands](#console-commands), `setup`, `monitor`, `alerts`, `backup` and `api` are added (`api token` works while the API is off);
 9. ends orphaned servers from the previous run (see [Orphans](#orphans)). Only then does it put right a [backup or restore](backup.md) that a crash interrupted (`recoverInterruptedOperations`), start the backup schedule and, with `api.enabled`, the [API](api.md) server, so neither a backup nor a start or restore through the API touches a folder that a server of the previous run still writes to. An API that cannot be prepared or bound is logged as an error and the node runs without it;
 10. runs the setup: `SetupWizard.ensureComplete(console, config, SetupEnvironment.of(settings, env))`, also without a console (then only a setup file can answer). The launcher's `setup-file`, `non-interactive` and `platform.*` settings reach `SetupEnvironment` through `NodeSettings.toMap()`. A `SetupException` is printed with `describe(language)`, on the console or, without one, in the log. On `EULA_DECLINED`, `CANCELLED` or any other result that is not ready, no service starts; the console stays open, and once `setup` finishes there, the node starts the planned services right away;
-11. starts the console and every planned service, but only if `cloud.yml` has `setup-complete: true` and `eula-accepted: true`. Otherwise it logs a warning and starts nothing. The same gate, and the database's start gate, apply to every later start, also `service start` in the console, `service restart`, the automatic restart after a crash and the scaler. Once the planned services have started, the [autoscaler](scaling.md) begins its rounds (after a setup that finishes later, right after its start of the planned services). Both happen once per run: if `eula-accepted` or `setup-complete` is taken back and given again, the running autoscaler brings the services back;
+11. starts the console and every planned service, but only if `cloud.yml` has `setup-complete: true` and `eula-accepted: true`. Otherwise it logs a warning and starts nothing; the steps database, software, templates and services then show as `skipped` in the start output. Before the first service starts, the server jar and the plugins or mods of every group that starts services are fetched into `storage/` (step "Software"). The same gate, and the database's start gate, apply to every later start, also `service start` in the console, `service restart`, the automatic restart after a crash and the scaler. Once the planned services have started, the [autoscaler](scaling.md) begins its rounds (after a setup that finishes later, right after its start of the planned services). Both happen once per run: if `eula-accepted` or `setup-complete` is taken back and given again, the running autoscaler brings the services back;
 12. keeps the JVM alive with the non-daemon thread `vectora-node`.
 
 A second `start` in the same JVM is an error.
 
 `CloudNode.close()` (the shutdown hook, `shutdown` in the console, a second Ctrl+C) runs the reverse order: first the API refuses starts, reloads and backups (`beginShutdown`), then console, backup schedule, the autoscaler (no round starts a server any more), services (each with its stop command), monitoring (after the last service: history file, queued notifications), database (`DatabaseProvisioner.shutdown()` after the last service), cloud channel, configuration, log handlers, the API server (event streams get `1001`), home lock. Every step runs in a `try`/`finally` of its own: if one fails (also with an `Error`), it is logged and the next step still runs, so the home lock is always released; an `Error` is rethrown at the end. It is idempotent; a second caller waits until the first has finished. Once it has begun, no start reaches the database any more, so a start that was still running cannot leave a MariaDB behind. `SIGTERM` (`docker stop`, systemd) and Ctrl+C in plain mode reach the JVM's shutdown hook and end the node the same way.
+
+## Start output
+
+The start is shown as a banner and a few lines, not as a stream of log messages. The banner has the ASCII "VectoraCloud" logo, the version, Java version and vendor, operating system and architecture, and the home. Then every step logs one line in the same format (`StartupReport`):
+
+```
+10:15:02 INFO  [1/5] Configuration  ok       9 groups, 9 tasks, node node-1
+10:15:03 INFO  [2/5] Database       ok       mariadb on 127.0.0.1:3307
+10:15:05 INFO  [3/5] Software       ok       lobby: paper 26.3 + 6 plugins; proxy: velocity 26.3 + 5 plugins
+10:15:05 INFO  [4/5] Templates      ok       2 written (Lobby-Server, Proxy), 0 present, for 2 wanted server(s)
+10:15:06 INFO  [5/5] Services       ok       2 of 2 started
+10:15:06 INFO        lobby-1        starting port 30001, static
+10:15:06 INFO        proxy-1        starting port 25565, static
+```
+
+| Step | What it covers |
+|---|---|
+| Configuration | `config/` read and checked |
+| Database | the [database](database.md) set up |
+| Software | server jar and plugins or mods of every group that starts services, fetched into `storage/` ahead of the starts, so a download problem shows here and not as a failed service |
+| Templates | the [built-in templates](#built-in-templates) of the wanted servers written to `local/templates/` |
+| Services | the planned services started, one line each |
+
+Status is `ok`, `partly` (some groups or services failed), `failed` or `skipped`. While the setup is incomplete (no EULA, `setup-complete: false`) steps 2 to 5 are `skipped` with the reason. If the database fails, steps 3 to 5 are `skipped`: nothing starts without it.
+
+There is one log format everywhere: `HH:mm:ss LEVEL message`, with the level names `ERROR`, `WARN `, `INFO `, `DEBUG` and `TRACE` padded to five characters. They are fixed and do not depend on the system language (no `INFORMATION` or `WARNUNG`). Before the console is up, a handler on standard output prints the lines and encodes them in the console's code page, so umlauts are right on Windows too. Once the console runs, the lines go through it. In addition, `logs/cloud.log` gets every record in UTF-8 with date and milliseconds, the logger name and the full stack traces, secrets redacted. Each start begins a new file; the five before are kept as `cloud.1.log` to `cloud.5.log`.
+
+On Windows the start scripts switch the console to UTF-8 (`chcp 65001`) and start Java with `-Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8`. If you start the jar by hand in an old console, set the same.
+
+## Home layout migration
+
+Homes from before the layout change have configuration, templates and server folders next to each other at the top level. The node moves them on its own. The migration (`HomeLayoutMigration`) runs on every start, under the [home lock](#home-lock) and before the configuration is read. In a home that is already migrated it only checks the marker `state/home-layout` (content `2`).
+
+What happens, in this order:
+
+1. **Check.** If a process from `state/services.json` of the previous run is still alive, the start fails and nothing is moved. End the server first, then start again.
+2. **Backup.** `backups/home-layout-migration-<UTC yyyyMMdd-HHmmss>/` (owner only) gets a copy of the configuration files, `groups/`, `tasks/`, every `<Server>/template` and `state/services.json`. Worlds, database files and downloads are not copied; they are moved by rename (same file system). `state/home-layout-migration` records the backup, so a resumed run does not make a second one.
+3. **Configuration.** `cloud.yml`, `nodes.yml`, `monitor.yml`, `backup.yml`, `software.lock.yml`, `groups/` and `tasks/` move to `config/`. The node then reads the configuration (without validating or writing it) to know which template each group uses.
+4. **Templates.** `<Server>/template` becomes `local/templates/<Server>/default`. It is dropped instead if it is byte-identical to the built-in template of a server that is not wanted, and always for the old `Database` template.
+5. **Services.** `<Server>/runtime` and `<Server>/runtime-<n>` become `local/services/<group>-<n>`, when exactly one group uses that template. If several groups use it, the folder stays where it is and the log says so.
+6. **Database.** `Database/runtime` becomes `database/`.
+7. **Storage.** `cache/` becomes `storage/` (`cache/libs` is dropped, the launcher unpacks the libraries again), `jre/` becomes `storage/jre/`.
+8. **Cleanup.** Old folders that are empty now are removed, then the marker is written.
+
+The migration can be repeated safely. A source that is gone counts as done, folders that exist on both sides are merged, and identical files count as moved. If two different files meet in one place, the start stops with an error that names both, and nothing is overwritten. When the file system does not allow a rename (another file system), the node copies, renames and then deletes.
+
+`secrets/`, `backups/`, `logs/`, `state/` and `temp/` never move, so the secrets keep their permissions. Old files that show up next to an already migrated home (an old copy restored by hand, say) are only warned about, never read.
 
 ## Home lock
 
@@ -33,8 +80,8 @@ Only one cloud may use a home. The node holds an exclusive lock on `state/cloud.
 
 - PandaSpigot (the 1.8.8 groups) gets Java 21, every other software Java 25.
 - `java: <major>` in the group file overrides that. An override below the minimum of the server software fails the start with a message that names both versions.
-- The minimum is the highest known one (`JavaRequirement.minimumOf`): Mojang's `javaVersion`, Fill's `java.version.minimum`. `SoftwareInstaller` records it per group while it provides the server jar, which happens before the Java runtime is picked, and keeps it in `cache/java-minimums.properties` for offline starts.
-- A system Java of exactly that version is used if there is one; otherwise a Temurin JRE is downloaded into `<home>/jre/` and pinned in `software.lock.yml`, the same `SoftwareLockStore.inHome(home)` the other downloads use.
+- The minimum is the highest known one (`JavaRequirement.minimumOf`): Mojang's `javaVersion`, Fill's `java.version.minimum`. `SoftwareInstaller` records it per group while it provides the server jar, which happens before the Java runtime is picked, and keeps it in `storage/java-minimums.properties` for offline starts.
+- A system Java of exactly that version is used if there is one; otherwise a Temurin JRE is downloaded into `<home>/storage/jre/` and pinned in `config/software.lock.yml`, the same `SoftwareLockStore.inHome(home)` the other downloads use.
 
 The JRE manager is built on the first start that needs it.
 
@@ -42,7 +89,7 @@ The JRE manager is built on the first start that needs it.
 
 `software.SoftwareInstaller` is the node's `ServerSoftwareProvider`. A start goes: render the template, provide the software, check the bridge, pick the Java runtime, launch.
 
-- The server jar, the group's plugins or mods and the bridge jar come from the [catalog](download.md#what-the-node-installs), pinned in `software.lock.yml` on the first start and replayed from `cache/artifacts/` afterwards.
+- The server jar, the group's plugins or mods and the bridge jar come from the [catalog](download.md#what-the-node-installs), pinned in `config/software.lock.yml` on the first start and replayed from `storage/artifacts/` afterwards. The "Software" step of the [start output](#start-output) fetches them for all groups that start services before the first service is rendered.
 - The bridge of the platform (`VELOCITY` and `VELOCITY_LEGACY`: Velocity bridge, `PAPER`: Paper bridge, `PANDASPIGOT`: legacy bridge) is copied from the node's resources into `plugins/`. Fabric has none yet.
 - **A `PANDASPIGOT` service without `plugins/VectoraCloudBridgeLegacy-<version>.jar` does not start.** Its `server.properties` has `bungeecord: true`; without the bridge's token check it would trust every connection that claims to come from the legacy proxy. The check runs in `ServiceManager` itself, also when a test or a later module plugs in another `ServerSoftwareProvider`.
 - A download that fails stops this start: the service fails with the reason, like any other error before the launch.
@@ -50,16 +97,22 @@ The JRE manager is built on the first start that needs it.
 
 ## Built-in templates
 
-`VectoraCloud.jar` carries the templates of every server of the network: the tracked files of `templates/<Server>/` for `Proxy`, `Legacy-Proxy`, `Lobby-Server`, `Survival-Server`, `Creative-Server`, `Mod-Server`, `End-Server`, `Minigame-Server`, `Legacy-Server` and `Database`. The build task `:cloud:node:templateResources` copies them into the node's resources under `net/vectora/cloud/node/templates/<Server>/template/` (the layout of the home) and lists each file with its SHA-256 in `templates.index`. Jars, `key.pem`, `*.key`, `*.secret`, keystores and hidden files never go in, even if a checkout has them in a template folder.
+`VectoraCloud.jar` carries the templates of the servers of the network: the tracked files of `templates/<Server>/` for `Proxy`, `Legacy-Proxy`, `Lobby-Server`, `Survival-Server`, `Creative-Server`, `Mod-Server`, `End-Server`, `Minigame-Server` and `Legacy-Server`. The build task `:cloud:node:templateResources` copies them into the node's resources under `net/vectora/cloud/node/templates/<Server>/template/` and lists each file with its SHA-256 in `templates.index`. Jars, `key.pem`, `*.key`, `*.secret`, keystores and hidden files never go in, even if a checkout has them in a template folder. The `Database` template is not written to a home any more: the managed MariaDB writes its own `vectora-mariadb.ini` into `database/`.
 
-On every start `BuiltInTemplates.seed` writes the templates whose folder `<home>/<Server>/template/` does not exist. That is what makes `java -jar VectoraCloud.jar` in an empty folder work: the release, the Docker image and the Pterodactyl egg ship only the jar.
+`BuiltInTemplates` writes a built-in template to `<home>/local/templates/<Server>/default/` only for servers that are wanted, and only when that folder does not exist. That is what makes `java -jar VectoraCloud.jar` in an empty folder work: the release, the Docker image and the Pterodactyl egg ship only the jar. A server you switched off leaves no folder behind. It happens at three points:
 
-- A template folder that exists, also an empty one or a link, belongs to the operator. The cloud never overwrites, merges or updates it; to get the built-in version back, delete or rename the folder and start again.
-- Each folder is written into `<home>/<Server>/.vectora-template-incoming/` first, every file is checked against the index, and the folder is then moved into place. A crash leaves either the whole template or none; the staging folder is removed on the next start.
+- in the "Templates" start step, for every wanted group;
+- when a configuration change switches a server on;
+- right before a service of a group is rendered (the `TemplateSource` of `ServiceManager`), so a start never meets a missing template.
+
+Rules:
+
+- A `default/` folder that exists, also an empty one or a link, belongs to the operator. The cloud never overwrites, merges or updates it; to get the built-in version back, delete or rename the folder and start again.
+- Each folder is written into `<home>/local/templates/<Server>/.vectora-template-incoming/` first, every file is checked against the index, and the folder is then moved into place. A crash leaves either the whole template or none; the staging folder is removed on the next start.
 - The index accepts only plain paths below `<Server>/template/` (no `..`, no hidden names, no backslash).
 - A template that cannot be written is logged as an error; the node keeps running, and the servers of that template fail to start with the missing folder as reason.
 
-In a home that already has every template folder nothing is written.
+In a home that already has the folders of all wanted servers nothing is written. The repository keeps `templates/<Server>/` as it is.
 
 ## Database
 
@@ -77,7 +130,7 @@ In a home that already has every template folder nothing is written.
 
 A service is one running server process. The plan comes from the configuration:
 
-- Each task in `tasks/` that runs on this node (`nodes` empty or containing `node-id`) gets `min-services` services of its group, but only if the group is wanted (`ServicePlanner.isWanted(group, cloud)`):
+- Each task in `config/tasks/` that runs on this node (`nodes` empty or containing `node-id`) gets `min-services` services of its group, but only if the group is wanted (`ServicePlanner.isWanted(group, cloud)`):
   - `wanted: false` in the group file switches the group off, whatever its template (for example one minigame of several);
   - a group whose `template` is one of the nine known folders (`Proxy`, `Lobby-Server`, `Survival-Server`, `Creative-Server`, `Mod-Server`, `End-Server`, `Database`, `Minigame-Server`, `Legacy-Server`) also needs its switch under `servers` in `cloud.yml`; every PandaSpigot group, also on a template of its own, follows `servers.legacy-server`;
   - the 1.8.8 groups (the `Legacy-Proxy` template, the `Legacy-Server` template and every PandaSpigot group) are only wanted while `legacy-proxy.enabled` is `true`;
@@ -106,12 +159,12 @@ Backends start before proxies, so the proxy's server list is complete when it re
 | | Rule |
 |---|---|
 | Service id | `<group>-<index>`, index 1 to 9999, the lowest free index of the group. Example: `lobby-1`. |
-| Folder, static task | index 1: `<home>/<template>/runtime`, index n: `<home>/<template>/runtime-<n>`. Kept after the stop: worlds and player data stay. |
-| Folder, dynamic task | `<home>/temp/services/<id>`. Cleared before the start and deleted after the stop. Only direct children of `temp/services` are deleted, and links are not followed. While the folder of a stopped service is still being deleted (on Windows a locked file can delay this by a few seconds), its id is not handed out again; the next start takes the next free index. |
+| Folder, static task | `<home>/local/services/<id>`, for example `local/services/lobby-1`. Kept after the stop: worlds and player data stay. |
+| Folder, dynamic task | `<home>/temp/services/<id>_<run>`, `<run>` being 8 random hex digits per start. Deleted after the stop. Only direct children of `temp/services` are deleted, and links are not followed. While the folder of a stopped service is still being deleted (on Windows a locked file can delay this by a few seconds), its id is not handed out again; the next start takes the next free index. |
 | Port, proxy | `cloud.proxy.port` (the software `velocity` marks a proxy); the proxy on the `Legacy-Proxy` template gets `legacy-proxy.port`. One proxy of each kind per node. |
 | Port, other services | the first free port in the node's `service-ports`, skipping the node's fixed ports (proxy, Bedrock, legacy proxy, API, database, channel) and ports another program already has bound. Never two services on one port. |
 
-Every start renders the template with [cloud-template](template.md) into the folder. Secrets are need-to-know: a template only gets the secrets of `secrets/vectora.env` that its platform uses (`ServiceSecrets`):
+Every start renders the template (`local/templates/<template>/default/`, with `<template>` the `template` value of the group) with [cloud-template](template.md) into the folder. Secrets are need-to-know: a template only gets the secrets of `secrets/vectora.env` that its platform uses (`ServiceSecrets`):
 
 | Platform | Secret placeholders |
 |---|---|
@@ -222,7 +275,7 @@ Lines shown by `screen` have passed the secret filter; control characters and Un
 
 ## Logs
 
-The output of each service (standard output and standard error together) goes to `<home>/logs/services/<id>.log`. The previous five runs are kept as `<id>.1.log` to `<id>.5.log`. Every line is passed through the secret filter first: values from `vectora.env` and the service token are written as `***`, in the log and to listeners. Lines longer than 8192 bytes are split, invalid UTF-8 is replaced.
+The node's own log is `<home>/logs/cloud.log` (format and rotation in [Start output](#start-output)). The output of each service (standard output and standard error together) goes to `<home>/logs/services/<id>.log`. The previous five runs are kept as `<id>.1.log` to `<id>.5.log`. Every line is passed through the secret filter first: values from `vectora.env` and the service token are written as `***`, in the log and to listeners. Lines longer than 8192 bytes are split, invalid UTF-8 is replaced.
 
 ## `state/services.json`
 
@@ -242,7 +295,7 @@ On every state change the node writes all services to `<home>/state/services.jso
     "pid" : 4242,
     "started-at" : 1700000000000,
     "port" : 30001,
-    "work-directory" : "Lobby-Server/runtime"
+    "work-directory" : "local/services/lobby-1"
   } ]
 }
 ```
@@ -271,11 +324,11 @@ Afterwards the leftover folders in `temp/services/` are deleted, except blocked 
 
 Add `-Pe2eAllowRoot=true` in a shell that runs as administrator or root; the test then passes `--allow-root`. GitHub's Windows runners run as administrator, so `managed-mariadb.yml` sets it there.
 
-**Offline (`e2eTest`).** The home starts empty except for `nodes.yml` (a free channel port) and a pre-seeded `software.lock.yml` with `cache/artifacts/`: every catalog entry the default groups ask for points at one fake server jar that logs in to the cloud channel like a bridge. The cloud runs on Java 25 and sees exactly a Java 21 and a Java 25 on the `PATH`. It gets `--non-interactive --setup-file` with every server switched on (proxy, lobby, Survival, Creative, Mod-Server, End, minigames, legacy proxy, 1.8.8 server), free ports, H2 and 256M per group. The test checks:
+**Offline (`e2eTest`).** The home starts empty except for `config/nodes.yml` (a free channel port) and a pre-seeded `config/software.lock.yml` with `storage/artifacts/`: every catalog entry the default groups ask for points at one fake server jar that logs in to the cloud channel like a bridge. The cloud runs on Java 25 and sees exactly a Java 21 and a Java 25 on the `PATH`. It gets `--non-interactive --setup-file` with every server switched on (proxy, lobby, Survival, Creative, Mod-Server, End, minigames, legacy proxy, 1.8.8 server), free ports, H2 and 256M per group. The test checks:
 
 - the setup ran from the file and the built-in templates were written;
 - all nine services become `running`, which only the channel's `ServiceReady` does;
-- `software.lock.yml` is unchanged byte for byte, nothing was downloaded, no `.part` file is left;
+- `config/software.lock.yml` is unchanged byte for byte, nothing was downloaded, no `.part` file is left;
 - each server's `.vectora-managed` lists exactly the catalog's plugins (or mods) for its template plus the bridge of its platform, and none on Fabric; the Floodgate key is in the lobby but not in the 1.8.8 server;
 - the 1.8.8 server runs on Java 21, Paper and Velocity on Java 25;
 - the main proxy gets a `RegisterServer` for every modern backend and none for the 1.8.8 server; the legacy proxy gets the 1.8.8 server with `legacy=true` and not the lobby;
@@ -313,7 +366,7 @@ What none of these tests do: join with a real client. Logging in with Java 1.8.8
 ## Limits today
 
 - The Paper bridge is compiled against Paper 26.3. A Paper group on another Minecraft version gets the same bridge; whether it loads there is not tested.
-- Updates of the server software or a plugin are not automatic: a pinned entry stays until it is removed from `software.lock.yml`.
+- Updates of the server software or a plugin are not automatic: a pinned entry stays until it is removed from `config/software.lock.yml`.
 - `service-ports` and `node-id` are read once when the node starts; a change needs a restart.
 - One proxy and one legacy proxy per node. PR 24 completes the legacy proxy.
 - Scaling is per node; see [scaling.md](scaling.md#limits-today).

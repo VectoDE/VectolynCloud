@@ -4,7 +4,7 @@ Paket `net.vectora.cloud.node.scaling` in `cloud/node`. Der Node hält von jedem
 
 ## Konfiguration
 
-Skaliert wird pro Task in `tasks/<name>.yml` (siehe [config.md](config.md#tasksnameyml)):
+Skaliert wird pro Task in `config/tasks/<name>.yml` (siehe [config.md](config.md#tasksnameyml)):
 
 ```yaml
 schema-version: 2
@@ -25,8 +25,8 @@ nodes: []
 
 Es muss `static ≤ min ≤ max` gelten, und `scale-down-below` muss kleiner sein als `scale-up-at`.
 
-- **Statische Dienste** (`static-services`): die ersten des Tasks. Jeder hat einen eigenen Ordner unter dem Template der Gruppe (`runtime`, `runtime-2`, …), der jeden Stopp überdauert, und der Scaler stoppt keinen davon.
-- **Dynamische Dienste**: alles über `static-services` bis `max-services`. Jeder läuft in `temp/services/<id>`, und dieser Ordner wird beim Stopp gelöscht.
+- **Statische Dienste** (`static-services`): die ersten des Tasks. Jeder hat einen eigenen Ordner (`local/services/<id>`, zum Beispiel `lobby-1` und `lobby-2`), der jeden Stopp überdauert, und der Scaler stoppt keinen davon.
+- **Dynamische Dienste**: alles über `static-services` bis `max-services`. Jeder läuft in `temp/services/<id>_<run>`, und dieser Ordner wird beim Stopp gelöscht.
 
 Ein neuer Dienst ist statisch, solange der Task weniger statische Dienste hat als `static-services`, sonst dynamisch. Die Lobby oben hat also eine statische und bis zu drei dynamische. `static-services = max-services` ist ein rein statischer Task (er skaliert nie), `static-services = 0` ein rein dynamischer.
 
@@ -38,7 +38,7 @@ Datei, Konsole und API ändern das alle über `ConfigService.apply` und denselbe
 
 | Weg | Beispiel |
 |---|---|
-| Datei | `tasks/minigame.yml` bearbeiten; der Node liest sie nach 200 ms neu |
+| Datei | `config/tasks/minigame.yml` bearbeiten; der Node liest sie nach 200 ms neu |
 | Konsole | `task set minigame max-services 6`, `task set lobby static-services 2`, `task set minigame scale-down-below 40` |
 | API | `PUT /api/v1/tasks/minigame` mit dem ganzen Task als JSON (Scope `config:write`) |
 
@@ -161,7 +161,7 @@ Die letzten drei Zeilen nennen, warum ein Dienst nicht geleert wurde: Zeit abgel
 
 ## IDs, Ordner und Proxys
 
-Ein skalierter Dienst ist ein gewöhnlicher Dienst des Service-Kerns ([node.md](node.md#ids-folders-and-ports)): ID `<gruppe>-<index>` mit dem kleinsten freien Index, dynamische Ordner unter `temp/services/<id>`, ein Port aus den `service-ports` des Nodes. Die Proxys erfahren per `RegisterServer` von ihm, sobald er läuft, und per `UnregisterServer`, wenn er stoppt.
+Ein skalierter Dienst ist ein gewöhnlicher Dienst des Service-Kerns ([node.md](node.md#ids-folders-and-ports)): ID `<gruppe>-<index>` mit dem kleinsten freien Index, dynamische Ordner unter `temp/services/<id>_<run>`, ein Port aus den `service-ports` des Nodes. Die Proxys erfahren per `RegisterServer` von ihm, sobald er läuft, und per `UnregisterServer`, wenn er stoppt.
 
 ## Grenzen
 

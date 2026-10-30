@@ -2,13 +2,13 @@
 
 English: [setup.md](setup.md)
 
-VectoraCloud hat einen Startpunkt: `java -jar VectoraCloud.jar`. Solange in `cloud.yml` `setup-complete: false` steht, läuft die Einrichtung, bevor der Node einen Server startet. Es gibt drei Wege, und alle schreiben über denselben `ConfigService` wie die Konsolenbefehle und Änderungen von Hand:
+VectoraCloud hat einen Startpunkt: `java -jar VectoraCloud.jar`. Solange in `config/cloud.yml` `setup-complete: false` steht, läuft die Einrichtung, bevor der Node einen Server startet. Es gibt drei Wege, und alle schreiben über denselben `ConfigService` wie die Konsolenbefehle und Änderungen von Hand:
 
 | Weg | Wann | Wie |
 |---|---|---|
 | Fragen in der Konsole | erster Start mit Terminal, später der Befehl `setup` | `SetupWizard.run` |
 | Setup-Datei | Docker, Pterodactyl, CI, jeder Start ohne jemanden an der Tastatur | `--setup-file setup.yml` |
-| Dateien und Befehle | jederzeit danach | `cloud.yml`, `groups/`, `tasks/` bearbeiten oder `config set`, `group`, `task` (siehe [Konsole](console.de.md)) |
+| Dateien und Befehle | jederzeit danach | `config/cloud.yml`, `config/groups/`, `config/tasks/` bearbeiten oder `config set`, `group`, `task` (siehe [Konsole](console.de.md)) |
 
 Das Dashboard kommt später als vierter Weg dazu und nutzt dieselbe Schicht. Der Code liegt in `cloud/setup` (`net.vectora.cloud.setup`).
 
@@ -63,7 +63,7 @@ Alle anderen Secrets (Forwarding-Secrets, Passwörter der verwalteten Datenbank,
 
 ### Erneut ausführen: `setup`
 
-Der Konsolenbefehl `setup` stellt die Fragen noch einmal. Die aktuelle Konfiguration liefert die Vorschläge, geschrieben wird nur, was du änderst. Änderst du nichts, sagt der Assistent das und schreibt nichts. Änderst du nur den Heap der Lobby, wird nur `groups/lobby.yml` geschrieben. Der Assistent liest die Dateien beim Start; während du antwortest, kann jemand sie über die API oder die Konsole ändern. Beim Heap, bei `static/min/max` jeder Task (jede Zahl für sich), `drain-timeout`, `max-memory` und jedem Feld von `memory-reserve` gilt: Ein Wert, den du so lässt, wie er angezeigt wurde, übernimmt beim Speichern den Stand der Datei. Eine solche Änderung geht also nicht verloren. Ein Wert, den du änderst, wird geschrieben, und `default` oder `auto` entfernt die Einstellung auch dann, wenn sie zwischendurch geändert wurde. Eine erteilte EULA-Zustimmung und `setup-complete` bleiben. Ein ausgeschalteter Server stoppt sofort (siehe [node](node.md#reload)); ein eingeschalteter startet mit `service start <Task>` oder beim nächsten Start der Cloud. Das sagt der Assistent nach dem Speichern.
+Der Konsolenbefehl `setup` stellt die Fragen noch einmal. Die aktuelle Konfiguration liefert die Vorschläge, geschrieben wird nur, was du änderst. Änderst du nichts, sagt der Assistent das und schreibt nichts. Änderst du nur den Heap der Lobby, wird nur `config/groups/lobby.yml` geschrieben. Der Assistent liest die Dateien beim Start; während du antwortest, kann jemand sie über die API oder die Konsole ändern. Beim Heap, bei `static/min/max` jeder Task (jede Zahl für sich), `drain-timeout`, `max-memory` und jedem Feld von `memory-reserve` gilt: Ein Wert, den du so lässt, wie er angezeigt wurde, übernimmt beim Speichern den Stand der Datei. Eine solche Änderung geht also nicht verloren. Ein Wert, den du änderst, wird geschrieben, und `default` oder `auto` entfernt die Einstellung auch dann, wenn sie zwischendurch geändert wurde. Eine erteilte EULA-Zustimmung und `setup-complete` bleiben. Ein ausgeschalteter Server stoppt sofort (siehe [node](node.md#reload)); ein eingeschalteter startet mit `service start <Task>` oder beim nächsten Start der Cloud. Das sagt der Assistent nach dem Speichern.
 
 ## Setup-Datei (`--setup-file`)
 

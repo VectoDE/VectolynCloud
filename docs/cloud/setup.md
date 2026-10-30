@@ -2,13 +2,13 @@
 
 Deutsch: [setup.de.md](setup.de.md)
 
-VectoraCloud has one entry point: `java -jar VectoraCloud.jar`. As long as `cloud.yml` has `setup-complete: false`, the node runs the setup before it starts any server. There are three ways to answer, and all of them write through the same `ConfigService` as the console commands and hand edits:
+VectoraCloud has one entry point: `java -jar VectoraCloud.jar`. As long as `config/cloud.yml` has `setup-complete: false`, the node runs the setup before it starts any server. There are three ways to answer, and all of them write through the same `ConfigService` as the console commands and hand edits:
 
 | Way | When | How |
 |---|---|---|
 | Questions on the console | first start with a terminal, and later the `setup` command | `SetupWizard.run` |
 | Setup file | Docker, Pterodactyl, CI, any start without a person at the keyboard | `--setup-file setup.yml` |
-| Files and commands | at any time afterwards | edit `cloud.yml`, `groups/`, `tasks/`, or use `config set`, `group`, `task` (see [console](console.md)) |
+| Files and commands | at any time afterwards | edit `config/cloud.yml`, `config/groups/`, `config/tasks/`, or use `config set`, `group`, `task` (see [console](console.md)) |
 
 The dashboard will be a fourth way later and will use the same layer.
 
@@ -65,7 +65,7 @@ All other secrets (forwarding secrets, database passwords of the managed server,
 
 ### Running it again: `setup`
 
-The console command `setup` runs the questions again. The current configuration provides the defaults, and only what you change is written. If you change nothing, the assistant says so and writes nothing; if you only change the lobby's heap, only `groups/lobby.yml` is written. The assistant reads the files when it starts; someone may change them through the API or the console while you answer. For the heap, the `static/min/max` of each task (each number on its own), `drain-timeout`, `max-memory` and every field of `memory-reserve`, a value you kept as shown takes what the file holds when you save, so such a change is not reset. A value you changed is written, and `default` or `auto` removes the setting even if it was changed in the meantime. An existing EULA consent and `setup-complete` stay. A server switched off stops right away (see [node](node.md#reload)); a server switched on starts with `service start <task>` or at the next start of the cloud, and the assistant says so after saving.
+The console command `setup` runs the questions again. The current configuration provides the defaults, and only what you change is written. If you change nothing, the assistant says so and writes nothing; if you only change the lobby's heap, only `config/groups/lobby.yml` is written. The assistant reads the files when it starts; someone may change them through the API or the console while you answer. For the heap, the `static/min/max` of each task (each number on its own), `drain-timeout`, `max-memory` and every field of `memory-reserve`, a value you kept as shown takes what the file holds when you save, so such a change is not reset. A value you changed is written, and `default` or `auto` removes the setting even if it was changed in the meantime. An existing EULA consent and `setup-complete` stay. A server switched off stops right away (see [node](node.md#reload)); a server switched on starts with `service start <task>` or at the next start of the cloud, and the assistant says so after saving.
 
 ## Setup file (`--setup-file`)
 
@@ -108,7 +108,7 @@ services:                     # per task: any of the three numbers, the rest kee
     max-services: 12
 drain-timeout:                # optional, per group, 5s to 10m; missing: the group keeps its value (new groups 30s)
   lobby: 45s
-node:                         # optional, memory of this node in nodes.yml
+node:                         # optional, memory of this node in config/nodes.yml
   max-memory: 8G              # at least 512M, or auto (the node works it out); missing: keeps its value
   memory-reserve:             # each 1M to 64G; a field left out keeps its value or default
     system: 2G                # default 1G

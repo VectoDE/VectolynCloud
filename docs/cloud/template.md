@@ -1,10 +1,10 @@
 # Template rendering (`cloud-template`)
 
-`cloud/template` (package `net.vectora.cloud.template`) turns `<home>/<Server>/template/` into the server's `runtime/` folder. It replaces the `{{VECTORA_*}}` placeholders, writes the files that come from secrets, and builds the proxy's server list from the wanted servers. The placeholders themselves are listed in [`templates/placeholders.md`](../../templates/placeholders.md).
+`cloud/template` (package `net.vectora.cloud.template`) turns a template folder (`<home>/local/templates/<template>/default/`) into the folder of a service (`<home>/local/services/<id>` for a static one, `<home>/temp/services/<id>_<run>` for a dynamic one). The parameters of the API below still call the target `runtime`. It replaces the `{{VECTORA_*}}` placeholders, writes the files that come from secrets, and builds the proxy's server list from the wanted servers. The placeholders themselves are listed in [`templates/placeholders.md`](../../templates/placeholders.md).
 
-The node carries a copy of every template in its jar and writes it into a home that does not have it ([node.md](node.md#built-in-templates)); the repository keeps these templates in `templates/<Server>/`.
+The node carries a copy of every template in its jar and writes it into a home that does not have it, but only for servers that are wanted ([node.md](node.md#built-in-templates)); the repository keeps these templates in `templates/<Server>/`. The home keeps the template of a group in `local/templates/<template>/default/`, where `<template>` is the `template` value of the group (`Lobby-Server`, or a name of your own).
 
-The module does not read `cloud.yml` or `secrets/` itself. The caller (later `cloud/node`) passes the values through the `PlaceholderValues` interface.
+The module does not read `config/cloud.yml` or `secrets/` itself. The caller (later `cloud/node`) passes the values through the `PlaceholderValues` interface.
 
 ## API
 
@@ -17,7 +17,7 @@ The module does not read `cloud.yml` or `secrets/` itself. The caller (later `cl
 | `ProxyServerList.of(backends, tryOrder, forcedHosts)` | Values for `VECTORA_PROXY_SERVERS`, `VECTORA_PROXY_TRY` and `VECTORA_PROXY_FORCED_HOSTS`. |
 | `ProxyBackend(name, host, port, wanted)` | One backend as the proxy sees it. |
 | `GeneratedFiles` | Writes `forwarding.secret`, Floodgate's `key.pem` and `eula.txt`. |
-| `SpigotRestart` (package-private) | Turns Spigot's own restart off in the runtime `spigot.yml` of Paper and PandaSpigot (see [Restarts are the node's job](#restarts-are-the-nodes-job)). |
+| `SpigotRestart` (package-private) | Turns Spigot's own restart off in the service's `spigot.yml` of Paper and PandaSpigot (see [Restarts are the node's job](#restarts-are-the-nodes-job)). |
 | `ServerPlatform` | `VELOCITY`, `VELOCITY_LEGACY`, `PAPER`, `PANDASPIGOT`, `FABRIC` or `NONE`. Decides which files are generated and where. |
 | `TemplateException` | Every rendering error. The message starts with `file:line`. |
 
@@ -27,7 +27,7 @@ Typical use:
 PlaceholderValues values = PlaceholderValues.of(secretsAndServiceValues)
         .orElse(ProxyServerList.of(backends, List.of("lobby"), forcedHosts).placeholderValues());
 RenderReport report = TemplateInstaller.install(
-        network.resolve("Proxy/template"), network.resolve("Proxy/runtime"),
+        home.resolve("local/templates/Proxy/default"), home.resolve("local/services/proxy-1"),
         ServerPlatform.VELOCITY, values, eulaAccepted);
 ```
 
@@ -68,17 +68,19 @@ Rendered files keep their encoding and line endings:
 - Everything outside a placeholder stays as it is, including CRLF in `.bat` files.
 - A multi-line value such as `VECTORA_PROXY_SERVERS` is written with the line ending of the file (its first line break, `\n` if it has none).
 
-Markdown files (`*.md`, case-insensitive, in any folder of the template) are neither rendered nor copied and are listed in `RenderReport.skipped()`. They document the template and quote the placeholders by name, so rendering them would put real values, passwords included, into `runtime/`. No server reads a Markdown file.
+Markdown files (`*.md`, case-insensitive, in any folder of the template) are neither rendered nor copied and are listed in `RenderReport.skipped()`. They document the template and quote the placeholders by name, so rendering them would put real values, passwords included, into the service folder. No server reads a Markdown file.
 
-## Template to runtime
+## Template to service folder
 
-- Files that come from the template overwrite their copy in `runtime/`.
-- Everything else in `runtime/` stays untouched: worlds, jars, logs, player data, LuckPerms files. Nothing is deleted. A file that is removed from a template therefore stays in existing runtime folders until someone deletes it.
-- All text files are rendered in memory before the first write. An unknown placeholder or a broken file leaves `runtime/` as it was.
+In this section "service folder" is the target (`runtime` in the API): `local/services/<id>` or `temp/services/<id>_<run>`.
+
+- Files that come from the template overwrite their copy in the service folder.
+- Everything else in the service folder stays untouched: worlds, jars, logs, player data, LuckPerms files. Nothing is deleted. A file that is removed from a template therefore stays in existing service folders until someone deletes it.
+- All text files are rendered in memory before the first write. An unknown placeholder or a broken file leaves the service folder as it was.
 - Symbolic links and Windows junctions in the template are skipped, not followed, and listed in `RenderReport.skipped()`. The template folder itself may be a link.
-- Symbolic links and Windows junctions inside `runtime/` are never written through. A link or junction where a folder or a target file should be is an error. The `runtime/` folder itself may be a link. Java does not report a junction as a symbolic link but as "other"; both count as a link here.
-- Target paths are plain relative paths. `..`, `.`, empty parts, absolute paths, drive letters, backslashes and control characters are rejected, and the resolved path must stay inside `runtime/`.
-- The template and runtime folders must not contain each other.
+- Symbolic links and Windows junctions inside the service folder are never written through. A link or junction where a folder or a target file should be is an error. The service folder itself may be a link. Java does not report a junction as a symbolic link but as "other"; both count as a link here.
+- Target paths are plain relative paths. `..`, `.`, empty parts, absolute paths, drive letters, backslashes and control characters are rejected, and the resolved path must stay inside the service folder.
+- The template and service folders must not contain each other.
 
 ## Generated files
 
@@ -104,10 +106,10 @@ So every Paper and PandaSpigot template sets `restart-script: ''` and `restart-o
 `restart-on-crash` stays `true` on purpose. With the empty script it no longer means "restart", only "stop": the server calls its restart routine, finds no script and shuts down. On PandaSpigot (Spigot 1.8.8) that is the only way the watchdog ends a hung server at all; with `false` it logs a thread dump and leaves the hung process running, and the node would keep it as RUNNING. Paper's watchdog stops a hung server either way.
 
 - Only these two keys directly under the top-level `settings:` block change. Everything else in the file stays as it is, keys with the same name deeper down too. A value spread over several lines is replaced as a whole.
-- A missing key is added at the top of the block, with the block's indent. A file without `settings:` gets the block appended; a runtime folder without `spigot.yml` gets a file with just that block, and the server adds every other setting on its first start.
+- A missing key is added at the top of the block, with the block's indent. A file without `settings:` gets the block appended; a service folder without `spigot.yml` gets a file with just that block, and the server adds every other setting on its first start.
 - `settings` as a flow mapping (`settings: {...}`), with an anchor or tag, twice in the file, or a file that is a flow mapping is refused with a `TemplateException` and the service does not start. So is a top-level key or a key directly under `settings` that is not plain or quoted without escapes (an explicit key `? restart-script`, `&anchor key:`, `!!str key:`, `"restart-script":`, a list item), because YAML keeps the last of two equal keys and such a spelling could bring the old value back after the fixed line. The message names `spigot.yml` and the line; fix the template (or the runtime file, if the template has none) to plain `key: value` lines. Files that Spigot writes itself never hit this. The node does not guess at a layout it cannot edit safely.
 - The file is only written when something changes; it then appears in `RenderReport.generated()`. The shipped templates are right already, so `RealTemplatesTest` fails when the node would have to change one of them.
-- Enforcement rather than a warning, because a warning would leave the second server possible, and because Spigot itself writes the dangerous defaults into any `spigot.yml` without the keys. The runtime folder belongs to the node in the same way as `eula.txt`; there is no reason under the cloud to let a server restart itself.
+- Enforcement rather than a warning, because a warning would leave the second server possible, and because Spigot itself writes the dangerous defaults into any `spigot.yml` without the keys. The service folder belongs to the node in the same way as `eula.txt`; there is no reason under the cloud to let a server restart itself.
 
 Velocity and Fabric have no such setting. Paper's own files (`config/paper-global.yml`, `config/paper-world-defaults.yml`) have none either.
 

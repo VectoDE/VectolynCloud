@@ -44,7 +44,9 @@ The bridges (`plugins/bridge/paper`, `plugins/bridge/legacy`, `plugins/bridge/ve
 
 ## Configuration: `monitor.yml`
 
-The file sits in the cloud home next to `cloud.yml`. Without it the defaults below apply. It is read with the same strict YAML reader as the other configuration files: unknown fields, duplicate keys and type guessing fail, and errors name the file, the field path and the rule, never the value.
+(File names in this section are relative to `config/`; the history file `state/monitor-history.bin` is not.)
+
+The file is `config/monitor.yml` in the cloud home, next to `cloud.yml`. Without it the defaults below apply. It is read with the same strict YAML reader as the other configuration files: unknown fields, duplicate keys and type guessing fail, and errors name the file, the field path and the rule, never the value.
 
 ```yaml
 schema-version: 1

@@ -21,7 +21,7 @@ You need:
 4. Replace every `{{VECTORA_…}}` placeholder in the `runtime/` folders with your values. [`placeholders.md`](https://github.com/VectoDE/VectoraCloud/blob/main/templates/placeholders.md) lists each placeholder, where it is used and its local default (ports, heap sizes, the proxy's server list).
 5. Create the files that do not come from templates: `Proxy/runtime/forwarding.secret` (the forwarding secret), the Floodgate `key.pem` (the base64 value decoded to 16 bytes, the same file on the proxy and on every backend) and `eula.txt` once you have accepted the Minecraft EULA.
 
-VectoraCloud takes over steps 2 to 5 in stage 2.
+VectoraCloud takes over steps 2 to 5 in stage 2. These folders (`<Server>\runtime`, `Database\runtime`) belong to the by-hand start scripts only; VectoraCloud uses its own layout (`config/`, `local/`, `database/`, `storage/`), see [Cloud home](https://github.com/VectoDE/VectoraCloud/blob/main/docs/cloud/architecture.md#cloud-home).
 
 ### 2. Add the server software
 
@@ -62,7 +62,7 @@ VectoraCloud is set up and configured like CloudNet:
 
 1. Run `java -jar VectoraCloud.jar` on Windows, Linux, macOS, in Docker or on Pterodactyl.
 2. On first start a setup wizard runs in the console. It asks, among other things, how the database should run (managed MariaDB, Docker or external) and which of the seven servers and minigame groups you want.
-3. The cloud generates the secrets, downloads and verifies the server software and Java runtimes, builds each wanted server from its template in `runtime/` and starts it. Servers you did not choose are not created, and neither proxy nor lobby refers to them.
+3. The cloud generates the secrets, downloads and verifies the server software and Java runtimes, builds each wanted server from its template into its own folder under `local/services/` and starts it. The start prints a banner and one line per step (configuration, database, software, templates, services). Your configuration is in `config/`. Servers you did not choose are not created, and neither proxy nor lobby refers to them.
 4. After that you change the setup through config files and console commands.
 
 From stage 8 on, the web dashboard will offer the same, including the first-time setup and the choice of servers. Wizard, files, console commands and dashboard all work on one shared configuration layer.

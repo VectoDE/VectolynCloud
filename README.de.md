@@ -86,7 +86,7 @@ VectoraCloud/
   .github/                Workflows, Issue-Formulare, Dependabot
 ```
 
-Server-Laufzeiten (Jars, Welten, Logs) und Secrets gehören nicht ins Repository. Sie liegen im Cloud-Home, dem Ordner, in dem VectoraCloud läuft. Bei der lokalen Entwicklung ist das `run/` im Wurzelverzeichnis des Repositorys (siehe [Lokal starten](#lokal-starten)); `.gitignore` hält den ganzen Ordner aus Git heraus.
+Server-Laufzeiten (Jars, Welten, Logs) und Secrets gehören nicht ins Repository. Sie liegen im Cloud-Home, dem Ordner, in dem VectoraCloud läuft: `config/` enthält die Konfiguration, `local/` die Vorlagen und die Welten der statischen Dienste, `storage/` die Downloads, `secrets/` die Secrets (Aufbau: [architecture](docs/cloud/architecture.md#cloud-home), Englisch). Bei der lokalen Entwicklung ist das `run/` im Wurzelverzeichnis des Repositorys (siehe [Lokal starten](#lokal-starten)); `.gitignore` hält den ganzen Ordner aus Git heraus.
 
 ## Schnellstart (Übergang, bis es VectoraCloud gibt)
 

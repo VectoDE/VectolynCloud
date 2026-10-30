@@ -21,10 +21,14 @@ Override with the system property `vectora.console` or the environment variable 
 
 Both native providers call native code. Java 24 and newer warn about that unless native access is allowed, so `VectoraCloud.jar` declares `Enable-Native-Access: ALL-UNNAMED` in its manifest (the tests pass `--enable-native-access=ALL-UNNAMED`).
 
+### Log format
+
+Every line that reaches the console has one format: `HH:mm:ss LEVEL message`, with the fixed level names `ERROR`, `WARN `, `INFO `, `DEBUG` and `TRACE` (`LogFormat`). They do not follow the system language. Before the console is up, and in a node without console, a handler on standard output (`LogHandlers.stream`) prints the same lines through `System.out`, so they are encoded in the console's code page and umlauts are right on Windows. `logs/cloud.log` gets the same records in UTF-8 with date, milliseconds, logger name and stack traces; each start rotates it (`cloud.1.log` to `cloud.5.log`). The banner and the step lines of a start are described in [Start output](node.md#start-output).
+
 ### On a terminal (JLine)
 
 - Prompt `vectora> `, colored only if the terminal reports at least 8 colors and `NO_COLOR` is not set. Errors are red, warnings yellow, success green.
-- Line editing, tab completion of commands, subcommands and values (keys of `cloud.yml`, group and task names, enum values).
+- Line editing, tab completion of commands, subcommands and values (keys of `config/cloud.yml`, group and task names, enum values).
 - Log lines appear above the prompt; the line being typed stays.
 - History in `<home>/state/console.history`, at most 500 lines, restricted to the owner. Not stored: answers to questions, secrets, lines of commands marked sensitive, lines that start with a space. If the file is a symbolic link, the history stays in memory.
 - History expansion (`!!`) is off, so a `!` in a value stays as typed.
@@ -55,7 +59,7 @@ Refused, with the position: an unclosed quote, a backslash at the end of the lin
 
 ## Commands
 
-The language of all texts comes from `language` in `cloud.yml` and switches at once.
+The language of all texts comes from `language` in `config/cloud.yml` and switches at once.
 
 ### `help [command] [subcommand]`
 
