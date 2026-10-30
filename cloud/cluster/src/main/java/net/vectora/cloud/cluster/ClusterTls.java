@@ -11,7 +11,7 @@ import javax.net.ssl.X509ExtendedTrustManager;
 
 /**
  * TLS settings of the cluster port: TLS 1.3 only (no fallback to 1.2 or older), the JDK's default
- * TLS 1.3 cipher suites, no ALPN, no host name check (see {@link ClusterTrust}). The server asks
+ * TLS 1.3 cipher suites, no ALPN, endpoint identification by node id instead of host name (see {@link ClusterTrust}). The server asks
  * for a client certificate but does not require one, because a joining node has none yet; what
  * such a connection may do is limited to one join request ({@link ClusterServer}).
  */
@@ -40,11 +40,17 @@ public final class ClusterTls {
         }
     }
 
-    /** Limits a client socket to TLS 1.3. */
+    /**
+     * Limits a client socket to TLS 1.3 and switches endpoint identification on. With an
+     * {@link X509ExtendedTrustManager}, JSSE leaves the identification to the trust manager: the
+     * cluster's ({@link ClusterTrust}) identifies the peer by the node id in its certificate (the
+     * head named in {@code cluster.yml} or in the join line), not by the host name, which a node
+     * certificate does not carry.
+     */
     public static void configure(SSLSocket socket) {
         SSLParameters parameters = socket.getSSLParameters();
         parameters.setProtocols(new String[] {PROTOCOL});
-        parameters.setEndpointIdentificationAlgorithm(null);
+        parameters.setEndpointIdentificationAlgorithm("HTTPS");
         socket.setSSLParameters(parameters);
     }
 

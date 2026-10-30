@@ -29,6 +29,9 @@ import net.vectora.protocol.NodeId;
  */
 public final class NodeIdentity {
 
+    /** Names of the temporary request files. */
+    private static final SecureRandom RANDOM = new SecureRandom();
+
     /** Alias of the key in the keystore. */
     static final String ALIAS = "vectora-node";
 
@@ -82,7 +85,7 @@ public final class NodeIdentity {
         Files.createDirectories(work);
         OwnerOnlyPermissions.restrictDirectory(work);
         byte[] random = new byte[8];
-        new SecureRandom().nextBytes(random);
+        RANDOM.nextBytes(random);
         Path csr = work.resolve(HexFormat.of().formatHex(random) + ".csr");
         try {
             Keytool.run(List.of("-certreq", "-alias", ALIAS, "-keystore", keystore.toString(), "-storetype", "PKCS12",

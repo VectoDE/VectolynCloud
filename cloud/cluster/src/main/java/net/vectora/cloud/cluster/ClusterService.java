@@ -70,16 +70,32 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
         MEMBER
     }
 
-    /** What the cluster tells the node; every method has a default that does nothing. */
+    /** What the cluster tells the node; {@link #NONE} ignores everything. */
     public interface Events {
 
+        /** Events that nobody listens to. */
+        Events NONE = new Events() {
+            @Override
+            public void memberConnected(NodeId member) {
+                // nobody listens
+            }
+
+            @Override
+            public void memberDisconnected(NodeId member) {
+                // nobody listens
+            }
+
+            @Override
+            public void versionMismatch(String own, String head) {
+                // nobody listens
+            }
+        };
+
         /** A member's session with this head started. */
-        default void memberConnected(NodeId member) {
-        }
+        void memberConnected(NodeId member);
 
         /** A member's session with this head ended. */
-        default void memberDisconnected(NodeId member) {
-        }
+        void memberDisconnected(NodeId member);
 
         /**
          * The head refused this member because of its version. The update system ({@code #74})
@@ -88,8 +104,7 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
          * @param own  this node's version
          * @param head the head's version
          */
-        default void versionMismatch(String own, String head) {
-        }
+        void versionMismatch(String own, String head);
     }
 
     /**
@@ -131,7 +146,7 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
     private final Object joinLock = new Object();
     private final java.util.concurrent.atomic.AtomicLong refusedJoins = new java.util.concurrent.atomic.AtomicLong();
     private final java.util.concurrent.atomic.AtomicLong refusedHellos = new java.util.concurrent.atomic.AtomicLong();
-    private volatile Events events = new Events() { };
+    private volatile Events events = Events.NONE;
     private volatile ClusterConfig cluster;
     private volatile ClusterServer server;
     private volatile ClusterLink link;
@@ -587,7 +602,7 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
             }
         }
         List<MemberStatus> members = new ArrayList<>();
-        if (role == Role.HEAD) {
+        if (role == Role.HEAD && current != null) {
             ClusterServer running = server;
             Set<NodeId> connected = running == null ? Set.of() : running.connected();
             for (ClusterConfig.Member member : current.members()) {

@@ -236,11 +236,12 @@ public final class ClusterLink implements AutoCloseable {
             try {
                 while (!closed.get()) {
                     Envelope envelope = stream.read(Protocol.MAX_FRAME_SIZE);
+                    if (envelope.message() instanceof Pong) {
+                        // alive; reading it reset the idle timeout
+                        continue;
+                    }
                     switch (envelope.message()) {
                         case Ping p -> send(stream, socket, Envelope.of(new Pong(p.nonce())));
-                        case Pong p -> {
-                            // alive
-                        }
                         case Disconnect d -> {
                             LOG.log(System.Logger.Level.INFO, "Cluster: the head ended the session ({0})", d.reason());
                             return HelloOutcome.ACCEPTED;

@@ -360,13 +360,13 @@ public final class ClusterServer implements AutoCloseable {
             session.run();
         } catch (SocketTimeoutException e) {
             if (session != null) {
-                session.end(Disconnect.Reason.TIMEOUT);
+                session.endHere(Disconnect.Reason.TIMEOUT);
             }
         } catch (ProtocolException e) {
             LOG.log(System.Logger.Level.DEBUG, "Cluster port: protocol error from {0}: {1}",
                     socket.getInetAddress().getHostAddress(), e.getMessage());
             if (session != null) {
-                session.end(Disconnect.Reason.PROTOCOL_ERROR);
+                session.endHere(Disconnect.Reason.PROTOCOL_ERROR);
             } else {
                 sendQuietly(socket, Disconnect.Reason.PROTOCOL_ERROR);
             }
@@ -481,25 +481,26 @@ public final class ClusterServer implements AutoCloseable {
         void run() throws IOException {
             while (!ended.get()) {
                 Envelope envelope = stream.read(Protocol.MAX_FRAME_SIZE);
+                if (envelope.message() instanceof Pong) {
+                    // the session is alive; reading it reset the idle timeout
+                    continue;
+                }
                 switch (envelope.message()) {
                     case Ping ping -> {
                         if (tooManyPings()) {
                             LOG.log(System.Logger.Level.WARNING, "Cluster: {0} sends more than {1} pings per interval; "
                                     + "session ended", node, PINGS_PER_INTERVAL);
-                            end(Disconnect.Reason.PROTOCOL_ERROR);
+                            endHere(Disconnect.Reason.PROTOCOL_ERROR);
                             return;
                         }
                         send(Envelope.of(new Pong(ping.nonce())));
-                    }
-                    case Pong pong -> {
-                        // the session is alive; reading it reset the idle timeout
                     }
                     case Disconnect disconnect -> {
                         LOG.log(System.Logger.Level.DEBUG, "Cluster: {0} disconnected ({1})", node, disconnect.reason());
                         return;
                     }
                     default -> {
-                        end(Disconnect.Reason.PROTOCOL_ERROR);
+                        endHere(Disconnect.Reason.PROTOCOL_ERROR);
                         return;
                     }
                 }
@@ -525,6 +526,22 @@ public final class ClusterServer implements AutoCloseable {
                 }
             } catch (IOException e) {
                 end(null);
+            }
+        }
+
+        /**
+         * Ends the session from the thread that serves it: sends the reason here, waiting at most
+         * {@link #WRITE_WAIT}, before that thread closes the socket in its {@code finally}. The
+         * asynchronous {@link #end} would race that close and lose the reason.
+         */
+        void endHere(Disconnect.Reason reason) {
+            if (!ended.compareAndSet(false, true)) {
+                return;
+            }
+            try {
+                stream.tryWrite(Envelope.of(new Disconnect(reason)), WRITE_WAIT);
+            } catch (IOException e) {
+                // the peer is gone
             }
         }
 

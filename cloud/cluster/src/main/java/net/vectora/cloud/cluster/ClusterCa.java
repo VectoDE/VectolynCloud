@@ -30,6 +30,9 @@ import net.vectora.protocol.NodeId;
  */
 public final class ClusterCa {
 
+    /** Names of the temporary request and certificate files. */
+    private static final SecureRandom RANDOM = new SecureRandom();
+
     /** Alias of the CA key in its keystore. */
     static final String ALIAS = "vectora-cluster-ca";
     /** How long the CA certificate is valid. */
@@ -125,7 +128,7 @@ public final class ClusterCa {
         Files.createDirectories(work);
         OwnerOnlyPermissions.restrictDirectory(work);
         byte[] random = new byte[8];
-        new SecureRandom().nextBytes(random);
+        RANDOM.nextBytes(random);
         String name = HexFormat.of().formatHex(random);
         Path csr = work.resolve(name + ".csr");
         Path crt = work.resolve(name + ".crt");
