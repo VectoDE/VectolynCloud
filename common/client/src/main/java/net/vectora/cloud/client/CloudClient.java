@@ -108,6 +108,14 @@ public final class CloudClient implements AutoCloseable {
     private volatile ServiceStatus lastStatus;
     /** The token for the next connection, from the last accepted one; null before the first. */
     private volatile AuthToken ticket;
+    /**
+     * The token presented for the last accepted connection. If that connection broke before our
+     * first frame reached the cloud, the cloud rolled back to it, so it is tried once after the
+     * ticket was refused.
+     */
+    private volatile AuthToken previousTicket;
+    private volatile boolean useFallback;
+    private volatile boolean lastWasFallback;
     private volatile boolean closed;
     private Thread connector;
     private Thread shutdownHook;
@@ -420,6 +428,10 @@ public final class CloudClient implements AutoCloseable {
                     LOG.log(Level.WARNING, "VectoraCloud refused service {0}: {1}", serviceId().value(),
                             result.outcome());
                     AuthResult.Outcome outcome = result.outcome();
+                    if (outcome == AuthResult.Outcome.INVALID_TOKEN && ticket != null && previousTicket != null) {
+                        // Alternate: the ticket next time again if the fallback is refused as well.
+                        useFallback = !lastWasFallback;
+                    }
                     notifyListeners(new CloudClientEvent.Rejected(outcome));
                 }
             } catch (IncompatibleVersionException e) {
@@ -468,7 +480,9 @@ public final class CloudClient implements AutoCloseable {
         attempt.socket.setSoTimeout((int) settings.connectTimeout().toMillis());
         // The start token works for the first connection only; every later one needs the ticket
         // the cloud sent over the connection before (docs/cloud/network.md#security-model).
-        AuthToken presented = ticket != null ? ticket : settings.token();
+        lastWasFallback = useFallback && previousTicket != null;
+        AuthToken presented = lastWasFallback ? previousTicket : ticket != null ? ticket : settings.token();
+        useFallback = false;
         send(attempt, Envelope.of(new Hello(Protocol.PROTOCOL_VERSION, serviceId(), presented)));
         Message first = attempt.reader.read().message();
         if (!(first instanceof AuthResult result)) {
@@ -481,7 +495,11 @@ public final class CloudClient implements AutoCloseable {
                 if (!(second instanceof SessionTicket next)) {
                     throw new ProtocolException("expected SessionTicket, got " + second.getClass().getSimpleName());
                 }
+                // The cloud takes the ticket as received once a frame of ours follows it; until
+                // then it may roll back to the token just presented, which is kept as fallback.
+                previousTicket = presented;
                 ticket = next.ticket();
+                send(attempt, Envelope.of(new Ping(0)));
             }
             attempt.reader.authenticated();
             attempt.socket.setSoTimeout((int) settings.idleTimeout().toMillis());

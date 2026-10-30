@@ -27,6 +27,8 @@ import net.vectora.protocol.message.AuthResult;
  */
 public final class ServiceTokens implements ServiceAuthenticator {
 
+    private static final System.Logger LOG = System.getLogger(ServiceTokens.class.getName());
+
     /** Random bytes per token: 32 bytes, 43 characters in URL-safe Base64. */
     private static final int TOKEN_BYTES = 32;
 
@@ -103,6 +105,13 @@ public final class ServiceTokens implements ServiceAuthenticator {
             return Admission.refused(AuthResult.Outcome.UNKNOWN_PEER);
         }
         if (!matches) {
+            // The start token once more, after it was used: somebody has a copy of the
+            // environment, or a plugin of the service connected before the bridge did.
+            if (credential.issued().matches(token)) {
+                LOG.log(System.Logger.Level.ERROR, "The start token of service {0} was presented again after it "
+                        + "was used up. A plugin or process may have copied it from the server's environment; "
+                        + "check the service if its bridge is not the one connected.", service.value());
+            }
             return Admission.refused(AuthResult.Outcome.INVALID_TOKEN);
         }
         // Compare and swap: of two connections with the same token only one gets in, the other
@@ -112,6 +121,16 @@ public final class ServiceTokens implements ServiceAuthenticator {
             return Admission.refused(AuthResult.Outcome.INVALID_TOKEN);
         }
         return Admission.accepted(next);
+    }
+
+    @Override
+    public void ticketNotTaken(PeerId peer, AuthToken presented, AuthToken ticket) {
+        Objects.requireNonNull(presented, "presented");
+        Objects.requireNonNull(ticket, "ticket");
+        if (peer instanceof ServiceId service) {
+            tokens.computeIfPresent(service, (id, credential) -> credential.current().matches(ticket)
+                    ? new Credential(credential.issued(), presented) : credential);
+        }
     }
 
     private static AuthToken newToken(SecureRandom random) {

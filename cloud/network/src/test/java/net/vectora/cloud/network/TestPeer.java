@@ -68,6 +68,9 @@ final class TestPeer implements AutoCloseable {
         AuthResult result = (AuthResult) read().message();
         if (result.outcome() == AuthResult.Outcome.ACCEPTED) {
             ticket = ((SessionTicket) read().message()).ticket();
+            // Like the client: a frame right after the ticket tells the cloud it arrived.
+            send(new net.vectora.protocol.message.Ping(0));
+            readUntil(net.vectora.protocol.message.Pong.class);
         }
         return result;
     }

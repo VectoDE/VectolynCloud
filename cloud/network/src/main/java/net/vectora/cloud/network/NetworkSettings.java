@@ -85,6 +85,10 @@ public record NetworkSettings(String bindHost, int port, Duration handshakeTimeo
                 || maxUnauthenticatedPerAddress < 1) {
             throw new IllegalArgumentException("connection and request limits must be at least 1");
         }
+        if (maxUnauthenticated > maxConnections || maxUnauthenticatedPerAddress > maxUnauthenticated) {
+            throw new IllegalArgumentException("the limits for unauthenticated connections must not exceed the "
+                    + "connection limit, and the one per address not the total");
+        }
     }
 
     /** Listens on {@code 127.0.0.1:7010} with the default limits. */
@@ -114,10 +118,14 @@ public record NetworkSettings(String bindHost, int port, Duration handshakeTimeo
                 maxPendingRequests, request, maxUnauthenticated, maxUnauthenticatedPerAddress);
     }
 
-    /** A copy with other limits. */
+    /**
+     * A copy with other limits. The limits for unauthenticated connections are lowered to
+     * {@code total} if they were higher.
+     */
     public NetworkSettings withLimits(int total, int perAddress, int pendingRequests) {
+        int unauthenticated = Math.min(maxUnauthenticated, total);
         return new NetworkSettings(bindHost, port, handshakeTimeout, idleTimeout, pingInterval, total, perAddress,
-                pendingRequests, requestTimeout, maxUnauthenticated, maxUnauthenticatedPerAddress);
+                pendingRequests, requestTimeout, unauthenticated, Math.min(maxUnauthenticatedPerAddress, unauthenticated));
     }
 
     /** A copy with other limits for connections that have not authenticated yet. */

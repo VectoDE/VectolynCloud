@@ -12,6 +12,7 @@ import java.lang.System.Logger.Level;
 import java.net.InetSocketAddress;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import net.vectora.protocol.AuthToken;
 import net.vectora.protocol.IncompatibleVersionException;
 import net.vectora.protocol.PeerId;
 import net.vectora.protocol.Protocol;
@@ -57,6 +58,10 @@ final class ConnectionHandler extends SimpleChannelInboundHandler<Envelope> {
     /** The connection's share of the limits; null for the embedded channels of the tests. */
     private final ConnectionLimiter.Slot slot;
     private ScheduledFuture<?> handshakeTimer;
+    /** The ticket sent to the peer, until a frame of the peer shows it arrived; null otherwise. */
+    private AuthToken unconfirmedTicket;
+    private AuthToken presentedToken;
+    private PeerId unconfirmedPeer;
     private ServiceSession session;
     private boolean closing;
     private Disconnect.Reason closeReason;
@@ -85,6 +90,12 @@ final class ConnectionHandler extends SimpleChannelInboundHandler<Envelope> {
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         if (handshakeTimer != null) {
             handshakeTimer.cancel(false);
+        }
+        if (unconfirmedTicket != null) {
+            // The peer never sent a frame after its ticket, so it may not have it: the token it
+            // presented becomes valid again instead of locking the service out.
+            server.ticketNotTaken(unconfirmedPeer, presentedToken, unconfirmedTicket);
+            unconfirmedTicket = null;
         }
         if (session != null) {
             server.sessionClosed(session, closeReason);
@@ -123,10 +134,19 @@ final class ConnectionHandler extends SimpleChannelInboundHandler<Envelope> {
         }
         AuthResult.Outcome outcome = admission.outcome();
         if (outcome != AuthResult.Outcome.ACCEPTED) {
-            LOG.log(Level.WARNING, "Refused {0} {1} from {2}: {3}", peer.role(), peer.value(), remote(ctx), outcome);
+            long refused = server.countRefusedHello();
+            // Throttled: refused connections free their slot within a second, so a peer could
+            // otherwise write hundreds of warnings a second.
+            Level level = refused <= 10 || refused % 1000 == 0 ? Level.WARNING : Level.DEBUG;
+            LOG.log(level, "Refused {0} {1} from {2}: {3} ({4} refused so far)", peer.role(), peer.value(),
+                    remote(ctx), outcome, String.valueOf(refused));
             closeWith(ctx, new AuthResult(outcome, Protocol.PROTOCOL_VERSION), Disconnect.Reason.AUTH_FAILED);
             return;
         }
+        // Until the peer sends a frame after its ticket, the ticket counts as not taken.
+        unconfirmedPeer = peer;
+        presentedToken = hello.token();
+        unconfirmedTicket = admission.ticket();
         handshakeTimer.cancel(false);
         decoder.authenticated();
         if (slot != null) {
@@ -143,6 +163,11 @@ final class ConnectionHandler extends SimpleChannelInboundHandler<Envelope> {
         // its next connection; an older one cannot reconnect with the same token (it has none).
         if (MessageRegistry.standard().typeOf(SessionTicket.class).availableIn(version)) {
             ctx.write(Envelope.of(new SessionTicket(admission.ticket())));
+        } else {
+            // Nothing to confirm or roll back: an older peer never learns a ticket.
+            unconfirmedTicket = null;
+            LOG.log(Level.WARNING, "Service {0} speaks protocol {1}, which has no session tickets: it cannot "
+                    + "reconnect without a restart. Update its VectoraCloud plugin.", peer.value(), version);
         }
         ctx.flush();
         LOG.log(Level.INFO, "Service {0} connected from {1}", peer.value(), remote(ctx));
@@ -150,6 +175,8 @@ final class ConnectionHandler extends SimpleChannelInboundHandler<Envelope> {
     }
 
     private void authenticated(ChannelHandlerContext ctx, Envelope envelope) {
+        // Any frame after the ticket shows that the peer read it (frames arrive in order).
+        unconfirmedTicket = null;
         Message message = envelope.message();
         switch (message) {
             case Ping ping -> ctx.writeAndFlush(Envelope.of(new Pong(ping.nonce())));

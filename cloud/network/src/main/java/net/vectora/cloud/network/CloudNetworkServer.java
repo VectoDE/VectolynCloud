@@ -100,6 +100,7 @@ public final class CloudNetworkServer implements AutoCloseable {
     private final Map<ChannelName, List<ChannelSubscriber>> subscribers = new ConcurrentHashMap<>();
     private final AtomicLong droppedChannelMessages = new AtomicLong();
     private final AtomicLong refusedConnections = new AtomicLong();
+    private final AtomicLong refusedHellos = new AtomicLong();
 
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
@@ -367,6 +368,18 @@ public final class CloudNetworkServer implements AutoCloseable {
             LOG.log(Level.ERROR, "Authenticator failed for " + peer.role() + " " + peer.value(), e);
             return ServiceAuthenticator.Admission.refused(AuthResult.Outcome.UNKNOWN_PEER);
         }
+    }
+
+    void ticketNotTaken(PeerId peer, AuthToken presented, AuthToken ticket) {
+        try {
+            authenticator.ticketNotTaken(peer, presented, ticket);
+        } catch (RuntimeException e) {
+            LOG.log(Level.ERROR, "Authenticator failed for " + peer.role() + " " + peer.value(), e);
+        }
+    }
+
+    long countRefusedHello() {
+        return refusedHellos.incrementAndGet();
     }
 
     ServiceSession newSession(ServiceId service, Channel channel, ProtocolVersion version) {

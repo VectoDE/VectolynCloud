@@ -108,6 +108,28 @@ class CloudClientTest {
         }
     }
 
+    /** The client confirms its ticket at once, and falls back to the token before it once if the cloud rolled back. */
+    @Test
+    void confirmsTheTicketAndTriesThePreviousTokenOnceAfterARefusal() throws Exception {
+        start(Duration.ofSeconds(5));
+        try (Peer first = accept()) {
+            first.read();
+            first.accept(TICKET);
+            assertInstanceOf(Ping.class, first.read().message(), "a frame right behind the ticket");
+        }
+        try (Peer refused = accept()) {
+            assertTrue(((Hello) refused.read().message()).token().matches(TICKET));
+            refused.send(new AuthResult(AuthResult.Outcome.INVALID_TOKEN, Protocol.PROTOCOL_VERSION));
+        }
+        try (Peer fallback = accept()) {
+            assertTrue(((Hello) fallback.read().message()).token().matches(TOKEN), "the token the cloud rolled back to");
+            fallback.send(new AuthResult(AuthResult.Outcome.INVALID_TOKEN, Protocol.PROTOCOL_VERSION));
+        }
+        try (Peer again = accept()) {
+            assertTrue(((Hello) again.read().message()).token().matches(TICKET), "then the ticket again");
+        }
+    }
+
     @Test
     void anAcceptanceWithoutTicketMakesTheClientStartOver() throws Exception {
         start(Duration.ofSeconds(5));

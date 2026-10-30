@@ -152,6 +152,11 @@ class CloudNetworkServerTest {
             public Admission admit(net.vectora.protocol.PeerId peer, AuthToken token) {
                 throw new IllegalStateException("broken");
             }
+
+            @Override
+            public void ticketNotTaken(net.vectora.protocol.PeerId peer, AuthToken presented, AuthToken ticket) {
+                throw new IllegalStateException("broken");
+            }
         }).build();
         address = server.start();
         try (TestPeer peer = TestPeer.connect(address)) {

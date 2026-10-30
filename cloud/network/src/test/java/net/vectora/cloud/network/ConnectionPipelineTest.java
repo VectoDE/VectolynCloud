@@ -276,9 +276,46 @@ class ConnectionPipelineTest {
         }
     }
 
+    /** A ticket that never arrived: the connection closes before the peer sends anything after it. */
+    @Test
+    void aTicketThatWasNotTakenGivesTheTokenBack() {
+        AuthToken start = tokens.issue(LOBBY);
+        AuthToken lost;
+        try (EmbeddedConnection first = new EmbeddedConnection(server)) {
+            first.receive(CODEC.encode(Envelope.of(new Hello(Protocol.PROTOCOL_VERSION, LOBBY, start))));
+            lost = ticketOf(first);
+        }
+        assertEquals(AuthResult.Outcome.INVALID_TOKEN, tokens.authenticate(LOBBY, lost), "the lost ticket is void");
+        assertEquals(AuthResult.Outcome.ACCEPTED, tokens.authenticate(LOBBY, start), "the token is valid again");
+        // Counter-check: once a frame followed the ticket, closing gives nothing back.
+        AuthToken taken;
+        try (EmbeddedConnection second = new EmbeddedConnection(server)) {
+            hello(second, Protocol.PROTOCOL_VERSION, start);
+            taken = ticketOf(second);
+        }
+        assertEquals(AuthResult.Outcome.INVALID_TOKEN, tokens.authenticate(LOBBY, start));
+        assertEquals(AuthResult.Outcome.ACCEPTED, tokens.authenticate(LOBBY, taken));
+    }
+
+    /** A rollback only touches the ticket it is about: a newer ticket stays. */
+    @Test
+    void aLateRollbackDoesNotUndoANewerTicket() {
+        AuthToken start = tokens.issue(LOBBY);
+        ServiceAuthenticator.Admission first = tokens.admit(LOBBY, start);
+        ServiceAuthenticator.Admission second = tokens.admit(LOBBY, first.ticket());
+        tokens.ticketNotTaken(LOBBY, start, first.ticket());
+        assertEquals(AuthResult.Outcome.INVALID_TOKEN, tokens.authenticate(LOBBY, start));
+        assertEquals(AuthResult.Outcome.ACCEPTED, tokens.authenticate(LOBBY, second.ticket()));
+    }
+
+    /** Hello as a client sends it, followed by a Ping once the ticket is there (the client's confirmation). */
     private static AuthResult hello(EmbeddedConnection connection, ProtocolVersion version, AuthToken token) {
         connection.receive(CODEC.encode(Envelope.of(new Hello(version, LOBBY, token))));
-        return (AuthResult) connection.sent().get(0).message();
+        List<Envelope> sent = connection.sent();
+        if (sent.size() > 1 && sent.get(1).message() instanceof SessionTicket) {
+            connection.receive(CODEC.encode(Envelope.of(new net.vectora.protocol.message.Ping(0))));
+        }
+        return (AuthResult) sent.get(0).message();
     }
 
     private static AuthToken ticketOf(EmbeddedConnection connection) {

@@ -32,6 +32,14 @@ public interface ServiceAuthenticator {
     Admission admit(PeerId peer, AuthToken token);
 
     /**
+     * The connection that got {@code ticket} closed before the peer sent a single frame after it,
+     * so the peer may never have received it. Makes {@code presented}, the token that connection
+     * was admitted with, valid again, but only while {@code ticket} is still the current one.
+     * Otherwise a lost ticket would lock the service out until its restart.
+     */
+    void ticketNotTaken(PeerId peer, AuthToken presented, AuthToken ticket);
+
+    /**
      * Result of {@link #admit}.
      *
      * @param outcome result of the check
