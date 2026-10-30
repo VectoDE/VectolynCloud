@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VectolynCloud | Run your own Minecraft network</title>
+<meta name="description" content="VectolynCloud is an open-source kit under GPL-3.0 for running your own Minecraft network, with Java 1.8 to 26.3 and Bedrock players on the same servers.">
+<meta name="theme-color" content="#14111F">
+<meta name="color-scheme" content="dark">
+<link rel="canonical" href="https://vectode.github.io/VectolynCloud/">
+<link rel="icon" href="brand/mark-on-dark.svg" type="image/svg+xml">
+<link rel="icon" href="brand/png/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="brand/png/apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="VectolynCloud">
+<meta property="og:title" content="VectolynCloud | Run your own Minecraft network">
+<meta property="og:description" content="An open-source kit under GPL-3.0 for running your own Minecraft network, with Java and Bedrock players on the same servers.">
+<meta property="og:url" content="https://vectode.github.io/VectolynCloud/">
+<meta property="og:image" content="https://vectode.github.io/VectolynCloud/brand/png/social-preview.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:image:alt" content="The VectolynCloud wordmark and the 3D mark with the line Run your own Minecraft network">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preload" href="brand/fonts/pixelify-sans/PixelifySans-Variable.ttf" as="font" type="font/ttf" crossorigin>
+<link rel="stylesheet" href="home.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <nav aria-label="Project">
+    <a href="https://github.com/VectoDE/VectolynCloud">GitHub</a>
+    <a href="https://github.com/VectoDE/VectolynCloud/wiki">Wiki</a>
+    <a href="brand/">Brand guide</a>
+  </nav>
+</header>
+
+<main id="main">
+<section class="hero" aria-labelledby="title">
+  <div class="intro">
+    <h1 id="title"><img class="lockup" src="brand/lockup-vectolyncloud-dark.svg" width="484" height="64" alt="VectolynCloud"></h1>
+    <p class="tagline">Run your own Minecraft network.</p>
+    <p class="lede">Vectolyn is an open-source kit under GPL-3.0. You host the network yourself, and Java players from 1.8 to 26.3 join the same servers as Bedrock players.</p>
+    <p class="status">Stage 2 of 8. There is no usable cloud release yet, and parts of the architecture below are still a plan.</p>
+    <p class="actions">
+      <a class="button" href="https://github.com/VectoDE/VectolynCloud">Source on GitHub</a>
+      <a class="plain" href="https://github.com/VectoDE/VectolynCloud/wiki/Getting-Started">Getting started</a>
+    </p>
+  </div>
+  <figure class="shot">
+    <img src="brand/png/mc-serverlist-java@2x.png" width="642" height="376" alt="Minecraft Java server list with the Vectolyn entry selected. Its message of the day reads VECTOLYN.NET, 1.8 to 26.3, New lobby, Java and Bedrock, with 128 of 500 players online. Four placeholder networks sit around it.">
+    <figcaption>How a Vectolyn network shows up in the Java server list. The other entries are placeholders.</figcaption>
+  </figure>
+</section>
+
+<section class="block" aria-labelledby="h-parts">
+  <h2 id="h-parts">What runs where</h2>
+  <div class="body">
+    <dl class="parts">
+      <dt>Proxy</dt>
+      <dd>Velocity is the single entry point. Geyser and Floodgate let Bedrock clients in, and ViaVersion, ViaBackwards and ViaRewind translate older Java versions.</dd>
+      <dt>Servers</dt>
+      <dd>Paper runs Lobby, Survival, Creative, End and later the minigames. Fabric runs the mod server. Command blocks stay off on every server.</dd>
+      <dt>VectolynCloud</dt>
+      <dd>A Java node with a console and a setup wizard, under construction in stage 2. It will download and verify server software, manage Java runtimes and the database, generate secrets and scale minigame servers.</dd>
+      <dt>Vectolyn plugin</dt>
+      <dd>Planned for stage 3: one jar per platform for Paper, Velocity and Fabric, replacing LuckPerms, TAB, WorldEdit, WorldGuard, PlaceholderAPI, ProxyPortal and Chunky.</dd>
+      <dt>Database</dt>
+      <dd>MariaDB or MySQL.</dd>
+    </dl>
+    <p class="note">We do not run a network ourselves. There is no official server to join, and no hosted Discord bot or store. The website, Discord bot and store are code in the repository that you host with your own bot token and your own Stripe account.</p>
+  </div>
+</section>
+
+<section class="block" aria-labelledby="h-road">
+  <h2 id="h-road">Roadmap</h2>
+  <div class="body">
+    <ol class="stages">
+      <li class="done"><span class="slot" aria-hidden="true">1</span><span class="name">Foundation: repository, build, config fixes</span><span class="state">Done</span></li>
+      <li class="now"><span class="slot" aria-hidden="true">2</span><span class="name">VectolynCloud core</span><span class="state">In progress</span></li>
+      <li><span class="slot" aria-hidden="true">3</span><span class="name">Vectolyn plugin base</span><span class="state">Planned</span></li>
+      <li><span class="slot" aria-hidden="true">4</span><span class="name">Lobby</span><span class="state">Planned</span></li>
+      <li><span class="slot" aria-hidden="true">5</span><span class="name">Survival, Creative, Mod server</span><span class="state">Planned</span></li>
+      <li><span class="slot" aria-hidden="true">6</span><span class="name">Minigames and anti-cheat</span><span class="state">Planned</span></li>
+      <li><span class="slot" aria-hidden="true">7</span><span class="name">Brand and resource pack</span><span class="state">Planned</span></li>
+      <li><span class="slot" aria-hidden="true">8</span><span class="name">Dashboard, Discord bot, website, store</span><span class="state">Planned</span></li>
+    </ol>
+    <p>Progress per task is on the <a href="https://github.com/users/VectoDE/projects/11">Vectolyn roadmap board</a>.</p>
+  </div>
+</section>
+
+<section class="block" aria-labelledby="h-links">
+  <h2 id="h-links">Read on</h2>
+  <div class="body">
+    <ul class="links">
+      <li><a href="https://github.com/VectoDE/VectolynCloud">Repository</a><span>Code, issues and the README with build and local start instructions.</span></li>
+      <li><a href="https://github.com/VectoDE/VectolynCloud/releases">Releases</a><span>Signed pre-releases with provenance. None of them is a usable cloud yet.</span></li>
+      <li><a href="https://github.com/VectoDE/VectolynCloud/wiki">Wiki</a><span>Overview, architecture, getting started, crossplay and FAQ, in English and German.</span></li>
+      <li><a href="https://github.com/VectoDE/VectolynCloud/tree/main/docs">Technical docs</a><span>One document per cloud module: config, node, network, API, backup and more.</span></li>
+      <li><a href="https://github.com/VectoDE/VectolynCloud/discussions">Discussions</a><span>Questions, ideas and announcements.</span></li>
+      <li><a href="brand/">Brand guide</a><span>Mark, lockups, colors, type and in-game design, with every file to download.</span></li>
+    </ul>
+  </div>
+</section>
+</main>
+
+<footer class="foot">
+  <p>VectolynCloud is licensed under <a href="https://github.com/VectoDE/VectolynCloud/blob/main/LICENSE">GPL-3.0</a>. Security reports go through the <a href="https://github.com/VectoDE/VectolynCloud/security/policy">security policy</a>.</p>
+  <p>Minecraft is a trademark of Mojang Synergies AB. Vectolyn is not affiliated with Mojang or Microsoft. This page sets no cookies and loads nothing from other sites.</p>
+</footer>
+</body>
+</html>

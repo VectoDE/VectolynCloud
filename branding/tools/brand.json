@@ -1,6 +1,7 @@
 {
   "_comment": "Brand constants read by the generators. Override the file with VECTOLYN_BRAND=/path/to/brand.json.",
   "url": "github.com/VectoDE/VectolynCloud",
+  "site": "https://vectode.github.io/VectolynCloud/",
   "facts": [
     "Java 1.8 to 26.3",
     "Bedrock via Geyser",

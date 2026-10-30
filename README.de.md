@@ -158,6 +158,7 @@ Als root oder Administrator verweigert der Launcher den Start. Läuft deine Entw
 
 ## Doku und Community
 
+- [Projektseite](https://vectode.github.io/VectolynCloud/) mit dem [Brand Guide](https://vectode.github.io/VectolynCloud/brand/) (englisch, Quellen in `site/` und `branding/`)
 - [Wiki](https://github.com/VectoDE/VectolynCloud/wiki) (Deutsch und Englisch, Quellen in `docs/wiki/`)
 - [Discussions](https://github.com/VectoDE/VectolynCloud/discussions) für Fragen, Ideen und Ankündigungen
 - [Mitmachen](CONTRIBUTING.de.md) · [Verhaltenskodex](CODE_OF_CONDUCT.md) · [Sicherheit](SECURITY.md)
