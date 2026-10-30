@@ -8,7 +8,7 @@ Wir betreiben kein Netzwerk, keine Server und keine Domain und hosten weder Webs
 
 ## Stand
 
-Das Projekt steht bei **Etappe 2 von 8** (VectolynCloud-Kern). Etappe 1, das Fundament, ist fertig und als signiertes Pre-Release [v0.1.1](https://github.com/VectoDE/VectolynCloud/releases/tag/v0.1.1) erschienen. Ein nutzbares Cloud-Release gibt es noch nicht. Fortschritt: [Roadmap](Roadmap-DE) und [#11](https://github.com/VectoDE/VectolynCloud/issues/11).
+Das Projekt steht bei **Etappe 2 von 8** (VectolynCloud-Kern). Etappe 1, das Fundament, ist fertig und als signiertes Pre-Release [v0.1.1-dev](https://github.com/VectoDE/VectolynCloud/releases/tag/v0.1.1-dev) erschienen. Ein nutzbares Cloud-Release gibt es noch nicht. Fortschritt: [Roadmap](Roadmap-DE) und [#11](https://github.com/VectoDE/VectolynCloud/issues/11).
 
 ## Ziel
 
