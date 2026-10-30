@@ -19,6 +19,7 @@ import net.vectora.protocol.message.Envelope;
 import net.vectora.protocol.message.Hello;
 import net.vectora.protocol.message.Message;
 import net.vectora.protocol.message.MessageCodec;
+import net.vectora.protocol.message.SessionTicket;
 
 /**
  * A hand-driven peer on a real loopback socket. Unlike the CloudClient it does exactly what a
@@ -32,6 +33,7 @@ final class TestPeer implements AutoCloseable {
     private final OutputStream out;
     private final InputStream in;
     private byte[] buffer = new byte[0];
+    private AuthToken ticket;
 
     private TestPeer(Socket socket) throws IOException {
         this.socket = socket;
@@ -57,9 +59,22 @@ final class TestPeer implements AutoCloseable {
         return test;
     }
 
+    /**
+     * Says Hello and returns the AuthResult. After an acceptance the cloud sends the ticket for
+     * the next connection right behind it; it is read here and kept in {@link #ticket()}.
+     */
     AuthResult hello(PeerId peer, AuthToken token) throws IOException {
         send(new Hello(Protocol.PROTOCOL_VERSION, peer, token));
-        return (AuthResult) read().message();
+        AuthResult result = (AuthResult) read().message();
+        if (result.outcome() == AuthResult.Outcome.ACCEPTED) {
+            ticket = ((SessionTicket) read().message()).ticket();
+        }
+        return result;
+    }
+
+    /** The ticket of the last accepted Hello, or null. */
+    AuthToken ticket() {
+        return ticket;
     }
 
     void send(Message message) throws IOException {

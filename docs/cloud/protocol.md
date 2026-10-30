@@ -80,6 +80,7 @@ All messages are immutable records in `net.vectora.protocol.message`, listed in 
 | `0x02` | `Ping` | both | nonce (long) |
 | `0x03` | `Pong` | both | nonce of the ping (long) |
 | `0x04` | `Disconnect` | both | reason (VarInt) |
+| `0x05` | `SessionTicket` | cloud → peer | ticket (string 16–256), the token for the peer's next `Hello`. Sent right after `AuthResult(ACCEPTED)`. Since 1.2. |
 | `0x10` | `ServiceReady` | service → cloud | service id (string ≤ 64) |
 | `0x11` | `ServiceStatus` | service → cloud | service id, players online and max (VarInt, 0 to 1,000,000), TPS (double, 0 to 1000), MSPT (double, 0 to 60,000), heap used (VarLong, ≥ 0), heap max (VarLong, ≥ 0, or `-1` for unknown or unlimited) |
 | `0x20` | `RegisterServer` | cloud → proxy | name (service id), host (string ≤ 253, DNS name or IPv6 literal, see below), port (u16, 1 to 65535), group (string ≤ 32), legacy (bool) |
@@ -133,15 +134,15 @@ The sender of a request picks an id that is unique among its open requests (a co
 ### Connection flow
 
 1. The peer connects and sends `Hello` with its version, role, id and token. Until step 2 is done, both sides read frames of 4 KiB at most; the largest `Hello` is about 330 bytes. A larger length prefix closes the connection right away, before the body is read.
-2. The cloud checks the token and answers `AuthResult`. On anything but `ACCEPTED` it closes the connection. After `ACCEPTED` both sides allow the full 1 MiB.
+2. The cloud checks the token and answers `AuthResult`. On anything but `ACCEPTED` it closes the connection. On `ACCEPTED` the token is used up, and from protocol 1.2 on a `SessionTicket` follows directly: the token for the next `Hello` of this peer. The client reads it before anything else; an acceptance without it is a protocol error. After `ACCEPTED` (and the ticket) both sides allow the full 1 MiB.
 3. Both sides send `Ping` at intervals and answer with `Pong`. A side that hears nothing for too long closes with `Disconnect(TIMEOUT)`.
 4. Either side ends the connection with `Disconnect` and a reason.
 
-The token comes from the cloud: a fresh service token per start, or the join token for cluster nodes. Cluster links also run over mTLS with TLS 1.3; the protocol does not replace transport security.
+The token comes from the cloud: a fresh service token per start for the first connection, then the ticket of the connection before. Each token and each ticket opens exactly one connection, see [network.md](network.md#security-model). The protocol does not replace transport security.
 
 ## Versions
 
-The current version is `Protocol.PROTOCOL_VERSION`, **1.1**.
+The current version is `Protocol.PROTOCOL_VERSION`, **1.2**.
 
 - **Same major version required.** Peers with different major versions cannot talk. A major version changes when the frame layout, an existing message id or the encoding of an existing message changes.
 - **Minor versions only add.** A new message type, a new enum code or a new value range that old peers would reject needs a new minor version. Existing payloads stay as they are.
@@ -154,6 +155,7 @@ Version history:
 |---|---|
 | 1.0 | First version: 15 messages. Before the first release (stage 2, PR 9) the handshake frame limit was added, `ServiceStatus` accepts a heap maximum of `-1`, and channel names and hosts got the stricter rules above. No peer with the earlier rules was ever released, so the version stayed 1.0. |
 | 1.1 | `ServerCapacity` (`0x22`) and `TransferPlayer` (`0x33`, reason `SCALE_DOWN`), both cloud → proxy, for the choice of the emptiest server and the moves before a scale-down; `NetworkKick` (`0x34`), backend → cloud → proxy, for kicks that take a player off the network. |
+| 1.2 | `SessionTicket` (`0x05`), cloud → peer: a service token opens one connection only, the next one needs the ticket the cloud sent over the last accepted connection. The cloud uses the token up for a peer of 1.1 as well; such a peer gets no ticket and cannot reconnect until its service is restarted. The node ships the bridges of its own build, so in practice every peer speaks 1.2. |
 
 ## Limits at a glance
 

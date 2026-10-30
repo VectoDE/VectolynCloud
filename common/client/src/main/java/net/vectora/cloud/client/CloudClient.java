@@ -25,6 +25,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.net.SocketFactory;
+import net.vectora.protocol.AuthToken;
 import net.vectora.protocol.ChannelName;
 import net.vectora.protocol.IncompatibleVersionException;
 import net.vectora.protocol.Protocol;
@@ -38,6 +39,7 @@ import net.vectora.protocol.message.Hello;
 import net.vectora.protocol.message.Message;
 import net.vectora.protocol.message.MessageCodec;
 import net.vectora.protocol.message.MessageLimits;
+import net.vectora.protocol.message.MessageRegistry;
 import net.vectora.protocol.message.NetworkKick;
 import net.vectora.protocol.message.Ping;
 import net.vectora.protocol.message.PlayerJoin;
@@ -48,6 +50,7 @@ import net.vectora.protocol.message.Request;
 import net.vectora.protocol.message.Response;
 import net.vectora.protocol.message.ServiceReady;
 import net.vectora.protocol.message.ServiceStatus;
+import net.vectora.protocol.message.SessionTicket;
 
 /**
  * Connects a proxy or server to VectoraCloud. Uses only the JDK (a blocking socket and three
@@ -103,6 +106,8 @@ public final class CloudClient implements AutoCloseable {
     private volatile Connection connection;
     private volatile boolean ready;
     private volatile ServiceStatus lastStatus;
+    /** The token for the next connection, from the last accepted one; null before the first. */
+    private volatile AuthToken ticket;
     private volatile boolean closed;
     private Thread connector;
     private Thread shutdownHook;
@@ -461,12 +466,23 @@ public final class CloudClient implements AutoCloseable {
 
     private AuthResult handshake(Connection attempt) throws IOException {
         attempt.socket.setSoTimeout((int) settings.connectTimeout().toMillis());
-        send(attempt, Envelope.of(new Hello(Protocol.PROTOCOL_VERSION, serviceId(), settings.token())));
+        // The start token works for the first connection only; every later one needs the ticket
+        // the cloud sent over the connection before (docs/cloud/network.md#security-model).
+        AuthToken presented = ticket != null ? ticket : settings.token();
+        send(attempt, Envelope.of(new Hello(Protocol.PROTOCOL_VERSION, serviceId(), presented)));
         Message first = attempt.reader.read().message();
         if (!(first instanceof AuthResult result)) {
             throw new ProtocolException("expected AuthResult, got " + first.getClass().getSimpleName());
         }
         if (result.outcome() == AuthResult.Outcome.ACCEPTED) {
+            if (result.version().isCompatibleWith(Protocol.PROTOCOL_VERSION) && MessageRegistry.standard()
+                    .typeOf(SessionTicket.class).availableIn(Protocol.PROTOCOL_VERSION.negotiate(result.version()))) {
+                Message second = attempt.reader.read().message();
+                if (!(second instanceof SessionTicket next)) {
+                    throw new ProtocolException("expected SessionTicket, got " + second.getClass().getSimpleName());
+                }
+                ticket = next.ticket();
+            }
             attempt.reader.authenticated();
             attempt.socket.setSoTimeout((int) settings.idleTimeout().toMillis());
         }
@@ -504,7 +520,8 @@ public final class CloudClient implements AutoCloseable {
                 }
                 default -> {
                     Message message = envelope.message();
-                    if (message instanceof Hello || message instanceof AuthResult) {
+                    // A ticket outside the handshake is never passed on: listeners are plugin code.
+                    if (message instanceof Hello || message instanceof AuthResult || message instanceof SessionTicket) {
                         throw new ProtocolException(message.getClass().getSimpleName() + " after the handshake");
                     }
                     // Pong needs nothing: any frame resets the read timeout already.

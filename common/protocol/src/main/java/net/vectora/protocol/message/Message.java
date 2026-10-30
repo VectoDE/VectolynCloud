@@ -7,7 +7,7 @@ import net.vectora.protocol.PacketWriter;
  * {@code read(PacketReader)} and is listed in {@link MessageRegistry#standard()}.
  */
 public sealed interface Message
-        permits Hello, AuthResult, Ping, Pong, Disconnect,
+        permits Hello, AuthResult, Ping, Pong, Disconnect, SessionTicket,
                 ServiceReady, ServiceStatus, RegisterServer, UnregisterServer, ServerCapacity,
                 PlayerJoin, PlayerQuit, PlayerSwitch, TransferPlayer, NetworkKick,
                 ChannelMessage, Request, Response {

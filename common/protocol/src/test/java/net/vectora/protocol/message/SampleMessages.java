@@ -28,6 +28,7 @@ final class SampleMessages {
                 new Ping(42L),
                 new Pong(42L),
                 new Disconnect(Disconnect.Reason.SHUTDOWN),
+                new SessionTicket(TOKEN),
                 new ServiceReady(LOBBY),
                 new ServiceStatus(LOBBY, 12, 100, 19.98, 3.25, 512L << 20, 2048L << 20),
                 new RegisterServer(SURVIVAL, "127.0.0.1", 30_002, new GroupName("survival"), false),
@@ -62,6 +63,7 @@ final class SampleMessages {
         return List.of(
                 new Hello(Protocol.PROTOCOL_VERSION, new NodeId("n".repeat(NodeId.MAX_LENGTH)),
                         new AuthToken("t".repeat(AuthToken.MAX_LENGTH))),
+                new SessionTicket(new AuthToken("k".repeat(AuthToken.MAX_LENGTH))),
                 new Ping(Long.MIN_VALUE),
                 new Pong(Long.MAX_VALUE),
                 new ServiceStatus(longId, MessageLimits.MAX_PLAYERS, MessageLimits.MAX_PLAYERS,

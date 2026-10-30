@@ -22,12 +22,16 @@ public final class MessageRegistry {
     /** Version 1.1 added {@link ServerCapacity}, {@link TransferPlayer} and {@link NetworkKick}. */
     private static final ProtocolVersion V1_1 = new ProtocolVersion(1, 1);
 
+    /** Version 1.2 added {@link SessionTicket}: service tokens are valid for one connection. */
+    private static final ProtocolVersion V1_2 = new ProtocolVersion(1, 2);
+
     private static final MessageRegistry STANDARD = builder()
             .register(0x00, Hello.class, Hello::read)
             .register(0x01, AuthResult.class, AuthResult::read)
             .register(0x02, Ping.class, Ping::read)
             .register(0x03, Pong.class, Pong::read)
             .register(0x04, Disconnect.class, Disconnect::read)
+            .register(0x05, SessionTicket.class, SessionTicket::read, V1_2)
             .register(0x10, ServiceReady.class, ServiceReady::read)
             .register(0x11, ServiceStatus.class, ServiceStatus::read)
             .register(0x20, RegisterServer.class, RegisterServer::read)

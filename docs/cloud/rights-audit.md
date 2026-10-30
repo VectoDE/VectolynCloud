@@ -26,7 +26,7 @@ The Fabric mod server has no Vectora bridge yet; command blocks are off there th
 
 ## Cloud channel
 
-Only services the cloud started talk on the channel, each with a token of its own ([protocol.md](protocol.md)). A player's client never reaches it. What a service may send, and what the cloud and the proxies accept:
+Only services the cloud started talk on the channel, each with a token of its own ([protocol.md](protocol.md)). A player's client never reaches it. The token in the environment of a server process opens one connection; after that only the ticket the cloud sent over that connection gets in, so a plugin or local process that copies the token from the environment is refused (`ConnectionPipelineTest.aReusedOrCopiedStartTokenIsRefused`, `CloudClientEndToEndTest.aSecondClientWithTheSameStartTokenIsRefused`, [network.md](network.md#security-model)). What a service may send, and what the cloud and the proxies accept:
 
 | Message from a service | Accepted when | Otherwise | Test |
 |---|---|---|---|
@@ -34,6 +34,7 @@ Only services the cloud started talk on the channel, each with a token of its ow
 | `NetworkKick` | it names the sender itself (network layer), the sender is a backend on the proxies' lists (node), and the proxy listed that server and the player is on it or was kicked from it within 10 seconds (proxy) | cut off, dropped or ignored | `ConnectionPipelineTest.networkKickOnlyForTheSendersOwnServer`, `ChannelBridgeDrainTest.networkKicksArePassedOnOnlyFromListedBackends`, `ProxyBridgeTest.aNetworkKickIsIgnoredForAnUnlistedServerOrAPlayerWhoIsNotOnIt` |
 | `PlayerJoin`, `PlayerSwitch`, `PlayerQuit` | the sender is a proxy and the server name is one of its backends | dropped | `NetworkPlayersTest.reportsThatDoNotFitAreDropped` |
 | `RegisterServer`, `UnregisterServer`, `ServerCapacity`, `TransferPlayer` | never: only the cloud fills the proxies' lists and moves players | the connection is cut off | `ConnectionPipelineTest.transferCapacityAndServerListsFromAServiceAreProtocolViolations` |
+| `SessionTicket` | never: only the cloud hands out tickets | the connection is cut off | `ConnectionPipelineTest.aTicketFromAServiceIsAViolation` |
 | `ChannelMessage` | always, passed on to the other services | no bridge subscribes to a channel, so it changes nothing on a proxy | |
 | `Request` | a handler for its channel exists | `NO_HANDLER`; the node registers none | |
 

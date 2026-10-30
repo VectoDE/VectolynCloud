@@ -16,6 +16,7 @@ import net.vectora.protocol.IncompatibleVersionException;
 import net.vectora.protocol.PeerId;
 import net.vectora.protocol.Protocol;
 import net.vectora.protocol.ProtocolException;
+import net.vectora.protocol.ProtocolVersion;
 import net.vectora.protocol.ServiceId;
 import net.vectora.protocol.message.AuthResult;
 import net.vectora.protocol.message.ChannelMessage;
@@ -23,6 +24,7 @@ import net.vectora.protocol.message.Disconnect;
 import net.vectora.protocol.message.Envelope;
 import net.vectora.protocol.message.Hello;
 import net.vectora.protocol.message.Message;
+import net.vectora.protocol.message.MessageRegistry;
 import net.vectora.protocol.message.NetworkKick;
 import net.vectora.protocol.message.Ping;
 import net.vectora.protocol.message.PlayerJoin;
@@ -33,6 +35,7 @@ import net.vectora.protocol.message.Request;
 import net.vectora.protocol.message.Response;
 import net.vectora.protocol.message.ServiceReady;
 import net.vectora.protocol.message.ServiceStatus;
+import net.vectora.protocol.message.SessionTicket;
 
 /**
  * State machine of one connection: waiting for {@code Hello}, then authenticated, then closing.
@@ -51,15 +54,18 @@ final class ConnectionHandler extends SimpleChannelInboundHandler<Envelope> {
 
     private final CloudNetworkServer server;
     private final EnvelopeDecoder decoder;
+    /** The connection's share of the limits; null for the embedded channels of the tests. */
+    private final ConnectionLimiter.Slot slot;
     private ScheduledFuture<?> handshakeTimer;
     private ServiceSession session;
     private boolean closing;
     private Disconnect.Reason closeReason;
 
-    ConnectionHandler(CloudNetworkServer server, EnvelopeDecoder decoder) {
+    ConnectionHandler(CloudNetworkServer server, EnvelopeDecoder decoder, ConnectionLimiter.Slot slot) {
         super(Envelope.class);
         this.server = server;
         this.decoder = decoder;
+        this.slot = slot;
     }
 
     @Override
@@ -106,15 +112,16 @@ final class ConnectionHandler extends SimpleChannelInboundHandler<Envelope> {
             return;
         }
         PeerId peer = hello.peer();
-        AuthResult.Outcome outcome;
+        ServiceAuthenticator.Admission admission;
         if (!hello.version().isCompatibleWith(Protocol.PROTOCOL_VERSION)) {
-            outcome = AuthResult.Outcome.INCOMPATIBLE_VERSION;
+            admission = ServiceAuthenticator.Admission.refused(AuthResult.Outcome.INCOMPATIBLE_VERSION);
         } else if (!(peer instanceof ServiceId)) {
-            // Cluster nodes arrive with PR 20, over mTLS.
-            outcome = AuthResult.Outcome.UNKNOWN_PEER;
+            // Cluster nodes are not admitted on the service channel.
+            admission = ServiceAuthenticator.Admission.refused(AuthResult.Outcome.UNKNOWN_PEER);
         } else {
-            outcome = server.authenticate(peer, hello.token());
+            admission = server.admit(peer, hello.token());
         }
+        AuthResult.Outcome outcome = admission.outcome();
         if (outcome != AuthResult.Outcome.ACCEPTED) {
             LOG.log(Level.WARNING, "Refused {0} {1} from {2}: {3}", peer.role(), peer.value(), remote(ctx), outcome);
             closeWith(ctx, new AuthResult(outcome, Protocol.PROTOCOL_VERSION), Disconnect.Reason.AUTH_FAILED);
@@ -122,12 +129,22 @@ final class ConnectionHandler extends SimpleChannelInboundHandler<Envelope> {
         }
         handshakeTimer.cancel(false);
         decoder.authenticated();
+        if (slot != null) {
+            slot.authenticated();
+        }
         // The lower minor version of both sides: the cloud sends nothing the peer would not know.
-        session = server.newSession((ServiceId) peer, ctx.channel(), hello.version().negotiate(Protocol.PROTOCOL_VERSION));
+        ProtocolVersion version = hello.version().negotiate(Protocol.PROTOCOL_VERSION);
+        session = server.newSession((ServiceId) peer, ctx.channel(), version);
         // Registered before the answer goes out, so the cloud can send to the service as soon as
         // the service knows it is accepted.
         server.register(session);
-        ctx.writeAndFlush(Envelope.of(new AuthResult(AuthResult.Outcome.ACCEPTED, Protocol.PROTOCOL_VERSION)));
+        ctx.write(Envelope.of(new AuthResult(AuthResult.Outcome.ACCEPTED, Protocol.PROTOCOL_VERSION)));
+        // The token of this Hello is used up. A peer of protocol 1.2 or later gets the ticket for
+        // its next connection; an older one cannot reconnect with the same token (it has none).
+        if (MessageRegistry.standard().typeOf(SessionTicket.class).availableIn(version)) {
+            ctx.write(Envelope.of(new SessionTicket(admission.ticket())));
+        }
+        ctx.flush();
         LOG.log(Level.INFO, "Service {0} connected from {1}", peer.value(), remote(ctx));
         server.sessionOpened(session);
     }
@@ -166,8 +183,9 @@ final class ConnectionHandler extends SimpleChannelInboundHandler<Envelope> {
             case Response response -> session.complete(envelope.requestId(), response);
             default -> {
                 // Pong needs nothing: any inbound frame already resets the idle timer. Hello,
-                // AuthResult, RegisterServer, UnregisterServer, ServerCapacity and TransferPlayer
-                // never come from a service: only the cloud moves players.
+                // AuthResult, SessionTicket, RegisterServer, UnregisterServer, ServerCapacity and
+                // TransferPlayer never come from a service: only the cloud hands out tickets and
+                // moves players.
                 if (!(message instanceof Pong)) {
                     violation(ctx, message.getClass().getSimpleName() + " from a peer");
                 }

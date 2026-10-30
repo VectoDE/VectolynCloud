@@ -49,6 +49,7 @@ class MessageRegistryTest {
         expected.put(Ping.class, 0x02);
         expected.put(Pong.class, 0x03);
         expected.put(Disconnect.class, 0x04);
+        expected.put(SessionTicket.class, 0x05);
         expected.put(ServiceReady.class, 0x10);
         expected.put(ServiceStatus.class, 0x11);
         expected.put(RegisterServer.class, 0x20);
@@ -69,21 +70,28 @@ class MessageRegistryTest {
         assertEquals(expected.size(), registry.types().size());
     }
 
-    /** Version 1.1 added three messages; a 1.0 connection never carries them, everything else is 1.0. */
+    /**
+     * Version 1.1 added three messages and 1.2 one; an older connection never carries them,
+     * everything else is 1.0.
+     */
     @Test
     void newMessagesAreOnlyAvailableFromTheVersionThatAddedThem() {
         ProtocolVersion v10 = new ProtocolVersion(1, 0);
         ProtocolVersion v11 = new ProtocolVersion(1, 1);
+        ProtocolVersion v12 = new ProtocolVersion(1, 2);
         Set<Class<?>> since11 = Set.of(ServerCapacity.class, TransferPlayer.class, NetworkKick.class);
+        Set<Class<?>> since12 = Set.of(SessionTicket.class);
         for (MessageType<?> type : registry.types()) {
-            boolean added = since11.contains(type.type());
-            assertEquals(added ? v11 : v10, type.since(), type.type().getSimpleName());
-            assertEquals(!added, type.availableIn(v10), type.type().getSimpleName());
-            assertTrue(type.availableIn(v11), type.type().getSimpleName());
-            assertTrue(type.availableIn(new ProtocolVersion(1, 9)), type.type().getSimpleName());
-            assertFalse(type.availableIn(new ProtocolVersion(2, 1)), type.type().getSimpleName());
+            String name = type.type().getSimpleName();
+            ProtocolVersion since = since12.contains(type.type()) ? v12 : since11.contains(type.type()) ? v11 : v10;
+            assertEquals(since, type.since(), name);
+            assertEquals(since.equals(v10), type.availableIn(v10), name);
+            assertEquals(!since.equals(v12), type.availableIn(v11), name);
+            assertTrue(type.availableIn(v12), name);
+            assertTrue(type.availableIn(new ProtocolVersion(1, 9)), name);
+            assertFalse(type.availableIn(new ProtocolVersion(2, 1)), name);
         }
-        assertEquals(v11, Protocol.PROTOCOL_VERSION);
+        assertEquals(v12, Protocol.PROTOCOL_VERSION);
     }
 
     @Test

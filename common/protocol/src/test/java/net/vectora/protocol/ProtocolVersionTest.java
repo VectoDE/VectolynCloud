@@ -10,9 +10,9 @@ import org.junit.jupiter.api.Test;
 class ProtocolVersionTest {
 
     @Test
-    void currentVersionIsOnePointOne() {
-        assertEquals(new ProtocolVersion(1, 1), Protocol.PROTOCOL_VERSION);
-        assertEquals("1.1", Protocol.PROTOCOL_VERSION.toString());
+    void currentVersionIsOnePointTwo() {
+        assertEquals(new ProtocolVersion(1, 2), Protocol.PROTOCOL_VERSION);
+        assertEquals("1.2", Protocol.PROTOCOL_VERSION.toString());
     }
 
     @Test
