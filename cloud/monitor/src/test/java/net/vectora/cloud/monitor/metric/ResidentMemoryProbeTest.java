@@ -83,11 +83,17 @@ class ResidentMemoryProbeTest {
     }
 
     @Test
-    void tasklistOnlyReturnsTheAskedPids() throws Exception {
+    void tasklistOnlyReturnsTheAskedPidsWithOneRunForAll() throws Exception {
+        java.util.concurrent.atomic.AtomicInteger runs = new java.util.concurrent.atomic.AtomicInteger();
         ResidentMemoryProbe probe = ResidentMemoryProbe.tasklist(Path.of("C:\\Windows\\System32\\tasklist.exe"),
-                command -> "\"a.exe\",\"1\",\"C\",\"1\",\"1 K\"\n\"b.exe\",\"2\",\"C\",\"1\",\"2 K\"\n");
-        assertEquals(Map.of(2L, 2048L), probe.measure(Set.of(2L, 3L)));
+                command -> {
+                    runs.incrementAndGet();
+                    return "\"a.exe\",\"1\",\"C\",\"1\",\"1 K\"\n\"b.exe\",\"2\",\"C\",\"1\",\"2 K\"\n";
+                });
+        assertEquals(Map.of(1L, 1024L, 2L, 2048L), probe.measure(Set.of(1L, 2L, 3L)));
+        assertEquals(1, runs.get(), "one tasklist run for three services");
         assertTrue(probe.measure(Set.of()).isEmpty());
+        assertEquals(1, runs.get(), "none without a process");
     }
 
     @Test

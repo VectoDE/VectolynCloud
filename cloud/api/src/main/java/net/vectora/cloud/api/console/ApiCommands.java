@@ -1,5 +1,6 @@
 package net.vectora.cloud.api.console;
 
+import java.io.IOException;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
@@ -33,7 +34,20 @@ import net.vectora.cloud.console.command.CommandException;
  */
 public final class ApiCommands {
 
-    private final ApiTokens tokens;
+    private final TokenFile file;
+    private volatile ApiTokens tokens;
+
+    /** Opens the token store; fails while {@code secrets/api-tokens.json} is broken. */
+    @FunctionalInterface
+    public interface TokenFile {
+        /**
+         * Opens the store.
+         *
+         * @return the store
+         * @throws IOException if the file cannot be read or is malformed (the message names no value)
+         */
+        ApiTokens open() throws IOException;
+    }
 
     /**
      * Creates the commands.
@@ -42,6 +56,46 @@ public final class ApiCommands {
      */
     public ApiCommands(ApiTokens tokens) {
         this.tokens = Objects.requireNonNull(tokens, "tokens");
+        this.file = () -> tokens;
+    }
+
+    /**
+     * Creates the commands for a token file that could not be opened when the node started. Each
+     * {@code api token} command tries to open it again: while it fails, the command reports why;
+     * once it works (the file was repaired or deleted), that store is used from then on.
+     *
+     * @param file opens the token file
+     */
+    public ApiCommands(TokenFile file) {
+        this.file = Objects.requireNonNull(file, "file");
+    }
+
+    private ApiTokens tokens() throws CommandException {
+        ApiTokens current = tokens;
+        if (current != null) {
+            return current;
+        }
+        synchronized (this) {
+            if (tokens == null) {
+                try {
+                    tokens = Objects.requireNonNull(file.open(), "token store");
+                } catch (IOException e) {
+                    throw new CommandException(Text.of(
+                            "secrets/%1$s cannot be read (%2$s). Repair it, or delete it to start without tokens."
+                                    + " The API stays off until the node starts with a readable file.",
+                            "secrets/%1$s kann nicht gelesen werden (%2$s). Die Datei reparieren, oder löschen, um"
+                                    + " ohne Tokens neu anzufangen. Die API bleibt aus, bis der Node mit einer lesbaren"
+                                    + " Datei startet."),
+                            ApiTokens.FILE_NAME, e.getMessage());
+                }
+            }
+            return tokens;
+        }
+    }
+
+    private List<String> tokenNames() {
+        ApiTokens current = tokens;
+        return current == null ? List.of() : current.list().stream().map(ApiToken::name).toList();
     }
 
     /**
@@ -78,7 +132,7 @@ public final class ApiCommands {
                                         "Widerruft ein Token; es wirkt sofort nicht mehr."))
                                 .argument(Argument.required("token", Text.of("Id or name of the token",
                                         "ID oder Name des Tokens"))
-                                        .suggest(previous -> tokens.list().stream().map(ApiToken::name).toList()))
+                                        .suggest(previous -> tokenNames()))
                                 .executes(context -> revoke(context.out(), context.argument("token")))))
                 .subcommand(Command.builder("scopes")
                         .description(Text.of("Lists the scopes a token can have.",
@@ -101,15 +155,16 @@ public final class ApiCommands {
             }
             scopes.add(scope.get());
         }
-        if (tokens.list().stream().anyMatch(t -> t.name().equals(name))) {
+        ApiTokens store = tokens();
+        if (store.list().stream().anyMatch(t -> t.name().equals(name))) {
             throw new CommandException(Text.of("A token named %1$s exists already.",
                     "Ein Token namens %1$s existiert bereits."), name);
         }
-        if (tokens.list().size() >= ApiTokens.MAX_TOKENS) {
+        if (store.list().size() >= ApiTokens.MAX_TOKENS) {
             throw new CommandException(Text.of("At most %1$s tokens are possible.", "Höchstens %1$s Tokens sind möglich."),
                     ApiTokens.MAX_TOKENS);
         }
-        ApiTokens.Created created = tokens.create(name, scopes);
+        ApiTokens.Created created = store.create(name, scopes);
         out.success(Text.of("Token %1$s (%2$s) created with %3$s.", "Token %1$s (%2$s) erstellt mit %3$s."),
                 created.info().name(), created.info().id(), scopeNames(created.info()));
         // The one place the token is shown. Text built here from a fixed alphabet, so println is safe.
@@ -120,8 +175,8 @@ public final class ApiCommands {
                         + "wird widerrufen und neu erstellt."));
     }
 
-    private void list(ConsoleOutput out) {
-        List<ApiToken> all = tokens.list();
+    private void list(ConsoleOutput out) throws CommandException {
+        List<ApiToken> all = tokens().list();
         if (all.isEmpty()) {
             out.println(Text.of("No API tokens. \"api token create <name> <scopes>\" creates one.",
                     "Keine API-Tokens. „api token create <name> <scopes>“ erstellt eins."));
@@ -140,7 +195,7 @@ public final class ApiCommands {
             throw new CommandException(Text.of("No such token. \"api token list\" shows them.",
                     "Kein solches Token. „api token list“ zeigt sie."));
         }
-        Optional<ApiToken> revoked = tokens.revoke(idOrName);
+        Optional<ApiToken> revoked = tokens().revoke(idOrName);
         if (revoked.isEmpty()) {
             throw new CommandException(Text.of("No such token. \"api token list\" shows them.",
                     "Kein solches Token. „api token list“ zeigt sie."));

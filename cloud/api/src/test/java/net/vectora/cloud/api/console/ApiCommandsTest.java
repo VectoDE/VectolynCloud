@@ -102,4 +102,32 @@ class ApiCommandsTest {
         assertFalse(TOKEN.matcher(output()).find(), "a second token with the same name is refused");
         assertEquals(1, tokens.list().size());
     }
+
+    @Test
+    void aBrokenTokenFileIsReportedUntilItIsRepaired() throws Exception {
+        Path file = dir.resolve("broken/api-tokens.json");
+        java.nio.file.Files.createDirectories(file.getParent());
+        java.nio.file.Files.writeString(file, "{ not json");
+        ByteArrayOutputStream screen = new ByteArrayOutputStream();
+        try (Console broken = Console.builder()
+                .streams(new ByteArrayInputStream(new byte[0]), new PrintStream(screen, true, StandardCharsets.UTF_8))
+                .build()) {
+            broken.commands().register(new ApiCommands(() -> ApiTokens.open(file, Clock.systemUTC(),
+                    new SecureRandom())).command());
+            for (String line : new String[] {"api token list", "api token create ok admin", "api token revoke ok"}) {
+                assertEquals(Outcome.FAILED, broken.dispatcher().execute(line), line);
+                String text = screen.toString(StandardCharsets.UTF_8);
+                screen.reset();
+                assertTrue(text.contains("secrets/api-tokens.json cannot be read"), line + ": " + text);
+                assertFalse(TOKEN.matcher(text).find(), line);
+            }
+            assertEquals(Outcome.DONE, broken.dispatcher().execute("api scopes"), "needs no token file");
+
+            // Deleted: the next command opens the store and works from then on.
+            java.nio.file.Files.delete(file);
+            assertEquals(Outcome.DONE, broken.dispatcher().execute("api token create ok admin"));
+            assertTrue(TOKEN.matcher(screen.toString(StandardCharsets.UTF_8)).find());
+            assertEquals(Outcome.DONE, broken.dispatcher().execute("api token list"));
+        }
+    }
 }
