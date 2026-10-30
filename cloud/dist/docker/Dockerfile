@@ -64,7 +64,7 @@ WORKDIR /data
 VOLUME ["/data"]
 USER 1000:1000
 
-# Default ports (all configurable in cloud.yml): Java proxy, Bedrock (Geyser: RakNet on UDP and
+# Default ports (all configurable in config/cloud.yml): Java proxy, Bedrock (Geyser: RakNet on UDP and
 # NetherNet signaling on TCP 19132, NetherNet WebRTC on UDP 19133),
 # legacy proxy for 1.8.8. Publish only the ones you use; the cloud channel (7010) stays inside.
 EXPOSE 25565/tcp 19132/udp 19132/tcp 19133/udp 25564/tcp
