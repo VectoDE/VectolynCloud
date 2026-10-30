@@ -92,6 +92,67 @@ class MonitorTest {
     }
 
     @Test
+    void aSlowProcessProbeDoesNotMakeTheSampleOlderThanItsData() throws Exception {
+        directory.running("lobby-1", "lobby", 100);
+        // tasklist on a busy Windows machine: the process metrics take 30 s.
+        MetricSource slow = new MetricSource() {
+            @Override
+            public java.util.Map<Long, ProcessMetrics> processes(java.util.Set<Long> pids) {
+                clock.advanceSeconds(30);
+                return source.processes(pids);
+            }
+
+            @Override
+            public net.vectora.cloud.monitor.metric.NodeSample node(Instant at) {
+                return source.node(at);
+            }
+        };
+        MonitorConfigLoader.Settings settings = MonitorConfigLoader.parse(
+                "schema-version: 1\nrules: []\n".getBytes(StandardCharsets.UTF_8));
+        try (Monitor monitor = Monitor.builder(directory, slow, settings).clock(clock).build()) {
+            monitor.statusReported(status(LOBBY, 20, 1, 2));
+            monitor.sampleNow();
+            ServiceSample sample = monitor.history(LOBBY).getFirst();
+            assertEquals(T0.plusSeconds(30), sample.at(), "the time after the probe, not before it");
+            assertEquals(3, sample.playersOnline(), "the report of the same moment is still fresh");
+        }
+    }
+
+    @Test
+    void anErrorInOneRoundDoesNotStopTheSampling() throws Exception {
+        directory.running("lobby-1", "lobby", 100);
+        // A class missing from a runtime image: an Error, not an Exception. A periodic task that
+        // throws is never run again, so the samples would age and the scaler would see no counts.
+        java.util.concurrent.atomic.AtomicInteger rounds = new java.util.concurrent.atomic.AtomicInteger();
+        MetricSource failing = new MetricSource() {
+            @Override
+            public java.util.Map<Long, ProcessMetrics> processes(java.util.Set<Long> pids) {
+                if (rounds.incrementAndGet() == 1) {
+                    throw new NoClassDefFoundError("com/sun/management/OperatingSystemMXBean");
+                }
+                return source.processes(pids);
+            }
+
+            @Override
+            public net.vectora.cloud.monitor.metric.NodeSample node(Instant at) {
+                return source.node(at);
+            }
+        };
+        MonitorConfigLoader.Settings settings = MonitorConfigLoader.parse(
+                "schema-version: 1\nsample-interval: 1s\nrules: []\n".getBytes(StandardCharsets.UTF_8));
+        try (Fakes.LogCapture log = new Fakes.LogCapture("net.vectora.cloud.monitor");
+             Monitor monitor = Monitor.builder(directory, failing, settings).build()) {
+            monitor.start();
+            long end = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
+            while (monitor.history(LOBBY).isEmpty() && System.nanoTime() < end) {
+                Thread.sleep(50);
+            }
+            assertFalse(monitor.history(LOBBY).isEmpty(), "the round after the failed one sampled");
+            assertTrue(log.text().contains("Monitor sample failed"), "the failure is logged");
+        }
+    }
+
+    @Test
     void proxiesHaveNoTpsWhateverTheyReport() throws Exception {
         directory.put("proxy-1", "proxy", true, ServicePhase.RUNNING, 7, 0);
         ServiceId proxy = new ServiceId("proxy-1");

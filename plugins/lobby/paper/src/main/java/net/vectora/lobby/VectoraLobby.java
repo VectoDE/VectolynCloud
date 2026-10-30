@@ -1,5 +1,8 @@
 package net.vectora.lobby;
 
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
 import org.bukkit.GameRule;
 import org.bukkit.Location;
@@ -7,14 +10,21 @@ import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.Sign;
+import org.bukkit.block.sign.Side;
+import org.bukkit.block.sign.SignSide;
+import org.bukkit.entity.Enemy;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
 import org.bukkit.event.entity.FoodLevelChangeEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.world.EntitiesLoadEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /** Creates and protects Vectora's compact sky-island lobby on its first startup. */
@@ -43,6 +53,29 @@ public final class VectoraLobby extends JavaPlugin implements Listener {
         world.setGameRule(GameRule.DO_WEATHER_CYCLE, false);
         world.setTime(1000);
         world.setStorm(false);
+        // Nothing may hurt a player and no mob may appear; the event handlers below enforce the
+        // same rules, the game rules additionally stop the work server-side.
+        world.setGameRule(GameRule.DO_MOB_SPAWNING, false);
+        world.setGameRule(GameRule.SPAWN_MONSTERS, false);
+        world.setGameRule(GameRule.DO_PATROL_SPAWNING, false);
+        world.setGameRule(GameRule.DO_TRADER_SPAWNING, false);
+        world.setGameRule(GameRule.DO_WARDEN_SPAWNING, false);
+        world.setGameRule(GameRule.DO_INSOMNIA, false);
+        world.setGameRule(GameRule.DISABLE_RAIDS, true);
+        world.setGameRule(GameRule.MOB_GRIEFING, false);
+        world.setGameRule(GameRule.DO_FIRE_TICK, false);
+        world.setGameRule(GameRule.FALL_DAMAGE, false);
+        world.setGameRule(GameRule.DROWNING_DAMAGE, false);
+        world.setGameRule(GameRule.FIRE_DAMAGE, false);
+        world.setGameRule(GameRule.FREEZE_DAMAGE, false);
+        world.setGameRule(GameRule.PVP, false);
+        for (Entity entity : world.getEntities()) {
+            if (isHostile(entity)) entity.remove();
+        }
+    }
+
+    static boolean isHostile(Entity entity) {
+        return entity instanceof Enemy;
     }
 
     private void buildIsland(World world) {
@@ -97,8 +130,10 @@ public final class VectoraLobby extends JavaPlugin implements Listener {
         Block signBlock = world.getBlockAt(px, Y + 3, pz - 1);
         signBlock.setType(Material.OAK_SIGN, false);
         if (signBlock.getState() instanceof Sign sign) {
-            sign.setLine(0, "§b§l" + title);
-            sign.setLine(1, "§7" + subtitle);
+            // Adventure components instead of the deprecated Sign.setLine with § colour codes.
+            SignSide front = sign.getSide(Side.FRONT);
+            front.line(0, Component.text(title, NamedTextColor.AQUA, TextDecoration.BOLD));
+            front.line(1, Component.text(subtitle, NamedTextColor.GRAY));
             sign.update();
         }
     }
@@ -146,11 +181,32 @@ public final class VectoraLobby extends JavaPlugin implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onDamage(EntityDamageEvent event) {
-        if (event.getEntity() instanceof Player) event.setCancelled(true);
+        if (!(event.getEntity() instanceof Player player)) return;
+        event.setCancelled(true);
+        if (event.getCause() == DamageCause.VOID) {
+            player.setFallDistance(0);
+            player.teleportAsync(player.getWorld().getSpawnLocation());
+        }
     }
 
     @EventHandler(ignoreCancelled = true)
     public void onHunger(FoodLevelChangeEvent event) {
-        if (event.getEntity() instanceof Player) event.setCancelled(true);
+        if (event.getEntity() instanceof Player player) {
+            event.setCancelled(true);
+            player.setFoodLevel(20);
+            player.setSaturation(20f);
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onCreatureSpawn(CreatureSpawnEvent event) {
+        if (SpawnPolicy.blocks(event.getSpawnReason().name())) event.setCancelled(true);
+    }
+
+    @EventHandler
+    public void onEntitiesLoad(EntitiesLoadEvent event) {
+        for (Entity entity : event.getEntities()) {
+            if (isHostile(entity)) entity.remove();
+        }
     }
 }

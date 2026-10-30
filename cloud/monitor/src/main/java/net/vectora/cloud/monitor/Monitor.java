@@ -234,7 +234,10 @@ public final class Monitor implements AutoCloseable {
     private void sampleSafely() {
         try {
             sampleNow();
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | LinkageError e) {
+            // Whatever is thrown out of a periodic task ends the task for good, silently: sampling
+            // would stop, every sample would age past stale-after and the autoscaler would see no
+            // player count of any service. A class a runtime image lacks is such an error.
             LOG.log(Level.WARNING, "Monitor sample failed", e);
         }
     }
@@ -255,7 +258,6 @@ public final class Monitor implements AutoCloseable {
      */
     public List<AlertEvent> sampleNow() {
         synchronized (sampling) {
-            Instant now = Instant.ofEpochSecond(clock.instant().getEpochSecond());
             List<MonitoredService> services = directory.services();
             Set<Long> pids = new HashSet<>();
             for (MonitoredService s : services) {
@@ -264,6 +266,11 @@ public final class Monitor implements AutoCloseable {
                 }
             }
             Map<Long, MetricSource.ProcessMetrics> processes = pids.isEmpty() ? Map.of() : source.processes(pids);
+            // The time of the sample is taken after the process metrics: their helper program
+            // (tasklist on Windows) may take up to 30 s on a busy machine. Taken before, the sample
+            // would be that much older than the bridge reports it holds, and the autoscaler would
+            // count them as stale.
+            Instant now = Instant.ofEpochSecond(clock.instant().getEpochSecond());
             List<AlertEvent> events = new ArrayList<>();
             Set<String> present = new HashSet<>();
             for (MonitoredService service : services) {

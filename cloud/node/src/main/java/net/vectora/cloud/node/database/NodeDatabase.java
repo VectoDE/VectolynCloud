@@ -26,7 +26,6 @@ import net.vectora.cloud.node.service.PlaceholderContributor;
 import net.vectora.cloud.node.service.ServiceException;
 import net.vectora.cloud.node.service.ServiceManager;
 import net.vectora.cloud.node.service.ServicePlanner;
-import net.vectora.cloud.node.service.ServiceSpec;
 
 /**
  * The network's database as the node runs it.
@@ -151,7 +150,7 @@ public final class NodeDatabase implements ServiceManager.StartGate, Placeholder
     }
 
     @Override
-    public Map<String, String> values(ServiceSpec service, ConfigSnapshot snapshot) {
+    public Map<String, String> values(ConfigSnapshot snapshot) {
         DatabaseEndpoint ready = endpoint;
         if (ready == null) {
             return Map.of();

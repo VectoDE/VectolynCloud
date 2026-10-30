@@ -85,6 +85,15 @@ Einen echten Zusatzschutz hätte PGP: gegen eine Kontoübernahme, bei der jemand
 
 pandaspigot-api gibt es nur als Snapshot, deshalb legt der Build einen eindeutigen Snapshot fest (`1.8.8-R0.1-20251003.170525-12`). Gradle 9.8.2 scheitert beim Schreiben der Metadaten für eine solche Version (`Multiple entries with same key`), sobald Metadaten geprüft werden. Das Lesen funktioniert. Das Skript vertraut deshalb während des Schreibens der `.pom` und `.module` von pandaspigot-api und ersetzt diesen Eintrag danach durch ihre SHA-256-Werte aus dem Gradle-Cache. In der eingecheckten Datei werden sie wie alles andere geprüft. Bleibt der vorübergehende Eintrag stehen, schlägt die CI fehl.
 
+## Verwundbare transitive Versionen
+
+OpenSSF Scorecard (Check *Vulnerabilities*) liest die Artefakte in `gradle/verification-metadata.xml`. Eine Version, die nur eine Server-API als Compile- oder Test-Abhängigkeit mitbringt, zählt deshalb mit. `vectora.java-conventions` hebt diese Bibliotheken in jeder Konfiguration auf eine gepatchte Version an, wenn eine API eine ältere verlangt: Guava 33.7.2, Gson 2.14.0, commons-lang3 3.18.0, log4j-api 2.26.1, plexus-utils 3.6.1. Die Regel hebt nur an, nie ab. Einen Eintrag entfernen, sobald die APIs selbst eine behobene Version liefern.
+
+Lokal prüfen mit `osv-scanner scan source -L gradle/verification-metadata.xml`. Zwei Funde bleiben:
+
+- **commons-lang 2.6** (GHSA-j288-q9x7-2f5v): pandaspigot-api braucht es zur Testlaufzeit, die Bukkit-1.8.8-Klassen laden es. Für die 2.x-Linie gibt es keine behobene Version. Die Legacy-Bridge nutzt es nur in Tests, in keinem ausgelieferten Jar.
+- **kotlin-gradle-plugin 2.4.10** (GHSA-r937-wjx7-w2jp): kommt mit dem `kotlin-dsl`-Plugin der Gradle-Version, das `build-logic` baut. Die Lücke betrifft den Kotlin-Build-Cache, den dieser Build nicht nutzt. Die Korrektur gibt es nur als 2.4.20-Beta1; sie kommt mit einer Gradle-Version, die sie einbettet.
+
 ## Wenn die Prüfung fehlschlägt
 
 - **Du hast Abhängigkeiten geändert:** Skript ausführen, prüfen, committen.

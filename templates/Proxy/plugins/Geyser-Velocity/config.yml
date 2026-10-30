@@ -97,11 +97,11 @@ java:
 motd:
   # The MOTD that will be broadcasted to Minecraft: Bedrock Edition clients. This is irrelevant if "passthrough-motd" is set to true.
   # If either of these are empty, the respective string will default to "Geyser"
-  primary-motd: Geyser
-  secondary-motd: Another Geyser server.
+  primary-motd: "§8» §b§lVECTORA§6§l.NET §8« §7[1.8 - 26.3]"
+  secondary-motd: "§c§lNEUE LOBBY §8• §a§lJAVA & BEDROCK"
 
   # Whether Geyser should relay the MOTD from the Java server to Bedrock players.
-  passthrough-motd: true
+  passthrough-motd: false
 
   # Maximum amount of players that can connect.
   # This is only visual, and is only applied if passthrough-motd is disabled.

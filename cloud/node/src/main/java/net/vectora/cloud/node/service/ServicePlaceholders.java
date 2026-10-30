@@ -83,7 +83,7 @@ final class ServicePlaceholders {
             source = PlaceholderValues.of(proxyValues).orElse(source).orElse(list.placeholderValues());
         }
         for (PlaceholderContributor contributor : contributors) {
-            source = source.orElse(PlaceholderValues.of(contributor.values(spec, snapshot)));
+            source = source.orElse(PlaceholderValues.of(contributor.values(snapshot)));
         }
         return source;
     }
