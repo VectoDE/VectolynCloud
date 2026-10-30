@@ -1,15 +1,15 @@
-// Monitoring of VectoraCloud: metrics per service and node, history, alert rules with hysteresis,
+// Monitoring of VectolynCloud: metrics per service and node, history, alert rules with hysteresis,
 // notifications (webhook) and an optional Prometheus text endpoint. The node plugs it in through
 // ServiceDirectory and Monitor.statusReported/serviceStateChanged; it does not know cloud-node.
 // Alert rules and the history file are read from disk, so both parsers have Jazzer fuzz tests.
 // Details: docs/cloud/monitor.md
 
 plugins {
-    id("vectora.java-conventions")
-    id("vectora.fuzz-conventions")
+    id("vectolyn.java-conventions")
+    id("vectolyn.fuzz-conventions")
 }
 
-vectora {
+vectolyn {
     // Jar and manifest name from before the repository layout change.
     artifactName = "cloud-monitor"
 }

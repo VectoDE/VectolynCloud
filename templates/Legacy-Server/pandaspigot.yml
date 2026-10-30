@@ -1,4 +1,4 @@
-# Only the settings Vectora needs. PandaSpigot adds every other setting with its default value on
+# Only the settings Vectolyn needs. PandaSpigot adds every other setting with its default value on
 # the first start.
 
 # Must match online-mode of the legacy proxy (true): UUIDs and skins then come from the proxy.

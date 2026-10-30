@@ -1,4 +1,4 @@
-# VectoraCloud with MariaDB as an external database (Docker Compose v2).
+# VectolynCloud with MariaDB as an external database (Docker Compose v2).
 #
 #   cd cloud/dist/docker
 #   cp setup.example.yml setup.yml                         # then edit: accept the EULA, name, ports
@@ -14,28 +14,28 @@
 # The image comes from GHCR. To build it from this checkout instead: docker compose build
 # Details: docs/cloud/operations.md
 
-name: vectora
+name: vectolyn
 
 services:
   cloud:
-    image: ghcr.io/vectode/vectora-cloud:${VECTORA_VERSION:-latest}
+    image: ghcr.io/vectode/vectolyn-cloud:${VECTOLYN_VERSION:-latest}
     build:
       context: ../../..
       dockerfile: cloud/dist/docker/Dockerfile
     # Zombie reaping for every process the cloud starts (servers, MariaDB tools).
     init: true
     restart: unless-stopped
-    stdin_open: true          # "docker attach vectora-cloud-1" reaches the console
+    stdin_open: true          # "docker attach vectolyn-cloud-1" reaches the console
     tty: false
     command: ["--non-interactive", "--setup-file", "/data/setup.yml"]
     environment:
-      VECTORA_XMX: 512M
+      VECTOLYN_XMX: 512M
     volumes:
       - cloud-data:/data
       - ./setup.yml:/data/setup.yml:ro
     secrets:
       - source: db_password
-        target: vectora-db
+        target: vectolyn-db
     ports:
       - "25565:25565/tcp"     # Java proxy
       - "19132:19132/udp"     # Bedrock (Geyser, RakNet)

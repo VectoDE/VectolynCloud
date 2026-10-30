@@ -1,8 +1,8 @@
 # Cluster: several nodes
 
-Module `cloud/cluster`, package `net.vectora.cloud.cluster`. A cluster is one **head** and any number of **members**. The head runs `cluster init`, owns the cluster CA, the member list and (later) the configuration and placement. Members join with a one-time token and keep a mutual TLS 1.3 connection to the head on a dedicated cluster port.
+Module `cloud/cluster`, package `net.vectolyn.cloud.cluster`. A cluster is one **head** and any number of **members**. The head runs `cluster init`, owns the cluster CA, the member list and (later) the configuration and placement. Members join with a one-time token and keep a mutual TLS 1.3 connection to the head on a dedicated cluster port.
 
-State of [#73](https://github.com/VectoDE/VectoraCloud/issues/73), built in steps:
+State of [#73](https://github.com/VectoDE/VectolynCloud/issues/73), built in steps:
 
 | Step | Content | State |
 |---|---|---|
@@ -28,7 +28,7 @@ cluster token create node-2           # valid 1 hour by default, once
 cluster join 10.0.0.1:7011 node-1 k3x9qa.<32 characters> sha256:<64 hex digits>
 ```
 
-On the new node (its `cloud.yml` has `node-id: node-2`, same VectoraCloud version as the head), paste that line into the console. `cluster status` shows the role, the head, the CA pin, the members and whether they are connected.
+On the new node (its `cloud.yml` has `node-id: node-2`, same VectolynCloud version as the head), paste that line into the console. `cluster status` shows the role, the head, the CA pin, the members and whether they are connected.
 
 | Command | Where | What it does |
 |---|---|---|
@@ -46,7 +46,7 @@ The whole `cluster` command is sensitive: none of its lines reaches the console 
 | Decision | Rule | Where |
 |---|---|---|
 | Who signs node certificates | The cluster CA on the head: EC P-256, self-signed, `CA:true, pathlen:0`, 10 years, made with the JDK's `keytool` in `secrets/cluster/ca.p12` (owner only, random password in `secrets/cluster/ca.password`, passed to keytool through an environment variable). No library besides the JDK. | `ClusterCa` |
-| What a node certificate says | Exactly one subject alternative name, the URI `vectora-node:<node-id>`. The CA writes subject and name itself from the **token's** node id; keytool does not copy extensions out of the request, and every issued certificate is parsed and checked again (signed by the CA, no CA itself, exactly that name, EC key of at least 256 bits). EKU `serverAuth, clientAuth`, valid 825 days. | `ClusterCa.issue`, `NodeCertificates` |
+| What a node certificate says | Exactly one subject alternative name, the URI `vectolyn-node:<node-id>`. The CA writes subject and name itself from the **token's** node id; keytool does not copy extensions out of the request, and every issued certificate is parsed and checked again (signed by the CA, no CA itself, exactly that name, EC key of at least 256 bits). EKU `serverAuth, clientAuth`, valid 825 days. | `ClusterCa.issue`, `NodeCertificates` |
 | Where the node key lives | Made on the node itself (keytool, EC P-256) in `secrets/cluster/node.p12`. It never leaves the node: the node sends a PKCS#10 request, keytool on the head checks its signature. | `NodeIdentity` |
 | How a joining node trusts the head | Before it sends the token, the TLS chain of the head must end in a self-signed CA whose public key has the pin of the join line (`sha256:` over the DER `SubjectPublicKeyInfo`, as in `kubeadm join --discovery-token-ca-cert-hash`), the head's certificate must chain to it by PKIX and be the node certificate of the head id in the join line. Every member holds a certificate of the same CA, so without the head id a member that sits in the path could play the head and take the token. A wrong pin or head id ends the connection in the handshake: the token never leaves the node. The answer must name the node id of the head's TLS certificate, carry the pinned CA and a certificate for this node's key and node id. | `ClusterTrust.pinned`, `ClusterService.join` |
 | Join token | `<id>.<secret>`, 6 and 32 characters of `[a-z0-9]` (165 bits). For one node id, expires (1m to 24h). The head keeps only id, node, expiry and SHA-256 of the secret (`secrets/cluster/join-tokens.yml`, owner only). The first request with the right secret uses it up, also for the wrong node id; three wrong secrets use it up too. Every token problem gets the same answer (`INVALID_TOKEN`), and an unknown id costs the same hash comparison as a known one. Whether an id exists can still show in the answer time (a known id is written back to the file); against 165 random bits of secret that does not help. | `JoinTokens` |
@@ -55,7 +55,7 @@ The whole `cluster` command is sensitive: none of its lines reaches the console 
 | A connection without a certificate | May send exactly one join request and is closed after the answer. A hello without certificate gets `Disconnect(AUTH_FAILED)`, a join with certificate or any other frame `PROTOCOL_ERROR`. | `ClusterServer` |
 | Who a member talks to | Only the head named in its `cluster.yml`: the TLS certificate of the peer must chain to the cluster CA, be a node certificate of the head's node id and not be on the member's revocation list. That list is empty on a member today: the head's certificate cannot be revoked toward the members yet; replacing it comes with promotion (step 3). | `ClusterService.startLink` |
 | Revocation | `cluster remove` moves the member's certificate fingerprint from the member list to `revoked` in `cluster.yml` and ends its session at once (`Disconnect(AUTH_FAILED)`). The member's next hello gets `REVOKED`. The list survives restarts. A removed node can come back only with a new token, and gets a new certificate. | `ClusterService.remove` |
-| One version | A node with another VectoraCloud version than the head does not join (the token stays valid) and gets no session (`VERSION_MISMATCH` with the head's version) until it is updated. The update system ([#74](https://github.com/VectoDE/VectoraCloud/issues/74)) plugs in at `VersionPolicy` and `ClusterService.Events.versionMismatch(own, head)`. The version is the one the node reports: the rule keeps honest nodes in step and is no security boundary (a node with a member certificate is trusted anyway). Builds outside a release jar report `dev`, so two such builds count as the same version. | `VersionPolicy` |
+| One version | A node with another VectolynCloud version than the head does not join (the token stays valid) and gets no session (`VERSION_MISMATCH` with the head's version) until it is updated. The update system ([#74](https://github.com/VectoDE/VectolynCloud/issues/74)) plugs in at `VersionPolicy` and `ClusterService.Events.versionMismatch(own, head)`. The version is the one the node reports: the rule keeps honest nodes in step and is no security boundary (a node with a member certificate is trusted anyway). Builds outside a release jar report `dev`, so two such builds count as the same version. | `VersionPolicy` |
 
 ### Limits on the cluster port
 

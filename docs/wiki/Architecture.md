@@ -23,7 +23,7 @@
                     │
                 MariaDB
 
- VectoraCloud (planned) starts, scales and watches all of the above.
+ VectolynCloud (planned) starts, scales and watches all of the above.
 ```
 
 ## Proxy (today)
@@ -39,13 +39,13 @@ Paper for Lobby, Survival, Creative and End; Fabric for the mod server. Backends
 Each server has two parts:
 
 - its template: configs with placeholders, tracked in git under `templates/<Server>/`
-- the service folder: jars, worlds, logs and generated files, in the network folder (the cloud home) outside the repository. VectoraCloud keeps the template of a wanted server at `<home>/local/templates/<Server>/default/` and renders it into `<home>/local/services/<id>` (static services, kept) or `<home>/temp/services/<id>_<run>` (dynamic services, deleted on stop). Configuration is in `<home>/config/`.
+- the service folder: jars, worlds, logs and generated files, in the network folder (the cloud home) outside the repository. VectolynCloud keeps the template of a wanted server at `<home>/local/templates/<Server>/default/` and renders it into `<home>/local/services/<id>` (static services, kept) or `<home>/temp/services/<id>_<run>` (dynamic services, deleted on stop). Configuration is in `<home>/config/`.
 
-The cloud home is the folder VectoraCloud runs in. In production it lives outside any checkout of the repository. For development, `./gradlew :cloud:node:runLocal` builds `VectoraCloud.jar` and starts it with `run/` in the repository root as the cloud home; Git ignores `run/` as a whole, secrets and worlds included.
+The cloud home is the folder VectolynCloud runs in. In production it lives outside any checkout of the repository. For development, `./gradlew :cloud:node:runLocal` builds `VectolynCloud.jar` and starts it with `run/` in the repository root as the cloud home; Git ignores `run/` as a whole, secrets and worlds included.
 
-Until stage 2 the existing servers run locally from a `runtime/` folder via the Windows start scripts. VectoraCloud does not use that folder name; its layout is described in [Cloud home](https://github.com/VectoDE/VectoraCloud/blob/main/docs/cloud/architecture.md#cloud-home).
+Until stage 2 the existing servers run locally from a `runtime/` folder via the Windows start scripts. VectolynCloud does not use that folder name; its layout is described in [Cloud home](https://github.com/VectoDE/VectolynCloud/blob/main/docs/cloud/architecture.md#cloud-home).
 
-## VectoraCloud (planned, stage 2)
+## VectolynCloud (planned, stage 2)
 
 A Java node with a console (JLine) and a setup wizard.
 
@@ -56,19 +56,19 @@ A Java node with a console (JLine) and a setup wizard.
 - **Java runtimes:** JREs from the Adoptium API, per server group matching the Minecraft version (8, 17, 21 or 25).
 - **Database:** the wizard offers three ways: download and manage MariaDB (Windows/Linux), start it in Docker, or use an existing MariaDB/MySQL. H2 is the fallback for tests. Connection pools are sized centrally so `Too many connections` does not come back.
 - **Secrets:** generated on first start into `secrets/` or `.env` (gitignored): Velocity forwarding secret, Floodgate key, DB passwords, API tokens, Discord token.
-- **Messaging:** Vectora's own channel (Netty/WebSocket) between cloud, proxy and servers.
+- **Messaging:** Vectolyn's own channel (Netty/WebSocket) between cloud, proxy and servers.
 - **API:** REST and WebSocket with token auth.
 - **Backups and monitoring (stage 2):** backups of worlds and database, monitoring of TPS, RAM and players with alerts.
 - **Extras (stage 8):** web dashboard (including the full setup), Discord bot, website and cosmetic store. The operator hosts them and brings their own bot token and Stripe account.
 - **Operation:** Docker image on GHCR (Dockerfile and compose file in the repository), Pterodactyl egg, systemd unit, start scripts for Windows, Linux and macOS.
 
-## Vectora plugin (planned, stage 3)
+## Vectolyn plugin (planned, stage 3)
 
 Several Gradle modules (core, permissions, social, moderation, stats, economy, survival, creative, minigames, anti-cheat, lobby, portal bridge) are bundled into one plugin per platform:
 
-- `Vectora-Paper.jar`
-- `Vectora-Velocity.jar`
-- `Vectora-Fabric.jar`
+- `Vectolyn-Paper.jar`
+- `Vectolyn-Velocity.jar`
+- `Vectolyn-Fabric.jar`
 
 The cloud config decides which modules a server group enables, and the cloud ships the matching jar. Version adapters cover Minecraft 1.8.8 to 26.3. The plugin replaces LuckPerms, TAB, WorldEdit, WorldGuard, PlaceholderAPI, ProxyPortal and Chunky.
 

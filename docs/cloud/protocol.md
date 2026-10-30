@@ -1,6 +1,6 @@
 # Cloud protocol
 
-`common/protocol` (`net.vectora.protocol`) is the binary format that VectoraCloud uses to talk to the services it starts (bridges, later the Vectora plugin) and to other cloud nodes. Both ends share this one module, so they cannot drift apart.
+`common/protocol` (`net.vectolyn.protocol`) is the binary format that VectolynCloud uses to talk to the services it starts (bridges, later the Vectolyn plugin) and to other cloud nodes. Both ends share this one module, so they cannot drift apart.
 
 The module has no dependencies, not even Netty. Proxies and servers ship their own Netty versions, and a second copy on their class path invites conflicts. The codec works on `byte[]` and `java.nio.ByteBuffer`; the transport (Netty in `cloud/network`, plain sockets in `common/client`, TLS sockets on the cluster port in `cloud/cluster`) only moves bytes. Between nodes the frames travel over TLS 1.3; the cluster's own payloads are carried in `Request` and `Response` on the channels `cluster.join` and `cluster.hello` and described in [cluster.md](cluster.md#wire-format).
 
@@ -71,7 +71,7 @@ Exception messages never contain the offending string itself, since it may hold 
 
 ## Messages
 
-All messages are immutable records in `net.vectora.protocol.message`, listed in `MessageRegistry.standard()`.
+All messages are immutable records in `net.vectolyn.protocol.message`, listed in `MessageRegistry.standard()`.
 
 | Id | Message | Direction | Payload |
 |---|---|---|---|

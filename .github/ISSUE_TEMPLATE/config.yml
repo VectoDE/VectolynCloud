@@ -1,11 +1,11 @@
 blank_issues_enabled: false
 contact_links:
   - name: Question / Frage
-    url: https://github.com/VectoDE/VectoraCloud/discussions/categories/q-a
+    url: https://github.com/VectoDE/VectolynCloud/discussions/categories/q-a
     about: Ask in Discussions (Q&A). / Fragen bitte in den Discussions (Q&A) stellen.
   - name: Idea or feedback / Idee oder Feedback
-    url: https://github.com/VectoDE/VectoraCloud/discussions/categories/ideas
+    url: https://github.com/VectoDE/VectolynCloud/discussions/categories/ideas
     about: Loose ideas and roadmap feedback go to Discussions. / Lose Ideen und Feedback zur Roadmap gehören in die Discussions.
   - name: Security vulnerability / Sicherheitslücke
-    url: https://github.com/VectoDE/VectoraCloud/security/advisories/new
+    url: https://github.com/VectoDE/VectolynCloud/security/advisories/new
     about: Report privately, never in a public issue. / Bitte privat melden, nie in einem öffentlichen Issue.

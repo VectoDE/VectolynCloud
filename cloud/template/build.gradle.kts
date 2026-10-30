@@ -1,10 +1,10 @@
 plugins {
-    id("vectora.java-conventions")
+    id("vectolyn.java-conventions")
     // The placeholder renderer reads template files, which are untrusted input for the cloud.
-    id("vectora.fuzz-conventions")
+    id("vectolyn.fuzz-conventions")
 }
 
-vectora {
+vectolyn {
     // Jar and manifest name from before the repository layout change.
     artifactName = "cloud-template"
 }

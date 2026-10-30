@@ -113,7 +113,7 @@ proxies:
   velocity:
     enabled: true
     online-mode: true
-    secret: {{VECTORA_FORWARDING_SECRET}}
+    secret: {{VECTOLYN_FORWARDING_SECRET}}
 scoreboards:
   save-empty-scoreboard-teams: true
   track-plugin-scoreboards: false

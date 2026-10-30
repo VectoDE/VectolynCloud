@@ -2,29 +2,29 @@
 
 [Deutsch](Operations-DE)
 
-How to run VectoraCloud on your own machine. We do not host anything; every release only contains files you run yourself. The full page with every detail is [docs/cloud/operations.md](https://github.com/VectoDE/VectoraCloud/blob/main/docs/cloud/operations.md).
+How to run VectolynCloud on your own machine. We do not host anything; every release only contains files you run yourself. The full page with every detail is [docs/cloud/operations.md](https://github.com/VectoDE/VectolynCloud/blob/main/docs/cloud/operations.md).
 
 ## Downloads
 
-Each [release](https://github.com/VectoDE/VectoraCloud/releases) contains:
+Each [release](https://github.com/VectoDE/VectolynCloud/releases) contains:
 
-- `VectoraCloud.jar`
-- `VectoraCloud-<version>-windows.zip` with `start.bat` and `start.ps1`
-- `VectoraCloud-<version>-linux-macos.tar.gz` with `start.sh`
+- `VectolynCloud.jar`
+- `VectolynCloud-<version>-windows.zip` with `start.bat` and `start.ps1`
+- `VectolynCloud-<version>-linux-macos.tar.gz` with `start.sh`
 - `SHA256SUMS`, a cosign signature for every file and SLSA provenance
 
 Nothing else: the plugin jars are not part of a release.
 
-The container image is `ghcr.io/vectode/vectora-cloud:<version>`; `latest` points to the newest stable release only. Dockerfile, `compose.yml`, the systemd unit and the Pterodactyl egg are in [`cloud/dist/`](https://github.com/VectoDE/VectoraCloud/tree/main/cloud/dist).
+The container image is `ghcr.io/vectode/vectolyn-cloud:<version>`; `latest` points to the newest stable release only. Dockerfile, `compose.yml`, the systemd unit and the Pterodactyl egg are in [`cloud/dist/`](https://github.com/VectoDE/VectolynCloud/tree/main/cloud/dist).
 
 ## Where it runs
 
 | Platform | How |
 |---|---|
 | Windows | unpack the zip, run `start.bat` in a normal (not elevated) console |
-| Linux, VPS | `start.sh`, permanently with the systemd unit `vectora-cloud.service` under a user `vectora` |
+| Linux, VPS | `start.sh`, permanently with the systemd unit `vectolyn-cloud.service` under a user `vectolyn` |
 | macOS | unpack the tar, run `./start.sh`; the managed database falls back to H2 |
-| Docker | `docker run --init -v vectora:/data ghcr.io/vectode/vectora-cloud:<version>`, or `compose.yml` with MariaDB |
+| Docker | `docker run --init -v vectolyn:/data ghcr.io/vectode/vectolyn-cloud:<version>`, or `compose.yml` with MariaDB |
 | Pterodactyl | import the egg, one allocation per port, raise the Wings PID limit of 512 |
 
 Give the cloud its own folder as cloud home, outside any checkout of the repository. The `run/` folder that `./gradlew :cloud:node:runLocal` uses is for development only.
@@ -37,14 +37,14 @@ Without a terminal (systemd, Docker, Pterodactyl) the cloud needs a setup file: 
 
 ## Where the files are
 
-Everything is below the cloud home: `config/` (configuration), `local/` (templates and the worlds of the static services), `database/`, `storage/` (downloads and Java runtimes), `secrets/`, `backups/`, `logs/` and `state/`. Back up `config/`, `local/` and `secrets/`; `storage/`, `temp/` and `logs/` come back on their own. A home from an older version is moved to this layout at the first start of a new version, after a copy of the configuration into `backups/`. Stop the old cloud and its servers first. Details: [upgrading](https://github.com/VectoDE/VectoraCloud/blob/main/docs/cloud/operations.md#what-is-where-and-upgrading-from-an-older-home).
+Everything is below the cloud home: `config/` (configuration), `local/` (templates and the worlds of the static services), `database/`, `storage/` (downloads and Java runtimes), `secrets/`, `backups/`, `logs/` and `state/`. Back up `config/`, `local/` and `secrets/`; `storage/`, `temp/` and `logs/` come back on their own. A home from an older version is moved to this layout at the first start of a new version, after a copy of the configuration into `backups/`. Stop the old cloud and its servers first. Details: [upgrading](https://github.com/VectoDE/VectolynCloud/blob/main/docs/cloud/operations.md#what-is-where-and-upgrading-from-an-older-home).
 
 ## Several nodes
 
-A cluster is one head and its members; the details, the trust model and the commands are in [cluster.md](https://github.com/VectoDE/VectoraCloud/blob/main/docs/cloud/cluster.md). What operations has to know:
+A cluster is one head and its members; the details, the trust model and the commands are in [cluster.md](https://github.com/VectoDE/VectolynCloud/blob/main/docs/cloud/cluster.md). What operations has to know:
 
 - **Database:** every node needs a MariaDB server that all nodes reach: `database.mode: external` with an address of the cluster network. With `h2` the head refuses tokens and joins. `managed` and `docker` bind MariaDB to 127.0.0.1, so with them only nodes on the same machine can join; their binding to the cluster network follows with the next step of the cluster.
-- **Same version:** every node runs the head's VectoraCloud version. A node on another version does not join, or gets no session, until it is updated.
+- **Same version:** every node runs the head's VectolynCloud version. A node on another version does not join, or gets no session, until it is updated.
 - **Firewall:** the head's cluster port (TCP 7011 by default) open for the other nodes only. In Docker publish it as well (`-p 7011:7011`) and give `cluster init` the host's address. The ports for proxies and backends across nodes come with the next step of the cluster.
 - **Backup:** `secrets/cluster/` of the head holds the cluster CA; it is part of the backup of `secrets/`. Without it no node can join any more.
 - **Removing a node:** `cluster remove <node-id>` on the head revokes its certificate at once. Joining again needs a new token.
@@ -54,11 +54,11 @@ A cluster is one head and its members; the details, the trust model and the comm
 
 ```sh
 sha256sum --check --ignore-missing SHA256SUMS
-cosign verify-blob VectoraCloud.jar --bundle VectoraCloud.jar.sigstore.json \
-  --certificate-identity "https://github.com/VectoDE/VectoraCloud/.github/workflows/release.yml@refs/tags/<tag>" \
+cosign verify-blob VectolynCloud.jar --bundle VectolynCloud.jar.sigstore.json \
+  --certificate-identity "https://github.com/VectoDE/VectolynCloud/.github/workflows/release.yml@refs/tags/<tag>" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
-gh attestation verify VectoraCloud.jar --repo VectoDE/VectoraCloud
-gh attestation verify oci://ghcr.io/vectode/vectora-cloud:<version> --repo VectoDE/VectoraCloud
+gh attestation verify VectolynCloud.jar --repo VectoDE/VectolynCloud
+gh attestation verify oci://ghcr.io/vectode/vectolyn-cloud:<version> --repo VectoDE/VectolynCloud
 ```
 
-This applies to every release after v0.1.0. v0.1.0 was signed before the repository was renamed from `VectoDE/Vectora-Network`; for it, use `VectoDE/Vectora-Network` in the certificate identity and in `--repo`. Details: [docs/cloud/operations.md](https://github.com/VectoDE/VectoraCloud/blob/main/docs/cloud/operations.md#verifying-a-release).
+This applies to every release after v0.1.0. Check v0.1.0 against the owner instead (`gh attestation verify ... --owner VectoDE`). Details: [docs/cloud/operations.md](https://github.com/VectoDE/VectolynCloud/blob/main/docs/cloud/operations.md#verifying-a-release).

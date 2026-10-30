@@ -2,7 +2,7 @@
 
 English: [setup.md](setup.md)
 
-VectoraCloud hat einen Startpunkt: `java -jar VectoraCloud.jar`. Solange in `config/cloud.yml` `setup-complete: false` steht, läuft die Einrichtung, bevor der Node einen Server startet. Es gibt drei Wege, und alle schreiben über denselben `ConfigService` wie die Konsolenbefehle und Änderungen von Hand:
+VectolynCloud hat einen Startpunkt: `java -jar VectolynCloud.jar`. Solange in `config/cloud.yml` `setup-complete: false` steht, läuft die Einrichtung, bevor der Node einen Server startet. Es gibt drei Wege, und alle schreiben über denselben `ConfigService` wie die Konsolenbefehle und Änderungen von Hand:
 
 | Weg | Wann | Wie |
 |---|---|---|
@@ -10,7 +10,7 @@ VectoraCloud hat einen Startpunkt: `java -jar VectoraCloud.jar`. Solange in `con
 | Setup-Datei | Docker, Pterodactyl, CI, jeder Start ohne jemanden an der Tastatur | `--setup-file setup.yml` |
 | Dateien und Befehle | jederzeit danach | `config/cloud.yml`, `config/groups/`, `config/tasks/` bearbeiten oder `config set`, `group`, `task` (siehe [Konsole](console.de.md)) |
 
-Das Dashboard kommt später als vierter Weg dazu und nutzt dieselbe Schicht. Der Code liegt in `cloud/setup` (`net.vectora.cloud.setup`).
+Das Dashboard kommt später als vierter Weg dazu und nutzt dieselbe Schicht. Der Code liegt in `cloud/setup` (`net.vectolyn.cloud.setup`).
 
 ## Die Fragen
 
@@ -47,7 +47,7 @@ Reihenfolge wie unten. Jede Frage zeigt ihren Vorschlag in eckigen Klammern, Ent
 
 Danach kommt eine Zusammenfassung: alle Antworten, die erzeugten Secrets (als „verborgen“) und die Dateien, die geschrieben würden. Zur Wahl stehen `save`, `change` (alle Fragen noch einmal, mit deinen Antworten als Vorschlag) und `cancel`. Geschrieben wird nur bei `save`. Findet die Prüfung ein Problem, gibt es `save` erst, wenn die Antwort geändert ist.
 
-Nach dem Speichern sagt der Assistent, wer `secrets/vectora.env` lesen kann (siehe [unten](#wer-die-secrets-lesen-kann)).
+Nach dem Speichern sagt der Assistent, wer `secrets/vectolyn.env` lesen kann (siehe [unten](#wer-die-secrets-lesen-kann)).
 
 ### Das Passwort einer externen Datenbank
 
@@ -55,7 +55,7 @@ Secrets erscheinen nie auf dem Bildschirm und landen nie in der History der Kons
 
 - **Die Konsole verbirgt Eingaben** (JLine in einem echten Terminal): Das Passwort wird maskiert abgefragt. Bei einem späteren Lauf behält Enter das gespeicherte.
 - **Die Konsole zeigt Eingaben** (einfaches stdin, etwa manche IDEs oder `docker attach` ohne TTY): Der Assistent weist darauf hin und bietet drei Wege an:
-  - `file`: Du trägst `VECTORA_DB_PASSWORD=...` selbst in `secrets/vectora.env` ein (der volle Pfad wird angezeigt) und bestätigst. Der Assistent prüft die Datei und fragt erneut, bis er einen Wert findet.
+  - `file`: Du trägst `VECTOLYN_DB_PASSWORD=...` selbst in `secrets/vectolyn.env` ein (der volle Pfad wird angezeigt) und bestätigst. Der Assistent prüft die Datei und fragt erneut, bis er einen Wert findet.
   - `type`: Du tippst es trotzdem ein und weißt, dass es sichtbar ist.
   - `keep`: Das gespeicherte Passwort bleibt (nur, wenn es eins gibt).
 
@@ -70,7 +70,7 @@ Der Konsolenbefehl `setup` stellt die Fragen noch einmal. Die aktuelle Konfigura
 Für Starts ohne Fragen:
 
 ```sh
-java -jar VectoraCloud.jar --non-interactive --setup-file /data/setup.yml
+java -jar VectolynCloud.jar --non-interactive --setup-file /data/setup.yml
 ```
 
 Das Format und ein vollständiges Beispiel stehen in der [englischen Fassung](setup.md#setup-file---setup-file). Die Regeln:
@@ -80,7 +80,7 @@ Das Format und ein vollständiges Beispiel stehen in der [englischen Fassung](se
 - `memory` und `minigames` dürfen nur Gruppen nennen, die es gibt oder die die Einrichtung anlegt. `services` darf nur Tasks nennen, die es gibt oder die die Einrichtung anlegt. Die Proxys gehören nicht dazu, sie laufen immer mit einem Dienst. Jeder Eintrag wird wie eine getippte Antwort geprüft (`statisch ≤ min ≤ max`, max von 1 bis 1000), fehlende Zahlen behalten ihren Vorschlag. `drain-timeout` (pro Gruppe, 5s bis 10m) darf ebenfalls nur Gruppen nennen, die es gibt oder die die Einrichtung anlegt. Der Assistent an der Konsole fragt danach unter den erweiterten Einstellungen, später ändert es `group set <Name> drain-timeout`.
 - `node` (mit `max-memory`, mindestens 512M, und `memory-reserve` mit `system`, `node-overhead`, `database`, je 1M bis 64G) ändert den Node, als der diese Cloud läuft (`node-id` in `cloud.yml`), und wird wie `nodes.yml` geprüft. Ein weggelassenes Feld behält seinen Wert oder Default (1G, 256M, 512M). Der Assistent an der Konsole fragt danach unter den erweiterten Einstellungen, später ändert es `node set`. `max-memory: auto` entfernt die Grenze; anderer Text als eine Größe wird abgelehnt.
 - Die Datei zählt nur, solange `setup-complete` false ist. Danach wird eine weiterhin gemountete Datei übergangen, damit sie spätere Änderungen über `config set` oder das Dashboard nicht zurückdreht.
-- Die Datei enthält kein Secret. Das Passwort einer externen Datenbank kommt aus `secrets/vectora.env` (`VECTORA_DB_PASSWORD`) oder aus `database.password-file`: eine normale Datei (eine Verknüpfung darauf geht, ein FIFO oder Gerät nicht) mit dem Passwort in einer Zeile (ein Zeilenumbruch am Ende wird entfernt), höchstens 4 KiB, UTF-8, relativ zum Home oder absolut. Das passt zu Docker- und Kubernetes-Secrets.
+- Die Datei enthält kein Secret. Das Passwort einer externen Datenbank kommt aus `secrets/vectolyn.env` (`VECTOLYN_DB_PASSWORD`) oder aus `database.password-file`: eine normale Datei (eine Verknüpfung darauf geht, ein FIFO oder Gerät nicht) mit dem Passwort in einer Zeile (ein Zeilenumbruch am Ende wird entfernt), höchstens 4 KiB, UTF-8, relativ zum Home oder absolut. Das passt zu Docker- und Kubernetes-Secrets.
 
 ### Warum eine Datei und keine Umgebungsvariablen
 
@@ -93,13 +93,13 @@ Plattformen, die in Variablen denken, können die Datei trotzdem daraus erzeugen
 
 ### Pterodactyl
 
-Die Fragen funktionieren in der Panel-Konsole. Ihre Eingaben sieht jeder, der die Konsole öffnen kann, deshalb bietet der Assistent an, das Passwort stattdessen über den Dateimanager in `secrets/vectora.env` einzutragen.
+Die Fragen funktionieren in der Panel-Konsole. Ihre Eingaben sieht jeder, der die Konsole öffnen kann, deshalb bietet der Assistent an, das Passwort stattdessen über den Dateimanager in `secrets/vectolyn.env` einzutragen.
 
 Für ein Egg ohne Fragen erzeugt Wings die Setup-Datei aus Egg-Variablen über `config.files` mit dem Parser `yaml`. Der Startbefehl bekommt `--non-interactive --setup-file setup.yml`. Ein Beispiel steht in der [englischen Fassung](setup.md#pterodactyl). `docker` wird auf Pterodactyl abgelehnt, `SERVER_PORT` ist der Vorschlag für den Java-Port, `SERVER_MEMORY` die Grenze für die Speicherwarnung.
 
 ## Wer die Secrets lesen kann
 
-`secrets/vectora.env` ist auf das Konto beschränkt, unter dem die Cloud läuft (siehe [config](config.md#generation-and-storage)). Nach dem Speichern sagt der Assistent, wer trotzdem herankommt:
+`secrets/vectolyn.env` ist auf das Konto beschränkt, unter dem die Cloud läuft (siehe [config](config.md#generation-and-storage)). Nach dem Speichern sagt der Assistent, wer trotzdem herankommt:
 
 - **Linux und macOS:** der Besitzer und root.
 - **Windows:** der Besitzer und die Mitglieder der lokalen Administratorengruppe. Sie stehen nicht in der Zugriffsliste, aber Windows erlaubt ihnen immer, den Besitz einer Datei zu übernehmen und sie dann zu lesen. Der Gruppenname ist übersetzt (`BUILTIN\Administrators`, `VORDEFINIERT\Administratoren`, …). Der Assistent ermittelt ihn deshalb mit `%SystemRoot%\System32\whoami.exe /groups` und nennt immer die SID `S-1-5-32-544`, die auf jedem Windows gleich ist. Halte diese Gruppe auf einem Server mit der Cloud klein.

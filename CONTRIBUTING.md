@@ -1,13 +1,13 @@
-# Contributing to Vectora
+# Contributing to Vectolyn
 
 [Deutsch](CONTRIBUTING.de.md)
 
-Thanks for wanting to help. Vectora is at an early stage, so the rules below are short. They will grow with the code.
+Thanks for wanting to help. Vectolyn is at an early stage, so the rules below are short. They will grow with the code.
 
 ## Before you start
 
 - Read the [README](README.md) and the [roadmap](https://github.com/users/VectoDE/projects/11).
-- Questions and loose ideas go to [Discussions](https://github.com/VectoDE/VectoraCloud/discussions).
+- Questions and loose ideas go to [Discussions](https://github.com/VectoDE/VectolynCloud/discussions).
 - For a bug or a concrete feature, open an issue with one of the forms. For anything bigger than a small fix, wait for a reply on the issue before you write code. That saves you work if the change does not fit the plan.
 - Security problems: see [SECURITY.md](SECURITY.md). Never in a public issue.
 

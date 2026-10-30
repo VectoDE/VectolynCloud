@@ -1,4 +1,4 @@
-// Backups of VectoraCloud: archives of the static services (worlds and configuration from
+// Backups of VectolynCloud: archives of the static services (worlds and configuration from
 // local/services/<id>/), database dumps, manifest with hashes, retention, schedule, restore and the console
 // commands. cloud-node implements the small interfaces (BackupTargets, ServiceControl,
 // DatabaseSource) and starts the scheduler. The manifest is read back from archives that may have
@@ -6,11 +6,11 @@
 // Details: docs/cloud/backup.md
 
 plugins {
-    id("vectora.java-conventions")
-    id("vectora.fuzz-conventions")
+    id("vectolyn.java-conventions")
+    id("vectolyn.fuzz-conventions")
 }
 
-vectora {
+vectolyn {
     // Jar and manifest name from before the repository layout change.
     artifactName = "cloud-backup"
 }
@@ -44,8 +44,8 @@ val mariadbTest by tasks.registering(Test::class) {
     useJUnitPlatform {
         includeTags("mariadb")
     }
-    systemProperty("vectora.mariadb.cache", layout.buildDirectory.dir("mariadb-cache").get().asFile.absolutePath)
-    providers.gradleProperty("mariadbVersion").orNull?.let { systemProperty("vectora.mariadb.version", it) }
+    systemProperty("vectolyn.mariadb.cache", layout.buildDirectory.dir("mariadb-cache").get().asFile.absolutePath)
+    providers.gradleProperty("mariadbVersion").orNull?.let { systemProperty("vectolyn.mariadb.version", it) }
     outputs.upToDateWhen { false }
     outputs.cacheIf { false }
 }

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Packs the VectoraCloud release files. Used by .github/workflows/release.yml and, as a dry run,
+# Packs the VectolynCloud release files. Used by .github/workflows/release.yml and, as a dry run,
 # by .github/workflows/operations.yml, so both produce exactly the same files.
 #
-#   cloud/dist/package.sh <version> <VectoraCloud.jar> <output folder>
+#   cloud/dist/package.sh <version> <VectolynCloud.jar> <output folder>
 #
 # Writes into <output folder>:
-#   VectoraCloud.jar                              the jar, unchanged
-#   VectoraCloud-<version>-windows.zip            VectoraCloud.jar, start.bat, start.ps1
-#   VectoraCloud-<version>-linux-macos.tar.gz     VectoraCloud.jar, start.sh (executable)
+#   VectolynCloud.jar                              the jar, unchanged
+#   VectolynCloud-<version>-windows.zip            VectolynCloud.jar, start.bat, start.ps1
+#   VectolynCloud-<version>-linux-macos.tar.gz     VectolynCloud.jar, start.sh (executable)
 #
 # Why archives per operating system and not loose scripts: a downloaded start.sh loses its
 # executable bit, while the tar keeps it; the zip keeps the CRLF line ends of the Windows scripts;
@@ -20,7 +20,7 @@
 set -euo pipefail
 
 if [[ $# -ne 3 ]]; then
-    echo "usage: $0 <version> <VectoraCloud.jar> <output folder>" >&2
+    echo "usage: $0 <version> <VectolynCloud.jar> <output folder>" >&2
     exit 64
 fi
 version=$1
@@ -44,14 +44,14 @@ out=$(cd -- "${out}" && pwd -P)
 staging=$(mktemp -d)
 trap 'rm -rf -- "${staging}"' EXIT
 
-windows="VectoraCloud-${version}-windows"
-unix="VectoraCloud-${version}-linux-macos"
+windows="VectolynCloud-${version}-windows"
+unix="VectolynCloud-${version}-linux-macos"
 mkdir -- "${staging}/${windows}" "${staging}/${unix}"
 
-install -m 0644 -- "${jar}" "${out}/VectoraCloud.jar"
-install -m 0644 -- "${jar}" "${staging}/${windows}/VectoraCloud.jar"
+install -m 0644 -- "${jar}" "${out}/VectolynCloud.jar"
+install -m 0644 -- "${jar}" "${staging}/${windows}/VectolynCloud.jar"
 install -m 0644 -- "${dist_dir}/start.bat" "${dist_dir}/start.ps1" "${staging}/${windows}/"
-install -m 0644 -- "${jar}" "${staging}/${unix}/VectoraCloud.jar"
+install -m 0644 -- "${jar}" "${staging}/${unix}/VectolynCloud.jar"
 install -m 0755 -- "${dist_dir}/start.sh" "${staging}/${unix}/start.sh"
 
 # The Windows scripts must have CRLF line ends (.gitattributes), start.sh must have LF.
@@ -76,4 +76,4 @@ find "${staging}" -exec touch -h -d "@${epoch}" {} +
     find "${windows}" -print | LC_ALL=C sort | TZ=UTC zip -X -q -@ "${out}/${windows}.zip"
 )
 
-ls -l -- "${out}/VectoraCloud.jar" "${out}/${windows}.zip" "${out}/${unix}.tar.gz"
+ls -l -- "${out}/VectolynCloud.jar" "${out}/${windows}.zip" "${out}/${unix}.tar.gz"

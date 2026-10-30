@@ -23,7 +23,7 @@
                     │
                 MariaDB
 
- VectoraCloud (geplant) startet, skaliert und überwacht alles oben.
+ VectolynCloud (geplant) startet, skaliert und überwacht alles oben.
 ```
 
 ## Proxy (heute)
@@ -39,13 +39,13 @@ Paper für Lobby, Survival, Creative und End, Fabric für den Mod-Server. Die Ba
 Jeder Server besteht aus zwei Teilen:
 
 - seiner Vorlage: Configs mit Platzhaltern, in Git unter `templates/<Server>/`
-- dem Dienst-Ordner: Jars, Welten, Logs und erzeugte Dateien, im Netzwerk-Ordner (dem Cloud-Home) außerhalb des Repositorys. VectoraCloud legt die Vorlage eines gewollten Servers unter `<Home>/local/templates/<Server>/default/` ab und rendert sie nach `<Home>/local/services/<id>` (statische Dienste, bleiben erhalten) oder `<Home>/temp/services/<id>_<run>` (dynamische Dienste, beim Stopp gelöscht). Die Konfiguration liegt in `<Home>/config/`.
+- dem Dienst-Ordner: Jars, Welten, Logs und erzeugte Dateien, im Netzwerk-Ordner (dem Cloud-Home) außerhalb des Repositorys. VectolynCloud legt die Vorlage eines gewollten Servers unter `<Home>/local/templates/<Server>/default/` ab und rendert sie nach `<Home>/local/services/<id>` (statische Dienste, bleiben erhalten) oder `<Home>/temp/services/<id>_<run>` (dynamische Dienste, beim Stopp gelöscht). Die Konfiguration liegt in `<Home>/config/`.
 
-Das Cloud-Home ist der Ordner, in dem VectoraCloud läuft. Im Produktivbetrieb liegt es außerhalb jedes Checkouts des Repositorys. Zum Entwickeln baut `./gradlew :cloud:node:runLocal` die `VectoraCloud.jar` und startet sie mit `run/` im Wurzelverzeichnis des Repositorys als Cloud-Home. Git ignoriert `run/` komplett, Secrets und Welten eingeschlossen.
+Das Cloud-Home ist der Ordner, in dem VectolynCloud läuft. Im Produktivbetrieb liegt es außerhalb jedes Checkouts des Repositorys. Zum Entwickeln baut `./gradlew :cloud:node:runLocal` die `VectolynCloud.jar` und startet sie mit `run/` im Wurzelverzeichnis des Repositorys als Cloud-Home. Git ignoriert `run/` komplett, Secrets und Welten eingeschlossen.
 
-Bis Etappe 2 laufen die vorhandenen Server lokal aus einem `runtime/`-Ordner über die Windows-Startskripte. VectoraCloud nutzt diesen Ordnernamen nicht; der Aufbau steht unter [Cloud home](https://github.com/VectoDE/VectoraCloud/blob/main/docs/cloud/architecture.md#cloud-home) (Englisch).
+Bis Etappe 2 laufen die vorhandenen Server lokal aus einem `runtime/`-Ordner über die Windows-Startskripte. VectolynCloud nutzt diesen Ordnernamen nicht; der Aufbau steht unter [Cloud home](https://github.com/VectoDE/VectolynCloud/blob/main/docs/cloud/architecture.md#cloud-home) (Englisch).
 
-## VectoraCloud (geplant, Etappe 2)
+## VectolynCloud (geplant, Etappe 2)
 
 Ein Java-Node mit Konsole (JLine) und Einrichtungsassistent.
 
@@ -62,13 +62,13 @@ Ein Java-Node mit Konsole (JLine) und Einrichtungsassistent.
 - **Extras (Etappe 8):** Web-Dashboard (inklusive kompletter Einrichtung), Discord-Bot, Website und kosmetischer Store. Der Betreiber hostet sie selbst und bringt eigenen Bot-Token und eigenes Stripe-Konto mit.
 - **Betrieb:** Docker-Image auf GHCR (Dockerfile und compose-Datei im Repository), Pterodactyl-Egg, systemd-Unit, Startskripte für Windows, Linux und macOS.
 
-## Vectora-Plugin (geplant, Etappe 3)
+## Vectolyn-Plugin (geplant, Etappe 3)
 
 Mehrere Gradle-Module (Core, Rechte, Soziales, Moderation, Statistiken, Economy, Survival, Creative, Minigames, Anti-Cheat, Lobby, PortalBridge) werden zu einem Plugin pro Plattform gebündelt:
 
-- `Vectora-Paper.jar`
-- `Vectora-Velocity.jar`
-- `Vectora-Fabric.jar`
+- `Vectolyn-Paper.jar`
+- `Vectolyn-Velocity.jar`
+- `Vectolyn-Fabric.jar`
 
 Welche Module eine Server-Gruppe aktiviert, steht in der Cloud-Konfiguration; die Cloud verteilt die passende Jar. Versionsadapter decken Minecraft 1.8.8 bis 26.3 ab. Das Plugin ersetzt LuckPerms, TAB, WorldEdit, WorldGuard, PlaceholderAPI, ProxyPortal und Chunky.
 

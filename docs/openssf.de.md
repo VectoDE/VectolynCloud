@@ -2,7 +2,7 @@
 
 [English](openssf.md)
 
-Das Repository lässt [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/VectoDE/VectoraCloud) bei jedem Push auf `main`, wöchentlich und auf Abruf laufen ([`scorecard.yml`](../.github/workflows/scorecard.yml)). Die Funde stehen unter *Security and quality* neben denen von CodeQL. Außerdem hat das Projekt das [OpenSSF-Best-Practices-Badge](https://www.bestpractices.dev/projects/16026).
+Das Repository lässt [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/VectoDE/VectolynCloud) bei jedem Push auf `main`, wöchentlich und auf Abruf laufen ([`scorecard.yml`](../.github/workflows/scorecard.yml)). Die Funde stehen unter *Security and quality* neben denen von CodeQL. Außerdem hat das Projekt das [OpenSSF-Best-Practices-Badge](https://www.bestpractices.dev/projects/16026).
 
 ## Die Aufräum-Prüfung
 
@@ -13,7 +13,7 @@ Sie läuft am Ende jeder Etappe und vor jedem Release-Tag. Eine Etappe ist erst 
 3. CI, CodeQL, Dependency Review und Scorecard sind nach dem letzten Merge auf dem neuesten Commit von `main` gelaufen. Bringt ein Lauf etwas Neues hervor, wird es behoben, und die Läufe wiederholen sich, bis nichts Behebbares übrig ist.
 4. Was offen bleibt, steht unten mit Begründung.
 
-Die erste Runde dieser Prüfung war [Issue #71](https://github.com/VectoDE/VectoraCloud/issues/71).
+Die erste Runde dieser Prüfung war [Issue #71](https://github.com/VectoDE/VectolynCloud/issues/71).
 
 ## Was umgesetzt ist
 

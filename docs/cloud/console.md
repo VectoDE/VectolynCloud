@@ -1,6 +1,6 @@
-# VectoraCloud console
+# VectolynCloud console
 
-Module `cloud/console`, package `net.vectora.cloud.console`. It reads commands from the terminal, runs them, and offers a question API that the setup assistant builds on. Every change to the configuration goes through [cloud-config](config.md), so a command is checked exactly like a hand-edited file.
+Module `cloud/console`, package `net.vectolyn.cloud.console`. It reads commands from the terminal, runs them, and offers a question API that the setup assistant builds on. Every change to the configuration goes through [cloud-config](config.md), so a command is checked exactly like a hand-edited file.
 
 German version of the command reference: [console.de.md](console.de.md).
 
@@ -17,9 +17,9 @@ German version of the command reference: [console.de.md](console.de.md).
 
 `ffm` uses the Foreign Function & Memory API, which is final since Java 22. On Java 21 its classes are not even loaded; the check is the running version, never the order of jars on the class path. This is the one place in the cloud that uses a Java 22+ API, see [Java compatibility](../java-compatibility.md).
 
-Override with the system property `vectora.console` or the environment variable `VECTORA_CONSOLE`: `auto` (default), `ffm`, `jni`, `dumb` or `plain`. A provider that is not available falls back to the next one in the table, and the log says why.
+Override with the system property `vectolyn.console` or the environment variable `VECTOLYN_CONSOLE`: `auto` (default), `ffm`, `jni`, `dumb` or `plain`. A provider that is not available falls back to the next one in the table, and the log says why.
 
-Both native providers call native code. Java 24 and newer warn about that unless native access is allowed, so `VectoraCloud.jar` declares `Enable-Native-Access: ALL-UNNAMED` in its manifest (the tests pass `--enable-native-access=ALL-UNNAMED`).
+Both native providers call native code. Java 24 and newer warn about that unless native access is allowed, so `VectolynCloud.jar` declares `Enable-Native-Access: ALL-UNNAMED` in its manifest (the tests pass `--enable-native-access=ALL-UNNAMED`).
 
 ### Log format
 
@@ -27,7 +27,7 @@ Every line that reaches the console has one format: `HH:mm:ss LEVEL message`, wi
 
 ### On a terminal (JLine)
 
-- Prompt `vectora> `, colored only if the terminal reports at least 8 colors and `NO_COLOR` is not set. Errors are red, warnings yellow, success green.
+- Prompt `vectolyn> `, colored only if the terminal reports at least 8 colors and `NO_COLOR` is not set. Errors are red, warnings yellow, success green.
 - Line editing, tab completion of commands, subcommands and values (keys of `config/cloud.yml`, group and task names, enum values).
 - Log lines appear above the prompt; the line being typed stays.
 - History in `<home>/state/console.history`, at most 500 lines, restricted to the owner. Not stored: answers to questions, secrets, lines of commands marked sensitive, lines that start with a space. If the file is a symbolic link, the history stays in memory.
@@ -42,7 +42,7 @@ Every line that reaches the console has one format: `HH:mm:ss LEVEL message`, wi
 - Lines longer than 4096 characters are refused.
 - The end of stdin only stops reading; the cloud keeps running. Under systemd and in Docker without `-i`, stdin is empty from the start. Stop the cloud with a signal (SIGTERM, `docker stop`), which the node handles.
 - Ctrl+C does not reach the console here. It goes to the JVM as a signal, like SIGTERM, and the node shuts down cleanly through its shutdown hook (every service gets its stop command). To cancel a question, type `!cancel`.
-- Secrets cannot be masked. Whatever feeds stdin may show them, for example a terminal whose output is piped (`java -jar VectoraCloud.jar | tee cloud.log`) or a panel. The question warns first.
+- Secrets cannot be masked. Whatever feeds stdin may show them, for example a terminal whose output is piped (`java -jar VectolynCloud.jar | tee cloud.log`) or a panel. The question warns first.
 
 ## Command line syntax
 
@@ -51,7 +51,7 @@ Every line that reaches the console has one format: `HH:mm:ss LEVEL message`, wi
 | `config set proxy.port 25566` | `config`, `set`, `proxy.port`, `25566` |
 | `config set network-name 'My Network'` | ..., `My Network` |
 | `"say \"hi\""` | `say "hi"` |
-| `"C:\Vectora"` | `C:\Vectora` (a backslash before other characters stays) |
+| `"C:\Vectolyn"` | `C:\Vectolyn` (a backslash before other characters stays) |
 | `a\ b` | `a b` |
 | `config set database.docker-image ""` | ..., empty word (clears an optional text) |
 
@@ -88,7 +88,7 @@ Clears the screen. Without an ANSI terminal it says so and does nothing.
 
 Keys: `network-name`, `language`, `eula-accepted`, `setup-complete`, `node-id`, `fallback-group`, `servers.<proxy|lobby|survival|creative|mod|end|database|minigame|legacy-server>`, `proxy.bind`, `proxy.port`, `proxy.bedrock-port`, `legacy-proxy.enabled`, `legacy-proxy.port`, `database.mode`, `database.host`, `database.port`, `database.name`, `database.user`, `database.docker-image`, `api.enabled`, `api.bind`, `api.port`, `api.tls.enabled`, `api.tls.keystore`, `api.cors-origins`.
 
-Values follow the file rules: `true` or `false` only, whole numbers, enum values in lower case. `""` clears `fallback-group` (back to the default `lobby`), `database.docker-image`, `api.tls.keystore` and `api.cors-origins`. `fallback-group` must name an existing group. `api.cors-origins` takes a comma-separated list of origins. Secrets are not in `cloud.yml`; they stay in `secrets/vectora.env`.
+Values follow the file rules: `true` or `false` only, whole numbers, enum values in lower case. `""` clears `fallback-group` (back to the default `lobby`), `database.docker-image`, `api.tls.keystore` and `api.cors-origins`. `fallback-group` must name an existing group. `api.cors-origins` takes a comma-separated list of origins. Secrets are not in `cloud.yml`; they stay in `secrets/vectolyn.env`.
 
 ### `setup`
 
@@ -171,7 +171,7 @@ console.commands().register(Command.builder("service")
 
 ```java
 Prompter ask = console.prompter();
-String name = ask.ask(Question.text(Text.of("Network name", "Netzwerkname")).defaultValue("Vectora"));
+String name = ask.ask(Question.text(Text.of("Network name", "Netzwerkname")).defaultValue("Vectolyn"));
 int port = ask.ask(Question.number(Text.of("Proxy port", "Proxy-Port"), 1, 65535).defaultValue(25565));
 boolean eula = ask.ask(Question.yesNo(Text.of("Accept the Minecraft EULA?", "Minecraft-EULA akzeptieren?")));
 DatabaseMode mode = ask.ask(Question.choice(Text.of("Database", "Datenbank"), List.of(
@@ -190,7 +190,7 @@ Secret password = ask.ask(Question.secret(Text.of("Database password", "Datenban
 | `secret` | Any text, typed masked (`*`) where the terminal can hide input, returned as `Secret`. Never stored in the history, never shown, not even as default. |
 | `custom(parser, display)` | Whatever the parser accepts; it throws `InvalidAnswerException` otherwise. |
 
-- On a console that cannot hide input (`ConsoleTerminal.hidesSecrets()` is false: JLine's `dumb` terminal, plain mode) a secret question first warns: "This console cannot hide what you type. To keep the value off the screen, type !cancel and put it into secrets/vectora.env instead."
+- On a console that cannot hide input (`ConsoleTerminal.hidesSecrets()` is false: JLine's `dumb` terminal, plain mode) a secret question first warns: "This console cannot hide what you type. To keep the value off the screen, type !cancel and put it into secrets/vectolyn.env instead."
 - `defaultValue` is taken on Enter. A secret default shows "Enter keeps the current value".
 - `validate` adds checks; a check returns null or a `Text` that says what is expected. Error messages never repeat the answer.
 - `help` prints a line before the question.

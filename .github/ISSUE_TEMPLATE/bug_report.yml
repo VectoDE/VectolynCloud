@@ -22,8 +22,8 @@ body:
         - Mod server
         - End server
         - Minigames
-        - VectoraCloud
-        - Vectora plugin
+        - VectolynCloud
+        - Vectolyn plugin
         - Build / CI
         - Documentation / wiki
         - Other / Sonstiges
@@ -59,7 +59,7 @@ body:
     id: versions
     attributes:
       label: Versions / Versionen
-      description: Minecraft client version, Vectora version or commit, Java version, OS. / Client-Version, Vectora-Version oder Commit, Java-Version, Betriebssystem.
+      description: Minecraft client version, Vectolyn version or commit, Java version, OS. / Client-Version, Vectolyn-Version oder Commit, Java-Version, Betriebssystem.
       placeholder: "Java 1.8.9 client, commit abc1234, Temurin 21, Windows 11"
     validations:
       required: true

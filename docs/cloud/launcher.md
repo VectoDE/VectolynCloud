@@ -1,6 +1,6 @@
-# VectoraCloud launcher
+# VectolynCloud launcher
 
-`cloud/launcher` is the entry point of `java -jar VectoraCloud.jar`. It runs a few checks, unpacks the node and its libraries, and hands over to the node. It has no third-party dependencies and never references a node class at compile time.
+`cloud/launcher` is the entry point of `java -jar VectolynCloud.jar`. It runs a few checks, unpacks the node and its libraries, and hands over to the node. It has no third-party dependencies and never references a node class at compile time.
 
 ## Start order
 
@@ -9,17 +9,17 @@ The order is fixed. Each step runs only if the one before it passed.
 1. **Java version.** `Bootstrap` (the `Main-Class`) reads `java.specification.version`. Below 21 it prints a German or English message with the version and path of the running Java and where to get Java 21, then exits with code 3.
 2. **Root or administrator.** See [below](#root-and-administrator-check). Refused starts exit with code 2.
 3. **Arguments.** See [Arguments](#arguments). Mistakes exit with code 64 and print the help.
-4. **Node.** The embedded libraries are unpacked to `<home>/storage/libs/<version>` and checked, then `net.vectora.cloud.node.NodeMain` is loaded by name. See [Embedded libraries](#embedded-libraries) and [Node entry point](#node-entry-point).
+4. **Node.** The embedded libraries are unpacked to `<home>/storage/libs/<version>` and checked, then `net.vectolyn.cloud.node.NodeMain` is loaded by name. See [Embedded libraries](#embedded-libraries) and [Node entry point](#node-entry-point).
 
 Step 2 needs `--allow-root` and `--lang` before step 3 parses the arguments, so it reads just those two from the raw command line. A root start with a broken argument therefore reports the root problem first.
 
 ### Why the bootstrap class is compiled for Java 8
 
-Every Vectora module is built with `--release 21` ([Java compatibility](../java-compatibility.md)). A Java 8 to 20 runtime cannot even load such a class; it stops with `UnsupportedClassVersionError` and a class file version number. To print a readable message instead, the one class the JVM loads first, `net.vectora.cloud.launcher.Bootstrap`, lives in its own source set `bootstrap` and is compiled with `--release 8`. It uses no Java 9+ API and calls `Launcher.main` by reflection once the version is fine. `BootstrapTest` checks that its class file has major version 52. This is the only class with a release target other than 21. The build file switches off javac's "release 8 is obsolete" lint for this source set only, because `-Werror` would otherwise fail on it.
+Every Vectolyn module is built with `--release 21` ([Java compatibility](../java-compatibility.md)). A Java 8 to 20 runtime cannot even load such a class; it stops with `UnsupportedClassVersionError` and a class file version number. To print a readable message instead, the one class the JVM loads first, `net.vectolyn.cloud.launcher.Bootstrap`, lives in its own source set `bootstrap` and is compiled with `--release 8`. It uses no Java 9+ API and calls `Launcher.main` by reflection once the version is fine. `BootstrapTest` checks that its class file has major version 52. This is the only class with a release target other than 21. The build file switches off javac's "release 8 is obsolete" lint for this source set only, because `-Werror` would otherwise fail on it.
 
 ## Root and administrator check
 
-VectoraCloud starts servers and downloads and runs software. With root or administrator rights, a bug or a tampered download would affect the whole machine, so the launcher refuses such a start.
+VectolynCloud starts servers and downloads and runs software. With root or administrator rights, a bug or a tampered download would affect the whole machine, so the launcher refuses such a start.
 
 | System | Counts as elevated | Sources, in order |
 |---|---|---|
@@ -34,12 +34,12 @@ The fallback commands are started by absolute path and never looked up on the `P
 
 If no source works, the launcher prints a boxed `WARNING` (German: `WARNUNG`) and continues: the rights could not be determined, and anyone who started it as administrator or root should stop it right away and start it again as a normal user. Refusing in that case would lock out normal users on unusual systems.
 
-**Override.** `--allow-root` or the environment variable `VECTORA_ALLOW_ROOT=true` (only `true`, any case) allow an elevated start. A boxed warning is printed every time. The node receives `root-allowed=true`.
+**Override.** `--allow-root` or the environment variable `VECTOLYN_ALLOW_ROOT=true` (only `true`, any case) allow an elevated start. A boxed warning is printed every time. The node receives `root-allowed=true`.
 
-**Message.** In German or English (`--lang`, otherwise `user.language`), with instructions for the current system:
+**Message.** In English, or German with `--lang de`, with instructions for the current system:
 
 - Windows: a normal Command Prompt or PowerShell instead of "Run as administrator"; as a service, a dedicated account instead of LocalSystem.
-- Linux and macOS: a dedicated user (`useradd --system --create-home vectora`, `sudo -u vectora java -jar VectoraCloud.jar`), systemd with `User=` and `Group=`, Docker with `USER 1000` or `docker run --user 1000:1000`.
+- Linux and macOS: a dedicated user (`useradd --system --create-home vectolyn`, `sudo -u vectolyn java -jar VectolynCloud.jar`), systemd with `User=` and `Group=`, Docker with `USER 1000` or `docker run --user 1000:1000`.
 
 ## Arguments
 
@@ -48,7 +48,7 @@ If no source works, the launcher prints a boxed `WARNING` (German: `WARNUNG`) an
 | `--home <path>` | Cloud home. Default: the working directory. |
 | `--non-interactive` | Never ask on the console (Docker, Pterodactyl, systemd). |
 | `--setup-file <path>` | Answers for the setup assistant, see [setup](setup.md#setup-file---setup-file). Used only while `setup-complete` is false. |
-| `--lang de\|en` | Language of the messages. Default: `user.language`, German stays German, everything else is English. |
+| `--lang de\|en` | Language of the messages. Default: English, whatever the system language is. |
 | `--allow-root` | Allow a start with root or administrator rights. |
 | `--help` | Print the help and exit. |
 | `--version` | Print the version and exit. |
@@ -57,15 +57,15 @@ Values may follow as the next argument or after `=` (`--home=/data`). Each optio
 
 ## Local start from the repository
 
-For development and tests, `./gradlew :cloud:node:runLocal` builds `VectoraCloud.jar` (`:cloud:launcher:cloudJar`) and starts it on the Java 25 toolchain with `run/` in the repository root as working directory and `--home`. The folder is created if it is missing. Standard input is passed through, so the setup assistant asks and the console takes commands in the same terminal. `.gitignore` ignores `run/` completely: configuration, secrets, worlds, logs and downloaded software stay local.
+For development and tests, `./gradlew :cloud:node:runLocal` builds `VectolynCloud.jar` (`:cloud:launcher:cloudJar`) and starts it on the Java 25 toolchain with `run/` in the repository root as working directory and `--home`. The folder is created if it is missing. Standard input is passed through, so the setup assistant asks and the console takes commands in the same terminal. `.gitignore` ignores `run/` completely: configuration, secrets, worlds, logs and downloaded software stay local.
 
 The task puts the jar on the class path and calls `Bootstrap` directly instead of using `-jar`; the launcher still finds `libs.index` there. The manifest attribute `Enable-Native-Access` only applies with `-jar`, so the task passes `--enable-native-access=ALL-UNNAMED` itself. Under Gradle the process has no console of its own, so the task also sets `stdout.encoding` and `stderr.encoding` to UTF-8; otherwise Java would fall back to the platform encoding and German messages would arrive garbled. Further launcher options go after `--args`, for example `./gradlew :cloud:node:runLocal --args="--lang en"`; `--home` and `--allow-root` are added by the task and must not be repeated there.
 
-Gradle runs the cloud as a child of its daemon, so the cloud never sees a real terminal: the console runs in plain mode, one line at a time from stdin, without line editing, completion or history ([console](console.md#without-a-terminal-plain)). Secrets typed into the setup assistant stay visible on screen; the question warns first. `--console=plain` keeps Gradle's progress line out of the questions. Ctrl+C reaches Gradle, not the console: it cancels the build and ends the cloud process. On Linux and macOS that is a SIGTERM and the node shuts down cleanly through its shutdown hook; on Windows the process is terminated without it, and servers that are still running are ended as orphans on the next start ([node](node.md#orphans)). Stop the network with `shutdown` in the console instead. For a real terminal, build it with `./gradlew :cloud:launcher:cloudJar` and start `cloud/launcher/build/cloud/VectoraCloud.jar` yourself: `java -jar cloud/launcher/build/cloud/VectoraCloud.jar --home run`.
+Gradle runs the cloud as a child of its daemon, so the cloud never sees a real terminal: the console runs in plain mode, one line at a time from stdin, without line editing, completion or history ([console](console.md#without-a-terminal-plain)). Secrets typed into the setup assistant stay visible on screen; the question warns first. `--console=plain` keeps Gradle's progress line out of the questions. Ctrl+C reaches Gradle, not the console: it cancels the build and ends the cloud process. On Linux and macOS that is a SIGTERM and the node shuts down cleanly through its shutdown hook; on Windows the process is terminated without it, and servers that are still running are ended as orphans on the next start ([node](node.md#orphans)). Stop the network with `shutdown` in the console instead. For a real terminal, build it with `./gradlew :cloud:launcher:cloudJar` and start `cloud/launcher/build/cloud/VectolynCloud.jar` yourself: `java -jar cloud/launcher/build/cloud/VectolynCloud.jar --home run`.
 
 `-PallowRoot=true` adds `--allow-root` for a development shell that runs as root or administrator, like `-Pe2eAllowRoot=true` for the end-to-end test. No secret is passed on the command line; the setup assistant writes them to `run/secrets/`.
 
-Production operators do not use this task. They start the released `VectoraCloud.jar` in their own cloud home outside any checkout ([operations](operations.md)).
+Production operators do not use this task. They start the released `VectolynCloud.jar` in their own cloud home outside any checkout ([operations](operations.md)).
 
 ## Platform detection
 
@@ -79,20 +79,20 @@ All reads go through the `SystemAccess` interface. The tests replace it and repl
 
 ## Embedded libraries
 
-`VectoraCloud.jar` is assembled by the task `:cloud:launcher:cloudJar` (part of `assemble`, output `cloud/launcher/build/cloud/VectoraCloud.jar`):
+`VectolynCloud.jar` is assembled by the task `:cloud:launcher:cloudJar` (part of `assemble`, output `cloud/launcher/build/cloud/VectolynCloud.jar`):
 
 ```
-net/vectora/cloud/launcher/...         launcher classes (release 21) and Bootstrap (release 8)
-META-INF/vectora/libs.index            index, see below
-META-INF/vectora/libs/*.jar            cloud-node, the other cloud modules and every runtime library, unchanged
-META-INF/MANIFEST.MF                   Main-Class: net.vectora.cloud.launcher.Bootstrap, Implementation-Version,
+net/vectolyn/cloud/launcher/...        launcher classes (release 21) and Bootstrap (release 8)
+META-INF/vectolyn/libs.index           index, see below
+META-INF/vectolyn/libs/*.jar           cloud-node, the other cloud modules and every runtime library, unchanged
+META-INF/MANIFEST.MF                   Main-Class: net.vectolyn.cloud.launcher.Bootstrap, Implementation-Version,
                                        Enable-Native-Access: ALL-UNNAMED
 ```
 
 `libs.index` is written by the task `embeddedLibrariesIndex` from the launcher's runtime class path. One line per jar, the layout of `sha256sum`:
 
 ```
-# VectoraCloud embedded libraries, format 1: <sha256>  <file name>
+# VectolynCloud embedded libraries, format 1: <sha256>  <file name>
 b2fe0161…  cloud-node-0.1.0-SNAPSHOT.jar
 ```
 
@@ -102,7 +102,7 @@ At startup the launcher:
 2. resolves each name in `<home>/storage/libs/<version>` and checks that the result is directly inside that directory (zip slip, a second check independent of the name rule);
 3. reuses a jar already in the cache only if its SHA-256 matches; otherwise unpacks it to a temporary file, hashes it while writing, and moves it into place only if the hash matches. A wrong hash stops the start with code 4 and leaves no file behind;
 4. deletes jars in its version folder that the index no longer lists. Each launcher version has its own folder (`<version>` is the manifest version; a version with other characters than `A-Z a-z 0-9 . _ + -` becomes `v-` plus 16 hex digits of its SHA-256), so two versions sharing one home never delete each other's libraries;
-5. creates a `URLClassLoader` named `vectora-node` over the checked jars, with the launcher's class loader as parent, and sets it as context class loader while calling the node.
+5. creates a `URLClassLoader` named `vectolyn-node` over the checked jars, with the launcher's class loader as parent, and sets it as context class loader while calling the node.
 
 Without `libs.index` on the class path (IDE, Gradle tests) the launcher's own class loader is used.
 
@@ -122,7 +122,7 @@ The cost: the first start of each version writes the libraries to `storage/libs/
 The node provides:
 
 ```java
-package net.vectora.cloud.node;
+package net.vectolyn.cloud.node;
 
 public final class NodeMain {
     public static void start(java.util.Map<String, String> settings) { ... }
@@ -153,7 +153,7 @@ The settings are strings because the node cannot depend on the launcher (the dep
 |---|---|
 | 0 | Node started, or `--help` / `--version` |
 | 1 | The node threw while starting |
-| 2 | Started as root or administrator without `--allow-root` / `VECTORA_ALLOW_ROOT=true` |
+| 2 | Started as root or administrator without `--allow-root` / `VECTOLYN_ALLOW_ROOT=true` |
 | 3 | Java older than 21 |
 | 4 | Embedded library missing, unsafe name, or wrong SHA-256 |
 | 5 | No node entry point in this build, or an invalid one |

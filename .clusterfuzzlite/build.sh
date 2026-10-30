@@ -2,7 +2,7 @@
 # Builds the ClusterFuzzLite fuzzers. Each *Fuzzer.java under .clusterfuzzlite/fuzzers is one
 # target; it lives in the package of the class it fuzzes, because those classes are not public.
 #
-# The OSS-Fuzz JVM image runs on Java 17 while VectoraCloud builds for Java 21 with Gradle. These
+# The OSS-Fuzz JVM image runs on Java 17 while VectolynCloud builds for Java 21 with Gradle. These
 # targets therefore compile the sources of the parsers they fuzz directly with --release 17. That
 # works for the pure modules below; a target that needs a Java 21 API or a library must wait for
 # an image with a newer JDK.
@@ -10,7 +10,7 @@
 JACKSON_ANNOTATIONS=jackson-annotations-2.22.jar
 JACKSON_ANNOTATIONS_SHA256=21ddb598807d3a51a876704eb979d9296e1c6a6f47ab1826ff88c6d6a127a2d0
 
-cd "$SRC/VectoraCloud"
+cd "$SRC/VectolynCloud"
 
 # Only annotations (cloud.config.model.Language); same version and checksum as
 # gradle/verification-metadata.xml.
@@ -47,7 +47,7 @@ LD_LIBRARY_PATH="$JVM_LD_LIBRARY_PATH":\$this_dir \
 ASAN_OPTIONS=\$ASAN_OPTIONS:symbolize=1:external_symbolizer_path=\$this_dir/llvm-symbolizer:detect_leaks=0 \
 \$this_dir/jazzer_driver --agent_path=\$this_dir/jazzer_agent_deploy.jar \
   --cp=\$this_dir/classes:\$this_dir/$JACKSON_ANNOTATIONS \
-  --instrumentation_includes='net.vectora.**' \
+  --instrumentation_includes='net.vectolyn.**' \
   --target_class=$class_name \
   --jvm_args="-Xmx2048m" \
   \$@

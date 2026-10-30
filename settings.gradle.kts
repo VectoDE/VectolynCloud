@@ -1,5 +1,5 @@
 pluginManagement {
-    // Convention plugins shared by all Java modules (vectora.java-conventions and friends).
+    // Convention plugins shared by all Java modules (vectolyn.java-conventions and friends).
     includeBuild("build-logic")
 }
 
@@ -8,7 +8,7 @@ plugins {
     id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
 }
 
-rootProject.name = "vectoracloud"
+rootProject.name = "vectolyncloud"
 
 dependencyResolutionManagement {
     repositoriesMode = RepositoriesMode.FAIL_ON_PROJECT_REPOS
@@ -43,7 +43,7 @@ dependencyResolutionManagement {
 // Shared between the cloud and the servers it manages.
 include("common:protocol", "common:client")
 
-// VectoraCloud, module graph in docs/cloud/architecture.md.
+// VectolynCloud, module graph in docs/cloud/architecture.md.
 include(
     "cloud:launcher",
     "cloud:config",

@@ -31,6 +31,6 @@ docs/
 !cloud/**/src/**/*.md
 !plugins/bridge/**/src/**/*.md
 
-# The node carries the server templates in VectoraCloud.jar (docs/cloud/node.md#built-in-templates),
+# The node carries the server templates in VectolynCloud.jar (docs/cloud/node.md#built-in-templates),
 # so templates/ stays in the context. No rule here may bring it back with "!": that would also bring
 # back secrets/ or runtime/ folders someone put below it (rules above).

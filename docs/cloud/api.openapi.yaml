@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
-  title: VectoraCloud API
+  title: VectolynCloud API
   version: 1.0.0
-  summary: REST API and live events of a VectoraCloud node.
+  summary: REST API and live events of a VectolynCloud node.
   description: |
     JSON over HTTP/1.1. Every request needs a bearer token (`vct_...`) created at the node console
     with `api token create <name> <scopes>`. Bodies use the records of the YAML configuration with
@@ -560,8 +560,8 @@ paths:
       summary: Live events (WebSocket)
       description: |
         Scope: services:read. Upgrade to a WebSocket; a plain GET answers 426. Browsers pass the
-        token as subprotocol `vectora.bearer.<token>` next to `vectora.v1`; offering subprotocols
-        without `vectora.v1` answers 400 subprotocol-required. Every text frame is an
+        token as subprotocol `vectolyn.bearer.<token>` next to `vectolyn.v1`; offering subprotocols
+        without `vectolyn.v1` answers 400 subprotocol-required. Every text frame is an
         `Event`. Output lines are redacted. Revoking the token closes the stream with 1008,
         shutdown with 1001.
       operationId: events

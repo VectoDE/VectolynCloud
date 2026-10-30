@@ -2,4 +2,4 @@ hackOnlineMode = true
 hackEarlySend = false
 hackMessageChain = false
 disconnectMessage = "This server requires you to connect with Velocity."
-secret = "{{VECTORA_FORWARDING_SECRET}}"
+secret = "{{VECTOLYN_FORWARDING_SECRET}}"

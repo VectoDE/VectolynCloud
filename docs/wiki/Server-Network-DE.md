@@ -2,7 +2,7 @@
 
 [English](Server-Network)
 
-Ein Vectora-Netzwerk besteht aus sieben Servern und Minigame-Servern, die die Cloud skalieren wird (geplant, Etappe 6). Die Ports entsprechen dem aktuellen lokalen Aufbau.
+Ein Vectolyn-Netzwerk besteht aus sieben Servern und Minigame-Servern, die die Cloud skalieren wird (geplant, Etappe 6). Die Ports entsprechen dem aktuellen lokalen Aufbau.
 
 | Server | Software | Port | Rolle |
 |---|---|---|---|
@@ -15,23 +15,23 @@ Ein Vectora-Netzwerk besteht aus sieben Servern und Minigame-Servern, die die Cl
 | Database | MariaDB | 3307 | Gemeinsame Datenbank |
 | Minigames (geplant) | Paper, dynamisch skaliert | vergibt die Cloud | BedWars, SkyWars und mehr |
 
-Von außen sollten nur die Proxy-Ports erreichbar sein. Die Backends binden an `127.0.0.1` (`VECTORA_SERVER_HOST`) und bekommen die Spieler über das Modern Forwarding von Velocity.
+Von außen sollten nur die Proxy-Ports erreichbar sein. Die Backends binden an `127.0.0.1` (`VECTOLYN_SERVER_HOST`) und bekommen die Spieler über das Modern Forwarding von Velocity.
 
 ## Welche Server laufen (geplant, Etappe 2)
 
-Du musst nicht alle betreiben. Im Einrichtungsassistenten von VectoraCloud oder in der Cloud-Konfiguration markierst du jeden Server und jede Minigame-Gruppe als gewollt oder nicht. Die Cloud legt nur gewollte Server aus ihrer Vorlage (`templates/<Server>/` im Repository) in einem eigenen Dienst-Ordner unter `local/services/` an, lädt die Software, setzt die Secrets ein und startet sie. Nicht gewollte Server entstehen gar nicht, und weder Proxy noch Lobby verweisen auf sie.
+Du musst nicht alle betreiben. Im Einrichtungsassistenten von VectolynCloud oder in der Cloud-Konfiguration markierst du jeden Server und jede Minigame-Gruppe als gewollt oder nicht. Die Cloud legt nur gewollte Server aus ihrer Vorlage (`templates/<Server>/` im Repository) in einem eigenen Dienst-Ordner unter `local/services/` an, lädt die Software, setzt die Secrets ein und startet sie. Nicht gewollte Server entstehen gar nicht, und weder Proxy noch Lobby verweisen auf sie.
 
 Neustarts übernimmt allein die Cloud. Die Paper- und PandaSpigot-Templates lassen Spigots `restart-script` leer, und die Cloud setzt das auch bei eigenen Templates durch. `/restart` und der Watchdog halten den Server deshalb nur an, die Cloud startet ihn wieder.
 
-Command-Blöcke gibt es im Netzwerk nicht, und keine Einstellung schaltet sie wieder ein. Die Cloud schreibt in jede `server.properties`, die sie rendert, `enable-command-block=false` und warnt im Log, wenn sie einen anderen Wert überschreiben musste. Die Bridges auf Paper und 1.8.8 halten Command-Blöcke und Command-Block-Loren außerdem aus jedem Inventar heraus, verhindern Setzen und Benutzen und entfernen vorhandene, sobald ihre Chunks laden. Team-Befehle wie der Netzwerk-Kick wirken nur für die Konsole, RCON und Spieler mit der Berechtigung; die vollständige Liste steht im [Rechte-Audit](https://github.com/VectoDE/VectoraCloud/blob/main/docs/cloud/rights-audit.md).
+Command-Blöcke gibt es im Netzwerk nicht, und keine Einstellung schaltet sie wieder ein. Die Cloud schreibt in jede `server.properties`, die sie rendert, `enable-command-block=false` und warnt im Log, wenn sie einen anderen Wert überschreiben musste. Die Bridges auf Paper und 1.8.8 halten Command-Blöcke und Command-Block-Loren außerdem aus jedem Inventar heraus, verhindern Setzen und Benutzen und entfernen vorhandene, sobald ihre Chunks laden. Team-Befehle wie der Netzwerk-Kick wirken nur für die Konsole, RCON und Spieler mit der Berechtigung; die vollständige Liste steht im [Rechte-Audit](https://github.com/VectoDE/VectolynCloud/blob/main/docs/cloud/rights-audit.md).
 
-Bis Etappe 2 laufen die vorhandenen Server lokal aus `runtime/` über die Windows-Startskripte. Um VectoraCloud aus einem Checkout auszuprobieren, startest du `./gradlew :cloud:node:runLocal`. Das Netzwerk läuft dann in `run/` im Wurzelverzeichnis des Repositorys, das Git ignoriert. Ein Produktivnetzwerk bekommt sein eigenes Cloud-Home außerhalb des Checkouts ([Betrieb](Operations-DE)).
+Bis Etappe 2 laufen die vorhandenen Server lokal aus `runtime/` über die Windows-Startskripte. Um VectolynCloud aus einem Checkout auszuprobieren, startest du `./gradlew :cloud:node:runLocal`. Das Netzwerk läuft dann in `run/` im Wurzelverzeichnis des Repositorys, das Git ignoriert. Ein Produktivnetzwerk bekommt sein eigenes Cloud-Home außerhalb des Checkouts ([Betrieb](Operations-DE)).
 
 ## Geplante Inhalte je Server
 
-**Proxy.** Einziger Einstieg. MOTD, Tablist und netzwerkweiter Chat kommen aus dem Vectora-Plugin (Etappe 3).
+**Proxy.** Einziger Einstieg. MOTD, Tablist und netzwerkweiter Chat kommen aus dem Vectolyn-Plugin (Etappe 3).
 
-**Lobby** (Etappe 4). Eine echte Hub-Lobby, per Code im Vectora-Stil generiert: Kompass-Navigator, NPCs und Portale zu den Modi, Hologramm-Bestenlisten, Gadgets und Cosmetics, Profilmenü, Schutz, Doppelsprung, Parkour.
+**Lobby** (Etappe 4). Eine echte Hub-Lobby, per Code im Vectolyn-Stil generiert: Kompass-Navigator, NPCs und Portale zu den Modi, Hologramm-Bestenlisten, Gadgets und Cosmetics, Profilmenü, Schutz, Doppelsprung, Parkour.
 
 **Survival** (Etappe 5). Claims; Homes, TPA, Spawn und Back; Spieler-Shops und Markt; Jobs und Quests; eigene Economy.
 

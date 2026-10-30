@@ -2,7 +2,7 @@
 
 [Deutsch](openssf.de.md)
 
-The repository runs [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/VectoDE/VectoraCloud) on every push to `main`, weekly and on demand ([`scorecard.yml`](../.github/workflows/scorecard.yml)). Its findings show up under *Security and quality* next to CodeQL. The project also holds the [OpenSSF Best Practices badge](https://www.bestpractices.dev/projects/16026).
+The repository runs [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/VectoDE/VectolynCloud) on every push to `main`, weekly and on demand ([`scorecard.yml`](../.github/workflows/scorecard.yml)). Its findings show up under *Security and quality* next to CodeQL. The project also holds the [OpenSSF Best Practices badge](https://www.bestpractices.dev/projects/16026).
 
 ## The cleanup check
 
@@ -13,7 +13,7 @@ Run at the end of every stage and before every release tag. A stage is finished 
 3. CI, CodeQL, Dependency Review and Scorecard ran on the newest commit of `main` after the last merge. If a run brings up something new, it is fixed and the runs repeat until nothing fixable is left.
 4. What stays open is listed below with its reason.
 
-The first round of this check was [issue #71](https://github.com/VectoDE/VectoraCloud/issues/71).
+The first round of this check was [issue #71](https://github.com/VectoDE/VectolynCloud/issues/71).
 
 ## What is in place
 

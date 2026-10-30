@@ -2,23 +2,23 @@
 //
 // paper-api 26.3 is compiled for Java 25 (class file version 69) and its Gradle module
 // metadata demands a Java 25 consumer. javac 25 still compiles against those classes with
-// --release 21, so this module keeps bytecode 21. vectora.java25-api-conventions calls
+// --release 21, so this module keeps bytecode 21. vectolyn.java25-api-conventions calls
 // disableAutoTargetJvm(), which only switches off Gradle's variant check; it does not change
 // the bytecode level.
 // Runtime still needs Java 25 because Paper 26.3 itself does. Details and the stage-3 plan
 // (Java-21 core plus per-version adapters): docs/java-compatibility.md
 
 plugins {
-    id("vectora.java25-api-conventions")
+    id("vectolyn.java25-api-conventions")
 }
 
-vectora {
+vectolyn {
     // Jar and manifest name from before the repository layout change.
-    artifactName = "Vectora-PortalBridge"
+    artifactName = "Vectolyn-PortalBridge"
 }
 
 base {
-    archivesName = "VectoraPortalBridge"
+    archivesName = "VectolynPortalBridge"
 }
 
 dependencies {
@@ -37,5 +37,5 @@ tasks.processResources {
 }
 
 tasks.test {
-    systemProperty("vectora.expectedVersion", project.version.toString())
+    systemProperty("vectolyn.expectedVersion", project.version.toString())
 }

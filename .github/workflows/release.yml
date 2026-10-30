@@ -54,23 +54,23 @@ jobs:
           cache-disabled: true
 
       # The tag (v1.2.3) sets the version of every module. The full build runs all tests, but
-      # only VectoraCloud.jar is released: the plugin jars are not part of a release (the
+      # only VectolynCloud.jar is released: the plugin jars are not part of a release (the
       # owner's decision of 2026-10-29); operators build them from the repository.
       - name: Build
         env:
           TAG: ${{ github.ref_name }}
         run: bash ./gradlew build --no-daemon --no-build-cache -Pversion="${TAG#v}"
 
-      # The release files: VectoraCloud.jar plus one archive per operating system with the
+      # The release files: VectolynCloud.jar plus one archive per operating system with the
       # start scripts, nothing else. The same script runs as a dry run in operations.yml on
       # every pull request.
-      - name: Package VectoraCloud
+      - name: Package VectolynCloud
         env:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           bash cloud/dist/package.sh "${TAG#v}" \
-            cloud/launcher/build/cloud/VectoraCloud.jar dist
+            cloud/launcher/build/cloud/VectolynCloud.jar dist
           ls -l dist
 
       # SHA256SUMS lists exactly the three release files; the provenance covers every file in it,
@@ -83,7 +83,7 @@ jobs:
         run: |
           set -euo pipefail
           version="${TAG#v}"
-          files=(VectoraCloud.jar "VectoraCloud-${version}-windows.zip" "VectoraCloud-${version}-linux-macos.tar.gz")
+          files=(VectolynCloud.jar "VectolynCloud-${version}-windows.zip" "VectolynCloud-${version}-linux-macos.tar.gz")
           found=$(find . -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort)
           want=$(printf '%s\n' "${files[@]}" | LC_ALL=C sort)
           if [ "$found" != "$want" ]; then
@@ -117,7 +117,7 @@ jobs:
 
       # SLSA build provenance (in-toto statement, signed with Sigstore) for every file in
       # SHA256SUMS. GitHub keeps it in the repository's attestations; the bundle also goes into the
-      # release as vectora.intoto.jsonl, so it can be checked without the GitHub API.
+      # release as vectolyn.intoto.jsonl, so it can be checked without the GitHub API.
       # This replaces slsa-github-generator: that reusable workflow has to be referenced by tag
       # (slsa-verifier rejects a commit SHA), and every action in this workflow is pinned by digest.
       - name: Attest build provenance
@@ -133,9 +133,9 @@ jobs:
           BUNDLE: ${{ steps.attest.outputs.bundle-path }}
         run: |
           set -euo pipefail
-          jq -c . "$BUNDLE" > dist/vectora.intoto.jsonl
-          test "$(wc -l < dist/vectora.intoto.jsonl)" -eq 1
-          jq -r '.dsseEnvelope.payloadType' dist/vectora.intoto.jsonl
+          jq -c . "$BUNDLE" > dist/vectolyn.intoto.jsonl
+          test "$(wc -l < dist/vectolyn.intoto.jsonl)" -eq 1
+          jq -r '.dsseEnvelope.payloadType' dist/vectolyn.intoto.jsonl
 
       - name: Upload dist
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -145,7 +145,7 @@ jobs:
           if-no-files-found: error
           retention-days: 5
 
-  # Container image on GHCR with the signed VectoraCloud.jar of the build job (not rebuilt: the
+  # Container image on GHCR with the signed VectolynCloud.jar of the build job (not rebuilt: the
   # named build context "jar" replaces the Dockerfile's build stage). Signed with cosign keyless,
   # with a GitHub build provenance attestation and BuildKit's SBOM and provenance in the registry.
   # "latest" only for stable releases (same rule as the GitHub release: v0.* and v*-* are
@@ -194,9 +194,9 @@ jobs:
       - name: Prepare jar context
         run: |
           set -euo pipefail
-          (cd dist && grep -E '^[0-9a-f]{64}  VectoraCloud\.jar$' SHA256SUMS | sha256sum --check --strict -)
+          (cd dist && grep -E '^[0-9a-f]{64}  VectolynCloud\.jar$' SHA256SUMS | sha256sum --check --strict -)
           mkdir jar-context
-          cp dist/VectoraCloud.jar jar-context/
+          cp dist/VectolynCloud.jar jar-context/
 
       - name: Image name and tags
         id: meta
@@ -206,7 +206,7 @@ jobs:
         run: |
           set -euo pipefail
           version="${TAG#v}"
-          image="ghcr.io/${OWNER,,}/vectora-cloud"
+          image="ghcr.io/${OWNER,,}/vectolyn-cloud"
           tags="${image}:${version}"
           case "$TAG" in
             v0.*|*-*) echo "Pre-release: no latest tag." ;;

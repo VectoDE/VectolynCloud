@@ -16,8 +16,8 @@ All das läuft auf dem Proxy. Die Backends laufen auf der neuesten Minecraft-Ver
 
 ## Aktueller Stand
 
-- Auf dem Proxy laufen Velocity, Geyser, Floodgate, ViaVersion 5.12.2, ViaBackwards 5.12.2 und ViaRewind 4.2.0. ViaBackwards und ViaRewind übersetzen für ältere Java-Clients bis 1.8 ([#5](https://github.com/VectoDE/VectoraCloud/issues/5)).
-- Floodgate läuft auf jedem Backend, auch auf dem Fabric-Mod-Server (Floodgate-Fabric 2.2.7-b69, [#4](https://github.com/VectoDE/VectoraCloud/issues/4)). Alle Server nutzen denselben Floodgate-Schlüssel.
+- Auf dem Proxy laufen Velocity, Geyser, Floodgate, ViaVersion 5.12.2, ViaBackwards 5.12.2 und ViaRewind 4.2.0. ViaBackwards und ViaRewind übersetzen für ältere Java-Clients bis 1.8 ([#5](https://github.com/VectoDE/VectolynCloud/issues/5)).
+- Floodgate läuft auf jedem Backend, auch auf dem Fabric-Mod-Server (Floodgate-Fabric 2.2.7-b69, [#4](https://github.com/VectoDE/VectolynCloud/issues/4)). Alle Server nutzen denselben Floodgate-Schlüssel.
 - Geyser nimmt beide Bedrock-Transporte an (`transport: both`): RakNet auf UDP 19132, NetherNet mit eingebautem Signaling auf TCP 19132 und dessen WebRTC-Verkehr auf UDP 19133 (immer `bedrock-port` + 1). Ist das Netzwerk von außen erreichbar, alle drei weiterleiten.
 
 ## Regeln für Spielinhalte
@@ -30,4 +30,4 @@ All das läuft auf dem Proxy. Die Backends laufen auf der neuesten Minecraft-Ver
 
 ## Plugin-Versionen (geplant, Etappe 3)
 
-Das Vectora-Plugin deckt Minecraft 1.8.8 bis 26.3 über Versionsadapter ab. Für 1.8.8-Server-Gruppen wählen wir in Etappe 2 einen modernen Fork, der unter Java 21 läuft.
+Das Vectolyn-Plugin deckt Minecraft 1.8.8 bis 26.3 über Versionsadapter ab. Für 1.8.8-Server-Gruppen wählen wir in Etappe 2 einen modernen Fork, der unter Java 21 läuft.

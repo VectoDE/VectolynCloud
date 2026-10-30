@@ -2,11 +2,11 @@
 // WebSocket API. Reads bytes from the network, so it has Jazzer fuzz tests.
 
 plugins {
-    id("vectora.java-conventions")
-    id("vectora.fuzz-conventions")
+    id("vectolyn.java-conventions")
+    id("vectolyn.fuzz-conventions")
 }
 
-vectora {
+vectolyn {
     // Jar and manifest name from before the repository layout change.
     artifactName = "cloud-network"
 }

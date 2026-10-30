@@ -2,7 +2,7 @@
 
 **English** · [Deutsch](README.de.md)
 
-Programs that run next to VectoraCloud and work through its API. None of them exists yet; they are built in stage 8.
+Programs that run next to VectolynCloud and work through its API. None of them exists yet; they are built in stage 8.
 
 | Folder | Part | Needed |
 |---|---|---|
@@ -11,6 +11,6 @@ Programs that run next to VectoraCloud and work through its API. None of them ex
 | `discord-bot/` | Discord bot, runs with the operator's own bot token. | optional |
 | `store/` | Store, runs with the operator's own Stripe account. | optional |
 
-For each optional part the setup wizard and the dashboard offer three choices: the Vectora version, your own, or off. The website starts on the Vectora version. The Discord bot and the store start switched off, because they need a token or an account first.
+For each optional part the setup wizard and the dashboard offer three choices: the Vectolyn version, your own, or off. The website starts on the Vectolyn version. The Discord bot and the store start switched off, because they need a token or an account first.
 
 A folder and its build files are added when work on that service starts.

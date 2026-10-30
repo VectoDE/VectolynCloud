@@ -1,0 +1,368 @@
+package net.vectolyn.cloud.client;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.nio.ByteBuffer;
+import java.time.Duration;
+import java.util.Arrays;
+import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import net.vectolyn.protocol.AuthToken;
+import net.vectolyn.protocol.ChannelName;
+import net.vectolyn.protocol.Protocol;
+import net.vectolyn.protocol.ProtocolVersion;
+import net.vectolyn.protocol.ServiceId;
+import net.vectolyn.protocol.VarInts;
+import net.vectolyn.protocol.message.AuthResult;
+import net.vectolyn.protocol.message.Disconnect;
+import net.vectolyn.protocol.message.Envelope;
+import net.vectolyn.protocol.message.Hello;
+import net.vectolyn.protocol.message.Message;
+import net.vectolyn.protocol.message.NetworkKick;
+import net.vectolyn.protocol.message.MessageCodec;
+import net.vectolyn.protocol.message.MessageLimits;
+import net.vectolyn.protocol.message.Ping;
+import net.vectolyn.protocol.message.PlayerJoin;
+import net.vectolyn.protocol.message.ServiceReady;
+import net.vectolyn.protocol.message.ServiceStatus;
+import net.vectolyn.protocol.message.SessionTicket;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+/** The client against a scripted fake cloud on a plain JDK server socket. */
+class CloudClientTest {
+
+    private static final ServiceId LOBBY = new ServiceId("lobby-1");
+    private static final AuthToken TOKEN = new AuthToken("client-token-not-a-real-secret-01");
+    private static final AuthToken TICKET = new AuthToken("client-ticket-not-a-real-secret-01");
+    private static final MessageCodec CODEC = MessageCodec.standard();
+
+    private ServerSocket cloud;
+    private CloudClient client;
+
+    @BeforeEach
+    void openFakeCloud() throws IOException {
+        cloud = new ServerSocket(0, 10, InetAddress.getLoopbackAddress());
+        cloud.setSoTimeout(5_000);
+    }
+
+    @AfterEach
+    void closeAll() throws IOException {
+        if (client != null) {
+            client.close();
+        }
+        cloud.close();
+    }
+
+    private CloudClient start(Duration idle) {
+        CloudClientSettings settings = CloudClientSettings.of("127.0.0.1", cloud.getLocalPort(), LOBBY, TOKEN)
+                .withTimeouts(Duration.ofSeconds(2), idle.dividedBy(3), idle, Duration.ofSeconds(1),
+                        Duration.ofMillis(20), Duration.ofMillis(100));
+        client = CloudClient.create(settings);
+        client.start();
+        return client;
+    }
+
+    @Test
+    void saysHelloWithItsIdAndTokenAndThenReportsReady() throws Exception {
+        start(Duration.ofSeconds(5));
+        try (Peer peer = accept()) {
+            Hello hello = (Hello) peer.read().message();
+            assertEquals(LOBBY, hello.peer());
+            assertTrue(hello.token().matches(TOKEN));
+            assertEquals(Protocol.PROTOCOL_VERSION, hello.version());
+            peer.accept(TICKET);
+            awaitConnected();
+            assertTrue(client.markReady());
+            assertEquals(new ServiceReady(LOBBY), peer.readSkippingPings());
+        }
+    }
+
+    @Test
+    void reconnectsWithTheTicketOfTheLastConnectionNotWithTheStartToken() throws Exception {
+        start(Duration.ofSeconds(5));
+        try (Peer first = accept()) {
+            assertTrue(((Hello) first.read().message()).token().matches(TOKEN));
+            first.accept(TICKET);
+            awaitConnected();
+        }
+        AuthToken second = new AuthToken("second-ticket-not-a-real-secret-02");
+        try (Peer peer = accept()) {
+            Hello hello = (Hello) peer.read().message();
+            assertTrue(hello.token().matches(TICKET), "the ticket, not the used-up start token");
+            peer.accept(second);
+            awaitConnected();
+        }
+        try (Peer peer = accept()) {
+            assertTrue(((Hello) peer.read().message()).token().matches(second), "always the newest ticket");
+        }
+    }
+
+    /** The client confirms its ticket at once, and falls back to the token before it once if the cloud rolled back. */
+    @Test
+    void confirmsTheTicketAndTriesThePreviousTokenOnceAfterARefusal() throws Exception {
+        start(Duration.ofSeconds(5));
+        try (Peer first = accept()) {
+            first.read();
+            first.accept(TICKET);
+            assertInstanceOf(Ping.class, first.read().message(), "a frame right behind the ticket");
+        }
+        try (Peer refused = accept()) {
+            assertTrue(((Hello) refused.read().message()).token().matches(TICKET));
+            refused.send(new AuthResult(AuthResult.Outcome.INVALID_TOKEN, Protocol.PROTOCOL_VERSION));
+        }
+        try (Peer fallback = accept()) {
+            assertTrue(((Hello) fallback.read().message()).token().matches(TOKEN), "the token the cloud rolled back to");
+            fallback.send(new AuthResult(AuthResult.Outcome.INVALID_TOKEN, Protocol.PROTOCOL_VERSION));
+        }
+        try (Peer again = accept()) {
+            assertTrue(((Hello) again.read().message()).token().matches(TICKET), "then the ticket again");
+        }
+    }
+
+    @Test
+    void anAcceptanceWithoutTicketMakesTheClientStartOver() throws Exception {
+        start(Duration.ofSeconds(5));
+        try (Peer first = accept()) {
+            first.read();
+            first.send(new AuthResult(AuthResult.Outcome.ACCEPTED, Protocol.PROTOCOL_VERSION));
+            first.send(new Ping(1));
+            assertEquals(new Disconnect(Disconnect.Reason.PROTOCOL_ERROR), first.read().message());
+        }
+        assertFalse(client.isConnected());
+        try (Peer second = accept()) {
+            // Nothing new was learned, so the start token again.
+            assertTrue(((Hello) second.read().message()).token().matches(TOKEN));
+        }
+    }
+
+    @Test
+    void aCloudOfProtocolOnePointOneSendsNoTicket() throws Exception {
+        start(Duration.ofSeconds(5));
+        try (Peer first = accept()) {
+            first.read();
+            first.send(new AuthResult(AuthResult.Outcome.ACCEPTED, new ProtocolVersion(1, 1)));
+            awaitConnected();
+        }
+        try (Peer second = accept()) {
+            assertTrue(((Hello) second.read().message()).token().matches(TOKEN));
+        }
+    }
+
+    @Test
+    void aTicketAfterTheHandshakeIsAViolationAndNeverReachesListeners() throws Exception {
+        start(Duration.ofSeconds(5));
+        java.util.List<CloudClientEvent> events = new java.util.concurrent.CopyOnWriteArrayList<>();
+        client.addListener(events::add);
+        AuthToken stray = new AuthToken("stray-ticket-not-a-real-secret-03");
+        try (Peer peer = accept()) {
+            peer.read();
+            peer.accept(TICKET);
+            awaitConnected();
+            peer.send(new SessionTicket(stray));
+            assertEquals(new Disconnect(Disconnect.Reason.PROTOCOL_ERROR), peer.readSkippingPings());
+        }
+        try (Peer again = accept()) {
+            assertTrue(((Hello) again.read().message()).token().matches(TICKET), "the stray ticket is not taken");
+        }
+        assertTrue(events.stream().noneMatch(event -> event instanceof CloudClientEvent.MessageReceived));
+    }
+
+    @Test
+    void anOversizedFrameBeforeAuthResultMakesTheClientStartOver() throws Exception {
+        start(Duration.ofSeconds(5));
+        try (Peer first = accept()) {
+            first.read(); // Hello
+            ByteBuffer prefix = ByteBuffer.allocate(VarInts.MAX_BYTES);
+            VarInts.write(prefix, Protocol.MAX_HANDSHAKE_FRAME_SIZE + 1);
+            first.sendRaw(Arrays.copyOf(prefix.array(), prefix.position()));
+            assertEquals(new Disconnect(Disconnect.Reason.PROTOCOL_ERROR), first.read().message());
+        }
+        try (Peer second = accept()) {
+            assertInstanceOf(Hello.class, second.read().message());
+        }
+        assertFalse(client.isConnected());
+    }
+
+    @Test
+    void aSilentCloudCountsAsGoneAfterTheIdleTimeout() throws Exception {
+        start(Duration.ofMillis(600));
+        try (Peer first = accept()) {
+            first.read();
+            first.accept(TICKET);
+            awaitConnected();
+            // The fake cloud never writes again; the client's pings do not keep it alive.
+            Message last;
+            do {
+                last = first.read().message();
+            } while (last instanceof Ping);
+            assertEquals(new Disconnect(Disconnect.Reason.TIMEOUT), last);
+        }
+        try (Peer second = accept()) {
+            assertInstanceOf(Hello.class, second.read().message());
+        }
+    }
+
+    @Test
+    void statusValuesAreClampedIntoTheProtocolRanges() throws Exception {
+        start(Duration.ofSeconds(5));
+        try (Peer peer = accept()) {
+            peer.read();
+            peer.accept(TICKET);
+            awaitConnected();
+            assertTrue(client.reportStatus(-5, 2_000_000, Double.NaN, 1e9));
+            ServiceStatus status = (ServiceStatus) peer.readSkippingPings();
+            assertEquals(0, status.playersOnline());
+            assertEquals(1_000_000, status.maxPlayers());
+            assertEquals(0.0, status.tps());
+            assertEquals(60_000.0, status.mspt());
+            assertTrue(status.heapMax() == ServiceStatus.UNKNOWN_HEAP_MAX || status.heapMax() > 0);
+        }
+    }
+
+    @Test
+    void misuseIsRefusedAndNothingIsSentWhileDisconnected() throws Exception {
+        CloudClientSettings settings = CloudClientSettings.of("127.0.0.1", cloud.getLocalPort(), LOBBY, TOKEN);
+        client = CloudClient.create(settings);
+        assertThrows(IllegalArgumentException.class, () -> client.send(new Ping(1)));
+        assertThrows(IllegalArgumentException.class, () -> client.send(new ServiceReady(LOBBY)));
+        assertThrows(IllegalArgumentException.class, () -> client.reportStatus(
+                new ServiceStatus(new ServiceId("other-1"), 0, 0, 20, 1, 0, 0)));
+        assertFalse(client.send(new PlayerJoin(UUID.randomUUID(), "Steve", LOBBY, false)));
+        assertThrows(IllegalArgumentException.class, () -> client.send(
+                new NetworkKick(UUID.randomUUID(), new ServiceId("other-1"), "")), "only its own kicks");
+        assertFalse(client.send(new NetworkKick(UUID.randomUUID(), LOBBY, "")));
+        assertFalse(client.publish(new ChannelName("c"), new byte[0]));
+        ExecutionException failed = assertThrows(ExecutionException.class,
+                () -> client.request(new ChannelName("c"), new byte[0]).get());
+        assertInstanceOf(NotConnectedException.class, failed.getCause());
+        CloudClient.Subscription handler = client.handleRequests(new ChannelName("c"), request -> null);
+        assertThrows(IllegalStateException.class, () -> client.handleRequests(new ChannelName("c"), request -> null));
+        handler.close();
+        client.handleRequests(new ChannelName("c"), request -> null).close();
+    }
+
+    @Test
+    void closeIsQuickIdempotentAndFinal() {
+        start(Duration.ofSeconds(5));
+        client.installShutdownHook();
+        client.installShutdownHook();
+        long started = System.nanoTime();
+        client.close();
+        client.close();
+        assertTrue(System.nanoTime() - started < Duration.ofSeconds(3).toNanos());
+        assertThrows(IllegalStateException.class, client::start);
+        assertFalse(client.isConnected());
+    }
+
+    @Test
+    void closeReturnsEvenWhileAWriteHangsOnACloudThatStoppedReading() throws Exception {
+        start(Duration.ofSeconds(30));
+        try (Peer peer = accept()) {
+            peer.read();
+            peer.accept(TICKET);
+            awaitConnected();
+            // The fake cloud reads nothing more: a writer fills both socket buffers and then blocks
+            // in the write, holding the connection's write lock.
+            java.util.concurrent.atomic.AtomicLong sent = new java.util.concurrent.atomic.AtomicLong();
+            byte[] payload = new byte[MessageLimits.MAX_PAYLOAD_SIZE / 2];
+            Thread writer = new Thread(() -> {
+                while (client.publish(new ChannelName("flood"), payload)) {
+                    sent.incrementAndGet();
+                }
+            }, "test-writer");
+            writer.setDaemon(true);
+            writer.start();
+            long last = -1;
+            while (sent.get() != last) {
+                last = sent.get();
+                Thread.sleep(300);
+            }
+            assertTrue(writer.isAlive(), "the writer is stuck in a write");
+
+            Thread closer = new Thread(client::close, "test-closer");
+            closer.setDaemon(true);
+            long started = System.nanoTime();
+            closer.start();
+            closer.join(Duration.ofSeconds(5).toMillis());
+            assertFalse(closer.isAlive(), "close() hung behind the blocked write");
+            assertTrue(System.nanoTime() - started < Duration.ofSeconds(4).toNanos());
+            // Closing the socket also frees the stuck writer.
+            writer.join(Duration.ofSeconds(2).toMillis());
+            assertFalse(writer.isAlive());
+        }
+    }
+
+    private void awaitConnected() throws InterruptedException {
+        long end = System.nanoTime() + Duration.ofSeconds(5).toNanos();
+        while (!client.isConnected()) {
+            if (System.nanoTime() > end) {
+                throw new AssertionError("client did not connect");
+            }
+            Thread.sleep(10);
+        }
+    }
+
+    private Peer accept() throws IOException {
+        Socket socket = cloud.accept();
+        socket.setSoTimeout(5_000);
+        return new Peer(socket);
+    }
+
+    /** The fake cloud's side of one connection. */
+    private static final class Peer implements AutoCloseable {
+
+        private final Socket socket;
+        private final FrameReader reader;
+        private final OutputStream out;
+
+        Peer(Socket socket) throws IOException {
+            this.socket = socket;
+            this.reader = new FrameReader(socket.getInputStream(), CODEC);
+            this.reader.authenticated();
+            this.out = socket.getOutputStream();
+        }
+
+        Envelope read() throws IOException {
+            return reader.read();
+        }
+
+        Message readSkippingPings() throws IOException {
+            Message message;
+            do {
+                message = read().message();
+            } while (message instanceof Ping);
+            return message;
+        }
+
+        void send(Message message) throws IOException {
+            sendRaw(CODEC.encode(Envelope.of(message)));
+        }
+
+        /** Answers Hello like the cloud does: AuthResult(ACCEPTED), then the ticket for the next connection. */
+        void accept(AuthToken ticket) throws IOException {
+            send(new AuthResult(AuthResult.Outcome.ACCEPTED, Protocol.PROTOCOL_VERSION));
+            send(new SessionTicket(ticket));
+        }
+
+        void sendRaw(byte[] bytes) throws IOException {
+            out.write(bytes);
+            out.flush();
+        }
+
+        @Override
+        public void close() throws IOException {
+            socket.close();
+        }
+    }
+}

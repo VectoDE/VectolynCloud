@@ -1,10 +1,10 @@
-# VectoraCloud configuration
+# VectolynCloud configuration
 
-Module `cloud/config`, package `net.vectora.cloud.config`. This is the one configuration layer of the cloud: the console, the setup assistant, hand-edited files and later the REST API and the dashboard all read and change the configuration through it.
+Module `cloud/config`, package `net.vectolyn.cloud.config`. This is the one configuration layer of the cloud: the console, the setup assistant, hand-edited files and later the REST API and the dashboard all read and change the configuration through it.
 
 ## Files in the cloud home
 
-The cloud home is the folder the cloud runs in (`VECTORA_HOME`, by default the folder of the start script). In production it lives outside any checkout. For local development and testing, `./gradlew :cloud:node:runLocal` builds `VectoraCloud.jar` and starts it with `run/` in the repository root as the home (see [launcher](launcher.md#local-start-from-the-repository)). `.gitignore` ignores `run/` as a whole, so its configuration, secrets, worlds, logs and downloads never reach a commit. If the cloud is started directly in the repository root by mistake, `.gitignore` also keeps its files (`config/`, `local/`, `database/`, `storage/`, `temp/`, `backups/`, `state/`, `logs/`) out of commits, but backups and secrets would still sit loose in the working tree.
+The cloud home is the folder the cloud runs in (`VECTOLYN_HOME`, by default the folder of the start script). In production it lives outside any checkout. For local development and testing, `./gradlew :cloud:node:runLocal` builds `VectolynCloud.jar` and starts it with `run/` in the repository root as the home (see [launcher](launcher.md#local-start-from-the-repository)). `.gitignore` ignores `run/` as a whole, so its configuration, secrets, worlds, logs and downloads never reach a commit. If the cloud is started directly in the repository root by mistake, `.gitignore` also keeps its files (`config/`, `local/`, `database/`, `storage/`, `temp/`, `backups/`, `state/`, `logs/`) out of commits, but backups and secrets would still sit loose in the working tree.
 
 ```
 <home>/config/cloud.yml           network and this node
@@ -12,7 +12,7 @@ The cloud home is the folder the cloud runs in (`VECTORA_HOME`, by default the f
 <home>/config/groups/<name>.yml   what a service runs (template, software, version, heap, plugins)
 <home>/config/tasks/<name>.yml    how many services of a group run, and where
 <home>/config/cluster.yml         head, members and revoked certificates of the cluster, see cluster.md
-<home>/secrets/vectora.env        secrets, KEY=VALUE, owner-only
+<home>/secrets/vectolyn.env       secrets, KEY=VALUE, owner-only
 ```
 
 `config/monitor.yml`, `config/backup.yml`, `config/cluster.yml` ([cluster.md](cluster.md#files)) and `config/software.lock.yml` belong to other modules, as do `local/`, `temp/`, `database/`, `storage/`, `backups/`, `logs/` and `state/`; the whole layout is in [architecture](architecture.md#cloud-home).
@@ -27,7 +27,7 @@ The cloud rewrites a file when it changes it. Comments in a file are not kept th
 
 ```yaml
 schema-version: 1
-network-name: Vectora        # 1-32 letters, digits, space, . _ -
+network-name: Vectolyn       # 1-32 letters, digits, space, . _ -
 language: en                 # en or de
 eula-accepted: false         # eula.txt is written only after this is true
 setup-complete: false        # needs eula-accepted: true
@@ -67,7 +67,7 @@ api:
   # cors-origins: [https://dashboard.example.org]   optional, up to 16 origins, off when empty
 ```
 
-Passwords are not in `cloud.yml`. They are in `secrets/vectora.env`.
+Passwords are not in `cloud.yml`. They are in `secrets/vectolyn.env`.
 
 ### `groups/<name>.yml`
 
@@ -86,7 +86,7 @@ drain-timeout: 30s           # optional, 5s to 10m, default 30s; only written wh
 catalog:                     # plugins and mods from the download catalog
   - id: luckperms
     kind: transitional       # plugin, mod or transitional
-  - id: vectora-paper
+  - id: vectolyn-paper
     kind: plugin
 process:                     # optional, see docs/cloud/node.md; every key has a default
   jvm-flags: [-XX:+UseG1GC]  # up to 64 flags, each -[A-Za-z0-9_.:+=/,@%-]{1,255}
@@ -103,7 +103,7 @@ process:                     # optional, see docs/cloud/node.md; every key has a
 
 `drain-timeout` is how long a service of the group may take to send its players to other services before the scaler stops it. If players are still on it after that time, the stop is called off and it keeps running; see [scaling.md](scaling.md#rules).
 
-`transitional` marks the third-party plugins the cloud installs until Vectora's own replacement is ready (LuckPerms, TAB, PlaceholderAPI, WorldEdit, WorldGuard, Chunky, spark, ProxyPortal). `mod` entries are only allowed with `fabric`, `plugin` entries only without it. `pandaspigot` only runs `1.8.8`.
+`transitional` marks the third-party plugins the cloud installs until Vectolyn's own replacement is ready (LuckPerms, TAB, PlaceholderAPI, WorldEdit, WorldGuard, Chunky, spark, ProxyPortal). `mod` entries are only allowed with `fabric`, `plugin` entries only without it. `pandaspigot` only runs `1.8.8`.
 
 ### `tasks/<name>.yml`
 
@@ -167,13 +167,13 @@ The cloud resolves a group or task file only directly inside `config/groups/` or
 
 ### Symbolic links
 
-`cloud.yml`, `nodes.yml`, the files in `groups/` and `tasks/`, the folders `config/`, `groups/`, `tasks/` and `secrets/`, and `secrets/vectora.env` must be real files and folders. A symbolic link, a Windows junction, a special file, or a file where a folder belongs is an error with the code `not-regular`:
+`cloud.yml`, `nodes.yml`, the files in `groups/` and `tasks/`, the folders `config/`, `groups/`, `tasks/` and `secrets/`, and `secrets/vectolyn.env` must be real files and folders. A symbolic link, a Windows junction, a special file, or a file where a folder belongs is an error with the code `not-regular`:
 
 - It is reported, never skipped silently. A link named like a configuration file (`groups/lobby.yml`) counts, a link with another name (`groups/notes.txt`) is ignored like any other file.
 - It is never followed. A dangling link where `cloud.yml` belongs does not count as a missing file, so the cloud does not write default files through it.
-- The secret store refuses a linked `secrets/` or `vectora.env` and writes nothing.
+- The secret store refuses a linked `secrets/` or `vectolyn.env` and writes nothing.
 
-The home folder itself may be a link, for example a mounted volume. The rule exists because the cloud replaces a file by renaming a new file over it, which would silently turn a link into a plain file, and because a link could point a secret or configuration out of the home. All checks use `NOFOLLOW_LINKS` (`RegularPaths` in `net.vectora.cloud.config.io`).
+The home folder itself may be a link, for example a mounted volume. The rule exists because the cloud replaces a file by renaming a new file over it, which would silently turn a link into a plain file, and because a link could point a secret or configuration out of the home. All checks use `NOFOLLOW_LINKS` (`RegularPaths` in `net.vectolyn.cloud.config.io`).
 
 Files in `groups/` and `tasks/` that start with `.` (editor swap files, the cloud's own temporary files) and files that do not end in `.yml` or `.yaml` are ignored. A `.yaml` file or a `.yml` file with an invalid name is an error, so a file that would otherwise be skipped silently is reported.
 
@@ -225,7 +225,7 @@ Not checked here: whether a template folder or a catalog id exists. The template
 ## Changing the configuration: `ConfigService`
 
 ```java
-try (ConfigService config = ConfigService.open(CloudHome.of(Path.of("/opt/vectora")))) {
+try (ConfigService config = ConfigService.open(CloudHome.of(Path.of("/opt/vectolyn")))) {
     config.addListener(change -> log.info("changed: " + change.files()));
     config.startWatching();
     config.apply(List.of(new SetServerWanted(ServerKind.MOD, false), new SetLanguage(Language.DE)));
@@ -234,7 +234,7 @@ try (ConfigService config = ConfigService.open(CloudHome.of(Path.of("/opt/vector
 
 `apply` runs the operations in order, validates the result as a whole, writes the changed files and then tells the listeners (`ConfigChanged` with the old and new snapshot, the files and the operations). If validation fails, it throws `ConfigException` with every error, writes nothing and keeps the current snapshot. Several operations in one call count as one change, so a new group and its task can be added together.
 
-Operations in `net.vectora.cloud.config.operation`: `SetLanguage`, `SetNetworkName`, `AcceptEula`, `CompleteSetup`, `SetServerWanted`, `SetDatabaseMode`, `SetDatabase`, `SetProxy`, `SetLegacyProxy`, `SetApi`, `PutGroup`, `RemoveGroup`, `SetGroupHeap`, `SetGroupWanted`, `PutTask`, `RemoveTask`, `SetTaskScaling`, `PutNode`, `RemoveNode`. `ConfigOperation` is a plain interface; other modules add their own operations by implementing it.
+Operations in `net.vectolyn.cloud.config.operation`: `SetLanguage`, `SetNetworkName`, `AcceptEula`, `CompleteSetup`, `SetServerWanted`, `SetDatabaseMode`, `SetDatabase`, `SetProxy`, `SetLegacyProxy`, `SetApi`, `PutGroup`, `RemoveGroup`, `SetGroupHeap`, `SetGroupWanted`, `PutTask`, `RemoveTask`, `SetTaskScaling`, `PutNode`, `RemoveNode`. `ConfigOperation` is a plain interface; other modules add their own operations by implementing it.
 
 The service is thread-safe. `snapshot()` never blocks; changes and reloads run one at a time. Listeners are called in order while the service holds its lock, so they see changes in the order they happened. They may read the snapshot and call `apply` again, but must return quickly. Such a nested `apply` returns its result at once; its event is queued and delivered after every listener has seen the change that triggered it, so no listener sees the second change before the first. An exception in a listener is logged and does not stop the others.
 
@@ -267,13 +267,13 @@ To change a format: raise `SCHEMA_VERSION` in the model record, change the recor
 
 ## Secrets
 
-`secrets/vectora.env` holds the secrets in `KEY=VALUE` lines. `cloud/dist/secrets/vectora.env.example` lists the keys.
+`secrets/vectolyn.env` holds the secrets in `KEY=VALUE` lines. `cloud/dist/secrets/vectolyn.env.example` lists the keys.
 
 ### The `Secret` type
 
-`Secret` wraps a secret value. `toString()` always returns `***`, the value is only reachable through `reveal()`, `equals` compares in constant time, and `hashCode` is a constant. Use it for every secret that leaves `vectora.env`.
+`Secret` wraps a secret value. `toString()` always returns `***`, the value is only reachable through `reveal()`, `equals` compares in constant time, and `hashCode` is a constant. Use it for every secret that leaves `vectolyn.env`.
 
-### Format of `vectora.env`
+### Format of `vectolyn.env`
 
 `EnvFileParser` is strict:
 
@@ -292,14 +292,14 @@ On the first start `SecretStore.ensureGenerated` creates every missing secret wi
 
 | Key | Value |
 |---|---|
-| `VECTORA_FORWARDING_SECRET` | 48 characters `A-Z a-z 0-9` |
-| `VECTORA_LEGACY_FORWARDING_SECRET` | 48 characters `A-Z a-z 0-9`, generated independently of `VECTORA_FORWARDING_SECRET` |
-| `VECTORA_DB_PASSWORD` | 32 characters `A-Z a-z 0-9` |
-| `VECTORA_DB_ROOT_PASSWORD` | 32 characters `A-Z a-z 0-9` |
-| `VECTORA_MANAGEMENT_SECRET` | 40 characters `A-Z a-z 0-9` |
-| `VECTORA_FLOODGATE_KEY_B64` | 16 random bytes (raw AES key), Base64 |
+| `VECTOLYN_FORWARDING_SECRET` | 48 characters `A-Z a-z 0-9` |
+| `VECTOLYN_LEGACY_FORWARDING_SECRET` | 48 characters `A-Z a-z 0-9`, generated independently of `VECTOLYN_FORWARDING_SECRET` |
+| `VECTOLYN_DB_PASSWORD` | 32 characters `A-Z a-z 0-9` |
+| `VECTOLYN_DB_ROOT_PASSWORD` | 32 characters `A-Z a-z 0-9` |
+| `VECTOLYN_MANAGEMENT_SECRET` | 40 characters `A-Z a-z 0-9` |
+| `VECTOLYN_FLOODGATE_KEY_B64` | 16 random bytes (raw AES key), Base64 |
 
-`VECTORA_DB_HOST`, `VECTORA_DB_PORT`, `VECTORA_DB_NAME` and `VECTORA_DB_USER` are not secrets; their values come from the `database` section of `cloud.yml`.
+`VECTOLYN_DB_HOST`, `VECTOLYN_DB_PORT`, `VECTOLYN_DB_NAME` and `VECTOLYN_DB_USER` are not secrets; their values come from the `database` section of `cloud.yml`.
 
 Rules of the store:
 
@@ -321,10 +321,10 @@ Both parsers have Jazzer fuzz tests (see [architecture](architecture.md#fuzz-tes
 - `EnvFileParserFuzzTest.parseFailsOnlyWithEnvFormatExceptionAndRoundTrips`: any input either fails with `EnvFormatException` or parses into a file whose rendering parses to the same lines.
 - `ConfigYamlFuzzTest.loadAndValidateFailOnlyWithConfigErrors`: the first byte picks the file kind, the rest is the file. Any input either fails with `ConfigException` or loads, validates without an exception and writes back to an equal value.
 
-Seed inputs live in `cloud/config/src/test/resources/net/vectora/cloud/config/…/*FuzzTestInputs/`. They are raw bytes, so a `.gitattributes` there switches off line-ending normalisation.
+Seed inputs live in `cloud/config/src/test/resources/net/vectolyn/cloud/config/…/*FuzzTestInputs/`. They are raw bytes, so a `.gitattributes` there switches off line-ending normalisation.
 
 ```sh
-./gradlew :cloud:config:test --tests 'net.vectora.cloud.config.io.ConfigYamlFuzzTest.loadAndValidateFailOnlyWithConfigErrors' -Pfuzz -PfuzzMaxDuration=5m
+./gradlew :cloud:config:test --tests 'net.vectolyn.cloud.config.io.ConfigYamlFuzzTest.loadAndValidateFailOnlyWithConfigErrors' -Pfuzz -PfuzzMaxDuration=5m
 ```
 
 ## JVM flag allowlist
@@ -345,7 +345,7 @@ Groups can be written through the [REST API](api.md), so a stolen token must not
 - `-Xss`, `-Xmn` with a size, `-Xrs`, `-Xnoclassgc`, `-Xint`, `-Xmixed`, `-Xbatch`, `-Xshare:auto|on|off`, `-server`, `--enable-preview`, assertions (`-ea`, `-da`, ...)
 - `--add-opens`, `--add-exports`, `--add-reads`, `--add-modules`, `--enable-native-access`, `--sun-misc-unsafe-memory-access`, `--illegal-native-access`
 - `-Xlog` to the console only (no `file=`)
-- `-D` for `file.encoding`, `stdout.encoding`, `stderr.encoding`, `user.language`, `user.country`, `user.timezone`, `java.awt.headless`, `java.net.preferIPv4Stack`, `java.net.preferIPv6Addresses`, the Aikar flags (`using.aikars.flags`, `aikars.new.flags`), Paper switches (`disable.watchdog`, `IReallyKnowWhatIAmDoingISwear`), `log4j2.formatMsgNoLookups`, and properties starting with `paper.`, `velocity.`, `fabric.`, `vectora.`, `terminal.`, `jline.`, `io.netty.`, `net.kyori.`, `com.velocitypowered.`, `geyser.`, `floodgate.`, `spark.`, `jdk.virtualThreadScheduler.`. Under these prefixes the value must be plain, `[A-Za-z0-9_.,+-]{0,128}` without `..`: a path, a drive, a URL, `@` or `%` is not listed, because it could point a loader somewhere else. The exact names above may have any value.
+- `-D` for `file.encoding`, `stdout.encoding`, `stderr.encoding`, `user.language`, `user.country`, `user.timezone`, `java.awt.headless`, `java.net.preferIPv4Stack`, `java.net.preferIPv6Addresses`, the Aikar flags (`using.aikars.flags`, `aikars.new.flags`), Paper switches (`disable.watchdog`, `IReallyKnowWhatIAmDoingISwear`), `log4j2.formatMsgNoLookups`, and properties starting with `paper.`, `velocity.`, `fabric.`, `vectolyn.`, `terminal.`, `jline.`, `io.netty.`, `net.kyori.`, `com.velocitypowered.`, `geyser.`, `floodgate.`, `spark.`, `jdk.virtualThreadScheduler.`. Under these prefixes the value must be plain, `[A-Za-z0-9_.,+-]{0,128}` without `..`: a path, a drive, a URL, `@` or `%` is not listed, because it could point a loader somewhere else. The exact names above may have any value.
 - No other `-D`. A plugin's own switch such as `-Dmyplugin.debug=true` is not listed: the node cannot know which library on the class path reads a name and what it does with it (Paper's library loader, for example, takes its Maven repository from a property). Put such a switch into the group file by hand; it then stays and is reported as a warning (see below).
 
 **Not listed** (`jvm-flag-not-listed`): everything else.

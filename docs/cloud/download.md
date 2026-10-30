@@ -1,6 +1,6 @@
 # Downloads
 
-`cloud/download` (`net.vectora.cloud.download`) fetches server software, plugins, mods and the MariaDB server, checks every file against a checksum and keeps it in a content-addressed cache. `config/software.lock.yml` records exactly which file each name stands for. Everything it downloads lives in `<home>/storage/`. The `jre` package picks the Java runtime for each server group and installs Temurin from Adoptium where no fitting system Java exists ([JRE management](#jre-management)).
+`cloud/download` (`net.vectolyn.cloud.download`) fetches server software, plugins, mods and the MariaDB server, checks every file against a checksum and keeps it in a content-addressed cache. `config/software.lock.yml` records exactly which file each name stands for. Everything it downloads lives in `<home>/storage/`. The `jre` package picks the Java runtime for each server group and installs Temurin from Adoptium where no fitting system Java exists ([JRE management](#jre-management)).
 
 The module uses the JDK `HttpClient` and Jackson 3. It has no other dependencies.
 
@@ -25,7 +25,7 @@ The module uses the JDK `HttpClient` and Jackson 3. It has no other dependencies
 - Timeouts: 15 s to connect, 30 s until the response headers arrive, 15 min per attempt in total. A watchdog closes a stalled connection when that time is up.
 - Up to 3 attempts with exponential backoff (1 s, 2 s, at most 10 s) after network errors and 5xx answers. 4xx answers are not retried, and neither are a refused host or an exceeded limit.
 - 429 (Too Many Requests) and 503 count as rate limits and get up to 2 retries of their own. The client waits as long as `Retry-After` asks: whole seconds (at most nine digits) or an HTTP date such as `Wed, 28 Oct 2026 12:00:05 GMT`, measured against the system clock in UTC. A date in the past means no wait. Without the header, or with a value it cannot read, it uses the backoff above. If `Retry-After` asks for more than 60 s, the request fails at once with a message that names the host and the requested wait, without the path or query of the URL.
-- User-Agent: `VectoraCloud/<version> (+https://github.com/VectoDE/VectoraCloud)`. The version comes from `Implementation-Version` in the jar manifest, which `vectora.java-conventions` sets for every module jar; outside a jar (tests, IDE) it is `dev`. PaperMC and Modrinth ask for a User-Agent that names the application and a contact.
+- User-Agent: `VectolynCloud/<version> (+https://github.com/VectoDE/VectolynCloud)`. The version comes from `Implementation-Version` in the jar manifest, which `vectolyn.java-conventions` sets for every module jar; outside a jar (tests, IDE) it is `dev`. PaperMC and Modrinth ask for a User-Agent that names the application and a contact.
 
 ## Providers
 
@@ -77,7 +77,7 @@ For a source without a checksum (only the Fabric launcher so far) the first down
 The lockfile lives in the configuration folder of the cloud home (`<home>/config/software.lock.yml`). It is written through a temporary file and an atomic move.
 
 ```yaml
-# Written by VectoraCloud. Pins every downloaded artifact to one file and its hash.
+# Written by VectolynCloud. Pins every downloaded artifact to one file and its hash.
 # Format: docs/cloud/download.md. Do not edit while the cloud is running.
 schema-version: 1
 artifacts:
@@ -134,13 +134,13 @@ Rules:
 
 ## Catalog
 
-`src/main/resources/net/vectora/cloud/download/catalog/catalog.yml` lists the artifacts the cloud needs. It is data; `ArtifactCatalog` only reads it. `CatalogEntry.toRequest(minecraftVersion)` builds the request for a group.
+`src/main/resources/net/vectolyn/cloud/download/catalog/catalog.yml` lists the artifacts the cloud needs. It is data; `ArtifactCatalog` only reads it. `CatalogEntry.toRequest(minecraftVersion)` builds the request for a group.
 
 | Field | Meaning |
 |---|---|
 | `id` | Unique name, also the name in the lockfile |
 | `kind` | `server`, `plugin`, `mod` or `database` |
-| `type` | `standard` or `transitional` (third-party plugin until the Vectora replacement exists; requires `replaced-by`) |
+| `type` | `standard` or `transitional` (third-party plugin until the Vectolyn replacement exists; requires `replaced-by`) |
 | `provider`, `project`, `platform` | Where it comes from |
 | `game-version` | `version` (the group's Minecraft version is the version to resolve, Paper), `filter` (only builds for that version, Modrinth and Fabric) or `none` (the proxy has no Minecraft version of its own) |
 | `targets` | Server templates in `templates/` that use it |
@@ -181,8 +181,8 @@ Every catalog entry has a source with a checksum except the Fabric launcher. A H
 - **Pinning.** The first resolve of a lock name asks the provider for the newest stable version (or the pinned `version`), downloads it and writes the coordinate and checksum to `config/software.lock.yml`. Every later start replays that entry: from `storage/artifacts/<sha256>` without the network, or by downloading exactly that file again. A newer upstream build is only taken after the entry is removed from the lockfile. A lock entry that no longer fits (another provider, another pinned version, another Minecraft version) is resolved again.
 - **What the checksum proves.** Fill, Modrinth, Hangar, GeyserMC and the PandaSpigot API publish the checksum in the same API answer that names the download URL. It catches a damaged or swapped download and a mirror that serves something else, but not a compromised source, project account or API: whoever controls the answer controls both. The first resolve of an unpinned entry is therefore trust in the source at that moment, like trust on first use; after that the lockfile pins exactly that file. Catalog entries name Modrinth and Hangar projects by slug, not by a fixed project id. `software.lock.yml` is trusted like the rest of the home folder: whoever can write it can pin another file from an allowed host, so it must only be writable by the cloud's user.
 - **Java minimum.** The highest of Fill's `java.version.minimum` and Mojang's `javaVersion` for that Minecraft version is noted per group in `storage/java-minimums.properties`, so `ManagedJavaRuntimes` knows it on a later offline start.
-- **Bridge.** `BridgePlugins` copies `VectoraCloudBridge{Velocity,Paper,Legacy}-<version>.jar` from the node's own resources (listed with their SHA-256 in `bridges.index`, built by `:cloud:node:bridgeResources`) into `plugins/`, checked against that hash, and removes older versions of the same bridge. Fabric has no bridge yet.
-- **Bookkeeping.** `plugins/.vectora-managed` (`mods/.vectora-managed`) lists the files the node put there. On the next start, a listed file that is no longer wanted is deleted; files the operator added are not touched.
+- **Bridge.** `BridgePlugins` copies `VectolynCloudBridge{Velocity,Paper,Legacy}-<version>.jar` from the node's own resources (listed with their SHA-256 in `bridges.index`, built by `:cloud:node:bridgeResources`) into `plugins/`, checked against that hash, and removes older versions of the same bridge. Fabric has no bridge yet.
+- **Bookkeeping.** `plugins/.vectolyn-managed` (`mods/.vectolyn-managed`) lists the files the node put there. On the next start, a listed file that is no longer wanted is deleted; files the operator added are not touched.
 
 ## Safe extraction
 
@@ -201,7 +201,7 @@ Every catalog entry has a source with a checksum except the Fabric launcher. A H
 
 ## Tests
 
-- Unit tests run without a network. `FakeTransport` replaces the HTTP layer; the provider tests use stored API answers under `src/test/resources/net/vectora/cloud/download/provider/`, saved on 2026-10-28 and trimmed.
+- Unit tests run without a network. `FakeTransport` replaces the HTTP layer; the provider tests use stored API answers under `src/test/resources/net/vectolyn/cloud/download/provider/`, saved on 2026-10-28 and trimmed.
 - Covered: wrong hash aborts and deletes, redirect to a foreign host or to HTTP, zip slip and tar slip, zip bomb by size and by entry count, links out of the target (also as chains), TOFU mismatch and a TOFU pin that stays binding once the source publishes a checksum, rate limits with `Retry-After`, lockfile round trip and rollback, catalog content.
 - Fuzz tests (Jazzer, regression mode in every test run, fuzzing at night): `TarReaderFuzzTest`, `ProviderJsonFuzzTest` (every JSON mapper, Adoptium included), `SoftwareLockFileFuzzTest` and `JreFilesFuzzTest` (`release` file, `-XshowSettings` output, install marker). Seeds include TAR files written by Python's `tarfile` in ustar, GNU and pax format.
 - Seven tests need symlinks or POSIX permissions and are skipped on Windows; CI runs them on Linux. The CI uploads the JUnit XML of every test run as an artifact (`junit-xml-ubuntu-latest`, `junit-xml-windows-latest`, `junit-xml-java21`), so it is visible there which tests ran and which were skipped.
@@ -255,7 +255,7 @@ Runtimes live in `<home>/storage/jre/<vendor>-<feature>-<os>-<arch>/`, for examp
 1. unpacks the verified archive with `SafeExtractor` into `storage/jre/.staging-<name>-*`, so the zip-slip, link and size rules above apply. TAR permission bits are kept, so `bin/java` stays executable on Linux and macOS;
 2. finds the Java home: the archive root, its single top-level directory, or `Contents/Home` below it (macOS);
 3. checks that `release` names the expected feature version, that `bin/java` (`bin\java.exe` on Windows) is a regular file and, for a Linux or macOS runtime on a POSIX file system, executable (a Windows zip has no permission bits, and `java.exe` needs none);
-4. writes `.vectora-jre.properties` (SHA-256 of the archive, relative Java home, version);
+4. writes `.vectolyn-jre.properties` (SHA-256 of the archive, relative Java home, version);
 5. moves the staging directory into place. An older install is moved to `storage/jre/.old-<name>-*` first and deleted. If a running server still holds files there (Windows), it is removed on the next install, together with any staging directory an interrupted install left.
 
 If a step fails, the staging directory is deleted and an existing install stays as it was. A marker whose Java home points outside its directory is ignored, and the runtime is installed again.

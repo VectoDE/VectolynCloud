@@ -1,13 +1,13 @@
-# Mitmachen bei Vectora
+# Mitmachen bei Vectolyn
 
 [English](CONTRIBUTING.md)
 
-Danke, dass du helfen willst. Vectora steht noch am Anfang, deshalb sind die Regeln kurz. Sie wachsen mit dem Code.
+Danke, dass du helfen willst. Vectolyn steht noch am Anfang, deshalb sind die Regeln kurz. Sie wachsen mit dem Code.
 
 ## Bevor du anfängst
 
 - Lies das [README](README.de.md) und die [Roadmap](https://github.com/users/VectoDE/projects/11).
-- Fragen und lose Ideen gehören in die [Discussions](https://github.com/VectoDE/VectoraCloud/discussions).
+- Fragen und lose Ideen gehören in die [Discussions](https://github.com/VectoDE/VectolynCloud/discussions).
 - Für einen Fehler oder ein konkretes Feature öffnest du ein Issue über eines der Formulare. Bei allem, was größer ist als ein kleiner Fix, warte auf eine Antwort im Issue, bevor du Code schreibst. Dann arbeitest du nicht umsonst, falls die Änderung nicht zum Plan passt.
 - Sicherheitslücken: siehe [SECURITY.md](SECURITY.md). Nie in einem öffentlichen Issue.
 

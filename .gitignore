@@ -2,7 +2,7 @@
 .local-backup/
 
 # --- Local cloud home ------------------------------------------------------------
-# ./gradlew :cloud:node:runLocal starts the built VectoraCloud.jar with run/ as its cloud home.
+# ./gradlew :cloud:node:runLocal starts the built VectolynCloud.jar with run/ as its cloud home.
 # Everything in it (configuration, secrets, worlds, logs, downloaded software) stays local.
 /run/
 

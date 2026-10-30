@@ -1,4 +1,4 @@
-# VectoraCloud-Konsole: Befehlsreferenz
+# VectolynCloud-Konsole: Befehlsreferenz
 
 Modul `cloud/console`. Die ausführliche Modulseite mit Terminal-Auswahl, Erweiterung und Frage-API steht auf Englisch in [console.md](console.md). Diese Seite beschreibt die Bedienung.
 
@@ -8,18 +8,18 @@ Alle Log-Zeilen haben ein Format: `HH:mm:ss LEVEL Nachricht`, mit den festen Stu
 
 ## Bedienung
 
-**Im Terminal** (JLine): Prompt `vectora> `, Zeilenbearbeitung, Tab vervollständigt Befehle, Unterbefehle und Werte. Farben gibt es nur, wenn das Terminal mindestens 8 Farben meldet und `NO_COLOR` nicht gesetzt ist. Log-Zeilen erscheinen über dem Prompt, die angefangene Eingabe bleibt stehen. Strg+C oder Strg+D am Prompt fragen erst nach („Zum Stoppen aller Dienste und der Cloud innerhalb von 3 Sekunden erneut Strg+C drücken oder shutdown eingeben.“). Erst ein zweites Strg+C oder Strg+D innerhalb von 3 Sekunden führt `shutdown` aus. Ein einzelner Tastendruck stoppt also nicht das ganze Netzwerk. Während ein Befehl läuft, wird Strg+C ignoriert.
+**Im Terminal** (JLine): Prompt `vectolyn> `, Zeilenbearbeitung, Tab vervollständigt Befehle, Unterbefehle und Werte. Farben gibt es nur, wenn das Terminal mindestens 8 Farben meldet und `NO_COLOR` nicht gesetzt ist. Log-Zeilen erscheinen über dem Prompt, die angefangene Eingabe bleibt stehen. Strg+C oder Strg+D am Prompt fragen erst nach („Zum Stoppen aller Dienste und der Cloud innerhalb von 3 Sekunden erneut Strg+C drücken oder shutdown eingeben.“). Erst ein zweites Strg+C oder Strg+D innerhalb von 3 Sekunden führt `shutdown` aus. Ein einzelner Tastendruck stoppt also nicht das ganze Netzwerk. Während ein Befehl läuft, wird Strg+C ignoriert.
 
 Die History liegt in `<home>/state/console.history` (höchstens 500 Zeilen, nur für den Besitzer lesbar). Nicht gespeichert werden Antworten auf Fragen, Secrets, Zeilen von Befehlen, die als sensibel markiert sind, und Zeilen, die mit einem Leerzeichen beginnen.
 
 **Ohne Terminal** (Docker ohne `-t`, Pterodactyl, systemd): Die Konsole liest stdin Zeile für Zeile, ohne Prompt, ohne Farben, ohne History. Endet stdin, hört die Konsole nur auf zu lesen; die Cloud läuft weiter und wird per Signal beendet (SIGTERM, `docker stop`). Strg+C kommt hier als Signal an. In beiden Fällen fährt die Cloud sauber herunter, jeder Dienst bekommt seinen Stopp-Befehl. Eine Frage bricht man hier mit `!cancel` ab.
 
-Erzwingen lässt sich die Art mit der System-Property `vectora.console` oder der Umgebungsvariable `VECTORA_CONSOLE`: `auto`, `ffm`, `jni`, `dumb` oder `plain`.
+Erzwingen lässt sich die Art mit der System-Property `vectolyn.console` oder der Umgebungsvariable `VECTOLYN_CONSOLE`: `auto`, `ffm`, `jni`, `dumb` oder `plain`.
 
 ## Eingabe
 
 - Leerzeichen trennen Wörter. `'einfache Anführungszeichen'` nehmen alles wörtlich.
-- In `"doppelten Anführungszeichen"` gelten nur `\"` und `\\` als Escape, sonst bleibt der Backslash stehen (`"C:\Vectora"`).
+- In `"doppelten Anführungszeichen"` gelten nur `\"` und `\\` als Escape, sonst bleibt der Backslash stehen (`"C:\Vectolyn"`).
 - Außerhalb von Anführungszeichen nimmt `\` das nächste Zeichen wörtlich (`a\ b` ist ein Wort).
 - `""` ist ein leeres Wort und leert einen optionalen Text.
 - Abgelehnt werden nicht geschlossene Anführungszeichen, ein Backslash am Zeilenende, Steuerzeichen und Zeilenumbrüche, mehr als 4096 Zeichen und mehr als 64 Wörter. Die Meldung nennt die Regel und die Position, nie die Eingabe.
@@ -63,7 +63,7 @@ Leert den Bildschirm, wenn das Terminal ANSI kann.
 
 Schlüssel: `network-name`, `language`, `eula-accepted`, `setup-complete`, `node-id`, `fallback-group`, `servers.<proxy|lobby|survival|creative|mod|end|database|minigame|legacy-server>`, `proxy.bind`, `proxy.port`, `proxy.bedrock-port`, `legacy-proxy.enabled`, `legacy-proxy.port`, `database.mode`, `database.host`, `database.port`, `database.name`, `database.user`, `database.docker-image`, `api.enabled`, `api.bind`, `api.port`, `api.tls.enabled`, `api.tls.keystore`, `api.cors-origins`.
 
-Werte wie in der Datei: nur `true` oder `false`, ganze Zahlen, Enum-Werte klein geschrieben. `api.cors-origins` nimmt eine durch Komma getrennte Liste von Origins, `""` schaltet CORS aus. `fallback-group` muss eine bestehende Gruppe nennen, `""` setzt sie auf den Standard `lobby` zurück. Passwörter stehen nicht in `cloud.yml`, sondern in `secrets/vectora.env`.
+Werte wie in der Datei: nur `true` oder `false`, ganze Zahlen, Enum-Werte klein geschrieben. `api.cors-origins` nimmt eine durch Komma getrennte Liste von Origins, `""` schaltet CORS aus. `fallback-group` muss eine bestehende Gruppe nennen, `""` setzt sie auf den Standard `lobby` zurück. Passwörter stehen nicht in `cloud.yml`, sondern in `secrets/vectolyn.env`.
 
 ### `setup`
 
@@ -125,6 +125,6 @@ Der Einrichtungsassistent und andere Assistenten stellen Fragen über dieselbe K
 - Enter übernimmt den Standardwert in eckigen Klammern.
 - Ja/Nein versteht `j`, `ja`, `y`, `yes`, `n`, `nein`, `no`.
 - Bei einer Auswahl gilt die Nummer oder der Name in Klammern.
-- Secrets werden maskiert eingegeben, nie angezeigt und nie in der History gespeichert. Maskieren kann nur ein natives Terminal (`ffm`, `jni`). Im `dumb`-Terminal von JLine und ohne Terminal bleibt die Eingabe sichtbar; die Frage warnt vorher und empfiehlt, mit `!cancel` abzubrechen und den Wert in `secrets/vectora.env` einzutragen. „Enter behält den aktuellen Wert“ lässt ein bestehendes Secret unverändert.
+- Secrets werden maskiert eingegeben, nie angezeigt und nie in der History gespeichert. Maskieren kann nur ein natives Terminal (`ffm`, `jni`). Im `dumb`-Terminal von JLine und ohne Terminal bleibt die Eingabe sichtbar; die Frage warnt vorher und empfiehlt, mit `!cancel` abzubrechen und den Wert in `secrets/vectolyn.env` einzutragen. „Enter behält den aktuellen Wert“ lässt ein bestehendes Secret unverändert.
 - Eine ungültige Antwort zeigt, was erwartet wird, und fragt erneut, höchstens zehnmal hintereinander.
 - Strg+C, Strg+D, das Ende von stdin oder `!cancel` brechen ab.

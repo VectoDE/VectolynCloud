@@ -1,28 +1,28 @@
 # Rights audit
 
-Every privileged command and action of VectoraCloud and its plugins, who may use it and where that is checked. The rule: a moderation, admin or team action is checked by the server that carries it out, for every call, never only by a client or a menu, and it is off for normal players unless an operator or a permission plugin grants it. Command blocks do not exist on the network at all ([bridges.md](bridges.md#command-blocks)).
+Every privileged command and action of VectolynCloud and its plugins, who may use it and where that is checked. The rule: a moderation, admin or team action is checked by the server that carries it out, for every call, never only by a client or a menu, and it is off for normal players unless an operator or a permission plugin grants it. Command blocks do not exist on the network at all ([bridges.md](bridges.md#command-blocks)).
 
 This list is part of the repository and changes with the code. A pull request that adds a privileged command or action adds its row here, with the test that shows a player without the right triggers nothing.
 
-State: stage 2 (VectoraCloud core). The Vectora plugin with its own moderation, ranks and menus comes in stage 3; its commands join this list then. There are no dashboard actions in game yet.
+State: stage 2 (VectolynCloud core). The Vectolyn plugin with its own moderation, ranks and menus comes in stage 3; its commands join this list then. There are no dashboard actions in game yet.
 
 ## In game
 
 | Command or action | Where | Who may | Checked where | Default for normal players | Test |
 |---|---|---|---|---|---|
-| `kick`, `minecraft:kick` (network kick) | Paper bridge | console, RCON, players with `vectora.moderation.kick`; `execute` as its caller | Brigadier requirement of the bridge's node (the command does not exist for others) and again in `networkKick` | off (`default: op` in `plugin.yml`) | `KickCommandNodeTest.anUnentitledSourceCannotUseIt`, `KickSourceTest` (paper), `PluginDescriptorTest` (paper) |
-| `kick`, `minecraft:kick`, `vectoracloud:kick` (network kick) | legacy bridge (1.8.8) | as above | `NetworkKickCommand` before anything else, and again in `networkKick`; selectors go to the vanilla command, which needs `minecraft.command.kick` | off (`default: op`) | `NetworkKickCommandTest.anUnentitledSenderTriggersNoNetworkKick`, `KickSourceTest` (legacy) |
+| `kick`, `minecraft:kick` (network kick) | Paper bridge | console, RCON, players with `vectolyn.moderation.kick`; `execute` as its caller | Brigadier requirement of the bridge's node (the command does not exist for others) and again in `networkKick` | off (`default: op` in `plugin.yml`) | `KickCommandNodeTest.anUnentitledSourceCannotUseIt`, `KickSourceTest` (paper), `PluginDescriptorTest` (paper) |
+| `kick`, `minecraft:kick`, `vectolyncloud:kick` (network kick) | legacy bridge (1.8.8) | as above | `NetworkKickCommand` before anything else, and again in `networkKick`; selectors go to the vanilla command, which needs `minecraft.command.kick` | off (`default: op`) | `NetworkKickCommandTest.anUnentitledSenderTriggersNoNetworkKick`, `KickSourceTest` (legacy) |
 | `/kick` of another plugin turned into a network kick (command line watch) | Paper and legacy bridge | entitled senders as above | `KickCommandWatch.entitled` for the line's sender | off | `KickCommandWatchTest.anUnentitledPlayerOrACommandBlockTriggersNoNetworkKick` |
 | `networkKick(issuer, player, reason)` for the moderation module | Paper and legacy bridge | entitled issuers as above | in the method itself, returns `false` and does nothing otherwise | off | `KickSourceTest` (paper, legacy) |
-| Joining a server the cloud closed | Velocity bridge | players with `vectora.server.bypass-closed` | `ServerPreConnectEvent` on the proxy (`ProxyBridge.mayConnect`) | off (Velocity grants no permission without a permission plugin) | `ProxyBridgeTest` (closed server refused, bypass, counter-checks) |
-| Breaking and placing blocks in the lobby | VectoraLobby | players with `vectora.lobby.build` | every `BlockBreakEvent` and `BlockPlaceEvent` on the lobby server (`BuildProtection`) | off (`default: op`) | `BuildProtectionTest` |
-| End portal routing | VectoraPortalBridge | every player, no privilege | | | |
+| Joining a server the cloud closed | Velocity bridge | players with `vectolyn.server.bypass-closed` | `ServerPreConnectEvent` on the proxy (`ProxyBridge.mayConnect`) | off (Velocity grants no permission without a permission plugin) | `ProxyBridgeTest` (closed server refused, bypass, counter-checks) |
+| Breaking and placing blocks in the lobby | VectolynLobby | players with `vectolyn.lobby.build` | every `BlockBreakEvent` and `BlockPlaceEvent` on the lobby server (`BuildProtection`) | off (`default: op`) | `BuildProtectionTest` |
+| End portal routing | VectolynPortalBridge | every player, no privilege | | | |
 | Command blocks and command block minecarts | every Paper and 1.8.8 server | nobody, also not operators | node (`enable-command-block=false`) and bridges (`CommandBlockGuard`) | not obtainable, not placeable, not usable | `CommandBlockSettingTest`, `RealTemplatesTest.noTemplateShipsCommandBlocks`, `CommandBlockGuardTest` (paper, legacy) |
 | Vanilla commands (`/op`, `/give`, `/gamemode`, ...) | Paper, PandaSpigot, Fabric | operators | the server; the templates set `op-permission-level=4` and ship no `ops.json` | off | |
 
-Plugins of the transitional base in the templates (LuckPerms, WorldEdit, WorldGuard, TAB, PlaceholderAPI, the Fabric mods) bring their own commands and check their own permissions on the server. They are not audited here one by one: they are replaced by the Vectora plugin from stage 3 on. WorldEdit's `command-block-support` is off in every template that ships WorldEdit.
+Plugins of the transitional base in the templates (LuckPerms, WorldEdit, WorldGuard, TAB, PlaceholderAPI, the Fabric mods) bring their own commands and check their own permissions on the server. They are not audited here one by one: they are replaced by the Vectolyn plugin from stage 3 on. WorldEdit's `command-block-support` is off in every template that ships WorldEdit.
 
-The Fabric mod server has no Vectora bridge yet; command blocks are off there through `server.properties`, and removing them from the world follows with the Fabric bridge ([#79](https://github.com/VectoDE/VectoraCloud/issues/79)).
+The Fabric mod server has no Vectolyn bridge yet; command blocks are off there through `server.properties`, and removing them from the world follows with the Fabric bridge ([#79](https://github.com/VectoDE/VectolynCloud/issues/79)).
 
 ## Cloud channel
 
@@ -63,4 +63,4 @@ Nodes of one cluster talk to the head on the cluster port with mutual TLS 1.3 ([
 | Hello (session) | client certificate of the cluster CA, the hello names its node id, its fingerprint is not revoked and is the member's in `cluster.yml`, same version | `Disconnect(AUTH_FAILED)` without certificate, `NODE_MISMATCH`, `REVOKED`, `UNKNOWN_NODE`, `VERSION_MISMATCH` | `ClusterPortTest.aHelloWithoutACertificateIsRefused`, `ClusterPortTest.aHelloWithAnotherNodeIdThanTheCertificateIsRefused`, `ClusterJoinTest.aRemovedMemberLosesItsSessionAndCannotComeBack`, `ClusterJoinTest.aMemberOnAnotherVersionGetsNoSessionUntilUpdated`, `ClusterPortTest.removingAMemberThatDoesNotReadDoesNotWait`, `ClusterPortTest.aMemberThatFloodsPingsLosesItsSession` |
 | The head, seen from a member or a joining node | at the join: its CA has the pin of the join line and its certificate the head id of the join line; later: its certificate is the head's node id of `cluster.yml` from the cluster CA and not revoked | the connection ends before the token or a hello is sent | `ClusterJoinTest.aWrongCaPinStopsTheJoinBeforeTheTokenIsSent`, `ClusterJoinTest.anotherHeadIdStopsTheJoinBeforeTheTokenIsSent`, `ClusterPortTest.aJoiningNodeRefusesAMemberThatPlaysTheHead`, `ClusterPortTest.theMemberSideRefusesAPeerThatIsNotItsHead` |
 
-In this first step a session carries only pings; config, placement and services across nodes follow with the next steps of [#73](https://github.com/VectoDE/VectoraCloud/issues/73) and get their rows here.
+In this first step a session carries only pings; config, placement and services across nodes follow with the next steps of [#73](https://github.com/VectoDE/VectolynCloud/issues/73) and get their rows here.

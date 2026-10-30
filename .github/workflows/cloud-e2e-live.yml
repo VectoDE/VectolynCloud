@@ -1,6 +1,6 @@
-name: VectoraCloud live start
+name: VectolynCloud live start
 
-# VectoraCloud.jar with the real downloads and the real servers: Velocity with the lobby
+# VectolynCloud.jar with the real downloads and the real servers: Velocity with the lobby
 # (Paper 26.3), the legacy proxy with the 1.8.8 server (PandaSpigot). It checks that every
 # download verifies and is pinned, that each server loads its bridge and reports ready on the cloud
 # channel, that both proxies get their backends, and the clean shutdown.

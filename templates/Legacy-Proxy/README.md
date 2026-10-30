@@ -10,9 +10,9 @@ Software: Velocity, same version as the main proxy. No plugins yet. Whether Bedr
 
 ## Placeholders
 
-- `{{VECTORA_PROXY_BIND}}`, `{{VECTORA_LEGACY_PROXY_PORT}}` in `velocity.toml` (bind address and query port)
-- `{{VECTORA_PROXY_SERVERS}}`, `{{VECTORA_PROXY_TRY}}`, `{{VECTORA_PROXY_FORCED_HOSTS}}` in `velocity.toml`: the cloud fills them with the wanted 1.8.8 groups only, never with the backends of the main proxy
-- `{{VECTORA_XMS}}`, `{{VECTORA_XMX}}` in `start.bat`
-- Generated file: `forwarding.secret`. The cloud writes `VECTORA_LEGACY_FORWARDING_SECRET` here, never `VECTORA_FORWARDING_SECRET` of the main proxy. Velocity sends it to the backends as `bungeeguard-token`, in plain text inside the handshake, so it must never equal the main proxy's modern-forwarding secret.
+- `{{VECTOLYN_PROXY_BIND}}`, `{{VECTOLYN_LEGACY_PROXY_PORT}}` in `velocity.toml` (bind address and query port)
+- `{{VECTOLYN_PROXY_SERVERS}}`, `{{VECTOLYN_PROXY_TRY}}`, `{{VECTOLYN_PROXY_FORCED_HOSTS}}` in `velocity.toml`: the cloud fills them with the wanted 1.8.8 groups only, never with the backends of the main proxy
+- `{{VECTOLYN_XMS}}`, `{{VECTOLYN_XMX}}` in `start.bat`
+- Generated file: `forwarding.secret`. The cloud writes `VECTOLYN_LEGACY_FORWARDING_SECRET` here, never `VECTOLYN_FORWARDING_SECRET` of the main proxy. Velocity sends it to the backends as `bungeeguard-token`, in plain text inside the handshake, so it must never equal the main proxy's modern-forwarding secret.
 
 This README is documentation only; the cloud never copies it into a service folder. All placeholders: [`../placeholders.md`](../placeholders.md).

@@ -37,7 +37,7 @@ updates:
       actions:
         patterns: ['*']
 
-  # Base images of the VectoraCloud image (pinned by digest) and the MariaDB image in compose.yml.
+  # Base images of the VectolynCloud image (pinned by digest) and the MariaDB image in compose.yml.
   - package-ecosystem: docker
     directory: /cloud/dist/docker
     schedule:
