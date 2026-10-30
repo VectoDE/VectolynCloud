@@ -65,7 +65,7 @@ public final class PixelFont {
                 TextAttribute.LIGATURES, 0);
         PixelFont pf = new PixelFont(base.deriveFont(attributes));
         // Everything the layout itself writes: ellipsis, digits, month names, badges, wordmark.
-        String needed = BannerLayout.ELLIPSIS + "0123456789,.-+ VECTOLYNCLOUDALPHABETARCPRE"
+        String needed = BannerLayout.ELLIPSIS + "0123456789,.-+ VECTOLYNCLOUDALPHABETARCPRE "
                 + "JanFebMarAprMayJunJulAugSepOctNovDec";
         pf.requireGlyphs(needed, "font " + ttf);
         return pf;
