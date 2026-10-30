@@ -203,7 +203,7 @@ A scaled service is an ordinary service of the service core ([node.md](node.md#i
 
 ## Limits today
 
-- One node. With the cluster (PR 20) each node scales its own tasks; a task on several nodes is not balanced between them yet.
+- One node. In a [cluster](cluster.md) each node scales its own tasks; a task on several nodes is not balanced between them yet.
 - The proxies know the slots only of backends the node registered; servers listed by hand in `velocity.toml` are chosen the way Velocity would.
 - Scaling starts from a running service: a task with `min-services: 0` and no service has no player count to scale on (no queue yet).
 - The budget looks at the maximum heaps, not at what a JVM uses beyond its heap (metaspace, threads, native memory). Leave headroom in `heap.max`.

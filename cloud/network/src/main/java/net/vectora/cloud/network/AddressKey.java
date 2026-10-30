@@ -22,17 +22,18 @@ import java.util.Objects;
  *
  * @param value printable form, for example {@code v4:192.0.2.7} or {@code v6:20010db800000001::/64}
  */
-record AddressKey(String value) {
+public record AddressKey(String value) {
 
     private static final byte[] NAT64_PREFIX = {0x00, 0x64, (byte) 0xff, (byte) 0x9b, 0, 0, 0, 0, 0, 0, 0, 0};
     private static final byte[] MAPPED_PREFIX = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, (byte) 0xff, (byte) 0xff};
 
-    AddressKey {
+    /** Checks the value. */
+    public AddressKey {
         Objects.requireNonNull(value, "value");
     }
 
     /** Returns the key of {@code address}. */
-    static AddressKey of(InetAddress address) {
+    public static AddressKey of(InetAddress address) {
         Objects.requireNonNull(address, "address");
         byte[] bytes = address.getAddress();
         if (address instanceof Inet4Address) {

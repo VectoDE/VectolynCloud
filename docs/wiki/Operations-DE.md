@@ -39,6 +39,17 @@ Ohne Terminal (systemd, Docker, Pterodactyl) braucht die Cloud eine Setup-Datei:
 
 Alles liegt unter dem Cloud-Home: `config/` (Konfiguration), `local/` (Vorlagen und Welten der statischen Dienste), `database/`, `storage/` (Downloads und Java-Runtimes), `secrets/`, `backups/`, `logs/` und `state/`. Sichere `config/`, `local/` und `secrets/`; `storage/`, `temp/` und `logs/` entstehen von selbst neu. Ein Home aus einer älteren Version wird beim ersten Start einer neuen Version in diesen Aufbau umgezogen, nach einer Kopie der Konfiguration in `backups/`. Beende vorher die alte Cloud samt Servern. Details: [Update](https://github.com/VectoDE/VectoraCloud/blob/main/docs/cloud/operations.md#what-is-where-and-upgrading-from-an-older-home) (Englisch).
 
+## Mehrere Nodes
+
+Ein Cluster besteht aus einem Head und seinen Mitgliedern; Ablauf, Vertrauensmodell und Befehle stehen in [cluster.md](https://github.com/VectoDE/VectoraCloud/blob/main/docs/cloud/cluster.md) (Englisch). Für den Betrieb wichtig:
+
+- **Datenbank:** Jeder Node braucht einen MariaDB-Server, den alle Nodes erreichen: `database.mode: external` mit einer Adresse im Cluster-Netz. Mit `h2` lehnt der Head Tokens und Beitritte ab. `managed` und `docker` binden MariaDB an 127.0.0.1, damit können nur Nodes auf derselben Maschine beitreten; die Bindung ans Cluster-Netz kommt mit dem nächsten Schritt des Clusters.
+- **Gleiche Version:** Jeder Node läuft mit der VectoraCloud-Version des Heads. Ein Node mit anderer Version tritt nicht bei bzw. bekommt keine Sitzung, bis er aktualisiert ist.
+- **Firewall:** Den Cluster-Port des Heads (standardmäßig TCP 7011) nur für die anderen Nodes öffnen. In Docker auch veröffentlichen (`-p 7011:7011`) und `cluster init` die Adresse des Hosts geben. Die Ports für Proxys und Backends über Nodes hinweg kommen mit dem nächsten Schritt des Clusters.
+- **Backup:** `secrets/cluster/` des Heads enthält die Cluster-CA und gehört zum Backup von `secrets/`. Ohne sie kann kein Node mehr beitreten.
+- **Node entfernen:** `cluster remove <node-id>` auf dem Head widerruft sein Zertifikat sofort. Ein neuer Beitritt braucht ein neues Token.
+- **Pterodactyl:** als Cluster nicht getestet; der Cluster-Port bräuchte eine eigene Allocation.
+
 ## Einen Download prüfen
 
 ```sh

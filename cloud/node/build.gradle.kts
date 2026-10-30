@@ -30,6 +30,8 @@ dependencies {
     implementation(project(":cloud:backup"))
     implementation(project(":cloud:monitor"))
     implementation(project(":cloud:api"))
+    // Cluster of several nodes: CA, join tokens, mutual TLS on the cluster port (docs/cloud/cluster.md).
+    implementation(project(":cloud:cluster"))
 
     // End-to-end test: the fake server connects with the real client.
     testImplementation(project(":common:client"))

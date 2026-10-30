@@ -262,6 +262,17 @@ So funktioniert das Egg:
 - **PID-Limit:** Wings begrenzt jeden Server-Container standardmäßig auf **512 Prozesse und Threads** (`docker.container_pid_limit` in `/etc/pterodactyl/config.yml`). Eine Minecraft-Server-JVM nutzt grob 50 bis 150 Threads, Proxy und MariaDB mehr. Mehrere Server in einem Pterodactyl-Server stoßen deshalb an diese Grenze und scheitern dann mit „unable to create native thread“ oder `OutOfMemoryError`. In der Wings-Konfiguration erhöhen (zum Beispiel auf 4096) und Wings neu starten. Dafür braucht man Zugriff auf den Node, nicht nur auf das Panel.
 - **Weitere Grenzen:** nur ein Node (kein Cluster), und jeder Port braucht eine Allocation. Einen Netzwerknamen nur aus Ziffern oder `true`/`false` würde Wings in eine Zahl oder einen Wahrheitswert umwandeln. Die Regel der Variable verlangt deshalb mindestens einen Buchstaben.
 
+## Mehrere Nodes
+
+Ein Cluster besteht aus einem Head und seinen Mitgliedern; Ablauf, Vertrauensmodell und Befehle stehen in [cluster.md](cluster.md) (Englisch). Für den Betrieb wichtig:
+
+- **Datenbank:** Jeder Node braucht einen MariaDB-Server, den alle Nodes erreichen: `database.mode: external` mit einer Adresse im Cluster-Netz. Mit `h2` lehnt der Head Tokens und Beitritte ab. `managed` und `docker` binden MariaDB an 127.0.0.1, damit können nur Nodes auf derselben Maschine beitreten; die Bindung ans Cluster-Netz kommt mit dem nächsten Schritt des Clusters.
+- **Gleiche Version:** Jeder Node läuft mit der VectoraCloud-Version des Heads. Ein Node mit anderer Version tritt nicht bei bzw. bekommt keine Sitzung, bis er aktualisiert ist.
+- **Firewall:** Den Cluster-Port des Heads (standardmäßig TCP 7011) nur für die anderen Nodes öffnen. In Docker auch veröffentlichen (`-p 7011:7011`) und `cluster init` die Adresse des Hosts geben. Die Ports für Proxys und Backends über Nodes hinweg kommen mit dem nächsten Schritt des Clusters.
+- **Backup:** `secrets/cluster/` des Heads enthält die Cluster-CA und gehört zum Backup von `secrets/`. Ohne sie kann kein Node mehr beitreten.
+- **Node entfernen:** `cluster remove <node-id>` auf dem Head widerruft sein Zertifikat sofort. Ein neuer Beitritt braucht ein neues Token.
+- **Pterodactyl:** als Cluster nicht getestet; der Cluster-Port bräuchte eine eigene Allocation.
+
 ## Ein Release prüfen
 
 Jede Datei eines Releases ist mit cosign keyless signiert (Sigstore, die GitHub-Actions-Identität von `release.yml`). Die drei Dateien aus `SHA256SUMS` haben zusätzlich eine Build-Provenance-Attestierung von GitHub (SLSA-Provenance, mit Sigstore signiert). `vectora.intoto.jsonl` ist dieselbe Attestierung als Datei, sie lässt sich also auch ohne Abfrage bei GitHub prüfen; `SHA256SUMS` selbst sichert seine Signatur ab. Ersetze `v0.2.0` durch den Tag, den du heruntergeladen hast.

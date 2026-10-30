@@ -12,8 +12,10 @@ import java.util.Map;
  * {@link Slot#authenticated()} and is given back by {@link Slot#release()} when the connection
  * closes, authenticated or not. The unauthenticated limits are smaller than the others, so a peer
  * that opens connections and never says {@code Hello} cannot keep services from connecting.
+ *
+ * <p>Public for the cluster port ({@code cloud/cluster}), which counts its peers the same way.
  */
-final class ConnectionLimiter {
+public final class ConnectionLimiter {
 
     private final int maxTotal;
     private final int maxPerAddress;
@@ -24,7 +26,15 @@ final class ConnectionLimiter {
     private int total;
     private int unauthenticated;
 
-    ConnectionLimiter(int maxTotal, int maxPerAddress, int maxUnauthenticated, int maxUnauthenticatedPerAddress) {
+    /**
+     * Creates a limiter.
+     *
+     * @param maxTotal                     open connections in total
+     * @param maxPerAddress                open connections per {@link AddressKey}
+     * @param maxUnauthenticated           connections not authenticated yet, in total
+     * @param maxUnauthenticatedPerAddress connections not authenticated yet, per {@link AddressKey}
+     */
+    public ConnectionLimiter(int maxTotal, int maxPerAddress, int maxUnauthenticated, int maxUnauthenticatedPerAddress) {
         this.maxTotal = maxTotal;
         this.maxPerAddress = maxPerAddress;
         this.maxUnauthenticated = maxUnauthenticated;
@@ -36,7 +46,7 @@ final class ConnectionLimiter {
      *
      * @return the slot, or {@code null} if a limit is reached
      */
-    synchronized Slot tryAcquire(InetAddress address) {
+    public synchronized Slot tryAcquire(InetAddress address) {
         AddressKey key = AddressKey.of(address);
         if (total >= maxTotal || perAddress.getOrDefault(key, 0) >= maxPerAddress
                 || unauthenticated >= maxUnauthenticated
@@ -51,12 +61,12 @@ final class ConnectionLimiter {
     }
 
     /** Returns the number of open connections. */
-    synchronized int open() {
+    public synchronized int open() {
         return total;
     }
 
     /** Returns the number of open connections that have not authenticated yet. */
-    synchronized int unauthenticated() {
+    public synchronized int unauthenticated() {
         return unauthenticated;
     }
 
@@ -65,7 +75,7 @@ final class ConnectionLimiter {
     }
 
     /** The share of one connection. */
-    final class Slot {
+    public final class Slot {
 
         private final AddressKey key;
         private boolean pending = true;
@@ -76,12 +86,12 @@ final class ConnectionLimiter {
         }
 
         /** Returns the key the connection is counted under. */
-        AddressKey key() {
+        public AddressKey key() {
             return key;
         }
 
         /** The connection has authenticated: it no longer counts against the unauthenticated limits. */
-        void authenticated() {
+        public void authenticated() {
             synchronized (ConnectionLimiter.this) {
                 if (pending && !released) {
                     pending = false;
@@ -92,7 +102,7 @@ final class ConnectionLimiter {
         }
 
         /** The connection has closed. Safe to call more than once. */
-        void release() {
+        public void release() {
             synchronized (ConnectionLimiter.this) {
                 if (released) {
                     return;

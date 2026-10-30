@@ -26,7 +26,7 @@ The channel carries no secrets beyond the service tokens, but a peer that gets i
 | Protocol violations | `Disconnect(PROTOCOL_ERROR)` and close. That covers undecodable bytes, anything before `Hello` except `Hello`, a second `Hello`, messages meant for the other direction (`AuthResult`, `RegisterServer`, `UnregisterServer`) and a `ServiceReady` or `ServiceStatus` about another service. | `ConnectionHandler` |
 | Closing | After the last message the connection stops reading. If the peer does not take the last message within a second, the connection is cut. | `ConnectionHandler` |
 | Backpressure | When more than 2 MiB are queued for a peer, the cloud stops reading from it until the queue is below 512 KiB. A peer that sends pings or requests without reading the answers therefore cannot make the cloud buffer without limit; if it stays stuck, the idle timeout ends it. | `ConnectionHandler` |
-| Cluster nodes | Refused (`UNKNOWN_PEER`) on the service channel. | `ConnectionHandler` |
+| Cluster nodes | Refused (`UNKNOWN_PEER`) on the service channel; they use the [cluster port](cluster.md). | `ConnectionHandler` |
 
 ### What an authenticated service can do
 
@@ -42,7 +42,7 @@ The token proves which service a connection belongs to, nothing more. It sits in
 - **Log volume.** A refused `Hello` is a warning for the first ten and then every 1000th, otherwise a debug line.
 - **Limits per connection.** 1 MiB per frame, 256 open requests in each direction, backpressure as above. One service can still load the cloud within those limits, for example by publishing large channel messages that are fanned out to every service; the fan-out skips services that do not keep up.
 
-**No TLS yet.** The channel is plain TCP. On loopback that is fine. If `host` in `nodes.yml` is set to another address, the cloud logs a warning at start; such a setup needs a firewall that only lets the cloud's own machines in. TLS 1.3 with mutual authentication follows with the cluster (stage 2, PR 20). The server has a hook for it already: a `PipelineCustomizer` runs first for every accepted connection and can add an `SslHandler` in front of the handler named `CloudNetworkServer.FRAME_DECODER`. The client accepts any `javax.net.SocketFactory`, so an `SSLSocketFactory` fits without changes to the client.
+**No TLS on this channel.** The channel is plain TCP, made for loopback: every service talks to the node it runs on. If `host` in `nodes.yml` is set to another address, the cloud logs a warning at start; such a setup needs a firewall that only lets the cloud's own machines in. Nodes talk to each other on their own port with mutual TLS 1.3, see [cluster.md](cluster.md). Should the service channel ever leave the machine, the server has a hook for TLS: a `PipelineCustomizer` runs first for every accepted connection and can add an `SslHandler` in front of the handler named `CloudNetworkServer.FRAME_DECODER`. The client accepts any `javax.net.SocketFactory`, so an `SSLSocketFactory` fits without changes to the client.
 
 ## Server: `CloudNetworkServer`
 

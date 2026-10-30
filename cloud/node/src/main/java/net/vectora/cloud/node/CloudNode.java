@@ -28,6 +28,10 @@ import net.vectora.cloud.backup.BackupException;
 import net.vectora.cloud.backup.BackupService;
 import net.vectora.cloud.backup.command.BackupCommands;
 import net.vectora.cloud.backup.schedule.BackupScheduler;
+import net.vectora.cloud.cluster.ClusterCommands;
+import net.vectora.cloud.cluster.ClusterPaths;
+import net.vectora.cloud.cluster.ClusterService;
+import net.vectora.cloud.cluster.VersionPolicy;
 import net.vectora.cloud.config.CloudHome;
 import net.vectora.cloud.config.model.ApiConfig;
 import net.vectora.cloud.monitor.MonitorRuntime;
@@ -85,6 +89,7 @@ import net.vectora.cloud.setup.SetupEnvironment;
 import net.vectora.cloud.setup.SetupException;
 import net.vectora.cloud.setup.SetupResult;
 import net.vectora.cloud.setup.SetupWizard;
+import net.vectora.protocol.NodeId;
 
 /**
  * One running node: home lock, configuration, secrets, the service core, the database, the cloud
@@ -378,9 +383,11 @@ public final class CloudNode implements AutoCloseable {
      * @param api        the node behind the API
      * @param apiServer  the API server, or null while {@code api.enabled} is off or it cannot be prepared
      * @param scaler     the autoscaler, started once the configured servers have started
+     * @param cluster    the cluster of this node (docs/cloud/cluster.md); standalone without
+     *                   {@code config/cluster.yml}
      */
     private record Ops(ApiCommands.TokenFile tokens, MonitorRuntime monitoring, BackupService backups, NodeApi api,
-                       ApiServer apiServer, Autoscaler scaler) {
+                       ApiServer apiServer, Autoscaler scaler, ClusterService cluster) {
     }
 
     private static Ops buildOps(NodeSettings settings, CloudHome home, ConfigService config, SecretStore secrets,
@@ -416,7 +423,10 @@ public final class CloudNode implements AutoCloseable {
                 ScalingSignals.of(monitoring.monitor(), channel.players(), channel::proxyWatches, Clock.systemUTC()));
         services.addListener(scaler);
         ApiCommands.TokenFile tokenFile = tokens.isPresent() ? tokens::get : () -> ApiTokens.open(home);
-        return new Ops(tokenFile, monitoring, backups, api, apiServer(home, config, secrets, api, tokens), scaler);
+        // One version per cluster: the update system (#74) hooks in at ClusterService.Events.
+        ClusterService cluster = ClusterService.openOrStandalone(new ClusterPaths(home), new NodeId(nodeId),
+                settings.launcherVersion(), config::snapshot, VersionPolicy.sameVersion(), Clock.systemUTC());
+        return new Ops(tokenFile, monitoring, backups, api, apiServer(home, config, secrets, api, tokens), scaler, cluster);
     }
 
     /**
@@ -571,6 +581,13 @@ public final class CloudNode implements AutoCloseable {
         // After the channel, before the first service: the monitor sees every start, and a backup
         // or restore that a crash interrupted is put right before a start renders into its folder.
         ops.monitoring().start();
+        // The cluster port of a head or the link of a member; a problem leaves the node running alone.
+        try {
+            ops.cluster().start();
+        } catch (IOException e) {
+            LOG.log(System.Logger.Level.ERROR, "Cluster: cannot start ({0}); the node runs outside the cluster. "
+                    + "See docs/cloud/cluster.md.", e.getMessage());
+        }
         prepareConsole();
         ServiceManager.Recovery recovery = services.recoverOrphans();
         if (!recovery.terminated().isEmpty() || !recovery.unverifiable().isEmpty()) {
@@ -891,6 +908,12 @@ public final class CloudNode implements AutoCloseable {
         // Tokens can be made before the API is switched on. A token file that could not be read at
         // the start is tried again by each command, which reports the problem until it is fixed.
         console.commands().register(new ApiCommands(ops.tokens()).command());
+        console.commands().register(new ClusterCommands(ops.cluster()).command());
+    }
+
+    /** The cluster of the node; for tests. */
+    ClusterService cluster() {
+        return ops.cluster();
     }
 
     /**
@@ -1016,6 +1039,7 @@ public final class CloudNode implements AutoCloseable {
         // After the last service: writes the history file and sends what is queued.
         step(errors, "closing the monitoring", ops.monitoring()::close);
         step(errors, "stopping the database", database::shutdown);
+        step(errors, "closing the cluster", ops.cluster()::close);
         step(errors, "closing the cloud channel", network::close);
         step(errors, "closing the configuration", config::close);
         step(errors, "closing the console", this::closeConsole);

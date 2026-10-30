@@ -258,5 +258,5 @@ They run on Java 25 and, with `-PtestJava=21`, on Java 21, on Linux and Windows 
 
 - Not wired into the node yet; see [Hooking it into the node](#hooking-it-into-the-node).
 - Changes to `monitor.yml` need a restart of the cloud.
-- One node only. With the cluster (PR 20) each node runs its own monitor; a combined view comes with the API and the dashboard.
+- One node only. In a [cluster](cluster.md) each node runs its own monitor; a combined view comes with the API and the dashboard.
 - Rules compare one metric with a fixed value. Rates of change and rules across several services are not supported.

@@ -11,10 +11,11 @@ The cloud home is the folder the cloud runs in (`VECTORA_HOME`, by default the f
 <home>/config/nodes.yml           all nodes of the cluster
 <home>/config/groups/<name>.yml   what a service runs (template, software, version, heap, plugins)
 <home>/config/tasks/<name>.yml    how many services of a group run, and where
+<home>/config/cluster.yml         head, members and revoked certificates of the cluster, see cluster.md
 <home>/secrets/vectora.env        secrets, KEY=VALUE, owner-only
 ```
 
-`config/monitor.yml`, `config/backup.yml` and `config/software.lock.yml` belong to other modules, as do `local/`, `temp/`, `database/`, `storage/`, `backups/`, `logs/` and `state/`; the whole layout is in [architecture](architecture.md#cloud-home).
+`config/monitor.yml`, `config/backup.yml`, `config/cluster.yml` ([cluster.md](cluster.md#files)) and `config/software.lock.yml` belong to other modules, as do `local/`, `temp/`, `database/`, `storage/`, `backups/`, `logs/` and `state/`; the whole layout is in [architecture](architecture.md#cloud-home).
 
 File names in this document, in error messages, events, the API and the console are relative to `config/`: `cloud.yml`, `groups/lobby.yml`. A relative path inside a file (for example `api.tls.keystore`) is resolved against the home, not against `config/`. A home from before the `config/` folder is moved by the [home layout migration](node.md#home-layout-migration) at the first start.
 

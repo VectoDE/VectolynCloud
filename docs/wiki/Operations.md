@@ -39,6 +39,17 @@ Without a terminal (systemd, Docker, Pterodactyl) the cloud needs a setup file: 
 
 Everything is below the cloud home: `config/` (configuration), `local/` (templates and the worlds of the static services), `database/`, `storage/` (downloads and Java runtimes), `secrets/`, `backups/`, `logs/` and `state/`. Back up `config/`, `local/` and `secrets/`; `storage/`, `temp/` and `logs/` come back on their own. A home from an older version is moved to this layout at the first start of a new version, after a copy of the configuration into `backups/`. Stop the old cloud and its servers first. Details: [upgrading](https://github.com/VectoDE/VectoraCloud/blob/main/docs/cloud/operations.md#what-is-where-and-upgrading-from-an-older-home).
 
+## Several nodes
+
+A cluster is one head and its members; the details, the trust model and the commands are in [cluster.md](https://github.com/VectoDE/VectoraCloud/blob/main/docs/cloud/cluster.md). What operations has to know:
+
+- **Database:** every node needs a MariaDB server that all nodes reach: `database.mode: external` with an address of the cluster network. With `h2` the head refuses tokens and joins. `managed` and `docker` bind MariaDB to 127.0.0.1, so with them only nodes on the same machine can join; their binding to the cluster network follows with the next step of the cluster.
+- **Same version:** every node runs the head's VectoraCloud version. A node on another version does not join, or gets no session, until it is updated.
+- **Firewall:** the head's cluster port (TCP 7011 by default) open for the other nodes only. In Docker publish it as well (`-p 7011:7011`) and give `cluster init` the host's address. The ports for proxies and backends across nodes come with the next step of the cluster.
+- **Backup:** `secrets/cluster/` of the head holds the cluster CA; it is part of the backup of `secrets/`. Without it no node can join any more.
+- **Removing a node:** `cluster remove <node-id>` on the head revokes its certificate at once. Joining again needs a new token.
+- **Pterodactyl:** not tested as a cluster; the cluster port would need an allocation of its own.
+
 ## Checking a download
 
 ```sh

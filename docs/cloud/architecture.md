@@ -2,7 +2,7 @@
 
 VectoraCloud is the Java application behind `java -jar VectoraCloud.jar`. It renders the server templates of its home (`<home>/local/templates/<Server>/default/`, written from the copies of `templates/` it carries, only for wanted servers), downloads and verifies the server software, sets up the database, starts and watches every proxy and server, and offers a console and an [API](api.md).
 
-This page describes the module layout. Each module gets its content in its own pull request (see the [roadmap](../wiki/Roadmap.md)). Done so far: [protocol](protocol.md), [configuration](config.md), [templates](template.md), [downloads](download.md), the [launcher](launcher.md), the [cloud channel](network.md) (`cloud/network` and `common/client`), the [database](database.md), the [node's service core](node.md), the [console](console.md), the [bridges](bridges.md), [backups](backup.md), [operations](operations.md) (start scripts, systemd, Docker, Pterodactyl, release files), [monitoring](monitor.md), the [API](api.md) and the [autoscaling](scaling.md), all wired into the node. The other modules are still empty shells with their final dependencies.
+This page describes the module layout. Each module gets its content in its own pull request (see the [roadmap](../wiki/Roadmap.md)). Done so far: [protocol](protocol.md), [configuration](config.md), [templates](template.md), [downloads](download.md), the [launcher](launcher.md), the [cloud channel](network.md) (`cloud/network` and `common/client`), the [database](database.md), the [node's service core](node.md), the [console](console.md), the [bridges](bridges.md), [backups](backup.md), [operations](operations.md) (start scripts, systemd, Docker, Pterodactyl, release files), [monitoring](monitor.md), the [API](api.md), the [autoscaling](scaling.md) and the first step of the [cluster](cluster.md), all wired into the node. The other modules are still empty shells with their final dependencies.
 
 ## Modules
 
@@ -19,6 +19,7 @@ This page describes the module layout. Each module gets its content in its own p
 | `cloud/database` | `net.vectora.cloud.database` | Database setup (managed MariaDB, Docker, external server or H2) and central sizing of the connection pools. See [database](database.md). |
 | `cloud/monitor` | `net.vectora.cloud.monitor` | Metrics per service and node, history, alert rules with hysteresis and debounce, webhook notifications, `monitor` and `alerts` commands, optional Prometheus endpoint on loopback. See [monitor.md](monitor.md). |
 | `cloud/setup` | `net.vectora.cloud.setup` | Setup assistant: the questions on the console, the setup file for `--non-interactive`, the `setup` command. Writes through `ConfigService`. See [setup](setup.md). |
+| `cloud/cluster` | `net.vectora.cloud.cluster` | Several nodes: cluster CA made with the JDK's `keytool`, one-time join tokens, the cluster port with mutual TLS 1.3 (JSSE, no Netty), membership, revocation, one version per cluster, the `cluster` command. See [cluster.md](cluster.md). |
 | `cloud/backup` | `net.vectora.cloud.backup` | Backups of the static services (worlds and configs, consistent through `save-off`/`save-all flush`/`save-on`) and of the database as zip archives in `backups/`, with manifest and SHA-256 per file, retention, schedule, restore of a stopped service and the `backup` console command. `cloud/node` provides the services and their control. See [backup.md](backup.md). |
 | `cloud/node` | `net.vectora.cloud.node` | The node itself: services, groups and tasks, JRE management, console, setup flow, scaling, monitoring, backups, updates, cluster. See [node.md](node.md). |
 | `cloud/launcher` | `net.vectora.cloud.launcher` | Entry point of `VectoraCloud.jar`: arguments, refusal to run as root or administrator (unless `--allow-root` or `VECTORA_ALLOW_ROOT=true`), node startup. See [launcher.md](launcher.md). |
@@ -45,6 +46,11 @@ graph TD
     node --> database[cloud-database]
     node --> console[cloud-console]
     node --> setup[cloud-setup]
+    node --> cluster[cloud-cluster]
+    cluster --> config
+    cluster --> console
+    cluster --> network
+    cluster --> protocol
     monitor[cloud-monitor] --> config
     monitor --> console
     monitor --> protocol
@@ -80,9 +86,10 @@ The rules behind it:
 
 | Library | Version | Used by | Why |
 |---|---|---|---|
-| Netty (`netty-transport`, `netty-handler`, `netty-codec-http`) | 4.2.19.Final | `cloud/network`, `cloud/api` | Non-blocking server for many long-lived connections (every proxy and server keeps one open), TLS 1.3 for the mTLS cluster links, and HTTP plus WebSocket for the API from the same stack. Velocity and Paper are built on Netty too, so its behaviour under load is well known. |
+| Netty (`netty-transport`, `netty-handler`, `netty-codec-http`) | 4.2.19.Final | `cloud/network`, `cloud/api` | Non-blocking server for many long-lived connections (every proxy and server keeps one open), and HTTP plus WebSocket for the API from the same stack. Velocity and Paper are built on Netty too, so its behaviour under load is well known. |
 | JLine 3 (`jline-reader`, `jline-terminal`, `jline-terminal-jni`) | 3.30.17 | `cloud/console` | Console with line editing, history and tab completion on Windows, Linux and macOS, as in CloudNet. The terminal provider `jni` works on Java 21. `ffm` (`jline-terminal-ffm`) needs Java 22+ and is chosen only on such runtimes, see [Java compatibility](../java-compatibility.md). |
 | Jackson 3 (`jackson-databind`, `jackson-dataformat-yaml`) | 3.2.4 | `cloud/config`, `cloud/download` | One data model for the YAML files and the JSON API, with explicit `schema-version` handling and exact error positions for broken config files. `cloud/download` also reads the download APIs, `software.lock.yml` and its catalog with it. |
+| JDK `keytool` and JSSE | Java 21 | `cloud/cluster` | The cluster CA and the node keys come from `keytool`, the cluster port is a plain `SSLServerSocket` with TLS 1.3 and a virtual thread per node (at most 64 members, so no event loop is needed). No certificate library is added. |
 | MariaDB Connector/J (`mariadb-java-client`) | 4.0.0 | `cloud/database` | Talks to the managed or external MariaDB/MySQL server: creating databases and users, checking the connection, sizing the pools. |
 
 Test only: JUnit 6 and Jazzer 0.30.0 (fuzz tests, see below). Compile only: `velocity-api` 4.3.1, `paper-api` 26.3 and `pandaspigot-api` 1.8.8 (with `adventure-api` 4.24.0) in the bridges. The proxy and the server provide them at runtime.
