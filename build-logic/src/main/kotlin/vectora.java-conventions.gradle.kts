@@ -45,6 +45,39 @@ tasks.withType<JavaCompile>().configureEach {
 
 val libs = the<VersionCatalogsExtension>().named("libs")
 
+// Minimum versions for libraries that come in transitively through the server APIs (Paper,
+// Velocity, PandaSpigot) and the Maven machinery inside paper-api. The APIs pin old releases with
+// known advisories (OpenSSF Scorecard "Vulnerabilities" reads gradle/verification-metadata.xml).
+// The APIs are compile only or test only here, so a newer patch release of the same line is safe.
+// Reasons and the advisories: docs/dependency-verification.md.
+val minimumVersions = mapOf(
+    "com.google.guava:guava" to "33.7.2-jre",
+    "com.google.code.gson:gson" to "2.14.0",
+    "org.apache.commons:commons-lang3" to "3.18.0",
+    "org.apache.logging.log4j:log4j-api" to "2.26.1",
+    "org.codehaus.plexus:plexus-utils" to "3.6.1",
+)
+// Compares the numeric parts of two versions ("33.6.0-jre" against "33.7.2-jre").
+fun compareVersions(a: String, b: String): Int {
+    val left = a.split('.', '-').mapNotNull { it.toIntOrNull() }
+    val right = b.split('.', '-').mapNotNull { it.toIntOrNull() }
+    for (i in 0 until maxOf(left.size, right.size)) {
+        val diff = left.getOrElse(i) { 0 }.compareTo(right.getOrElse(i) { 0 })
+        if (diff != 0) return diff
+    }
+    return 0
+}
+configurations.configureEach {
+    resolutionStrategy.eachDependency {
+        val wanted = minimumVersions["${requested.group}:${requested.name}"] ?: return@eachDependency
+        val current = requested.version ?: return@eachDependency
+        if (compareVersions(current, wanted) < 0) {
+            useVersion(wanted)
+            because("known advisories in $current")
+        }
+    }
+}
+
 dependencies {
     testImplementation(platform(libs.findLibrary("junit-bom").get()))
     testImplementation(libs.findLibrary("junit-jupiter").get())

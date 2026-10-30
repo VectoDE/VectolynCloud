@@ -85,6 +85,15 @@ PGP would add one real protection: against an account takeover where someone pub
 
 pandaspigot-api is only published as a snapshot, so the build pins one unique snapshot (`1.8.8-R0.1-20251003.170525-12`). Gradle 9.8.2 fails when writing metadata for such a version (`Multiple entries with same key`) as soon as metadata verification is on. Reading works. The script therefore trusts the `.pom` and `.module` of pandaspigot-api during the write and then replaces that entry with their SHA-256 from the Gradle cache. In the committed file they are checked like everything else; CI fails if the temporary entry is left over.
 
+## Vulnerable transitive versions
+
+OpenSSF Scorecard (check *Vulnerabilities*) reads the artifacts in `gradle/verification-metadata.xml`, so a version that only a server API pulls in as a compile-only or test-only dependency still counts. `vectora.java-conventions` raises these libraries to a patched release in every configuration when an API requests an older one: Guava 33.7.2, Gson 2.14.0, commons-lang3 3.18.0, log4j-api 2.26.1, plexus-utils 3.6.1. The rule only raises, never lowers. Remove an entry once the APIs ship a fixed version themselves.
+
+Check locally with `osv-scanner scan source -L gradle/verification-metadata.xml`. Two findings stay:
+
+- **commons-lang 2.6** (GHSA-j288-q9x7-2f5v): pandaspigot-api needs it at test runtime, because the Bukkit 1.8.8 classes load it. The 2.x line has no fixed release. The legacy bridge only uses it in tests, it is not part of any shipped jar.
+- **kotlin-gradle-plugin 2.4.10** (GHSA-r937-wjx7-w2jp): comes with the `kotlin-dsl` plugin of the Gradle version, which builds `build-logic`. The advisory concerns the Kotlin build cache, which this build does not use. The fix exists only as 2.4.20-Beta1; it arrives with a Gradle release that embeds it.
+
 ## When verification fails
 
 - **You changed dependencies:** run the script, review, commit.
