@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
@@ -20,6 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
@@ -159,6 +161,14 @@ class CloudJarEndToEndTest {
             assertTrue(Files.isRegularFile(services.resolve("lobby-1/plugins/floodgate/key.pem")));
             assertFalse(Files.exists(services.resolve("legacy-server-1/plugins/floodgate/key.pem")),
                     "no Floodgate key where the template has no Floodgate");
+            // Command blocks are off on every Minecraft server, Paper, PandaSpigot and Fabric.
+            for (String server : List.of("lobby-1", "survival-1", "creative-1", "mod-1", "end-1", "legacy-server-1")) {
+                Properties properties = new Properties();
+                try (InputStream in = Files.newInputStream(services.resolve(server + "/server.properties"))) {
+                    properties.load(in);
+                }
+                assertEquals("false", properties.getProperty("enable-command-block"), server);
+            }
 
             // Java: 21 for PandaSpigot, 25 for everything else.
             Path logs = home.resolve("logs/services");

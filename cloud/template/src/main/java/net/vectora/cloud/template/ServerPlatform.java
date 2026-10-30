@@ -20,7 +20,10 @@ public enum ServerPlatform {
      * groups through this proxy is decided in stage 2, PR 24.
      */
     VELOCITY_LEGACY(null, "VECTORA_LEGACY_FORWARDING_SECRET", false, false),
-    /** Paper: Floodgate key, EULA, Spigot's restart turned off in {@code spigot.yml}. */
+    /**
+     * Paper: Floodgate key, EULA, Spigot's restart turned off in {@code spigot.yml}, command blocks
+     * off in {@code server.properties} (also for PandaSpigot and Fabric).
+     */
     PAPER("plugins/floodgate/key.pem", null, true, true),
     /**
      * PandaSpigot 1.8.8 behind the legacy proxy: EULA, Spigot's restart turned off in
@@ -89,5 +92,19 @@ public enum ServerPlatform {
      */
     public boolean readsSpigotYml() {
         return spigot;
+    }
+
+    /**
+     * Tells whether this is a Minecraft server that reads {@code server.properties} and could run
+     * command blocks. The node always sets {@code enable-command-block=false} there; there is no
+     * setting to turn that off.
+     *
+     * @return whether {@code enable-command-block=false} is forced after rendering
+     */
+    public boolean readsServerProperties() {
+        return switch (this) {
+            case PAPER, PANDASPIGOT, FABRIC -> true;
+            case VELOCITY, VELOCITY_LEGACY, NONE -> false;
+        };
     }
 }

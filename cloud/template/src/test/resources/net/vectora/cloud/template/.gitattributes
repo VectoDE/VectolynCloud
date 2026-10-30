@@ -1,2 +1,4 @@
 # Fuzz inputs are raw bytes (CRLF, invalid UTF-8 on purpose); git must not normalise them.
 PlaceholderRendererFuzzTestInputs/** binary
+
+CommandBlockSettingFuzzTestInputs/** binary

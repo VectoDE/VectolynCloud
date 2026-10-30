@@ -155,14 +155,15 @@ class SpigotRestartTest {
         for (ServerPlatform platform : List.of(ServerPlatform.PAPER, ServerPlatform.PANDASPIGOT)) {
             Path out = dir.resolve(platform.name());
             RenderReport report = TemplateInstaller.install(template, out, platform, PlaceholderValues.none(), false);
-            assertEquals(List.of("spigot.yml"), report.generated(), platform.name());
+            // server.properties: the node always adds enable-command-block=false.
+            assertEquals(List.of("server.properties", "spigot.yml"), report.generated(), platform.name());
             assertOff(Files.readString(out.resolve("spigot.yml")));
         }
         // Counter-check: Fabric and Velocity have no spigot.yml of their own; the file stays as it is.
         Path fabric = dir.resolve("fabric");
         RenderReport report = TemplateInstaller.install(template, fabric, ServerPlatform.FABRIC,
                 PlaceholderValues.of(Map.of()), false);
-        assertEquals(List.of(), report.generated());
+        assertEquals(List.of("server.properties"), report.generated());
         assertTrue(Files.readString(fabric.resolve("spigot.yml")).contains("restart-script: ./start.sh"));
     }
 }

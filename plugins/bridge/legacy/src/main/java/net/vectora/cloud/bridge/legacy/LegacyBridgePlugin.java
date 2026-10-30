@@ -13,6 +13,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.flattener.ComponentFlattener;
 import net.vectora.cloud.bridge.BridgeConnection;
 import net.vectora.cloud.bridge.BridgeSender;
+import net.vectora.cloud.bridge.CommandBlocks;
 import net.vectora.cloud.bridge.KickCommandWatch;
 import net.vectora.cloud.bridge.OwnKick;
 import net.vectora.cloud.bridge.StatusSnapshot;
@@ -57,6 +58,8 @@ import org.bukkit.plugin.java.JavaPlugin;
  *       player with {@value KickCommandWatch#PERMISSION} can use it, command blocks are no source.
  *       The command line watch ({@link KickCommandWatch}) stays for selectors, which the vanilla
  *       command resolves, for the {@code kick} commands of other plugins and as a fallback.</li>
+ *   <li>Command blocks: removed and kept out of the server ({@link CommandBlockGuard}), always,
+ *       also when the cloud did not start the server.</li>
  * </ul>
  *
  * <p>Network-wide player events ({@code PlayerJoin} and so on) are reported by the proxy only, so
@@ -79,6 +82,7 @@ public final class LegacyBridgePlugin extends JavaPlugin implements Listener {
     @Override
     public void onEnable() {
         getServer().getPluginManager().registerEvents(HandshakeGuard.fromEnvironment(System::getenv, getLogger()), this);
+        guardCommandBlocks();
         Optional<CloudClientSettings> settings = BridgeConnection.settings();
         if (!settings.isPresent()) {
             getLogger().info("Not started by VectoraCloud (no connection settings): only the BungeeGuard check runs");
@@ -99,6 +103,23 @@ public final class LegacyBridgePlugin extends JavaPlugin implements Listener {
         // The vanilla commands are registered after the plugins are enabled: replace kick at the first tick.
         getServer().getScheduler().runTask(this, this::replaceKick);
         getServer().getScheduler().runTaskTimer(this, () -> report(0), STATUS_PERIOD_TICKS, STATUS_PERIOD_TICKS);
+    }
+
+    /**
+     * Command blocks are removed network-wide ({@link CommandBlockGuard}), whether or not the cloud
+     * started this server and with no setting to turn it off. Enabled before the worlds load, so
+     * their first chunks go through the chunk load event.
+     */
+    private void guardCommandBlocks() {
+        final CommandBlockGuard guard = new CommandBlockGuard(new CommandBlocks(getLogger()::info));
+        getServer().getPluginManager().registerEvents(guard, this);
+        getServer().getScheduler().runTaskTimer(this, () -> {
+            for (Player player : getServer().getOnlinePlayers()) {
+                guard.sweep(player);
+            }
+        }, CommandBlockGuard.PLAYER_SWEEP_TICKS, CommandBlockGuard.PLAYER_SWEEP_TICKS);
+        getServer().getScheduler().runTaskTimer(this, () -> guard.purgeLoaded(getServer().getWorlds(), "found by the sweep"),
+                CommandBlockGuard.WORLD_SWEEP_TICKS, CommandBlockGuard.WORLD_SWEEP_TICKS);
     }
 
     @Override

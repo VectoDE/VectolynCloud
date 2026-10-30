@@ -99,7 +99,7 @@ Gehört auf den Lobby-Server.
 - Beim ersten Start baut es die Himmelsinsel-Lobby um `0, 100, 0` in der ersten Welt des Servers und schreibt danach `built: true` in `plugins/VectoraLobby/config.yml`. Steht der Wert wieder auf `false`, baut es die Insel beim nächsten Start neu; vorhandene Blöcke in dem Bereich werden überschrieben.
 - Bei jedem Start schaltet es in dieser Welt Tageszeit- und Wetterwechsel ab und setzt den Spawn auf die Plattform.
 - Spieler werden beim Betreten zum Spawn teleportiert. Sie nehmen keinen Schaden und bekommen keinen Hunger.
-- Blöcke abbauen und setzen geht nur mit der Berechtigung `vectora.lobby.build`. Sie ist nicht in der `plugin.yml` eingetragen, also haben sie nur Operatoren oder Spieler, die sie über ein Rechte-Plugin bekommen.
+- Blöcke abbauen und setzen geht nur mit der Berechtigung `vectora.lobby.build`. Die `plugin.yml` gibt sie nur Operatoren (`default: op`); andere Spieler bekommen sie nur über ein Rechte-Plugin.
 
 ### VectoraPortalBridge
 

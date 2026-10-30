@@ -4,3 +4,7 @@ main: net.vectora.lobby.VectoraLobby
 api-version: '26.3'
 description: Builds and protects the Vectora sky-island lobby.
 author: Vectora
+permissions:
+  vectora.lobby.build:
+    description: Lets a player break and place blocks in the lobby. Staff only.
+    default: op

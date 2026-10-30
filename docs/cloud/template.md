@@ -92,6 +92,7 @@ In this section "service folder" is the target (`runtime` in the API): `local/se
 | `config/floodgate/key.pem` | `FABRIC`, only if the template has a `config/floodgate/` folder | Same key. |
 | `eula.txt` | `PAPER`, `PANDASPIGOT`, `FABRIC` | Only with `eulaAccepted = true`. Without consent nothing is written, and an existing `eula.txt` stays as it is. |
 | `spigot.yml` | `PAPER`, `PANDASPIGOT` | Only when the node had to create or change it: `settings.restart-script: ''` and `settings.restart-on-crash: true`, see below. |
+| `server.properties` | `PAPER`, `PANDASPIGOT`, `FABRIC` | Only when the node had to create or change it: `enable-command-block=false`, see [Command blocks are off](#command-blocks-are-off). |
 
 The paths match the Floodgate configs in the templates (`key-file-name: key.pem` next to each `config.yml`). A template without Floodgate's folder runs no Floodgate (`TemplateInstaller.runsFloodgate`): it gets no key and does not need `VECTORA_FLOODGATE_KEY_B64`, and the node does not offer the key to it as a placeholder either. A `key.pem` an earlier start wrote is deleted once the template no longer has the folder (only a regular file reached without a link; the rest of the folder stays). The secrets are checked before anything is written. Each generated file is written to a new temporary file next to the target (`.vectora-<random>.tmp`), flushed to disk and then moved over the target. A secret file is therefore never truncated in place, never written through a hard link or symbolic link at the target, and never visible half-written. The temporary file of `forwarding.secret` and `key.pem` is created readable by the owner only: with POSIX permissions `rw-------` from the start, on Windows with an access list that allows only the owner. A failed write leaves the old file and no temporary file behind.
 
@@ -113,6 +114,18 @@ So every Paper and PandaSpigot template sets `restart-script: ''` and `restart-o
 
 Velocity and Fabric have no such setting. Paper's own files (`config/paper-global.yml`, `config/paper-world-defaults.yml`) have none either.
 
+### Command blocks are off
+
+A command block runs commands with the power of the console for whoever can reach it. On the network they do not exist, and there is no setting, placeholder or template that turns them back on.
+
+- After rendering, `TemplateInstaller` sets `enable-command-block=false` in the runtime `server.properties` of every `PAPER`, `PANDASPIGOT` and `FABRIC` service (`CommandBlockSetting`). That happens on every start, also for an operator's own template and after an operator edited the file in the service folder.
+- Keys are found the way the server reads the file (`java.util.Properties`): every spelling of the key counts (escapes such as `enable\-command\-block`, `:` or a blank as separator, a value continued over several lines). Every occurrence is replaced by one line `enable-command-block=false` in place of the first. A file without the key gets the line at the end, a service folder without the file gets a file with just that line. The result is read back with `Properties`; a file that cannot be read as properties (a malformed `\u` escape) is refused with a `TemplateException`, and the service does not start.
+- Any value other than `false` is overwritten and reported in `RenderReport.warnings()`. The node logs it as a warning with the service id; the value itself is not logged.
+- The file is read and written byte for byte (ISO-8859-1), so every other line keeps its bytes and its line break, a UTF-8 `motd` included. It is written only when something changes and then appears in `RenderReport.generated()`.
+- Every shipped template already says `enable-command-block=false`. `RealTemplatesTest.noTemplateShipsCommandBlocks` fails when a template turns command blocks on or the node would have to change one; `CommandBlockSettingFuzzTest` checks that any file the server can read ends with command blocks off.
+
+The setting alone does not remove command blocks that are already in a world, and the server still lets players place them. That part is done by the bridges ([bridges.md](bridges.md#command-blocks)).
+
 ## Proxy server list
 
 `ProxyServerList.of(backends, tryOrder, forcedHosts)` takes every backend the cloud knows, each with its `wanted` flag. Only wanted servers appear in the output:
@@ -129,7 +142,7 @@ Names must be 1 to 64 letters, digits, `_` or `-`, and unique ignoring case. Hos
 
 ## Tests
 
-- `RealTemplatesTest` renders every real `templates/<Server>/` with test values into a temporary folder. Afterwards no file may contain `{{`. Every YAML and JSON file must parse with Jackson, every `.properties` file with `java.util.Properties`, and every TOML file must pass a plausibility check (no TOML library in the build). The test also checks that a proxy without the survival server never mentions it, checks that the rendered `spigot.yml` of every Paper and PandaSpigot template turns Spigot's restart off without the node having to change it, and compares the part of `velocity.toml` from `[servers]` up to `[advanced]` for 1, 3 and 6 wanted servers with the golden files in `src/test/resources/net/vectora/cloud/template/golden/`. When a template change is intended, the actual output lands in `build/golden-actual/` for review.
+- `RealTemplatesTest` renders every real `templates/<Server>/` with test values into a temporary folder. Afterwards no file may contain `{{`. Every YAML and JSON file must parse with Jackson, every `.properties` file with `java.util.Properties`, and every TOML file must pass a plausibility check (no TOML library in the build). The test also checks that a proxy without the survival server never mentions it, checks that the rendered `spigot.yml` of every Paper and PandaSpigot template turns Spigot's restart off without the node having to change it, checks that no template turns command blocks on, and compares the part of `velocity.toml` from `[servers]` up to `[advanced]` for 1, 3 and 6 wanted servers with the golden files in `src/test/resources/net/vectora/cloud/template/golden/`. When a template change is intended, the actual output lands in `build/golden-actual/` for review.
 - `PlaceholderRendererFuzzTest` is a Jazzer target: arbitrary bytes may only end in a `TemplateException`, and text without `{{` must come back byte for byte. Seeds are in `PlaceholderRendererFuzzTestInputs/`. A `.gitattributes` next to that folder marks them binary, so git keeps their CRLF and invalid UTF-8. Local run:
 
   ```sh

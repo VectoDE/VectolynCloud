@@ -17,8 +17,6 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.block.BlockBreakEvent;
-import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
@@ -35,6 +33,7 @@ public final class VectoraLobby extends JavaPlugin implements Listener {
     public void onEnable() {
         saveDefaultConfig();
         getServer().getPluginManager().registerEvents(this, this);
+        getServer().getPluginManager().registerEvents(new BuildProtection(), this);
         Bukkit.getScheduler().runTaskLater(this, () -> {
             World world = Bukkit.getWorlds().getFirst();
             configureWorld(world);
@@ -167,16 +166,6 @@ public final class VectoraLobby extends JavaPlugin implements Listener {
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         Bukkit.getScheduler().runTaskLater(this, () -> player.teleportAsync(player.getWorld().getSpawnLocation()), 1L);
-    }
-
-    @EventHandler(ignoreCancelled = true)
-    public void onBreak(BlockBreakEvent event) {
-        if (!event.getPlayer().hasPermission("vectora.lobby.build")) event.setCancelled(true);
-    }
-
-    @EventHandler(ignoreCancelled = true)
-    public void onPlace(BlockPlaceEvent event) {
-        if (!event.getPlayer().hasPermission("vectora.lobby.build")) event.setCancelled(true);
     }
 
     @EventHandler(ignoreCancelled = true)

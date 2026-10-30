@@ -63,6 +63,7 @@ import net.vectora.cloud.node.state.StateFileException;
 import net.vectora.cloud.template.PlaceholderValues;
 import net.vectora.cloud.template.ProxyBackend;
 import net.vectora.cloud.template.ServerPlatform;
+import net.vectora.cloud.template.RenderReport;
 import net.vectora.cloud.template.TemplateException;
 import net.vectora.cloud.template.TemplateInstaller;
 import net.vectora.protocol.AuthToken;
@@ -793,8 +794,12 @@ public final class ServiceManager implements AutoCloseable {
                 deleteDynamicFolder(spec.workDirectory());
             }
             templates.ensure(spec.group().template());
-            TemplateInstaller.install(spec.templateDir(), spec.workDirectory(), platform,
+            RenderReport rendered = TemplateInstaller.install(spec.templateDir(), spec.workDirectory(), platform,
                     values, snapshot.cloud().eulaAccepted());
+            // What the node overrode in the template, e.g. enable-command-block (always false).
+            for (String warning : rendered.warnings()) {
+                LOG.log(System.Logger.Level.WARNING, "{0}: {1}", spec.id(), warning);
+            }
             // The software first: its sources state the Java minimum the runtime must meet.
             String jar = software.provide(spec, spec.workDirectory());
             requireLegacyBridge(spec, platform);

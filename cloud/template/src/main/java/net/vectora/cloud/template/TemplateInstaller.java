@@ -37,8 +37,18 @@ import java.util.Optional;
  * otherwise the server would start a second, unmanaged server on {@code /restart} or after a hang,
  * or (PandaSpigot with {@code false}) stay hung instead of stopping.
  * {@code spigot.yml} is listed as generated only when the node created or changed it.
+ *
+ * <p>For Paper, PandaSpigot and Fabric the node always sets {@code enable-command-block=false} in
+ * the runtime {@code server.properties} ({@link CommandBlockSetting}), with no setting to turn this
+ * off. Another value is overwritten and reported in {@link RenderReport#warnings()};
+ * {@code server.properties} is listed as generated only when the node created or changed it.
  */
 public final class TemplateInstaller {
+
+    /** The warning when the template or an operator had turned command blocks on (or set an odd value). */
+    public static final String COMMAND_BLOCK_WARNING = CommandBlockSetting.FILE + " had " + CommandBlockSetting.KEY
+            + " set to another value than false; VectoraCloud always writes " + CommandBlockSetting.LINE
+            + " (command blocks are removed network-wide and this cannot be switched off)";
 
     private TemplateInstaller() {
     }
@@ -96,8 +106,18 @@ public final class TemplateInstaller {
         if (platform.readsSpigotYml()) {
             SpigotRestart.enforce(runtime).ifPresent(generated::add);
         }
+        List<String> warnings = new ArrayList<>();
+        if (platform.readsServerProperties()) {
+            CommandBlockSetting.Outcome outcome = CommandBlockSetting.enforce(runtime);
+            if (outcome.changed()) {
+                generated.add(CommandBlockSetting.FILE);
+            }
+            if (outcome.overwritten()) {
+                warnings.add(COMMAND_BLOCK_WARNING);
+            }
+        }
         generated.sort(null);
-        return report.withGenerated(generated);
+        return report.withGenerated(generated, warnings);
     }
 
     /**
