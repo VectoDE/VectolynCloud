@@ -27,7 +27,7 @@ class DockerProvisionerTest {
     private static final String APP_PW = "AppPasswordForTests45678";
     private static final DatabaseSecrets SECRETS = new DatabaseSecrets(Secret.of(ROOT_PW), Secret.of(APP_PW));
     private static final DatabaseConfig CONFIG =
-            new DatabaseConfig(DatabaseMode.DOCKER, "127.0.0.1", 3308, "luckperms", "luckperms", "mariadb:11.8");
+            new DatabaseConfig(DatabaseMode.DOCKER, "127.0.0.1", 3308, "luckperms", "luckperms", "mariadb:12.3");
 
     @TempDir
     Path home;
@@ -40,7 +40,7 @@ class DockerProvisionerTest {
         assertFalse(yaml.contains(ROOT_PW));
         JsonNode root = new YAMLMapper().readTree(yaml);
         JsonNode service = root.get("services").get("vectora-database");
-        assertEquals("mariadb:11.8", service.get("image").asString());
+        assertEquals("mariadb:12.3", service.get("image").asString());
         assertEquals("127.0.0.1:3308:3306", service.get("ports").get(0).asString());
         assertEquals("${VECTORA_DB_ROOT_PASSWORD:?missing in secrets/vectora.env}",
                 service.get("environment").get("MARIADB_ROOT_PASSWORD").asString());
@@ -53,7 +53,7 @@ class DockerProvisionerTest {
     @Test
     void composeFileRefusesBadInput() {
         assertThrows(IllegalArgumentException.class, () -> DockerComposeFile.render(new DatabaseConfig(DatabaseMode.DOCKER,
-                "127.0.0.1", 3308, "lp", "lp", "mariadb:11.8\"\n  privileged: true")));
+                "127.0.0.1", 3308, "lp", "lp", "mariadb:12.3\"\n  privileged: true")));
         assertThrows(IllegalArgumentException.class, () -> DockerComposeFile.render(new DatabaseConfig(DatabaseMode.MANAGED,
                 "127.0.0.1", 3308, "lp", "lp", null)));
     }

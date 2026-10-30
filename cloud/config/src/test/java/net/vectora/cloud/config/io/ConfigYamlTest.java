@@ -51,7 +51,7 @@ class ConfigYamlTest {
               port: 3307
               name: luckperms
               user: luckperms
-              docker-image: mariadb:11.8
+              docker-image: mariadb:12.3
             api:
               enabled: false
               bind: 127.0.0.1
@@ -90,7 +90,7 @@ class ConfigYamlTest {
         CloudConfig cloud = read(CLOUD, ConfigFormat.CLOUD);
         assertEquals(Language.DE, cloud.language());
         assertEquals(DatabaseMode.DOCKER, cloud.database().mode());
-        assertEquals("mariadb:11.8", cloud.database().dockerImage());
+        assertEquals("mariadb:12.3", cloud.database().dockerImage());
         assertTrue(cloud.servers().lobby());
         assertFalse(cloud.servers().survival(), "a missing server counts as not wanted");
     }
