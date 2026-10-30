@@ -225,8 +225,10 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
                 .request(MirrorMessages.TEMPLATE_CHUNK, (peer, payload) -> templateSource.chunk(payload))
                 .build();
         this.memberHandlers = ClusterHandlers.builder()
-                .push(MirrorMessages.CONFIG_CHANGED, (peer, payload) -> pushed(payload))
-                .push(MirrorMessages.TEMPLATES_CHANGED, (peer, payload) -> pushed(payload))
+                .push(MirrorMessages.CONFIG_CHANGED,
+                        (peer, payload) -> pushed(peer, MirrorMessages.CONFIG_CHANGED, payload))
+                .push(MirrorMessages.TEMPLATES_CHANGED,
+                        (peer, payload) -> pushed(peer, MirrorMessages.TEMPLATES_CHANGED, payload))
                 .build();
         if (cluster != null && !cluster.head().id().equals(self.value())) {
             config.mirrorMode(true);
@@ -814,8 +816,9 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
     }
 
     /** Member: the head pushed a change. */
-    private void pushed(byte[] payload) throws ClusterRpcException {
+    private void pushed(NodeId head, ChannelName channel, byte[] payload) throws ClusterRpcException {
         ConfigMirrorSource.read(() -> MirrorMessages.Changed.read(new PacketReader(payload)));
+        LOG.log(System.Logger.Level.DEBUG, "Cluster: the head {0} pushed {1}; syncing", head, channel);
         requestSync();
     }
 

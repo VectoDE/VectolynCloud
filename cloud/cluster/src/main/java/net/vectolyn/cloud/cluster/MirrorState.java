@@ -69,7 +69,11 @@ final class MirrorState {
         if (!m.matches()) {
             throw new IOException(file.getFileName() + " is not valid");
         }
-        return Optional.of(new Revision(Long.parseLong(m.group(1)), HEX.parseHex(m.group(2))));
+        try {
+            return Optional.of(new Revision(Long.parseLong(m.group(1)), HEX.parseHex(m.group(2))));
+        } catch (NumberFormatException e) {
+            throw new IOException(file.getFileName() + " is not valid", e);
+        }
     }
 
     static void writeRevision(Path file, Revision value) throws IOException {

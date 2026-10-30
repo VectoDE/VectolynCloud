@@ -65,8 +65,7 @@ public final class ClusterLink implements AutoCloseable {
          * @param head    the head
          * @param session requests and pushes to the head
          */
-        default void connected(NodeId head, ClusterSession session) {
-        }
+        void connected(NodeId head, ClusterSession session);
 
         /**
          * The head refused this node.
