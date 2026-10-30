@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
@@ -265,10 +266,17 @@ class ClusterJoinTest {
         String tokens = Files.readString(head.paths.joinTokens(), StandardCharsets.UTF_8);
         assertFalse(tokens.contains(secret), "only the hash of the secret is stored");
         member.cluster.join("127.0.0.1", port, HEAD,t[0], t[1]);
+        // The mirror writes in the background after the join; let its first sync finish.
+        await(() -> member.cluster.status().mirror().orElseThrow().lastSync().isPresent());
         for (Path home : List.of(head.home, member.home)) {
             try (var files = Files.walk(home)) {
                 for (Path file : files.filter(Files::isRegularFile).toList()) {
-                    byte[] content = Files.readAllBytes(file);
+                    byte[] content;
+                    try {
+                        content = Files.readAllBytes(file);
+                    } catch (NoSuchFileException e) {
+                        continue; // a temporary file renamed into place meanwhile; its target is read too
+                    }
                     assertFalse(new String(content, StandardCharsets.ISO_8859_1).contains(secret), file.toString());
                 }
             }

@@ -78,6 +78,36 @@ public record ClusterPaths(CloudHome home) {
         return dir().resolve("work");
     }
 
+    /** {@code state/cluster/}: the mirror's records. */
+    public Path stateDir() {
+        return home.stateDir().resolve("cluster");
+    }
+
+    /** {@code state/cluster/config-revision}: the head's config revision. */
+    public Path configRevision() {
+        return stateDir().resolve("config-revision");
+    }
+
+    /** {@code state/cluster/config-applied}: the config revision a member took over last. */
+    public Path configApplied() {
+        return stateDir().resolve("config-applied");
+    }
+
+    /** {@code state/cluster/templates}: the templates a member synced, with their digest. */
+    public Path templatesState() {
+        return stateDir().resolve("templates");
+    }
+
+    /** {@code local/templates}. */
+    public Path templatesDir() {
+        return home.templatesDir();
+    }
+
+    /** {@code local/.cluster-sync/}: staging of the template sync, next to the templates. */
+    public Path syncWorkDir() {
+        return home.templatesDir().resolveSibling(".cluster-sync");
+    }
+
     /**
      * Creates {@code secrets/} and {@code secrets/cluster/} if needed and restricts both to the
      * owner. A symbolic link or a file in their place is an error.

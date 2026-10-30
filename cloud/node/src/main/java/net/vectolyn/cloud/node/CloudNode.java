@@ -425,9 +425,11 @@ public final class CloudNode implements AutoCloseable {
                 ScalingSignals.of(monitoring.monitor(), channel.players(), channel::proxyWatches, Clock.systemUTC()));
         services.addListener(scaler);
         ApiCommands.TokenFile tokenFile = tokens.isPresent() ? tokens::get : () -> ApiTokens.open(home);
-        // One version per cluster: the update system (#74) hooks in at ClusterService.Events.
+        // One version per cluster: the update system (#74) hooks in at ClusterService.Events. On a
+        // member the service switches the config to the mirror mode: nodes.yml, groups and tasks
+        // come from the head, and console, setup and API cannot change them here.
         ClusterService cluster = ClusterService.openOrStandalone(new ClusterPaths(home), new NodeId(nodeId),
-                settings.launcherVersion(), config::snapshot, VersionPolicy.sameVersion(), Clock.systemUTC());
+                settings.launcherVersion(), config, VersionPolicy.sameVersion(), Clock.systemUTC());
         return new Ops(tokenFile, monitoring, backups, api, apiServer(home, config, secrets, api, tokens), scaler, cluster);
     }
 

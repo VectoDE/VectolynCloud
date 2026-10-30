@@ -7,6 +7,7 @@ import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.time.Duration;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -57,8 +58,14 @@ public final class ClusterLink implements AutoCloseable {
     /** What the node learns from the link. */
     public interface Listener {
 
-        /** The session with the head started. */
-        default void connected(NodeId head) {
+        /**
+         * The session with the head started. Runs on the link's reader thread: it must not wait
+         * for an answer on the session.
+         *
+         * @param head    the head
+         * @param session requests and pushes to the head
+         */
+        default void connected(NodeId head, ClusterSession session) {
         }
 
         /**
@@ -110,7 +117,9 @@ public final class ClusterLink implements AutoCloseable {
     private final Settings settings;
     private final SSLContext context;
     private final Listener listener;
+    private final ClusterHandlers handlers;
     private final AtomicBoolean closed = new AtomicBoolean();
+    private volatile ClusterSession rpc;
     private final ScheduledExecutorService timer;
     private final Object wait = new Object();
     private volatile State state = State.CONNECTING;
@@ -127,11 +136,13 @@ public final class ClusterLink implements AutoCloseable {
      * @param context  TLS context with this node's certificate and {@link ClusterTrust#peers}
      *                 (which checks that the peer is the head)
      * @param listener what the node learns
+     * @param handlers what this member answers on the session
      */
-    public ClusterLink(Settings settings, SSLContext context, Listener listener) {
+    public ClusterLink(Settings settings, SSLContext context, Listener listener, ClusterHandlers handlers) {
         this.settings = Objects.requireNonNull(settings, "settings");
         this.context = Objects.requireNonNull(context, "context");
         this.listener = Objects.requireNonNull(listener, "listener");
+        this.handlers = Objects.requireNonNull(handlers, "handlers");
         this.timer = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "vectolyn-cluster-link-timer");
             t.setDaemon(true);
@@ -154,6 +165,12 @@ public final class ClusterLink implements AutoCloseable {
         return state;
     }
 
+    /** The session with the head, while there is one. */
+    public Optional<ClusterSession> session() {
+        ClusterSession current = rpc;
+        return current == null || current.isClosed() ? Optional.empty() : Optional.of(current);
+    }
+
     /** Why the head refused this node last, if it did. */
     public HelloOutcome lastRefusal() {
         return lastRefusal;
@@ -169,7 +186,7 @@ public final class ClusterLink implements AutoCloseable {
         while (!closed.get()) {
             Duration next;
             try {
-                HelloOutcome outcome = session();
+                HelloOutcome outcome = connectOnce();
                 if (outcome == HelloOutcome.ACCEPTED) {
                     retry = settings.firstRetry();
                     next = retry;
@@ -191,7 +208,7 @@ public final class ClusterLink implements AutoCloseable {
     }
 
     /** One connection: hello and, if accepted, the session until it ends. */
-    private HelloOutcome session() throws IOException {
+    private HelloOutcome connectOnce() throws IOException {
         int timeout = (int) settings.timeout().toMillis();
         try (SSLSocket socket = (SSLSocket) context.getSocketFactory().createSocket()) {
             current = socket;
@@ -233,13 +250,16 @@ public final class ClusterLink implements AutoCloseable {
                 return welcome.outcome();
             }
             lastRefusal = null;
+            ClusterSession session = new ClusterSession(welcome.head(), handlers, e -> send(stream, socket, e));
+            rpc = session;
             state = State.CONNECTED;
-            listener.connected(welcome.head());
             socket.setSoTimeout((int) settings.idleTimeout().toMillis());
             long ping = settings.pingInterval().toMillis();
             ScheduledFuture<?> pings = timer.scheduleAtFixedRate(() -> send(stream, socket,
                     Envelope.of(new Ping(ThreadLocalRandom.current().nextLong()))), ping, ping, TimeUnit.MILLISECONDS);
             try {
+                // The listener must not wait for an answer here: this thread reads the answers.
+                listener.connected(welcome.head(), session);
                 while (!closed.get()) {
                     Envelope envelope = stream.read(Protocol.MAX_FRAME_SIZE);
                     if (envelope.message() instanceof Pong) {
@@ -253,8 +273,11 @@ public final class ClusterLink implements AutoCloseable {
                             return HelloOutcome.ACCEPTED;
                         }
                         default -> {
-                            send(stream, socket, Envelope.of(new Disconnect(Disconnect.Reason.PROTOCOL_ERROR)));
-                            return HelloOutcome.ACCEPTED;
+                            // requests, answers and pushes; anything else breaks the protocol
+                            if (!session.receive(envelope)) {
+                                send(stream, socket, Envelope.of(new Disconnect(Disconnect.Reason.PROTOCOL_ERROR)));
+                                return HelloOutcome.ACCEPTED;
+                            }
                         }
                     }
                 }
@@ -267,6 +290,8 @@ public final class ClusterLink implements AutoCloseable {
                 return HelloOutcome.ACCEPTED;
             } finally {
                 pings.cancel(false);
+                rpc = null;
+                session.close();
                 if (state == State.CONNECTED) {
                     state = State.CONNECTING;
                 }
@@ -278,18 +303,21 @@ public final class ClusterLink implements AutoCloseable {
         }
     }
 
-    private static void send(FrameStream stream, SSLSocket socket, Envelope envelope) {
+    /** Sends a frame; if that fails, the socket is closed, which ends the session. */
+    private static boolean send(FrameStream stream, SSLSocket socket, Envelope envelope) {
         try {
-            if (!stream.tryWrite(envelope, ClusterServer.WRITE_WAIT)) {
-                socket.close();
+            if (stream.tryWrite(envelope, ClusterServer.WRITE_WAIT)) {
+                return true;
             }
         } catch (IOException e) {
-            try {
-                socket.close();
-            } catch (IOException ignored) {
-                // gone
-            }
+            // closed below
         }
+        try {
+            socket.close();
+        } catch (IOException ignored) {
+            // gone
+        }
+        return false;
     }
 
     private static Duration jitter(Duration step) {
