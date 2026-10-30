@@ -60,7 +60,7 @@ jobs:
       # v<MAJOR>.<MINOR>.<PATCH> with -dev[.N] (the only choice below 1.0.0), -alpha[.N], -beta[.N],
       # -rc[.N], -lts or no suffix. The parser is the one that draws the banner (tools/release-banner,
       # ReleaseVersion); operations.yml runs the same script on every rule on each pull request.
-      # Its result sets the GitHub pre-release flag and the image's "latest" tag below.
+      # Its result sets the GitHub pre-release flag and the image tags ("latest", "dev") below.
       - name: Check release tag
         id: tag
         env:
@@ -249,6 +249,7 @@ jobs:
           TAG: ${{ github.ref_name }}
           OWNER: ${{ github.repository_owner }}
           PRERELEASE: ${{ needs.build.outputs.prerelease }}
+          CHANNEL: ${{ needs.build.outputs.channel }}
         run: |
           set -euo pipefail
           version="${TAG#v}"
@@ -259,6 +260,11 @@ jobs:
             false) tags="${tags},${image}:latest" ;;
             *) echo "::error::no pre-release flag from the tag check"; exit 1 ;;
           esac
+          # "dev" is a moving tag: always the newest -dev release. It shares the digest of the
+          # version tag, so the signature and attestation below (by digest) cover it too.
+          if [ "$CHANNEL" = "dev" ]; then
+            tags="${tags},${image}:dev"
+          fi
           {
             echo "image=${image}"
             echo "version=${version}"

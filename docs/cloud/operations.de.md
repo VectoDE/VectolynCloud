@@ -33,7 +33,7 @@ Bevor ein Tag gepusht wird, und am Ende jeder Etappe, läuft die Aufräum-Prüfu
 
 Die Startskripte kommen als ein Archiv pro Betriebssystem, nicht als lose Dateien. Ein heruntergeladenes `start.sh` verliert sein Ausführungsrecht, im tar bleibt es erhalten. Das zip behält die CRLF-Zeilenenden, die die Windows-Skripte brauchen. Und jedes Archiv ist ein einziger Download mit dem passenden Jar. Das Jar hängt zusätzlich einzeln am Release. Die Archive sind reproduzierbar (feste Reihenfolge, feste Besitzer und Zeitstempel), derselbe Tag ergibt also beim zweiten Bauen dieselbe SHA-256.
 
-Das Container-Image landet unter `ghcr.io/vectode/vectolyn-cloud` mit der Version als Tag (`1.0.0`, ohne `v`). `latest` wandert nur mit Releases, die keine Vorabversionen sind, also mit stabilen und `-lts`-Tags; `-dev`, `-alpha`, `-beta` und `-rc` lassen es stehen (siehe [Versionen und Tags](#versionen-und-tags)). Im Image steckt genau das `VectolynCloud.jar` des Releases: Der Workflow übergibt das signierte Jar an den Image-Build, statt es neu zu kompilieren, und prüft vorher seine SHA-256 gegen `SHA256SUMS`.
+Das Container-Image landet unter `ghcr.io/vectode/vectolyn-cloud` mit der Version als Tag (`1.0.0`, ohne `v`). `latest` wandert nur mit Releases, die keine Vorabversionen sind, also mit stabilen und `-lts`-Tags; `-dev`, `-alpha`, `-beta` und `-rc` lassen es stehen. Jedes `-dev`-Release verschiebt zusätzlich das Tag `dev` (immer das neueste `-dev`-Release; es ist bis zum ersten stabilen Release der Standard in `compose.yml`, danach wechselt der Standard auf `latest`) (siehe [Versionen und Tags](#versionen-und-tags)). Im Image steckt genau das `VectolynCloud.jar` des Releases: Der Workflow übergibt das signierte Jar an den Image-Build, statt es neu zu kompilieren, und prüft vorher seine SHA-256 gegen `SHA256SUMS`.
 
 ## Versionen und Tags
 
@@ -51,7 +51,7 @@ Ein Release beginnt mit einem gepushten Tag. Der erste Schritt von `release.yml`
 - `MAJOR`, `MINOR`, `PATCH` und der Zähler `.N` sind Zahlen ohne führende Nullen. Der Zähler ist optional.
 - `-lts` hat keinen Zähler. Eine LTS-Linie zählt ihre Releases mit der Patch-Version: `v1.4.0-lts`, `v1.4.1-lts`.
 - Alles andere bricht das Release ab: eine 0.x-Version ohne `-dev` oder mit anderem Zusatz (`v0.2.0`, `v0.2.0-alpha.1`), ein unbekannter Zusatz (`-nightly`, `-RC.1`), Build-Metadaten (`+build.7`; GitHub kann das `+` in Dateinamen umschreiben) und kaputte Tags (`v1.0`, `v01.0.0`).
-- Das Image-Tag `latest` folgt derselben Einordnung: Stabile und `-lts`-Releases verschieben es, Vorabversionen nicht.
+- Das Image-Tag `latest` folgt derselben Einordnung: Stabile und `-lts`-Releases verschieben es, Vorabversionen nicht. Das Tag `dev` ist getrennt: Nur `-dev`-Releases verschieben es, auf das neueste. Es zeigt auf denselben Digest wie das Versions-Tag, Signatur und Provenance dieses Digests gelten also auch dafür.
 
 Die Regeln stehen an einer Stelle, in `ReleaseVersion` in [`tools/release-banner`](../../tools/release-banner); das Banner liest den Tag mit demselben Code. Einen Tag vor dem Pushen prüfen:
 
