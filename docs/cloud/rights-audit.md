@@ -43,9 +43,24 @@ Only services the cloud started talk on the channel, each with a token of its ow
 | Action | Who may | Checked where | Test |
 |---|---|---|---|
 | Console commands of the node (services, groups, tasks, tokens, backups, ...) | whoever has the node's terminal: the operator | the node only reads its own standard input; no player, service or network peer reaches it | |
+| `cluster init`, `cluster token create`/`revoke`, `cluster join`, `cluster remove` | the operator at the node's terminal; `token` and `remove` only on the head | the node's console; the API has no cluster route. The command is sensitive and never written to the history | `ClusterJoinTest` |
 | `POST /services`, `.../stop`, `.../restart`, `.../command` | API tokens with `services:write` (or `admin`) | the API server for every request | `ApiServerTest.aTokenWithoutTheScopeGets403`, `RouteScopesTest` |
 | `PUT`/`DELETE` of groups, tasks, nodes, wanted switches, `PUT /config`, `POST /config/reload` | tokens with `config:write` | the API server | `ApiServerTest`, `RouteScopesTest` |
 | `POST /backups` | tokens with `backups:write` | the API server | `ApiServerTest`, `RouteScopesTest` |
 | Every `GET` | tokens with the read scope of its area; `GET /tokens/self` any valid token | the API server | `RouteScopesTest` |
 
 Details of the scopes: [api.md](api.md).
+
+## Cluster port
+
+Nodes of one cluster talk to the head on the cluster port with mutual TLS 1.3 ([cluster.md](cluster.md#trust-model)). A player's client or a service never gets anything there.
+
+| What a peer sends | Accepted when | Otherwise | Test |
+|---|---|---|---|
+| TLS handshake | TLS 1.3; a client certificate, if any, chains to the cluster CA | the handshake fails | `ClusterPortTest.tls12IsRefused`, `ClusterPortTest.aCertificateOfAnotherCaIsRefusedInTheHandshake` |
+| Join request (without client certificate, once per connection) | the version is the head's, the database is a MariaDB server the new node can reach, the token is open, unexpired and for this node id, the node id is no member, the certification request checks out; the certificate gets the token's node id, nothing from the request | `VERSION_MISMATCH`, `DATABASE_SINGLE_NODE`, `DATABASE_UNREACHABLE`, `INVALID_TOKEN` (the same for every token problem), `NODE_EXISTS`, `BAD_REQUEST` | `ClusterJoinTest` (`aUsedTokenIsRefusedTheSecondTime`, `anExpiredTokenIsRefused`, `aTokenForAnotherNodeIdIsRefusedAndUsedUp`, `aWrongSecretIsRefused`, `anotherVersionDoesNotJoinAndKeepsTheToken`, `joiningIsRefusedWhileTheHeadRunsH2`), `ClusterCaTest` |
+| Join request with a client certificate, any other frame first | never | `Disconnect(PROTOCOL_ERROR)` | `ClusterPortTest.aJoinRequestWithACertificateIsAProtocolError`, `ClusterPortTest.garbageEndsTheConnection` |
+| Hello (session) | client certificate of the cluster CA, the hello names its node id, its fingerprint is not revoked and is the member's in `cluster.yml`, same version | `Disconnect(AUTH_FAILED)` without certificate, `NODE_MISMATCH`, `REVOKED`, `UNKNOWN_NODE`, `VERSION_MISMATCH` | `ClusterPortTest.aHelloWithoutACertificateIsRefused`, `ClusterPortTest.aHelloWithAnotherNodeIdThanTheCertificateIsRefused`, `ClusterJoinTest.aRemovedMemberLosesItsSessionAndCannotComeBack`, `ClusterJoinTest.aMemberOnAnotherVersionGetsNoSessionUntilUpdated`, `ClusterPortTest.removingAMemberThatDoesNotReadDoesNotWait`, `ClusterPortTest.aMemberThatFloodsPingsLosesItsSession` |
+| The head, seen from a member or a joining node | at the join: its CA has the pin of the join line and its certificate the head id of the join line; later: its certificate is the head's node id of `cluster.yml` from the cluster CA and not revoked | the connection ends before the token or a hello is sent | `ClusterJoinTest.aWrongCaPinStopsTheJoinBeforeTheTokenIsSent`, `ClusterJoinTest.anotherHeadIdStopsTheJoinBeforeTheTokenIsSent`, `ClusterPortTest.aJoiningNodeRefusesAMemberThatPlaysTheHead`, `ClusterPortTest.theMemberSideRefusesAPeerThatIsNotItsHead` |
+
+In this first step a session carries only pings; config, placement and services across nodes follow with the next steps of [#73](https://github.com/VectoDE/VectoraCloud/issues/73) and get their rows here.

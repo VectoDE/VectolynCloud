@@ -262,6 +262,17 @@ How the egg works:
 - **PID limit:** Wings limits every server container to **512 processes and threads** by default (`docker.container_pid_limit` in `/etc/pterodactyl/config.yml`). Each Minecraft server JVM uses roughly 50 to 150 threads, the proxy and MariaDB more, so several servers in one Pterodactyl server run into this limit and then fail with "unable to create native thread" or `OutOfMemoryError`. Raise it (for example to 4096) in the Wings configuration and restart Wings; that needs access to the node, not only to the panel.
 - **Other limits:** one node only (no cluster), and every port needs an allocation. A network name of digits only, or `true`/`false`, would be turned into a number or boolean by Wings; the variable's rule requires at least one letter.
 
+## Several nodes
+
+A cluster is one head and its members; the details, the trust model and the commands are in [cluster.md](cluster.md). What operations has to know:
+
+- **Database:** every node needs a MariaDB server that all nodes reach: `database.mode: external` with an address of the cluster network. With `h2` the head refuses tokens and joins. `managed` and `docker` bind MariaDB to 127.0.0.1, so with them only nodes on the same machine can join; their binding to the cluster network follows with the next step of the cluster.
+- **Same version:** every node runs the head's VectoraCloud version. A node on another version does not join, or gets no session, until it is updated.
+- **Firewall:** the head's cluster port (TCP 7011 by default) open for the other nodes only. In Docker publish it as well (`-p 7011:7011`) and give `cluster init` the host's address. The ports for proxies and backends across nodes come with the next step of the cluster.
+- **Backup:** `secrets/cluster/` of the head holds the cluster CA; it is part of the backup of `secrets/`. Without it no node can join any more.
+- **Removing a node:** `cluster remove <node-id>` on the head revokes its certificate at once. Joining again needs a new token.
+- **Pterodactyl:** not tested as a cluster; the cluster port would need an allocation of its own.
+
 ## Verifying a release
 
 Every file of a release is signed with cosign keyless (Sigstore, the GitHub Actions identity of `release.yml`). The three files in `SHA256SUMS` also have a GitHub build provenance attestation (SLSA provenance, signed with Sigstore). `vectora.intoto.jsonl` is the same attestation as a file, so it can be checked without asking GitHub; `SHA256SUMS` itself is covered by its signature. Replace `v0.2.0` with the tag you downloaded.

@@ -69,7 +69,8 @@ Mehr dazu: [Architektur im Wiki](https://github.com/VectoDE/VectoraCloud/wiki/Ar
 ```
 VectoraCloud/
   cloud/                  VectoraCloud, je Teil ein Gradle-Modul: launcher, node, config, api,
-                          console, setup, database, download, template, network, backup, monitor
+                          console, setup, database, download, template, network, backup, monitor,
+                          cluster
     dist/                 Startskripte, Docker, Pterodactyl-Egg, systemd-Unit, vectora.env.example
   common/
     protocol/             Leitungsformat des Cloud-Kanals

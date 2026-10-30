@@ -173,7 +173,7 @@ Ein skalierter Dienst ist ein gewöhnlicher Dienst des Service-Kerns ([node.md](
 
 ## Grenzen
 
-- Ein Node. Mit dem Cluster (PR 20) skaliert jeder Node seine eigenen Tasks; ein Task auf mehreren Nodes wird noch nicht zwischen ihnen verteilt.
+- Ein Node. Im [Cluster](cluster.md) skaliert jeder Node seine eigenen Tasks; ein Task auf mehreren Nodes wird noch nicht zwischen ihnen verteilt.
 - Die Proxys kennen die Plätze nur von Backends, die der Node angemeldet hat. Von Hand in `velocity.toml` eingetragene Server wählt der Proxy so, wie Velocity es täte.
 - Skaliert wird ab einem laufenden Dienst: Ein Task mit `min-services: 0` ohne Dienst hat keine Spielerzahl, nach der er skalieren könnte (noch keine Warteschlange).
 - Das Budget rechnet mit den maximalen Heaps, nicht mit dem, was eine JVM darüber hinaus braucht (Metaspace, Threads, nativer Speicher). In `heap.max` Luft lassen.

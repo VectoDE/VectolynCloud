@@ -2,7 +2,7 @@
 
 `common/protocol` (`net.vectora.protocol`) is the binary format that VectoraCloud uses to talk to the services it starts (bridges, later the Vectora plugin) and to other cloud nodes. Both ends share this one module, so they cannot drift apart.
 
-The module has no dependencies, not even Netty. Proxies and servers ship their own Netty versions, and a second copy on their class path invites conflicts. The codec works on `byte[]` and `java.nio.ByteBuffer`; the transport (Netty in `cloud/network`, plain sockets in `common/client`) only moves bytes.
+The module has no dependencies, not even Netty. Proxies and servers ship their own Netty versions, and a second copy on their class path invites conflicts. The codec works on `byte[]` and `java.nio.ByteBuffer`; the transport (Netty in `cloud/network`, plain sockets in `common/client`, TLS sockets on the cluster port in `cloud/cluster`) only moves bytes. Between nodes the frames travel over TLS 1.3; the cluster's own payloads are carried in `Request` and `Response` on the channels `cluster.join` and `cluster.hello` and described in [cluster.md](cluster.md#wire-format).
 
 ## Layers
 
