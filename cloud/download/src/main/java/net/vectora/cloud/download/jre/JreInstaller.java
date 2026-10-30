@@ -38,7 +38,7 @@ import net.vectora.cloud.download.provider.TargetPlatform;
 
 /**
  * Unpacks Java runtimes into the cloud home, one directory per vendor, feature version and platform:
- * {@code <home>/jre/temurin-21-linux-x64/}.
+ * {@code <home>/storage/jre/temurin-21-linux-x64/}.
  *
  * <ul>
  *   <li>The archive (zip on Windows, tar.gz elsewhere) is unpacked with {@link SafeExtractor} into a
@@ -56,8 +56,8 @@ import net.vectora.cloud.download.provider.TargetPlatform;
  */
 public final class JreInstaller {
 
-    /** Directory below the cloud home. */
-    public static final String DIRECTORY = "jre";
+    /** Directory below the cloud home ({@code CloudHome.STORAGE_DIR} + {@code /jre}). */
+    public static final String DIRECTORY = "storage/jre";
 
     /** Marker file in each install directory. */
     public static final String MARKER = ".vectora-jre.properties";
@@ -77,7 +77,7 @@ public final class JreInstaller {
     /**
      * Creates an installer.
      *
-     * @param cloudHome the cloud home; runtimes go to {@code jre/} below it
+     * @param cloudHome the cloud home; runtimes go to {@code storage/jre/} below it
      * @param limits the extraction limits
      * @param platform the platform the runtimes are for
      */
@@ -117,7 +117,7 @@ public final class JreInstaller {
      * Returns the install directory of a runtime.
      *
      * @param name the install name
-     * @return {@code <home>/jre/<name>}
+     * @return {@code <home>/storage/jre/<name>}
      */
     public Path installDirectory(String name) {
         return directory.resolve(checkName(name));

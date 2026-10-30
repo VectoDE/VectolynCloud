@@ -54,7 +54,7 @@ class JreManagerTest {
         var client = FakeTransport.client(transport);
         AdoptiumProvider adoptium = new AdoptiumProvider(client);
         ArtifactDownloader downloader = new ArtifactDownloader(client, ProviderRegistry.of(List.of(adoptium)),
-                new ArtifactCache(home.resolve("cache")));
+                new ArtifactCache(home.resolve("storage")));
         return new JreManager(home, adoptium, downloader, SoftwareLockStore.inHome(home), system, LINUX_X64);
     }
 
@@ -72,7 +72,7 @@ class JreManagerTest {
 
         assertEquals(21, runtime.feature());
         assertEquals(JavaRuntime.Origin.MANAGED, runtime.origin());
-        assertTrue(runtime.executable().startsWith(home.resolve("jre/temurin-21-linux-x64")), runtime.executable().toString());
+        assertTrue(runtime.executable().startsWith(home.resolve("storage/jre/temurin-21-linux-x64")), runtime.executable().toString());
         assertTrue(Files.isRegularFile(runtime.executable()));
         LockedArtifact entry = lock().get("jre-temurin-21-linux-x64").orElseThrow();
         assertEquals(Trust.SOURCE, entry.trust());
@@ -123,7 +123,7 @@ class JreManagerTest {
         JreManager manager = manager(new FakeTransport().ok(latest(21), listing(tar)).ok(LINK, tampered), null);
 
         assertThrows(ChecksumMismatchException.class, () -> manager.provide(21));
-        assertFalse(Files.exists(home.resolve("jre/temurin-21-linux-x64")));
+        assertFalse(Files.exists(home.resolve("storage/jre/temurin-21-linux-x64")));
         assertTrue(lock().entries().isEmpty());
     }
 
@@ -131,8 +131,8 @@ class JreManagerTest {
     void reinstallsFromThePinWithoutAskingTheApi() throws Exception {
         byte[] tar = JreArchives.linuxTarGz("21.0.13", 0755);
         manager(new FakeTransport().ok(latest(21), listing(tar)).ok(LINK, tar), null).provide(21);
-        JreInstaller.deleteTree(home.resolve("jre"));
-        JreInstaller.deleteTree(home.resolve("cache"));
+        JreInstaller.deleteTree(home.resolve("storage/jre"));
+        JreInstaller.deleteTree(home.resolve("storage/artifacts"));
 
         FakeTransport second = new FakeTransport().ok(LINK, tar);
         JavaRuntime runtime = manager(second, null).provide(21);

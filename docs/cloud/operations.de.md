@@ -36,14 +36,14 @@ Das Container-Image landet unter `ghcr.io/vectode/vectora-cloud` mit der Version
 
 ## Voraussetzungen
 
-- **Java 21 oder neuer** für die Cloud selbst. Die Server, die sie startet, bekommen die Java-Version, die ihre Minecraft-Version braucht. Passt kein installiertes Java, lädt die Cloud ein Temurin-JRE nach `<home>/jre/` (siehe [node.md](node.md#java-runtimes)).
+- **Java 21 oder neuer** für die Cloud selbst. Die Server, die sie startet, bekommen die Java-Version, die ihre Minecraft-Version braucht. Passt kein installiertes Java, lädt die Cloud ein Temurin-JRE nach `<home>/storage/jre/` (siehe [node.md](node.md#java-runtimes)).
 - Ein normales Benutzerkonto. Als root oder Administrator startet die Cloud nicht (siehe [unten](#nie-als-root-oder-administrator)).
 - Arbeitsspeicher: der Heap der Cloud (`VECTORA_XMX`, Standard 512M) plus der Heap jedes Servers, den sie betreibt.
-- **Internetzugang beim ersten Start einer Gruppe.** Dann lädt die Cloud die Server-Software (Paper, Velocity, Fabric, PandaSpigot) und die Plugins und Mods aus dem Katalog: Geyser und Floodgate für Bedrock, ViaVersion, ViaBackwards und ViaRewind, damit Java-Clients von 1.8 bis 26.3 beitreten können, dazu LuckPerms und die Performance-Mods für Fabric. Jede Datei wird gegen ihre Prüfsumme geprüft und in `software.lock.yml` festgehalten. Spätere Starts nehmen sie ohne Netz aus `cache/artifacts/` ([download.md](download.md#what-the-node-installs)).
+- **Internetzugang beim ersten Start einer Gruppe.** Dann lädt die Cloud die Server-Software (Paper, Velocity, Fabric, PandaSpigot) und die Plugins und Mods aus dem Katalog: Geyser und Floodgate für Bedrock, ViaVersion, ViaBackwards und ViaRewind, damit Java-Clients von 1.8 bis 26.3 beitreten können, dazu LuckPerms und die Performance-Mods für Fabric. Jede Datei wird gegen ihre Prüfsumme geprüft und in `config/software.lock.yml` festgehalten. Spätere Starts nehmen sie ohne Netz aus `storage/artifacts/` ([download.md](download.md#what-the-node-installs)).
 
 ## Erster Start: was in jedem Server landet
 
-Die Vorlagen stecken im Jar: Ein leerer Home-Ordner bekommt beim ersten Start jeden Ordner `<Server>/template/`. Einen Ordner, den du schon hast, rührt die Cloud nicht an ([node.md](node.md#built-in-templates)).
+Die Vorlagen stecken im Jar: Für jeden Server, der gewünscht ist, schreibt der erste Start `local/templates/<Server>/default/`. Einen Ordner, den du schon hast, rührt die Cloud nicht an ([node.md](node.md#built-in-templates)). Ein abgeschalteter Server hinterlässt keinen Vorlagenordner.
 
 Vor jedem Start füllt der Node den Ordner des Servers: das Server-Jar, die Plugins (bei Fabric die Mods), die seine Gruppe braucht, und die VectoraCloud-Bridge seiner Plattform. Was er dort ablegt, notiert er in `plugins/.vectora-managed` (bei Fabric `mods/`). Will die Gruppe eine dieser Dateien nicht mehr, entfernt er sie wieder. Plugins, die du selbst hineinkopierst, bleiben liegen. Ein PandaSpigot-Server (1.8.8) startet nicht ohne seine Bridge, denn nur sie prüft den Token des Legacy-Proxys. Einzelheiten: [node.md](node.md#server-software).
 
@@ -103,6 +103,26 @@ Solange in `cloud.yml` nicht `setup-complete: true` steht, startet die Cloud kei
 ```
 
 Format und Regeln: [setup.md](setup.md). Die Datei enthält kein Secret. Ein Datenbank-Passwort kommt aus einer Datei (`database.password-file`) oder aus `secrets/vectora.env`. Ist das Setup abgeschlossen, wird die Datei ignoriert.
+
+## Was wo liegt und Update von einem alten Home
+
+Alles, was die Cloud ablegt, liegt unter dem Home ([Aufbau](architecture.md#cloud-home), Englisch). Für den Betrieb zählt:
+
+| Ordner | Sichern? | Hinweis |
+|---|---|---|
+| `config/` | ja | die Konfiguration, klein |
+| `local/` | ja | von dir geänderte Vorlagen und die Welten der statischen Dienste |
+| `database/` | mit der Datenbank | verwaltete MariaDB; nimm den Dump aus dem [Backup](backup.md), kopiere keine laufenden Datendateien |
+| `secrets/` | ja, getrennt | nur für den Besitzer lesbar, nie in ein Repository |
+| `storage/`, `temp/`, `logs/` | nein | Downloads, Java-Runtimes und entpackte Bibliotheken entstehen von selbst neu |
+| `backups/` | das ist das Backup | |
+| `state/` | nein | Lock, Dienst-Status, Konsolen-Verlauf |
+
+**Update.** Ein Home aus der Zeit vor diesem Aufbau (`cloud.yml`, `groups/`, `<Server>/template`, `<Server>/runtime`, `cache/` auf oberster Ebene) wird beim ersten Start der neuen Version umgezogen. Vorher legt die Cloud in `backups/home-layout-migration-<Zeit>/` eine Kopie von Konfiguration, Vorlagen und `state/services.json` an; Welten, Datenbank und Downloads werden nur umbenannt und verschoben, auch große Welten brauchen also Sekunden. Beende die alte Cloud samt Servern, bevor du die neue startest: Die Migration läuft nicht, solange ein Server des vorigen Laufs noch lebt. Was sie Schritt für Schritt tut und was passiert, wenn ein Ordner nicht zuzuordnen ist, steht in [node.md](node.md#home-layout-migration) (Englisch). Lösche den Backup-Ordner erst, wenn das Netzwerk einmal sauber lief.
+
+**Windows-Konsole.** `start.bat` und `start.ps1` stellen die Konsole auf UTF-8 um (`chcp 65001`) und starten Java mit `-Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8`, damit Umlaute im Log stimmen. Startest du `java -jar VectoraCloud.jar` von Hand in einer alten Konsole, setze dasselbe.
+
+**Logs.** `logs/cloud.log` ist das Log der Cloud selbst, in UTF-8 und mit vollen Stacktraces (Secrets geschwärzt). Jeder Start beginnt eine neue Datei, die letzten fünf bleiben als `cloud.1.log` bis `cloud.5.log`. Das Log jedes Servers ist `logs/services/<id>.log`. Was ein Start auf dem Bildschirm zeigt, steht in [node.md](node.md#start-output).
 
 ## Windows
 
@@ -182,10 +202,10 @@ docker run -d --init --name vectora -v vectora:/data -v ./setup.yml:/data/setup.
 Das Image:
 
 - wird in Stufen gebaut: Eine JDK-25-Stufe baut `VectoraCloud.jar` aus den Quellen, die Laufzeitstufe ist `eclipse-temurin:25-jre-noble`. Beide Basis-Images sind per Digest festgelegt, Dependabot hält sie aktuell.
-- läuft als Benutzer `vectora` mit UID und GID 1000. `/data` ist das Home und ein Volume. Jar und Startskript in `/opt/vectora` gehören root und sind für die Cloud nur lesbar. Ein Bind-Mount statt eines Volumes muss UID 1000 gehören (`chown -R 1000:1000 ./data`).
+- läuft als Benutzer `vectora` mit UID und GID 1000. `/data` ist das Home und ein Volume; alles darin (`config/`, `local/`, `database/`, `storage/`, `secrets/`, `state/`) liegt in diesem einen Volume, ein Update mit neuem Container behält es, und ein altes Volume wird beim ersten Start umgezogen ([Update](#was-wo-liegt-und-update-von-einem-alten-home)); dafür braucht es nur Platz für die Sicherungskopie der Konfiguration. Jar und Startskript in `/opt/vectora` gehören root und sind für die Cloud nur lesbar. Ein Bind-Mount statt eines Volumes muss UID 1000 gehören (`chown -R 1000:1000 ./data`).
 - startet über `start.sh`. Argumente nach dem Image-Namen gehen an die Cloud, `VECTORA_XMX` setzt den Heap der Cloud.
 - stoppt mit SIGTERM. Gib ihm Zeit mit `--stop-timeout 300` (oder `stop_grace_period` in compose), sonst beendet Docker die Server nach 10 s hart.
-- hat einen Healthcheck ohne curl oder netcat: bash öffnet eine TCP-Verbindung zum Cloud-Kanal auf `127.0.0.1:7010` (`VECTORA_HEALTHCHECK_PORT`, falls du ihn in `nodes.yml` verlegt hast) und schließt sie vor dem Handshake-Timeout des Kanals. Dabei entsteht keine Log-Zeile.
+- hat einen Healthcheck ohne curl oder netcat: bash öffnet eine TCP-Verbindung zum Cloud-Kanal auf `127.0.0.1:7010` (`VECTORA_HEALTHCHECK_PORT`, falls du ihn in `config/nodes.yml` verlegt hast) und schließt sie vor dem Handshake-Timeout des Kanals. Dabei entsteht keine Log-Zeile.
 - braucht keinen Docker-Socket, keine Capability und keinen privilegierten Modus. Der Datenbankmodus `docker` ist für eine Cloud auf einem Rechner mit Docker gedacht. Im Container `managed`, `external` (wie in compose unten) oder `h2` verwenden.
 - gibt es für `linux/amd64` und `linux/arm64`. Unter arm64 fällt `managed` auf H2 zurück.
 
@@ -237,6 +257,7 @@ So funktioniert das Egg:
 | Variablen | Version, Heap der Cloud, EULA, Sprache, Netzwerkname, Bedrock-Port, Legacy-Proxy an/aus, Port des Legacy-Proxys, Datenbankmodus |
 
 - **Datenbank:** `managed` (die Cloud betreibt eine eigene MariaDB im Server; läuft unter x86_64, weil die Pterodactyl-Images auf glibc aufbauen), `external` (eine Datenbank aus dem Datenbank-Tab des Panels) oder `h2`. Den Modus `docker` bietet das Egg nicht an, denn der Server ist ein Container ohne Docker, und das Setup lehnt ihn dort ebenfalls ab. Für `external` im Dateimanager `setup.yml` öffnen, unter `database:` die Schlüssel `host`, `port`, `name`, `user` und `password-file: db-password.txt` ergänzen und das Passwort in `db-password.txt` schreiben. Wings ersetzt nur die Schlüssel, die es selbst verwaltet, und lässt die anderen stehen. Alternativ `VECTORA_DB_PASSWORD=...` in `secrets/vectora.env` eintragen ([setup.md](setup.md#pterodactyl)).
+- **Dateien:** Der Dateimanager des Servers zeigt das ganze Home: `config/` für die Konfiguration, `local/services/<id>` für die Welten, `logs/cloud.log` für das Log. Eine Egg-Installation aus der Zeit vor dem neuen Aufbau wird beim ersten Start der neuen Version umgezogen; stoppe den Server vorher im Panel, damit kein Minecraft-Server mehr läuft.
 - **Arbeitsspeicher:** Das Speicherlimit des Servers gilt für die Cloud und jeden Minecraft-Server, den sie startet. Das Setup warnt, wenn die Heaps zusammen mehr als `SERVER_MEMORY` ergeben. Den Heap der Cloud klein halten (512M) und den Rest den Servern geben.
 - **PID-Limit:** Wings begrenzt jeden Server-Container standardmäßig auf **512 Prozesse und Threads** (`docker.container_pid_limit` in `/etc/pterodactyl/config.yml`). Eine Minecraft-Server-JVM nutzt grob 50 bis 150 Threads, Proxy und MariaDB mehr. Mehrere Server in einem Pterodactyl-Server stoßen deshalb an diese Grenze und scheitern dann mit „unable to create native thread“ oder `OutOfMemoryError`. In der Wings-Konfiguration erhöhen (zum Beispiel auf 4096) und Wings neu starten. Dafür braucht man Zugriff auf den Node, nicht nur auf das Panel.
 - **Weitere Grenzen:** nur ein Node (kein Cluster), und jeder Port braucht eine Allocation. Einen Netzwerknamen nur aus Ziffern oder `true`/`false` würde Wings in eine Zahl oder einen Wahrheitswert umwandeln. Die Regel der Variable verlangt deshalb mindestens einen Buchstaben.

@@ -102,7 +102,7 @@ class NodeEndToEndTest {
                 new PutGroup("survival", NodeFixture.group(ServerKind.SURVIVAL.templateFolder(), ServerSoftware.PAPER,
                         "-Dfake.cloud=true").withWanted(false)),
                 NodeFixture.task("survival", "survival", TaskMode.STATIC, 1, 1)));
-        fixture.file("Proxy/template/velocity.toml", """
+        fixture.file("local/templates/Proxy/default/velocity.toml", """
                 bind = "{{VECTORA_PROXY_BIND}}:{{VECTORA_PROXY_PORT}}"
                 [servers]
                 {{VECTORA_PROXY_SERVERS}}
@@ -121,8 +121,9 @@ class NodeEndToEndTest {
             }
             assertEquals(List.of(), fixture.database.runningAtProvision, "no process before the database");
             assertTrue(node.services().find(new ServiceId("survival-1")).isEmpty(), "wanted: false is never created");
-            assertFalse(Files.exists(fixture.home.resolve("Survival-Server/runtime")));
-            String velocity = NodeFixture.read(fixture.home.resolve("Proxy/runtime/velocity.toml"));
+            assertFalse(Files.exists(fixture.home.resolve("local/services/survival-1")));
+            assertFalse(Files.exists(fixture.home.resolve("Survival-Server")), "no old server folder at the top");
+            String velocity = NodeFixture.read(fixture.home.resolve("local/services/proxy-1/velocity.toml"));
             assertTrue(velocity.contains("lobby = "), velocity);
             assertFalse(velocity.contains("survival"), velocity);
 

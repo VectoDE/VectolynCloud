@@ -2,7 +2,7 @@
 
 Modul `cloud/api`. Eine JSON-API über HTTP/1.1 und ein WebSocket für Live-Events, gedacht für das Dashboard (Etappe 8) und für Skripte. Die maschinenlesbare Beschreibung steht in [`api.openapi.yaml`](api.openapi.yaml), die ausführliche englische Seite in [api.md](api.md).
 
-Die API ist standardmäßig aus. Sie startet mit dem Node, wenn in `cloud.yml` `api.enabled: true` steht:
+Die API ist standardmäßig aus. Sie startet mit dem Node, wenn in `config/cloud.yml` `api.enabled: true` steht:
 
 ```yaml
 api:
@@ -91,7 +91,7 @@ Jeder Schreibzugriff läuft über `ConfigService.apply`. Geprüft wird die ganze
 
 ### Fehler
 
-Jeder Fehler hat denselben Body: `code`, `message` und bei Konfigurationsfehlern `errors` mit `file`, `path`, `line`, `code`, `message` und `message-de`. Meldungen nennen Felder und Regeln, nie Werte. Meldungen des Nodes laufen durch dieselbe Schwärzung wie die Konsolenausgabe und werden auf 300 Zeichen gekürzt. Die Liste der Codes steht in [api.md](api.md#errors).
+Jeder Fehler hat denselben Body: `code`, `message` und bei Konfigurationsfehlern `errors` mit `file`, `path`, `line`, `code`, `message` und `message-de`. Dateinamen (`file`, `files` beim Reload) sind relativ zu `config/` (`groups/lobby.yml`), wie in der Konsole. Meldungen nennen Felder und Regeln, nie Werte. Meldungen des Nodes laufen durch dieselbe Schwärzung wie die Konsolenausgabe und werden auf 300 Zeichen gekürzt. Die Liste der Codes steht in [api.md](api.md#errors).
 
 ### Strenge Eingaben
 

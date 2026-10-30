@@ -61,7 +61,7 @@ final class TestNetwork implements AutoCloseable {
         network.backendTemplate(ServerKind.LOBBY.templateFolder());
         network.backendTemplate(ServerKind.SURVIVAL.templateFolder());
         network.backendTemplate(ServerKind.MINIGAME.templateFolder());
-        network.file("Proxy/template/velocity.toml", """
+        network.file("local/templates/Proxy/default/velocity.toml", """
                 bind = "{{VECTORA_PROXY_BIND}}:{{VECTORA_PROXY_PORT}}"
                 [servers]
                 {{VECTORA_PROXY_SERVERS}}
@@ -72,7 +72,7 @@ final class TestNetwork implements AutoCloseable {
     }
 
     private void backendTemplate(String folder) throws IOException {
-        file(folder + "/template/server.properties", """
+        file("local/templates/" + folder + "/default/server.properties", """
                 server-ip={{VECTORA_SERVER_HOST}}
                 server-port={{VECTORA_SERVER_PORT}}
                 management-server-secret={{VECTORA_MANAGEMENT_SECRET}}

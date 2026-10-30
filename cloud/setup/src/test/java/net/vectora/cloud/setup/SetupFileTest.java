@@ -262,9 +262,9 @@ class SetupFileTest {
 
     @Test
     void withoutNodeSectionNodesYmlStaysAsItIs() throws Exception {
-        byte[] before = Files.readAllBytes(root.resolve("nodes.yml"));
+        byte[] before = Files.readAllBytes(root.resolve("config/nodes.yml"));
         SetupWizard.nonInteractive(config, env("schema-version: 1\neula: true\n", false), null);
-        assertArrayEquals(before, Files.readAllBytes(root.resolve("nodes.yml")));
+        assertArrayEquals(before, Files.readAllBytes(root.resolve("config/nodes.yml")));
         assertEquals(null, config.snapshot().nodes().nodes().getFirst().maxMemory());
     }
 

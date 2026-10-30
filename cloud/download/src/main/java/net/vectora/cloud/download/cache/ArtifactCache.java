@@ -24,7 +24,7 @@ import net.vectora.cloud.download.hash.HashAlgorithm;
 import net.vectora.cloud.download.hash.MultiDigest;
 
 /**
- * Content-addressed store under {@code cache/artifacts/}: each file is named by its SHA-256.
+ * Content-addressed store under {@code storage/artifacts/}: each file is named by its SHA-256.
  *
  * <p>A file only gets its final name after its checksum was verified, so whatever lies under a
  * hash name was correct when it was stored. On lookup it is hashed again; a file that no longer
@@ -57,7 +57,7 @@ public final class ArtifactCache {
     /**
      * Creates the cache.
      *
-     * @param cacheRoot the cloud's {@code cache/} directory; files go to {@code artifacts/} below it
+     * @param cacheRoot the cloud's {@code storage/} directory; files go to {@code artifacts/} below it
      */
     public ArtifactCache(Path cacheRoot) {
         this.directory = Objects.requireNonNull(cacheRoot, "cacheRoot").resolve("artifacts");
@@ -66,7 +66,7 @@ public final class ArtifactCache {
     /**
      * Returns the directory of the stored files.
      *
-     * @return {@code cache/artifacts}
+     * @return {@code storage/artifacts}
      */
     public Path directory() {
         return directory;

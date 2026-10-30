@@ -39,18 +39,18 @@ Paper für Lobby, Survival, Creative und End, Fabric für den Mod-Server. Die Ba
 Jeder Server besteht aus zwei Teilen:
 
 - seiner Vorlage: Configs mit Platzhaltern, in Git unter `templates/<Server>/`
-- `runtime/`: Jars, Welten, Logs und erzeugte Dateien, im Netzwerk-Ordner (dem Cloud-Home) außerhalb des Repositorys, `<Home>/<Server>/runtime/`
+- dem Dienst-Ordner: Jars, Welten, Logs und erzeugte Dateien, im Netzwerk-Ordner (dem Cloud-Home) außerhalb des Repositorys. VectoraCloud legt die Vorlage eines gewollten Servers unter `<Home>/local/templates/<Server>/default/` ab und rendert sie nach `<Home>/local/services/<id>` (statische Dienste, bleiben erhalten) oder `<Home>/temp/services/<id>_<run>` (dynamische Dienste, beim Stopp gelöscht). Die Konfiguration liegt in `<Home>/config/`.
 
 Das Cloud-Home ist der Ordner, in dem VectoraCloud läuft. Im Produktivbetrieb liegt es außerhalb jedes Checkouts des Repositorys. Zum Entwickeln baut `./gradlew :cloud:node:runLocal` die `VectoraCloud.jar` und startet sie mit `run/` im Wurzelverzeichnis des Repositorys als Cloud-Home. Git ignoriert `run/` komplett, Secrets und Welten eingeschlossen.
 
-Bis Etappe 2 laufen die vorhandenen Server lokal aus `runtime/` über die Windows-Startskripte.
+Bis Etappe 2 laufen die vorhandenen Server lokal aus einem `runtime/`-Ordner über die Windows-Startskripte. VectoraCloud nutzt diesen Ordnernamen nicht; der Aufbau steht unter [Cloud home](https://github.com/VectoDE/VectoraCloud/blob/main/docs/cloud/architecture.md#cloud-home) (Englisch).
 
 ## VectoraCloud (geplant, Etappe 2)
 
 Ein Java-Node mit Konsole (JLine) und Einrichtungsassistent.
 
 - **Einrichtung und Konfiguration:** wie bei CloudNet. Beim ersten Start läuft ein Einrichtungsassistent in der Konsole, danach konfigurierst du die Cloud über Konfigurationsdateien und Konsolenbefehle (Etappe 2). Später kann das Web-Dashboard all das auch, einschließlich Ersteinrichtung und Server-Auswahl (Etappe 8). Beide nutzen dieselbe Konfigurationsschicht, die Etappe 2 baut.
-- **Server auswählen:** Im Assistenten oder in der Cloud-Konfiguration markierst du jeden der sieben Server und jede Minigame-Gruppe als gewollt oder nicht. Die Cloud baut nur gewollte Server: Sie kopiert die Vorlage des Servers (`templates/<Server>/` im Repository) nach `runtime/`, lädt die Software, setzt die Secrets ein und startet den Server. Nicht gewollte Server legt sie gar nicht an, und weder Proxy noch Lobby verweisen auf sie.
+- **Server auswählen:** Im Assistenten oder in der Cloud-Konfiguration markierst du jeden der sieben Server und jede Minigame-Gruppe als gewollt oder nicht. Die Cloud baut nur gewollte Server: Sie legt die Vorlage des Servers (`templates/<Server>/` im Repository) unter `local/templates/<Server>/default/` ab, rendert sie in den Dienst-Ordner, lädt die Software, setzt die Secrets ein und startet den Server. Nicht gewollte Server legt sie gar nicht an, und weder Proxy noch Lobby verweisen auf sie.
 - **Dienste:** Gruppen und Tasks, statische und dynamische Dienste, Autoskalierung nach Spielerzahl, mehrere Nodes im Cluster über TLS.
 - **Downloads:** Paper und Velocity über die PaperMC-API, Fabric-Meta, Download-API von Geyser und Floodgate, Hangar und Modrinth für die Via-Plugins und Performance-Mods. Die Cloud gleicht Prüfsummen ab und trägt Versionen fest ein; Updates laufen mit Teststart und Rollback.
 - **Java-Laufzeiten:** JREs über die Adoptium-API, pro Server-Gruppe passend zur Minecraft-Version (8, 17, 21 oder 25).

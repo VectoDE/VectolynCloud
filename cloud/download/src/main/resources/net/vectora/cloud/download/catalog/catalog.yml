@@ -2,7 +2,7 @@
 # Format and the source research behind each entry: docs/cloud/download.md
 #
 # Fields per entry:
-#   id            unique name, also the name in software.lock.yml
+#   id            unique name, also the name in config/software.lock.yml
 #   kind          server | plugin | mod | database
 #   type          standard | transitional (third-party plugin until the Vectora replacement exists)
 #   provider      id of the download provider (papermc, fabric, mojang, geysermc, pandaspigot,
@@ -16,7 +16,7 @@
 #   replaced-by   transitional only: what replaces it
 #   alternative   optional second source with a checksum, as provider:project
 #   version       optional, only with game-version none: the exact version to resolve instead of
-#                 the newest one. Whatever is resolved is pinned in software.lock.yml either way.
+#                 the newest one. Whatever is resolved is pinned in config/software.lock.yml either way.
 schema-version: 1
 artifacts:
   # --- Server software -------------------------------------------------------------------

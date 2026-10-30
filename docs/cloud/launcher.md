@@ -9,7 +9,7 @@ The order is fixed. Each step runs only if the one before it passed.
 1. **Java version.** `Bootstrap` (the `Main-Class`) reads `java.specification.version`. Below 21 it prints a German or English message with the version and path of the running Java and where to get Java 21, then exits with code 3.
 2. **Root or administrator.** See [below](#root-and-administrator-check). Refused starts exit with code 2.
 3. **Arguments.** See [Arguments](#arguments). Mistakes exit with code 64 and print the help.
-4. **Node.** The embedded libraries are unpacked to `<home>/cache/libs/<version>` and checked, then `net.vectora.cloud.node.NodeMain` is loaded by name. See [Embedded libraries](#embedded-libraries) and [Node entry point](#node-entry-point).
+4. **Node.** The embedded libraries are unpacked to `<home>/storage/libs/<version>` and checked, then `net.vectora.cloud.node.NodeMain` is loaded by name. See [Embedded libraries](#embedded-libraries) and [Node entry point](#node-entry-point).
 
 Step 2 needs `--allow-root` and `--lang` before step 3 parses the arguments, so it reads just those two from the raw command line. A root start with a broken argument therefore reports the root problem first.
 
@@ -99,7 +99,7 @@ b2fe0161…  cloud-node-0.1.0-SNAPSHOT.jar
 At startup the launcher:
 
 1. parses the index; file names must match `[A-Za-z0-9][A-Za-z0-9._+-]{0,199}\.jar`, so no separators, no `..`, no absolute paths;
-2. resolves each name in `<home>/cache/libs/<version>` and checks that the result is directly inside that directory (zip slip, a second check independent of the name rule);
+2. resolves each name in `<home>/storage/libs/<version>` and checks that the result is directly inside that directory (zip slip, a second check independent of the name rule);
 3. reuses a jar already in the cache only if its SHA-256 matches; otherwise unpacks it to a temporary file, hashes it while writing, and moves it into place only if the hash matches. A wrong hash stops the start with code 4 and leaves no file behind;
 4. deletes jars in its version folder that the index no longer lists. Each launcher version has its own folder (`<version>` is the manifest version; a version with other characters than `A-Z a-z 0-9 . _ + -` becomes `v-` plus 16 hex digits of its SHA-256), so two versions sharing one home never delete each other's libraries;
 5. creates a `URLClassLoader` named `vectora-node` over the checked jars, with the launcher's class loader as parent, and sets it as context class loader while calling the node.
@@ -115,7 +115,7 @@ The usual way is a fat jar built with the Shadow plugin, which merges all classe
 - **Checks before loading.** The launcher classes are the only code on the application class path. Nothing of the node or its libraries is loaded before the Java, root and argument checks have passed.
 - **No third-party build plugin.** One supply-chain dependency less in the build; the packing is a few lines in `cloud/launcher/build.gradle.kts`.
 
-The cost: the first start of each version writes the libraries to `cache/libs/<version>` (about 7 MB with the stage-2 scaffold), and code that relies on the system class loader instead of the context class loader does not see the node's classes.
+The cost: the first start of each version writes the libraries to `storage/libs/<version>` (about 7 MB with the stage-2 scaffold), and code that relies on the system class loader instead of the context class loader does not see the node's classes.
 
 ## Node entry point
 

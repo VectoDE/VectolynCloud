@@ -36,10 +36,10 @@ public final class SoftwareLockStore {
      * Creates the store of a cloud home.
      *
      * @param cloudHome the cloud home
-     * @return the store for {@code <home>/software.lock.yml}
+     * @return the store for {@code <home>/config/software.lock.yml}
      */
     public static SoftwareLockStore inHome(Path cloudHome) {
-        return new SoftwareLockStore(cloudHome.resolve(SoftwareLockFile.FILE_NAME));
+        return new SoftwareLockStore(cloudHome.resolve(SoftwareLockFile.CONFIG_DIR).resolve(SoftwareLockFile.FILE_NAME));
     }
 
     /**

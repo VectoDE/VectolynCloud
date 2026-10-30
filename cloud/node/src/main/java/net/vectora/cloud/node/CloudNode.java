@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -38,13 +40,13 @@ import net.vectora.cloud.config.ConfigService;
 import net.vectora.cloud.config.error.ConfigException;
 import net.vectora.cloud.config.model.ConfigSnapshot;
 import net.vectora.cloud.config.model.NodeConfig;
-import net.vectora.cloud.config.model.ServerKind;
 import net.vectora.cloud.config.secret.EnvFormatException;
 import net.vectora.cloud.config.secret.RedactingFilter;
 import net.vectora.cloud.config.secret.SecretGenerator;
 import net.vectora.cloud.config.secret.SecretStore;
 import net.vectora.cloud.console.Console;
 import net.vectora.cloud.console.ConsoleLogHandler;
+import net.vectora.cloud.console.LogHandlers;
 import net.vectora.cloud.console.builtin.BuiltinCommands;
 import net.vectora.cloud.database.DatabaseProvisioners;
 import net.vectora.cloud.database.managed.DownloadingMariaDbBinaries;
@@ -71,7 +73,10 @@ import net.vectora.cloud.node.jre.ManagedJavaRuntimes;
 import net.vectora.cloud.node.scaling.Autoscaler;
 import net.vectora.cloud.node.scaling.ScalingSignals;
 import net.vectora.cloud.node.scaling.ScalingTarget;
+import net.vectora.cloud.node.service.ServiceException;
+import net.vectora.cloud.node.service.ServiceInfo;
 import net.vectora.cloud.node.service.ServiceManager;
+import net.vectora.cloud.node.service.ServicePlanner;
 import net.vectora.cloud.node.software.ArtifactSource;
 import net.vectora.cloud.node.software.BridgePlugins;
 import net.vectora.cloud.node.software.LockedDownloads;
@@ -125,6 +130,10 @@ public final class CloudNode implements AutoCloseable {
     private final SetupEnvironment setupEnvironment;
     /** Monitoring, backups and the API. */
     private final Ops ops;
+    /** The built-in templates, written for the wanted servers. */
+    private final BuiltInTemplates templates;
+    /** {@code logs/cloud.log} on the root logger, removed in {@link #close()}. */
+    private final LogHandlers.FileHandler fileLog;
     private BackupScheduler backupScheduler;
     private volatile SetupResult.Status setupStatus;
     /** Set once start() has given up on the setup; a later first completion then starts the servers. */
@@ -146,8 +155,11 @@ public final class CloudNode implements AutoCloseable {
 
     private CloudNode(NodeSettings settings, HomeLock homeLock, ConfigService config, SecretStore secrets,
                       ServiceManager services, NodeDatabase database, CloudNetworkServer network,
-                      ChannelBridge channel, Console console, SetupEnvironment setupEnvironment, Ops ops) {
+                      ChannelBridge channel, Console console, SetupEnvironment setupEnvironment, Ops ops,
+                      BuiltInTemplates templates, LogHandlers.FileHandler fileLog) {
         this.ops = ops;
+        this.templates = templates;
+        this.fileLog = fileLog;
         this.settings = settings;
         this.setupEnvironment = setupEnvironment;
         this.homeLock = homeLock;
@@ -268,12 +280,28 @@ public final class CloudNode implements AutoCloseable {
         Path homePath = settings.home();
         HomeLock lock = HomeLock.acquire(homePath);
         ConfigService config = null;
+        LogHandlers.FileHandler fileLog = null;
         try {
+            // Before anything reads the home: an old layout is moved first (docs/cloud/node.md).
+            HomeLayoutMigration.Result layout = HomeLayoutMigration.of(homePath).run();
             removeLeftovers(homePath);
             CloudHome home = CloudHome.of(homePath);
-            config = ConfigService.open(home);
+            try {
+                config = ConfigService.open(home);
+            } catch (ConfigException e) {
+                StartupReport.step(StartupReport.Step.CONFIGURATION, StartupReport.Status.FAILED,
+                        "config/ has errors, see below");
+                throw e;
+            }
             SecretStore secrets = new SecretStore(home);
             secrets.ensureGenerated(new SecretGenerator());
+            fileLog = openCloudLog(home, secrets);
+            ConfigSnapshot loaded = config.snapshot();
+            StartupReport.step(StartupReport.Step.CONFIGURATION, StartupReport.Status.OK, loaded.groups().size()
+                    + " groups, " + loaded.tasks().size() + " tasks, node " + loaded.cloud().nodeId()
+                    + (layout.outcome() == HomeLayoutMigration.Outcome.MIGRATED
+                            ? "; home moved to the new layout, backup in " + layout.backup().orElse("?") : ""));
+            BuiltInTemplates builtIn = BuiltInTemplates.fromClassPath();
             Downloads downloads = new Downloads(homePath);
             SoftwareInstaller software = new SoftwareInstaller(ArtifactCatalog.builtIn(), downloads::software,
                     BridgePlugins.fromClassPath());
@@ -289,8 +317,10 @@ public final class CloudNode implements AutoCloseable {
             }, software);
             ServiceManager.Builder builder = ServiceManager.builder(homePath, config::snapshot, secrets::load)
                     .javaRuntimes(java)
-                    .serverSoftware(software);
-            Path databaseHome = homePath.resolve(ServerKind.DATABASE.templateFolder()).resolve("runtime");
+                    .serverSoftware(software)
+                    // A server switched on later gets its template right before its first start.
+                    .templates(template -> builtIn.seed(homePath, Set.of(template)));
+            Path databaseHome = home.databaseDir();
             NodeDatabase.Factory productionDatabase = (snapshot, passwords) -> DatabaseProvisioners.create(
                     snapshot.cloud().database(), passwords, databaseHome, new JdbcConnector(),
                     new DatabaseProvisioners.Managed(new DownloadingMariaDbBinaries(
@@ -319,8 +349,12 @@ public final class CloudNode implements AutoCloseable {
                             .build();
             SetupEnvironment setup = SetupEnvironment.of(settings.toMap(), options.environment);
             return new CloudNode(settings, lock, config, secrets, services, database, network, channel, console, setup,
-                    ops);
+                    ops, builtIn, fileLog);
         } catch (IOException | ConfigException | EnvFormatException | RuntimeException e) {
+            if (fileLog != null) {
+                Logger.getLogger("").removeHandler(fileLog);
+                fileLog.close();
+            }
             if (config != null) {
                 try {
                     config.close();
@@ -407,20 +441,74 @@ public final class CloudNode implements AutoCloseable {
     /** What an interrupted run can leave behind; only safe while this process holds the home lock. */
     private static void removeLeftovers(Path home) {
         try {
-            int parts = new ArtifactCache(home.resolve("cache")).removeStalePartFiles();
+            int parts = new ArtifactCache(CloudHome.of(home).storageDir()).removeStalePartFiles();
             if (parts > 0) {
-                LOG.log(System.Logger.Level.INFO, "Removed {0} unfinished download(s) from cache/artifacts", parts);
+                LOG.log(System.Logger.Level.INFO, "Removed {0} unfinished download(s) from storage/artifacts", parts);
             }
         } catch (IOException e) {
-            LOG.log(System.Logger.Level.WARNING, "Cannot clean up cache/artifacts: {0}", e.getMessage());
+            LOG.log(System.Logger.Level.WARNING, "Cannot clean up storage/artifacts: {0}", e.getMessage());
         }
         try {
             int jre = new JreInstaller(home, ExtractionLimits.defaults(), TargetPlatform.current()).removeLeftovers();
             if (jre > 0) {
-                LOG.log(System.Logger.Level.INFO, "Removed {0} unfinished Java install(s) from jre/", jre);
+                LOG.log(System.Logger.Level.INFO, "Removed {0} unfinished Java install(s) from storage/jre", jre);
             }
         } catch (RuntimeException e) {
-            LOG.log(System.Logger.Level.WARNING, "Cannot clean up jre/: {0}", e.getMessage());
+            LOG.log(System.Logger.Level.WARNING, "Cannot clean up storage/jre: {0}", e.getMessage());
+        }
+    }
+
+    /**
+     * Opens {@code logs/cloud.log} on the root logger, with the secrets taken out of every line. A
+     * problem leaves the node without the file, never without its start.
+     */
+    private static LogHandlers.FileHandler openCloudLog(CloudHome home, SecretStore secrets) {
+        RedactingFilter redactor;
+        try {
+            redactor = secrets.redactingFilter();
+        } catch (IOException | EnvFormatException | RuntimeException e) {
+            LOG.log(System.Logger.Level.WARNING, "logs/cloud.log is not written, the secrets cannot be read to "
+                    + "take them out of it ({0})", e.getMessage());
+            return null;
+        }
+        // The console output first: without a console (systemd, Docker) this handler stays for the
+        // whole run, so it must not depend on whether the file can be opened.
+        for (Handler handler : Logger.getLogger("").getHandlers()) {
+            if (handler instanceof LogHandlers.StreamHandler stream) {
+                stream.redactor(redactor::redact);
+            }
+        }
+        try {
+            LogHandlers.FileHandler handler = LogHandlers.file(home.logsDir(), redactor::redact);
+            Logger.getLogger("").addHandler(handler);
+            return handler;
+        } catch (IOException | RuntimeException e) {
+            LOG.log(System.Logger.Level.WARNING, "logs/cloud.log cannot be written ({0}); the log goes to the "
+                    + "console only", e.getMessage());
+            return null;
+        }
+    }
+
+    /** The {@code template} of every group that is wanted now. */
+    private static Set<String> wantedTemplates(ConfigSnapshot snapshot) {
+        Set<String> result = new TreeSet<>();
+        snapshot.groups().values().stream()
+                .filter(group -> ServicePlanner.isWanted(group, snapshot.cloud()))
+                .forEach(group -> result.add(group.template()));
+        return result;
+    }
+
+    /**
+     * Writes the built-in templates of the wanted servers the home does not have yet.
+     *
+     * @return the templates written, or empty if writing failed (logged)
+     */
+    private Optional<List<String>> seedWantedTemplates(ConfigSnapshot snapshot) {
+        try {
+            return Optional.of(templates.seed(settings.home(), wantedTemplates(snapshot)));
+        } catch (IOException e) {
+            LOG.log(System.Logger.Level.ERROR, "The built-in templates cannot be written: {0}", e.getMessage());
+            return Optional.empty();
         }
     }
 
@@ -444,12 +532,6 @@ public final class CloudNode implements AutoCloseable {
      *                     its port
      */
     public void start() throws IOException {
-        // An empty home (first start of VectoraCloud.jar) gets the templates the node carries.
-        try {
-            BuiltInTemplates.fromClassPath().seed(settings.home());
-        } catch (IOException e) {
-            LOG.log(System.Logger.Level.ERROR, "The built-in templates cannot be written: {0}", e.getMessage());
-        }
         config.startWatching();
         reconcile = new ConfigListener() {
             @Override
@@ -510,9 +592,11 @@ public final class CloudNode implements AutoCloseable {
             startedWithoutSetup = true;
         }
         if (!ready) {
+            skipServerSteps("the setup did not finish");
             LOG.log(System.Logger.Level.WARNING, "The setup did not finish, so no server is started. Run \"setup\" in "
                     + "the console or start again with --setup-file; see docs/cloud/setup.md.");
         } else if (!config.snapshot().cloud().setupComplete() || !config.snapshot().cloud().eulaAccepted()) {
+            skipServerSteps("the setup is not complete");
             LOG.log(System.Logger.Level.WARNING, "The setup is not complete (cloud.yml: setup-complete, eula-accepted), "
                     + "so no server is started. See docs/cloud/node.md.");
         } else {
@@ -546,6 +630,10 @@ public final class CloudNode implements AutoCloseable {
             return;
         }
         services.stopUnwanted();
+        // A server that was just switched on gets its template now (docs/cloud/node.md#built-in-templates).
+        if (!wantedTemplates(current).equals(wantedTemplates(previous))) {
+            seedWantedTemplates(current);
+        }
         // A changed players-per-service reaches the proxies' choice of the emptiest server.
         channel.refreshCapacities();
         if (setupJustFinished(previous, current) && !configuredStarted.get()) {
@@ -564,9 +652,79 @@ public final class CloudNode implements AutoCloseable {
         if (!configuredStarted.compareAndSet(false, true)) {
             return;
         }
-        services.startConfigured();
-        // Only now: a round must not race the configured starts for the same index.
-        ops.scaler().start();
+        try {
+            startConfiguredSteps();
+        } finally {
+            // Only now: a round must not race the configured starts for the same index.
+            ops.scaler().start();
+        }
+    }
+
+    /** Steps 2 to 5 of the start output: database, software, templates, services. */
+    private void startConfiguredSteps() {
+        try {
+            database.beforeStart();
+            StartupReport.step(StartupReport.Step.DATABASE, StartupReport.Status.OK, database.endpoint()
+                    .map(e -> e.storageMethod().placeholderValue() + " on " + e.host() + ":" + e.port())
+                    .orElse("ready"));
+        } catch (ServiceException e) {
+            StartupReport.step(StartupReport.Step.DATABASE, StartupReport.Status.FAILED, e.getMessage());
+            for (StartupReport.Step step : List.of(StartupReport.Step.SOFTWARE, StartupReport.Step.TEMPLATES,
+                    StartupReport.Step.SERVICES)) {
+                StartupReport.step(step, StartupReport.Status.SKIPPED, "the database is not ready");
+            }
+            return;
+        }
+        ConfigSnapshot snapshot = config.snapshot();
+        prepareSoftware(snapshot);
+        Optional<List<String>> written = seedWantedTemplates(snapshot);
+        Set<String> wanted = wantedTemplates(snapshot);
+        if (written.isPresent()) {
+            StartupReport.step(StartupReport.Step.TEMPLATES, StartupReport.Status.OK, written.get().size() + " written"
+                    + (written.get().isEmpty() ? "" : " (" + String.join(", ", written.get()) + ")") + ", "
+                    + (wanted.size() - written.get().size()) + " present, for " + wanted.size() + " wanted server(s)");
+        } else {
+            StartupReport.step(StartupReport.Step.TEMPLATES, StartupReport.Status.FAILED, "see the error above");
+        }
+        List<ServiceInfo> started = services.startConfigured();
+        long running = started.stream().filter(s -> s.state().hasProcess()).count();
+        StartupReport.step(StartupReport.Step.SERVICES, running == started.size() ? StartupReport.Status.OK
+                : running == 0 && !started.isEmpty() ? StartupReport.Status.FAILED : StartupReport.Status.PARTLY,
+                running + " of " + started.size() + " started");
+        StartupReport.services(started);
+    }
+
+    /** Step 3: fetches the software of every group that starts services now. */
+    private void prepareSoftware(ConfigSnapshot snapshot) {
+        Set<String> groups = new TreeSet<>();
+        for (ServicePlanner.Planned planned : ServicePlanner.plan(snapshot, snapshot.cloud().nodeId())) {
+            groups.add(planned.group());
+        }
+        List<String> done = new ArrayList<>();
+        List<String> failed = new ArrayList<>();
+        for (String name : groups) {
+            try {
+                services.prepareSoftware(name, snapshot.groups().get(name))
+                        .ifPresent(text -> done.add(name + ": " + text));
+            } catch (IOException | RuntimeException e) {
+                failed.add(name);
+                LOG.log(System.Logger.Level.ERROR, "Software of group {0} cannot be fetched: {1}", name, e.getMessage());
+            }
+        }
+        StartupReport.Status status = failed.isEmpty() ? StartupReport.Status.OK
+                : done.isEmpty() ? StartupReport.Status.FAILED : StartupReport.Status.PARTLY;
+        String detail = groups.isEmpty() ? "no service to start"
+                : done.isEmpty() && failed.isEmpty() ? "fetched on each start"
+                : String.join("; ", done) + (failed.isEmpty() ? "" : (done.isEmpty() ? "" : "; ") + "failed: " + failed);
+        StartupReport.step(StartupReport.Step.SOFTWARE, status, detail);
+    }
+
+    /** Steps 2 to 5 while no server may start. */
+    private static void skipServerSteps(String reason) {
+        for (StartupReport.Step step : List.of(StartupReport.Step.DATABASE, StartupReport.Step.SOFTWARE,
+                StartupReport.Step.TEMPLATES, StartupReport.Step.SERVICES)) {
+            StartupReport.step(step, StartupReport.Status.SKIPPED, reason);
+        }
     }
 
     /**
@@ -693,7 +851,7 @@ public final class CloudNode implements AutoCloseable {
             logHandler = console.logHandler(redactor::redact);
             Logger root = Logger.getLogger("");
             for (Handler handler : root.getHandlers()) {
-                if (handler instanceof java.util.logging.ConsoleHandler) {
+                if (handler instanceof java.util.logging.ConsoleHandler || handler instanceof LogHandlers.StreamHandler) {
                     root.removeHandler(handler);
                     removedHandlers.add(handler);
                 }
@@ -844,6 +1002,12 @@ public final class CloudNode implements AutoCloseable {
                 ops.apiServer().close();
             }
         });
+        step(errors, "closing logs/cloud.log", () -> {
+            if (fileLog != null) {
+                Logger.getLogger("").removeHandler(fileLog);
+                fileLog.close();
+            }
+        });
         step(errors, "releasing the home lock", homeLock::close);
         closed.countDown();
         closeDone.countDown();
@@ -935,7 +1099,7 @@ public final class CloudNode implements AutoCloseable {
             if (providers == null) {
                 DownloadClient client = DownloadClient.createDefault();
                 providers = ProviderRegistry.standard(client);
-                ArtifactCache cache = new ArtifactCache(home.resolve("cache"));
+                ArtifactCache cache = new ArtifactCache(CloudHome.of(home).storageDir());
                 downloader = new ArtifactDownloader(client, providers, cache);
                 // One store for every download of the node: JREs, MariaDB and the server software.
                 lockStore = SoftwareLockStore.inHome(home);

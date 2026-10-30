@@ -46,6 +46,9 @@ public final class NodeStarter {
     /** Name of the static entry method, taking a {@code Map<String, String>}. */
     public static final String ENTRY_METHOD = "start";
 
+    /** Folder of the downloads and libraries below the home (the same as {@code CloudHome.STORAGE_DIR}). */
+    public static final String STORAGE_DIR = "storage";
+
     /** Version folder names that are used as they are; anything else is replaced by a hash. */
     private static final Pattern SAFE_VERSION = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._+-]{0,63}");
 
@@ -53,7 +56,7 @@ public final class NodeStarter {
     }
 
     /**
-     * Returns the library cache of one cloud version: {@code <home>/cache/libs/<version>}.
+     * Returns the library cache of one cloud version: {@code <home>/storage/libs/<version>}.
      *
      * <p>Each version gets its own folder because {@link LibraryExtractor} deletes every jar in its
      * folder that the index does not list. With one shared folder, two versions of
@@ -61,18 +64,19 @@ public final class NodeStarter {
      * rollback) would delete each other's libraries. A version that is not a plain folder name
      * ({@code [A-Za-z0-9][A-Za-z0-9._+-]{0,63}}, and not {@code .} or {@code ..}) is replaced by
      * {@code v-} and the first 16 hex digits of its SHA-256, so it can never leave
-     * {@code cache/libs}.
+     * {@code storage/libs}. The folder of an older home layout ({@code cache/libs}) is removed by
+     * the node's home migration ({@code docs/cloud/node.md#home-layout-migration}).
      *
      * @param home    absolute cloud home
      * @param version version of this build, see {@link Launcher#version()}
      * @return the folder for this version's libraries
      */
     public static Path libsDirectory(Path home, String version) {
-        Path libs = home.resolve("cache").resolve("libs");
+        Path libs = home.resolve(STORAGE_DIR).resolve("libs");
         String folder = SAFE_VERSION.matcher(version).matches() ? version : hashedFolder(version);
         Path result = libs.resolve(folder).normalize();
         if (!libs.normalize().equals(result.getParent())) {
-            throw new IllegalArgumentException("library folder leaves cache/libs");
+            throw new IllegalArgumentException("library folder leaves storage/libs");
         }
         return result;
     }
@@ -93,7 +97,7 @@ public final class NodeStarter {
      * Gradle class path) the launcher's own class loader is returned.
      *
      * @param launcherLoader class loader that loaded the launcher
-     * @param libsDirectory  {@code <home>/cache/libs/<version>}
+     * @param libsDirectory  {@code <home>/storage/libs/<version>}
      * @return the class loader for the node
      * @throws LibraryException if the index or a library is invalid
      */

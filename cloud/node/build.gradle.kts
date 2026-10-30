@@ -100,8 +100,9 @@ val bridgeResources = tasks.register<BridgeIndex>("bridgeResources") {
  * Copies the server templates into the node's resources and writes templates.index: one line per
  * file, "<sha256 hex>  <Server>/template/<path>". BuiltInTemplates writes a missing template folder
  * from them, so VectoraCloud.jar in an empty folder has every template (docs/cloud/node.md).
- * The repository keeps a template in templates/<Server>/; in the jar and in the cloud home it is
- * <Server>/template/, as before.
+ * The repository keeps a template in templates/<Server>/; in the jar it is <Server>/template/<path>
+ * (index format 1). In the cloud home the node writes it to local/templates/<Server>/default/, only
+ * for the servers a group wants.
  */
 abstract class TemplateIndex : DefaultTask() {
 

@@ -121,6 +121,17 @@ try {
         -German "Kann nicht in das Cloud-Home wechseln: $cloudHome"
 }
 
-$javaArgs = @("-Xmx$xmx", '-jar', $jar) + $args
+# UTF-8 for the console and for what Java writes to it (non-ASCII characters in the console output).
+if ($onWindows) {
+    try {
+        [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+        $OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+        & chcp.com 65001 | Out-Null
+    } catch {
+        Write-Verbose 'Console encoding could not be switched to UTF-8.'
+    }
+}
+
+$javaArgs = @("-Xmx$xmx", '-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8', '-jar', $jar) + $args
 & $java @javaArgs
 exit $LASTEXITCODE

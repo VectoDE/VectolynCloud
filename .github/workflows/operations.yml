@@ -337,7 +337,7 @@ jobs:
           user=$(ps -o user= -p "$pid")
           echo "Main PID $pid runs as $user"
           test "$user" = vectora
-          sudo test -f /opt/vectora/cloud.yml
+          sudo test -f /opt/vectora/config/cloud.yml
           sudo systemctl stop vectora-cloud
           result=$(systemctl show -p Result --value vectora-cloud)
           status=$(systemctl show -p ExecMainStatus --value vectora-cloud)
@@ -478,7 +478,7 @@ jobs:
           echo "Health: $health"
           test "$health" = healthy
           test "$(docker exec vectora-ci stat -c %u /data)" = 1000
-          docker exec vectora-ci test -f /data/cloud.yml
+          docker exec vectora-ci test -f /data/config/cloud.yml
           docker stop -t 120 vectora-ci
           code=$(docker inspect -f '{{.State.ExitCode}}' vectora-ci)
           echo "Exit code after docker stop: $code"

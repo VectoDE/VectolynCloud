@@ -13,7 +13,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 
 /**
- * Watches {@code cloud.yml}, {@code nodes.yml}, {@code groups/} and {@code tasks/} and calls back
+ * Watches {@code config/} ({@code cloud.yml}, {@code nodes.yml}), {@code config/groups/} and
+ * {@code config/tasks/} and calls back
  * once per burst of changes. Editors often write a file in several steps (truncate, write, rename),
  * so events are collected until nothing has happened for a short quiet period.
  *
@@ -48,17 +49,17 @@ final class ConfigWatcher implements AutoCloseable {
     }
 
     /**
-     * Starts watching {@code home}. Both callbacks run on the watcher thread.
+     * Starts watching {@code <home>/config}. Both callbacks run on the watcher thread.
      *
      * @param onChange runs once per burst of relevant changes
-     * @param onError  gets the folder (relative to the home, {@code groups/}, or {@code .} for the home
-     *                 itself) that could not be watched again after its key became invalid
+     * @param onError  gets the folder (relative to {@code config/}, {@code groups/}, or {@code .} for
+     *                 {@code config/} itself) that could not be watched again after its key became invalid
      */
     static ConfigWatcher start(CloudHome home, Runnable onChange, BiConsumer<String, IOException> onError,
                                Duration quietPeriod) throws IOException {
         WatchService service = home.root().getFileSystem().newWatchService();
         try {
-            for (Path dir : new Path[] {home.root(), home.groupsDir(), home.tasksDir()}) {
+            for (Path dir : new Path[] {home.configDir(), home.groupsDir(), home.tasksDir()}) {
                 Files.createDirectories(dir);
                 register(service, dir);
             }
@@ -66,7 +67,7 @@ final class ConfigWatcher implements AutoCloseable {
             service.close();
             throw e;
         }
-        ConfigWatcher watcher = new ConfigWatcher(service, home.root(), onChange, onError, quietPeriod);
+        ConfigWatcher watcher = new ConfigWatcher(service, home.configDir(), onChange, onError, quietPeriod);
         watcher.thread.start();
         return watcher;
     }
@@ -122,8 +123,9 @@ final class ConfigWatcher implements AutoCloseable {
 
     /**
      * Registers a folder whose key became invalid again. A missing {@code groups/} or {@code tasks/}
-     * is created first (as on startup); the home itself is never created, because a missing home
-     * means the storage is gone, which the following reload reports. Package-private for tests.
+     * is created first (as on startup); {@code config/} itself is never created, because a missing
+     * {@code config/} means the files are gone, which the following reload reports. Package-private
+     * for tests.
      */
     void watchAgain(Path dir) {
         String name = dir.equals(root) ? "." : root.relativize(dir).toString().replace('\\', '/') + "/";

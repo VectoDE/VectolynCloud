@@ -30,7 +30,7 @@ class LibraryExtractorTest {
     }
 
     private Path libs() {
-        return home.resolve("cache").resolve("libs");
+        return home.resolve("storage").resolve("libs");
     }
 
     private static String sha256(byte[] data) throws IOException {

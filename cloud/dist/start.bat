@@ -83,6 +83,8 @@ cd /d "!VC_HOME!" 2>nul || (
 )
 
 rem --- Start. Delayed expansion off, so a "!" in an argument stays as typed.
+rem UTF-8 for the console and for what Java writes to it (non-ASCII characters in the console output).
+chcp 65001 >nul
 setlocal DisableDelayedExpansion
-"%VC_JAVA%" "-Xmx%VC_XMX%" -jar "%VC_JAR%" %*
+"%VC_JAVA%" "-Xmx%VC_XMX%" -Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8 -jar "%VC_JAR%" %*
 exit /b %ERRORLEVEL%

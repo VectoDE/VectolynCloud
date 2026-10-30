@@ -101,7 +101,7 @@ public final class ApiTls {
         if (relative == null || !relative.matches(ConfigNames.RELATIVE_PATH)) {
             throw new IllegalArgumentException("api.tls.keystore must be a relative path inside the cloud home");
         }
-        Path root = home.cloudFile().toAbsolutePath().normalize().getParent();
+        Path root = home.root();
         Path resolved = root.resolve(relative).normalize();
         if (!resolved.startsWith(root) || resolved.equals(root)) {
             throw new IllegalArgumentException("api.tls.keystore must be a relative path inside the cloud home");

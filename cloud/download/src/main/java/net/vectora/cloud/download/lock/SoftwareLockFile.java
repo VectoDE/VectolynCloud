@@ -32,8 +32,11 @@ import tools.jackson.dataformat.yaml.YAMLWriteFeature;
  */
 public final class SoftwareLockFile {
 
-    /** File name inside the cloud home. */
+    /** File name inside {@link #CONFIG_DIR}. */
     public static final String FILE_NAME = "software.lock.yml";
+
+    /** Folder of the file below the cloud home (the same as {@code CloudHome.CONFIG_DIR}). */
+    public static final String CONFIG_DIR = "config";
 
     static final String HEADER = "# Written by VectoraCloud. Pins every downloaded artifact to one file and its hash.\n"
             + "# Format: docs/cloud/download.md. Do not edit while the cloud is running.\n";

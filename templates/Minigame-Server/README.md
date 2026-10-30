@@ -20,4 +20,4 @@ Differences to the lobby: `gamemode=survival` and `spawn-protection=0`, because 
 
 ## Wanted or not
 
-The setup asks for each minigame group whether it is wanted. Only wanted groups are rendered from this template into `runtime/` and started, and only those appear in the proxy's server list. This README is documentation only; the cloud never copies it into `runtime/`. All placeholders: [`../placeholders.md`](../placeholders.md).
+The setup asks for each minigame group whether it is wanted. Only wanted groups are rendered from this template into their own folder under `local/services/` and started, and only those appear in the proxy's server list. This README is documentation only; the cloud never copies it into a service folder. All placeholders: [`../placeholders.md`](../placeholders.md).

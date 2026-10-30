@@ -2,7 +2,7 @@
 title Vectora Netzwerk Steuerzentrum
 chcp 65001 > nul
 rem Transitional launcher until VectoraCloud (stage 2) takes over.
-rem Copy it into the network folder (the later cloud home, outside the repository); every server
+rem Copy it into a separate network folder outside the repository; every server
 rem then runs from <network folder>\<Server>\runtime.
 set "SN=%~dp0"
 cls

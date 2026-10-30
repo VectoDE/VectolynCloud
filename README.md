@@ -86,7 +86,7 @@ VectoraCloud/
   .github/                workflows, issue forms, Dependabot
 ```
 
-Server runtimes (jars, worlds, logs) and secrets are not part of the repository. They live in the cloud home, the folder VectoraCloud runs in. For local development that is `run/` in the repository root (see [Run locally](#run-locally)); `.gitignore` keeps the whole folder out of Git.
+Server runtimes (jars, worlds, logs) and secrets are not part of the repository. They live in the cloud home, the folder VectoraCloud runs in: `config/` holds the configuration, `local/` the templates and the worlds of the static services, `storage/` the downloads, `secrets/` the secrets (layout: [architecture](docs/cloud/architecture.md#cloud-home)). For local development that is `run/` in the repository root (see [Run locally](#run-locally)); `.gitignore` keeps the whole folder out of Git.
 
 ## Quick start (transitional, until VectoraCloud exists)
 

@@ -40,7 +40,7 @@ class ConfigStoreTest {
         ConfigSnapshot snapshot = Samples.snapshot();
         Set<String> written = store.save(null, snapshot, Set.of());
         assertEquals(Set.of("cloud.yml", "nodes.yml", "groups/lobby.yml", "tasks/lobby.yml"), written);
-        assertTrue(Files.isRegularFile(root.resolve("groups/lobby.yml")));
+        assertTrue(Files.isRegularFile(root.resolve("config/groups/lobby.yml")));
         assertEquals(snapshot, store.load().snapshot());
     }
 
@@ -51,20 +51,20 @@ class ConfigStoreTest {
         store.save(null, before, Set.of());
         ConfigSnapshot after = before.withCloud(before.cloud().withLanguage(Language.DE)).withoutTask("lobby");
         assertEquals(Set.of("cloud.yml", "tasks/lobby.yml"), store.save(before, after, Set.of()));
-        assertFalse(Files.exists(root.resolve("tasks/lobby.yml")));
+        assertFalse(Files.exists(root.resolve("config/tasks/lobby.yml")));
         assertEquals(Set.of("nodes.yml"), store.save(after, after, Set.of("nodes.yml")));
     }
 
     @Test
     void reportsErrorsOfAllFilesTogether() throws IOException {
-        Files.createDirectories(root.resolve("groups"));
-        Files.createDirectories(root.resolve("tasks"));
-        Files.writeString(root.resolve("cloud.yml"), "schema-version: 1\nnetwrk-name: x\n");
-        Files.writeString(root.resolve("groups/lobby.yml"), "schema-version: 7\n");
-        Files.writeString(root.resolve("groups/Bad_Name.yml"), "schema-version: 1\n");
-        Files.writeString(root.resolve("tasks/lobby.yaml"), "schema-version: 1\n");
-        Files.writeString(root.resolve("tasks/notes.txt"), "ignored");
-        Files.writeString(root.resolve("tasks/.lobby.yml.swp"), "ignored");
+        Files.createDirectories(root.resolve("config/groups"));
+        Files.createDirectories(root.resolve("config/tasks"));
+        Files.writeString(root.resolve("config/cloud.yml"), "schema-version: 1\nnetwrk-name: x\n");
+        Files.writeString(root.resolve("config/groups/lobby.yml"), "schema-version: 7\n");
+        Files.writeString(root.resolve("config/groups/Bad_Name.yml"), "schema-version: 1\n");
+        Files.writeString(root.resolve("config/tasks/lobby.yaml"), "schema-version: 1\n");
+        Files.writeString(root.resolve("config/tasks/notes.txt"), "ignored");
+        Files.writeString(root.resolve("config/tasks/.lobby.yml.swp"), "ignored");
 
         ConfigException e = assertThrows(ConfigException.class, () -> new ConfigStore(CloudHome.of(root)).load());
         Set<String> found = e.errors().stream().map(err -> err.file() + " " + err.code()).collect(Collectors.toSet());
@@ -78,7 +78,7 @@ class ConfigStoreTest {
     @Test
     void writtenFilesAreReadableYamlWithHeader() throws IOException {
         new ConfigStore(CloudHome.of(root)).save(null, Samples.snapshot(), Set.of());
-        String group = Files.readString(root.resolve("groups/lobby.yml"), StandardCharsets.UTF_8);
+        String group = Files.readString(root.resolve("config/groups/lobby.yml"), StandardCharsets.UTF_8);
         assertTrue(group.startsWith("# Written by VectoraCloud"), group);
         assertTrue(group.contains("- id: luckperms"), group);
     }
@@ -86,7 +86,7 @@ class ConfigStoreTest {
     @Test
     void homeResolvesOnlyConfigurationFiles() {
         CloudHome home = CloudHome.of(root);
-        assertEquals(root.resolve("groups").resolve("lobby.yml").toAbsolutePath().normalize(), home.resolve("groups/lobby.yml"));
+        assertEquals(root.resolve("config/groups").resolve("lobby.yml").toAbsolutePath().normalize(), home.resolve("groups/lobby.yml"));
         assertEquals(home.cloudFile(), home.resolve("cloud.yml"));
         for (String bad : new String[] {"../cloud.yml", "groups/../../x.yml", "secrets/vectora.env", "groups/A.yml",
                 "groups/lobby.txt", "groups/sub/lobby.yml", ""}) {
@@ -99,13 +99,13 @@ class ConfigStoreTest {
                 assertThrows(IllegalArgumentException.class, () -> home.resolve(bad), bad);
             }
         }
-        assertEquals(root.resolve("tasks").resolve("console.yml").toAbsolutePath().normalize(),
+        assertEquals(root.resolve("config/tasks").resolve("console.yml").toAbsolutePath().normalize(),
                 home.resolve("tasks/console.yml"));
     }
 
     @Test
     void unreadableFolderEntriesDoNotHideOtherErrors() throws IOException {
-        Files.createDirectories(root.resolve("groups/sub.yml"));
+        Files.createDirectories(root.resolve("config/groups/sub.yml"));
         ConfigStore.Loaded loaded = assertLoads(new ConfigStore(CloudHome.of(root)));
         assertTrue(loaded.snapshot().groups().isEmpty(), "folders inside groups/ are skipped");
     }

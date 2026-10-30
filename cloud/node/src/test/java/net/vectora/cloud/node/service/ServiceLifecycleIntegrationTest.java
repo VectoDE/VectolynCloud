@@ -120,18 +120,20 @@ class ServiceLifecycleIntegrationTest {
 
                 // Unwanted: no service, no folder, not in the proxy list.
                 assertTrue(manager.find(new ServiceId("survival-1")).isEmpty());
-                assertFalse(Files.exists(net.home.resolve("Survival-Server/runtime")), "unwanted server was rendered");
-                String velocity = Files.readString(net.home.resolve("Proxy/runtime/velocity.toml"));
+                assertFalse(Files.exists(net.home.resolve("local/services/survival-1")), "unwanted server was rendered");
+                String velocity = Files.readString(net.home.resolve("local/services/proxy-1/velocity.toml"));
                 int lobbyPort = manager.find(lobby).orElseThrow().port();
                 assertTrue(velocity.contains("lobby = \"127.0.0.1:" + lobbyPort + "\""), velocity);
                 assertTrue(velocity.contains("try = [ \"lobby\" ]"), velocity);
                 assertFalse(velocity.contains("survival"), velocity);
                 assertFalse(velocity.contains("minigame"), "dynamic services register through the bridge: " + velocity);
-                assertTrue(Files.exists(net.home.resolve("Proxy/runtime/forwarding.secret")));
+                assertTrue(Files.exists(net.home.resolve("local/services/proxy-1/forwarding.secret")));
 
-                // Folders: static in <template>/runtime, dynamic in temp/services/<id>.
-                Path lobbyDir = net.home.resolve("Lobby-Server/runtime");
-                Path minigameDir = net.home.resolve("temp/services/minigame-1");
+                // Folders: static in local/services/<id>, dynamic in temp/services/<id>_<run>.
+                Path lobbyDir = net.home.resolve("local/services/lobby-1");
+                Path minigameDir = manager.find(minigame).orElseThrow().workDirectory();
+                assertEquals(net.home.resolve("temp/services").toAbsolutePath().normalize(), minigameDir.getParent());
+                assertTrue(minigameDir.getFileName().toString().matches("minigame-1_[0-9a-f]{8}"), minigameDir.toString());
                 assertTrue(Files.isRegularFile(lobbyDir.resolve("world/level.dat")));
                 assertTrue(Files.isRegularFile(minigameDir.resolve("world/level.dat")));
                 assertEquals("eula=true", Files.readAllLines(lobbyDir.resolve("eula.txt")).getLast());
@@ -149,8 +151,8 @@ class ServiceLifecycleIntegrationTest {
                 Map<String, ServiceRecord> records = state.services().stream()
                         .collect(Collectors.toMap(ServiceRecord::id, r -> r));
                 assertEquals(manager.find(lobby).orElseThrow().pid().getAsLong(), records.get("lobby-1").pid());
-                assertEquals("Lobby-Server/runtime", records.get("lobby-1").workDirectory());
-                assertEquals("temp/services/minigame-1", records.get("minigame-1").workDirectory());
+                assertEquals("local/services/lobby-1", records.get("lobby-1").workDirectory());
+                assertEquals("temp/services/" + minigameDir.getFileName(), records.get("minigame-1").workDirectory());
                 String token = Files.readString(lobbyDir.resolve("token.txt"));
                 assertFalse(Files.readString(new ServiceStateStore(net.home).file()).contains(token));
 
@@ -185,10 +187,11 @@ class ServiceLifecycleIntegrationTest {
                 ServiceId lobby2 = new ServiceId("lobby-2");
                 TestNetwork.await("lobby-2 running", WAIT, () -> state(manager, lobby2) == ServiceState.RUNNING);
                 // Mixed task (static 1, max 2): the overflow service is dynamic and lives in temp/services.
-                Path lobby2Dir = net.home.resolve("temp/services/lobby-2");
+                Path lobby2Dir = manager.find(lobby2).orElseThrow().workDirectory();
                 assertEquals(TaskMode.DYNAMIC, manager.find(lobby2).orElseThrow().mode());
                 assertTrue(Files.isDirectory(lobby2Dir));
-                assertFalse(Files.exists(net.home.resolve("Lobby-Server/runtime-2")), "overflow is not static");
+                assertTrue(lobby2Dir.getFileName().toString().startsWith("lobby-2_"), lobby2Dir.toString());
+                assertFalse(Files.exists(net.home.resolve("local/services/lobby-2")), "overflow is not static");
 
                 // Clean stop through stdin: static keeps its folder and world, dynamic is deleted.
                 ServiceInfo stopped = manager.stop(lobby);
@@ -220,7 +223,7 @@ class ServiceLifecycleIntegrationTest {
             }
             assertTrue(recorder.of("lobby-1").getLast().equalsIgnoreCase("stopped"), "close() stops everything");
             assertTrue(recorder.of("proxy-1").getLast().equalsIgnoreCase("stopped"));
-            assertTrue(Files.exists(net.home.resolve("Proxy/runtime/stopped-cleanly")),
+            assertTrue(Files.exists(net.home.resolve("local/services/proxy-1/stopped-cleanly")),
                     "Velocity gets \"shutdown\" on stdin");
             ServiceStates after = new ServiceStateStore(net.home).load().orElseThrow();
             assertTrue(after.services().stream().allMatch(r -> r.pid() == 0 && !r.state().hasProcess()), after.toString());
@@ -404,7 +407,7 @@ class ServiceLifecycleIntegrationTest {
                 manager.addListener(recorder);
                 manager.startConfigured();
                 TestNetwork.await("crash", WAIT, () -> recorder.of("minigame-1").contains("CRASHED"));
-                TestNetwork.await("cleanup", WAIT, () -> !Files.exists(net.home.resolve("temp/services/minigame-1")));
+                TestNetwork.await("cleanup", WAIT, () -> dynamicFolders(net, "minigame-1").isEmpty());
                 Thread.sleep(500);
                 assertEquals(1, recorder.of("minigame-1").stream().filter(s -> s.equals("STARTING")).count());
             }
@@ -423,7 +426,7 @@ class ServiceLifecycleIntegrationTest {
                 assertThrows(ServiceException.class, () -> manager.start("nether", 1), "unknown task");
                 ServiceInfo third = manager.start("survival", 3);
                 assertEquals(new ServiceId("survival-3"), third.id());
-                assertEquals(net.home.resolve("Survival-Server/runtime-3").toAbsolutePath().normalize(),
+                assertEquals(net.home.resolve("local/services/survival-3").toAbsolutePath().normalize(),
                         third.workDirectory());
                 TestNetwork.await("survival-3 running", WAIT, () -> state(manager, third.id()) == ServiceState.RUNNING);
                 assertThrows(ServiceException.class, () -> manager.start("survival", 3), "already running");
@@ -477,7 +480,7 @@ class ServiceLifecycleIntegrationTest {
                 manager.startConfigured();
                 ServiceId first = new ServiceId("minigame-1");
                 TestNetwork.await("minigame-1 running", WAIT, () -> state(manager, first) == ServiceState.RUNNING);
-                Path oldDir = net.home.resolve("temp/services/minigame-1");
+                Path oldDir = manager.find(first).orElseThrow().workDirectory();
                 ServiceInfo next;
                 // On Windows an open FileInputStream blocks the deletion, so the cleanup of the old
                 // folder is still retrying when the next service is started.
@@ -515,7 +518,7 @@ class ServiceLifecycleIntegrationTest {
                 ServiceInfo info = manager.stop(lobby);
                 assertEquals(ServiceState.STOPPED, info.state(), "a requested stop is never a crash");
                 assertFalse(ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false));
-                assertFalse(Files.exists(net.home.resolve("Lobby-Server/runtime/stopped-cleanly")));
+                assertFalse(Files.exists(net.home.resolve("local/services/lobby-1/stopped-cleanly")));
                 assertTrue(Duration.ofNanos(System.nanoTime() - started).compareTo(Duration.ofSeconds(1)) >= 0,
                         "the stop timeout must be waited for first");
             }
@@ -559,7 +562,7 @@ class ServiceLifecycleIntegrationTest {
                                 orphan.pid(), orphanStart, 30001, "temp/services/minigame-1"),
                         // Same pid as a live process, but another start time: the pid was reused.
                         new ServiceRecord("lobby-1", "lobby", "lobby", 1, TaskMode.STATIC, ServiceState.RUNNING,
-                                foreign.pid(), foreignStart - 60_000, 30000, "Lobby-Server/runtime"))));
+                                foreign.pid(), foreignStart - 60_000, 30000, "local/services/lobby-1"))));
 
                 try (ServiceManager manager = net.manager().build()) {
                     ServiceManager.Recovery recovery = manager.recoverOrphans();
@@ -608,6 +611,19 @@ class ServiceLifecycleIntegrationTest {
 
     private static ServiceState state(ServiceManager manager, ServiceId id) {
         return manager.find(id).map(ServiceInfo::state).orElse(null);
+    }
+
+    /** The run folders {@code temp/services/<id>_<run>} of one dynamic service that still exist. */
+    private static List<Path> dynamicFolders(TestNetwork net, String id) {
+        Path services = net.home.resolve("temp/services");
+        if (!Files.isDirectory(services)) {
+            return List.of();
+        }
+        try (java.util.stream.Stream<Path> folders = Files.list(services)) {
+            return folders.filter(folder -> ServicePlanner.isRunOf(folder, id)).toList();
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
     }
 
     private static String read(Path file) {

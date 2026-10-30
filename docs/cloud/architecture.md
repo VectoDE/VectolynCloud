@@ -1,6 +1,6 @@
 # VectoraCloud architecture
 
-VectoraCloud is the Java application behind `java -jar VectoraCloud.jar`. It renders the server templates of its home (`<home>/<Server>/template/`, written from the copies of `templates/` it carries), downloads and verifies the server software, sets up the database, starts and watches every proxy and server, and offers a console and an [API](api.md).
+VectoraCloud is the Java application behind `java -jar VectoraCloud.jar`. It renders the server templates of its home (`<home>/local/templates/<Server>/default/`, written from the copies of `templates/` it carries, only for wanted servers), downloads and verifies the server software, sets up the database, starts and watches every proxy and server, and offers a console and an [API](api.md).
 
 This page describes the module layout. Each module gets its content in its own pull request (see the [roadmap](../wiki/Roadmap.md)). Done so far: [protocol](protocol.md), [configuration](config.md), [templates](template.md), [downloads](download.md), the [launcher](launcher.md), the [cloud channel](network.md) (`cloud/network` and `common/client`), the [database](database.md), the [node's service core](node.md), the [console](console.md), the [bridges](bridges.md), [backups](backup.md), [operations](operations.md) (start scripts, systemd, Docker, Pterodactyl, release files), [monitoring](monitor.md), the [API](api.md) and the [autoscaling](scaling.md), all wired into the node. The other modules are still empty shells with their final dependencies.
 
@@ -10,9 +10,9 @@ This page describes the module layout. Each module gets its content in its own p
 |---|---|---|
 | `common/protocol` | `net.vectora.protocol` | Wire format of the cloud channel. No dependencies at all, because it runs inside every proxy and server. See [protocol.md](protocol.md). |
 | `common/client` | `net.vectora.cloud.client` | Client side of the channel, used by the bridges and later by the Vectora plugin. Uses only the JDK for networking (no Netty, neither shaded nor the server's), reasons in [network.md](network.md#why-the-client-uses-plain-jdk-sockets-and-no-netty). |
-| `cloud/config` | `net.vectora.cloud.config` | Configuration model: `cloud.yml`, `groups/`, `tasks/`, `nodes.yml`, each with a `schema-version`, plus `secrets/vectora.env`. The API speaks JSON with the same model. See [config.md](config.md). |
-| `cloud/template` | `net.vectora.cloud.template` | Turns `<home>/<Server>/template/` (from `templates/<Server>/`) into `runtime/`: placeholders, secrets, wanted and unwanted servers. See [template.md](template.md). |
-| `cloud/download` | `net.vectora.cloud.download` | Downloads server software, plugins, mods and JREs over HTTPS from an allowlist of hosts, verifies checksums, guards against zip slip. Owns `software.lock.yml`, the record of every resolved artifact with its hash. Its `jre` package picks and installs the Java runtime per group; `cloud/node` calls `JreManager`. See [download.md](download.md). |
+| `cloud/config` | `net.vectora.cloud.config` | Configuration model: `config/cloud.yml`, `config/groups/`, `config/tasks/`, `config/nodes.yml`, each with a `schema-version`, plus `secrets/vectora.env`. The API speaks JSON with the same model. See [config.md](config.md). |
+| `cloud/template` | `net.vectora.cloud.template` | Turns `<home>/local/templates/<Server>/default/` (from `templates/<Server>/`) into the service folder: placeholders, secrets, wanted and unwanted servers. See [template.md](template.md). |
+| `cloud/download` | `net.vectora.cloud.download` | Downloads server software, plugins, mods and JREs over HTTPS from an allowlist of hosts, verifies checksums, guards against zip slip. Owns `config/software.lock.yml`, the record of every resolved artifact with its hash. Its `jre` package picks and installs the Java runtime per group; `cloud/node` calls `JreManager`. See [download.md](download.md). |
 | `cloud/console` | `net.vectora.cloud.console` | Console: JLine terminal or plain stdin, command registry and parser, built-in commands (`help`, `shutdown`, `config`, `group`, `task`), question API for the setup assistant. See [console.md](console.md). |
 | `cloud/network` | `net.vectora.cloud.network` | Netty server for the cloud channel (bridges, later nodes). Loopback by default, per-start service tokens, connection limits. See [network.md](network.md). |
 | `cloud/api` | `net.vectora.cloud.api` | REST and WebSocket API on Netty: tokens with scopes (SHA-256 only), rate limits, TLS outside loopback, strict JSON, live events; writes go through `ConfigService.apply`. The node plugs in through `ApiBackend`. See [api.md](api.md). |
@@ -123,4 +123,29 @@ Code that parses untrusted input (protocol frames, config files, downloaded arch
 
 ## Cloud home
 
-The cloud keeps its data in files, not in a database. The home is the folder the cloud runs in (`VECTORA_HOME`, by default the folder of the start script), never a folder of the repository: `cloud.yml`, `groups/`, `tasks/`, `nodes.yml`, `software.lock.yml`, `secrets/`, `temp/`, `cache/`, `backups/`, `logs/`, `state/services.json`, next to the server templates. The repository only holds the templates (`templates/`) and example files (`cloud/dist/`).
+The cloud keeps its data in files, not in a database. The home is the folder the cloud runs in (`VECTORA_HOME`, by default the folder of the start script), never a folder of the repository. The repository only holds the templates (`templates/`) and example files (`cloud/dist/`).
+
+```
+<home>/
+  VectoraCloud.jar
+  config/            cloud.yml, nodes.yml, monitor.yml, backup.yml, software.lock.yml
+                     (+ <file>.v<N>.bak after a schema migration)
+    groups/          <group>.yml
+    tasks/           <task>.yml
+  local/
+    templates/<template>/default/   only for wanted servers (<template> = `template` of the group)
+    services/<service-id>/          static services, kept (local/services/lobby-1)
+  temp/
+    services/<service-id>_<run>/    dynamic services, deleted on stop
+    backup/                         work folder of the backups
+  database/          managed MariaDB: binaries, data, vectora-mariadb.ini, mariadb.log
+                     (docker mode: compose.database.yml)
+  storage/           artifacts/ (download cache), jre/ (managed JREs),
+                     libs/<version>/ (libraries of VectoraCloud.jar, unpacked by the launcher)
+  secrets/           vectora.env, api-tokens.json, TLS password; owner only
+  backups/           default target of backup.yml
+  logs/              cloud.log (+ cloud.1.log to cloud.5.log), services/<id>.log
+  state/             cloud.lock, services.json, console.history, monitor-history.bin, home-layout
+```
+
+What is configuration is in `config/`, what is data you would back up is in `local/` and `database/`, what the cloud can fetch or rebuild is in `storage/` and `temp/`. Configuration file names in error messages, events, the API and the console are relative to `config/` (`groups/lobby.yml`), so they read the same everywhere. Homes from before this layout are moved on the first start, see [home layout migration](node.md#home-layout-migration).

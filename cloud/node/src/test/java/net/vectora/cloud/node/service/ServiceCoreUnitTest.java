@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
+import net.vectora.cloud.config.CloudHome;
 import net.vectora.cloud.config.model.CloudConfig;
 import net.vectora.cloud.config.model.CombatSystem;
 import net.vectora.cloud.config.model.ConfigSnapshot;
@@ -156,13 +157,18 @@ class ServiceCoreUnitTest {
     @Test
     void workDirectoriesKeepStaticWorldsAndPutDynamicServicesIntoTemp() {
         Path home = Path.of("net").toAbsolutePath();
-        GroupConfig lobby = group("Lobby-Server", ServerSoftware.PAPER);
-        assertEquals(home.resolve("Lobby-Server").resolve("runtime"),
-                ServicePlanner.workDirectory(home, lobby, TaskMode.STATIC, "lobby-1", 1));
-        assertEquals(home.resolve("Lobby-Server").resolve("runtime-3"),
-                ServicePlanner.workDirectory(home, lobby, TaskMode.STATIC, "lobby-3", 3));
-        assertEquals(home.resolve("temp").resolve("services").resolve("lobby-2"),
-                ServicePlanner.workDirectory(home, lobby, TaskMode.DYNAMIC, "lobby-2", 2));
+        assertEquals(home.resolve("local").resolve("services").resolve("lobby-1"),
+                ServicePlanner.staticDirectory(home, "lobby-1"));
+        assertEquals(home.resolve("local").resolve("services").resolve("lobby-3"),
+                ServicePlanner.staticDirectory(home, "lobby-3"));
+        Path dynamic = ServicePlanner.dynamicDirectory(home, "lobby-2", "0a1b2c3d");
+        assertEquals(home.resolve("temp").resolve("services").resolve("lobby-2_0a1b2c3d"), dynamic);
+        assertTrue(ServicePlanner.isRunOf(dynamic, "lobby-2"));
+        assertFalse(ServicePlanner.isRunOf(dynamic, "lobby-22"));
+        assertFalse(ServicePlanner.isRunOf(home.resolve("lobby-2_x"), "lobby-2"));
+        String run = ServicePlanner.newRun();
+        assertTrue(run.matches("[0-9a-f]{8}"), run);
+        assertThrows(IllegalArgumentException.class, () -> ServicePlanner.dynamicDirectory(home, "lobby-2", "../x"));
     }
 
     @Test
@@ -471,7 +477,7 @@ class ServiceCoreUnitTest {
         Path home = Path.of("home").toAbsolutePath();
         String name = group.software() == ServerSoftware.VELOCITY ? "proxy" : "lobby";
         return new ServiceSpec(ServiceIds.of(name, 1), name, name, 1, group, TaskMode.STATIC,
-                ServicePlanner.kindOf(group), home.resolve(group.template()).resolve("template"),
-                home.resolve(group.template()).resolve("runtime"), port);
+                ServicePlanner.kindOf(group), CloudHome.of(home).templateDir(group.template()),
+                ServicePlanner.staticDirectory(home, name + "-1"), port);
     }
 }

@@ -39,18 +39,18 @@ Paper for Lobby, Survival, Creative and End; Fabric for the mod server. Backends
 Each server has two parts:
 
 - its template: configs with placeholders, tracked in git under `templates/<Server>/`
-- `runtime/`: jars, worlds, logs and generated files, in the network folder (the cloud home) outside the repository, `<home>/<Server>/runtime/`
+- the service folder: jars, worlds, logs and generated files, in the network folder (the cloud home) outside the repository. VectoraCloud keeps the template of a wanted server at `<home>/local/templates/<Server>/default/` and renders it into `<home>/local/services/<id>` (static services, kept) or `<home>/temp/services/<id>_<run>` (dynamic services, deleted on stop). Configuration is in `<home>/config/`.
 
 The cloud home is the folder VectoraCloud runs in. In production it lives outside any checkout of the repository. For development, `./gradlew :cloud:node:runLocal` builds `VectoraCloud.jar` and starts it with `run/` in the repository root as the cloud home; Git ignores `run/` as a whole, secrets and worlds included.
 
-Until stage 2 the existing servers run locally from `runtime/` via the Windows start scripts.
+Until stage 2 the existing servers run locally from a `runtime/` folder via the Windows start scripts. VectoraCloud does not use that folder name; its layout is described in [Cloud home](https://github.com/VectoDE/VectoraCloud/blob/main/docs/cloud/architecture.md#cloud-home).
 
 ## VectoraCloud (planned, stage 2)
 
 A Java node with a console (JLine) and a setup wizard.
 
 - **Setup and configuration:** like CloudNet. On first start a setup wizard runs in the console; after that you configure the cloud through config files and console commands (stage 2). Later the web dashboard can do all of it too, including the first-time setup and the choice of servers (stage 8). Both use the same configuration layer, which stage 2 builds.
-- **Choosing servers:** in the wizard or the cloud config you mark each of the seven servers and each minigame group as wanted or not. The cloud only builds wanted servers: it copies the server's template (`templates/<Server>/` in the repository) to `runtime/`, downloads the software, fills in the secrets and starts the server. Unwanted servers are never created, and neither the proxy nor the lobby refers to them.
+- **Choosing servers:** in the wizard or the cloud config you mark each of the seven servers and each minigame group as wanted or not. The cloud only builds wanted servers: it writes the server's template (`templates/<Server>/` in the repository) to `local/templates/<Server>/default/`, renders it into the service folder, downloads the software, fills in the secrets and starts the server. Unwanted servers are never created, and neither the proxy nor the lobby refers to them.
 - **Services:** groups and tasks, static and dynamic services, autoscaling by player count, multiple nodes in a cluster over TLS.
 - **Downloads:** Paper and Velocity via the PaperMC API, Fabric meta, the Geyser and Floodgate download API, Hangar and Modrinth for the Via plugins and performance mods. Checksums are verified and versions pinned; updates run a test start and roll back on failure.
 - **Java runtimes:** JREs from the Adoptium API, per server group matching the Minecraft version (8, 17, 21 or 25).

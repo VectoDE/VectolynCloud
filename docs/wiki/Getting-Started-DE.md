@@ -21,7 +21,7 @@ Du brauchst:
 4. In den `runtime/`-Ordnern jeden Platzhalter `{{VECTORA_…}}` durch deine Werte ersetzen. [`placeholders.md`](https://github.com/VectoDE/VectoraCloud/blob/main/templates/placeholders.md) listet jeden Platzhalter mit Fundstellen und lokalem Standardwert auf (Ports, Heap-Größen, Serverliste des Proxys).
 5. Die Dateien anlegen, die nicht aus Templates kommen: `Proxy/runtime/forwarding.secret` (das Forwarding-Secret), die Floodgate-`key.pem` (der Base64-Wert, dekodiert zu 16 Bytes, dieselbe Datei auf dem Proxy und auf jedem Backend) und `eula.txt`, sobald du die Minecraft-EULA akzeptiert hast.
 
-Die Schritte 2 bis 5 übernimmt ab Etappe 2 VectoraCloud.
+Die Schritte 2 bis 5 übernimmt ab Etappe 2 VectoraCloud. Diese Ordner (`<Server>\runtime`, `Database\runtime`) gehören nur zu den Startskripten von Hand; VectoraCloud nutzt einen eigenen Aufbau (`config/`, `local/`, `database/`, `storage/`), siehe [Cloud home](https://github.com/VectoDE/VectoraCloud/blob/main/docs/cloud/architecture.md#cloud-home) (Englisch).
 
 ### 2. Server-Software einspielen
 
@@ -62,7 +62,7 @@ VectoraCloud wird wie CloudNet eingerichtet und konfiguriert:
 
 1. `java -jar VectoraCloud.jar` unter Windows, Linux, macOS, in Docker oder auf Pterodactyl starten.
 2. Beim ersten Start läuft ein Einrichtungsassistent in der Konsole. Er fragt unter anderem, wie die Datenbank laufen soll (verwaltete MariaDB, Docker oder extern) und welche der sieben Server und Minigame-Gruppen du willst.
-3. Die Cloud erzeugt die Secrets, lädt Server-Software und Java-Laufzeiten herunter und prüft sie, baut jeden gewollten Server aus seiner Vorlage in `runtime/` und startet ihn. Nicht gewählte Server entstehen gar nicht, und weder Proxy noch Lobby verweisen auf sie.
+3. Die Cloud erzeugt die Secrets, lädt Server-Software und Java-Laufzeiten herunter und prüft sie, baut jeden gewollten Server aus seiner Vorlage in einen eigenen Ordner unter `local/services/` und startet ihn. Der Start zeigt ein Banner und eine Zeile je Schritt (Konfiguration, Datenbank, Software, Vorlagen, Dienste). Deine Konfiguration liegt in `config/`. Nicht gewählte Server entstehen gar nicht, und weder Proxy noch Lobby verweisen auf sie.
 4. Danach änderst du den Aufbau über Konfigurationsdateien und Konsolenbefehle.
 
 Ab Etappe 8 soll das Web-Dashboard dasselbe können, auch die Ersteinrichtung und die Server-Auswahl. Assistent, Dateien, Konsolenbefehle und Dashboard arbeiten auf einer gemeinsamen Konfigurationsschicht.

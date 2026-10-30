@@ -47,7 +47,8 @@ class MonitorConfigLoaderTest {
 
     @Test
     void readsAFullFile(@TempDir Path home) throws Exception {
-        Files.writeString(home.resolve("monitor.yml"), """
+        Files.createDirectories(home.resolve("config"));
+        Files.writeString(home.resolve("config/monitor.yml"), """
                 schema-version: 1
                 sample-interval: 5s
                 stale-after: 20s
@@ -195,7 +196,8 @@ class MonitorConfigLoaderTest {
         Path target = home.resolve("real.yml");
         Files.writeString(target, "schema-version: 1\n");
         try {
-            Files.createSymbolicLink(home.resolve("monitor.yml"), target);
+            Files.createDirectories(home.resolve("config"));
+            Files.createSymbolicLink(home.resolve("config/monitor.yml"), target);
         } catch (UnsupportedOperationException | java.io.IOException e) {
             org.junit.jupiter.api.Assumptions.abort("symbolic links are not available here");
         }

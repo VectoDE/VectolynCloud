@@ -432,8 +432,8 @@ paths:
   /config/reload:
     post:
       tags: [config]
-      summary: Read the files of the cloud home again
-      description: "Scope: config:write. Refused while the node shuts down."
+      summary: Read the configuration files again
+      description: "Scope: config:write. Reads the files in config/ again. File names in the answer are relative to config/ (groups/lobby.yml). Refused while the node shuts down."
       operationId: reloadConfig
       responses:
         "200":
@@ -685,7 +685,7 @@ components:
         max-players: {type: integer}
     Group:
       type: object
-      description: "groups/<name>.yml, see docs/cloud/config.md. Unknown fields are refused."
+      description: "config/groups/<name>.yml, see docs/cloud/config.md. Unknown fields are refused."
       properties:
         drain-timeout:
           type: string
@@ -696,7 +696,7 @@ components:
     Task:
       type: object
       description: >-
-        tasks/<name>.yml (schema-version 2), see docs/cloud/config.md. Unknown fields are refused.
+        config/tasks/<name>.yml (schema-version 2), see docs/cloud/config.md. Unknown fields are refused.
         A request body of schema-version 1 (with mode instead of scaling.static-services) is
         migrated like a file and stored as version 2; answers are always version 2.
       required: [schema-version, group, scaling]
@@ -738,7 +738,7 @@ components:
         cooldown: {type: string, example: "60s"}
     Node:
       type: object
-      description: "One entry of nodes.yml, see docs/cloud/config.md. Unknown fields are refused."
+      description: "One entry of config/nodes.yml, see docs/cloud/config.md. Unknown fields are refused."
       required: [host, port, service-ports]
       properties:
         id: {$ref: "#/components/schemas/Name"}
@@ -767,7 +767,7 @@ components:
         database: {type: string, example: "512M", description: "Default 512M"}
     CloudConfig:
       type: object
-      description: "cloud.yml, see docs/cloud/config.md. Unknown fields are refused."
+      description: "config/cloud.yml, see docs/cloud/config.md. Unknown fields are refused."
       properties:
         fallback-group:
           type: string

@@ -36,14 +36,14 @@ The container image goes to `ghcr.io/vectode/vectora-cloud`, tagged with the ver
 
 ## Requirements
 
-- **Java 21 or later** for the cloud itself. The servers it starts get the Java version their Minecraft version needs; if no installed Java fits, the cloud downloads a Temurin JRE into `<home>/jre/` (see [node.md](node.md#java-runtimes)).
+- **Java 21 or later** for the cloud itself. The servers it starts get the Java version their Minecraft version needs; if no installed Java fits, the cloud downloads a Temurin JRE into `<home>/storage/jre/` (see [node.md](node.md#java-runtimes)).
 - A normal user account. The cloud refuses to start as root or administrator (see [below](#never-as-root-or-administrator)).
 - Memory: the cloud's own heap (`VECTORA_XMX`, default 512M) plus the heap of every server it runs.
-- **Internet access on the first start of a group.** The cloud then downloads the server software (Paper, Velocity, Fabric, PandaSpigot) and the plugins and mods of the catalog: Geyser and Floodgate for Bedrock, ViaVersion, ViaBackwards and ViaRewind so Java clients from 1.8 to 26.3 can join, LuckPerms, the Fabric performance mods. Every file is checked against its checksum and pinned in `software.lock.yml`; later starts take it from `cache/artifacts/` without the network ([download.md](download.md#what-the-node-installs)).
+- **Internet access on the first start of a group.** The cloud then downloads the server software (Paper, Velocity, Fabric, PandaSpigot) and the plugins and mods of the catalog: Geyser and Floodgate for Bedrock, ViaVersion, ViaBackwards and ViaRewind so Java clients from 1.8 to 26.3 can join, LuckPerms, the Fabric performance mods. Every file is checked against its checksum and pinned in `config/software.lock.yml`; later starts take it from `storage/artifacts/` without the network ([download.md](download.md#what-the-node-installs)).
 
 ## First start: what lands in each server
 
-The templates come out of the jar: an empty home gets every `<Server>/template/` folder on the first start, and a folder you already have is never touched ([node.md](node.md#built-in-templates)).
+The templates come out of the jar: for every server that is wanted, the first start writes `local/templates/<Server>/default/`, and a folder you already have is never touched ([node.md](node.md#built-in-templates)). A server you switch off leaves no template folder behind.
 
 Before each start the node fills the server's folder: the server jar, the plugins (or mods on Fabric) its group needs, and the VectoraCloud bridge of its platform. It notes what it put there in `plugins/.vectora-managed` (`mods/` on Fabric) and removes those files again once the group no longer wants them; plugins you copy in yourself stay. A PandaSpigot 1.8.8 server does not start without its bridge, because only the bridge checks the legacy proxy's token. Details: [node.md](node.md#server-software).
 
@@ -103,6 +103,26 @@ Until `cloud.yml` says `setup-complete: true`, the cloud starts no server. With 
 ```
 
 Format and rules: [setup.md](setup.md). The file holds no secret; a database password comes from a file (`database.password-file`) or from `secrets/vectora.env`. Once the setup is complete, the file is ignored.
+
+## What is where, and upgrading from an older home
+
+Everything the cloud keeps is below the home ([layout](architecture.md#cloud-home)). For operations the folders matter like this:
+
+| Folder | Back it up? | Note |
+|---|---|---|
+| `config/` | yes | the configuration, small |
+| `local/` | yes | templates you edited and the worlds of the static services |
+| `database/` | with the database | managed MariaDB; use the [backup](backup.md) dump rather than copying live data files |
+| `secrets/` | yes, separately | owner only, never in a repository |
+| `storage/`, `temp/`, `logs/` | no | downloads, Java runtimes and unpacked libraries come back on their own |
+| `backups/` | it is the backup | |
+| `state/` | no | lock, service state, console history |
+
+**Upgrading.** A home from before this layout (`cloud.yml`, `groups/`, `<Server>/template`, `<Server>/runtime`, `cache/` at the top) is moved on the first start of the new version. The cloud makes a copy of the configuration, the templates and `state/services.json` in `backups/home-layout-migration-<time>/` first and moves worlds, database and downloads by rename, so even a large world takes seconds. Stop the old cloud, with its servers, before you start the new one: the migration refuses to run while a server of the previous run is still alive. What it does step by step, and what happens if a folder cannot be assigned, is in [node.md](node.md#home-layout-migration). Do not delete the backup folder until the network ran fine once.
+
+**Windows console.** `start.bat` and `start.ps1` switch the console to UTF-8 (`chcp 65001`) and start Java with `-Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8`, so umlauts in the log are right. If you start `java -jar VectoraCloud.jar` by hand in an old console, set the same.
+
+**Logs.** `logs/cloud.log` is the log of the cloud itself, in UTF-8 with the full stack traces (secrets redacted); each start begins a new file and keeps the last five as `cloud.1.log` to `cloud.5.log`. The log of each server is `logs/services/<id>.log`. What a start prints on screen: [node.md](node.md#start-output).
 
 ## Windows
 
@@ -182,10 +202,10 @@ docker run -d --init --name vectora -v vectora:/data -v ./setup.yml:/data/setup.
 The image:
 
 - is built in stages: a JDK 25 stage builds `VectoraCloud.jar` from source, the runtime stage is `eclipse-temurin:25-jre-noble`. Both base images are pinned by digest and updated by Dependabot;
-- runs as user `vectora` with UID and GID 1000. `/data` is the home and a volume; the jar and the start script in `/opt/vectora` belong to root and are read-only for the cloud. A bind mount instead of a volume must belong to UID 1000 (`chown -R 1000:1000 ./data`);
+- runs as user `vectora` with UID and GID 1000. `/data` is the home and a volume; all of it (`config/`, `local/`, `database/`, `storage/`, `secrets/`, `state/`) lives in that one volume, so an update that replaces the container keeps it, and an old volume is migrated at the first start ([upgrading](#what-is-where-and-upgrading-from-an-older-home)), which needs free space for the backup copy of the configuration only; the jar and the start script in `/opt/vectora` belong to root and are read-only for the cloud. A bind mount instead of a volume must belong to UID 1000 (`chown -R 1000:1000 ./data`);
 - uses `start.sh` as its entry point; arguments after the image name go to the cloud. `VECTORA_XMX` sets the heap of the cloud;
 - stops with SIGTERM. Give it time with `--stop-timeout 300` (or `stop_grace_period` in compose), otherwise Docker kills the servers after 10 s;
-- has a health check without curl or netcat: bash opens a TCP connection to the cloud channel on `127.0.0.1:7010` (`VECTORA_HEALTHCHECK_PORT` if you moved it in `nodes.yml`) and closes it before the channel's handshake timeout, so no log line is written;
+- has a health check without curl or netcat: bash opens a TCP connection to the cloud channel on `127.0.0.1:7010` (`VECTORA_HEALTHCHECK_PORT` if you moved it in `config/nodes.yml`) and closes it before the channel's handshake timeout, so no log line is written;
 - needs no Docker socket, no capability and no privileged mode. The `docker` database mode is for a cloud on a host with Docker; inside the container use `managed`, `external` (as in compose below) or `h2`;
 - exists for `linux/amd64` and `linux/arm64`. On arm64 the managed database falls back to H2.
 
@@ -237,6 +257,7 @@ How the egg works:
 | Variables | version, cloud heap, EULA, language, network name, Bedrock port, legacy proxy on/off, legacy proxy port, database mode |
 
 - **Database:** `managed` (the cloud runs its own MariaDB inside the server; works on x86_64 because the Pterodactyl images are glibc-based), `external` (a database from the panel's database tab) or `h2`. The `docker` mode is not offered: the server is a container without Docker, and the setup refuses it there too. For `external`, open `setup.yml` in the file manager and add under `database:` the keys `host`, `port`, `name`, `user` and `password-file: db-password.txt`, and put the password into `db-password.txt`; Wings only replaces the keys it manages and keeps the others. Alternatively put `VECTORA_DB_PASSWORD=...` into `secrets/vectora.env` ([setup.md](setup.md#pterodactyl)).
+- **Files:** the server's file manager shows the whole home: `config/` for the configuration, `local/services/<id>` for the worlds, `logs/cloud.log` for the log. An egg installation from before the layout change is migrated at the first start of the new version; stop the server in the panel first so no Minecraft server is still running.
 - **Memory:** the server's memory limit covers the cloud and every Minecraft server it starts. The setup warns when the heaps add up to more than `SERVER_MEMORY`. Keep the cloud heap small (512M) and give the servers the rest.
 - **PID limit:** Wings limits every server container to **512 processes and threads** by default (`docker.container_pid_limit` in `/etc/pterodactyl/config.yml`). Each Minecraft server JVM uses roughly 50 to 150 threads, the proxy and MariaDB more, so several servers in one Pterodactyl server run into this limit and then fail with "unable to create native thread" or `OutOfMemoryError`. Raise it (for example to 4096) in the Wings configuration and restart Wings; that needs access to the node, not only to the panel.
 - **Other limits:** one node only (no cluster), and every port needs an allocation. A network name of digits only, or `true`/`false`, would be turned into a number or boolean by Wings; the variable's rule requires at least one letter.

@@ -37,6 +37,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
+import net.vectora.cloud.config.CloudHome;
 import net.vectora.cloud.config.model.CloudConfig;
 import net.vectora.cloud.config.model.ConfigSnapshot;
 import net.vectora.cloud.config.model.DatabaseMode;
@@ -129,6 +130,24 @@ public final class ServiceManager implements AutoCloseable {
     }
 
     /**
+     * Makes sure the template folder of a group exists before a service is rendered from it, so a
+     * server that is switched on later gets its template on its first start
+     * ({@code docs/cloud/node.md#built-in-templates}).
+     */
+    @FunctionalInterface
+    public interface TemplateSource {
+
+        /**
+         * Writes {@code <home>/local/templates/<template>/default/} if the home does not have it and
+         * a built-in template of that name exists; does nothing otherwise.
+         *
+         * @param template the group's {@code template}
+         * @throws IOException if writing fails
+         */
+        void ensure(String template) throws IOException;
+    }
+
+    /**
      * Result of {@link #recoverOrphans()}.
      *
      * @param terminated   services whose process was still running from an earlier run and was ended
@@ -153,6 +172,7 @@ public final class ServiceManager implements AutoCloseable {
     private String channelHost;
     private int channelPort;
     private final StartGate startGate;
+    private final TemplateSource templates;
     private final String nodeId;
 
     private final Object lock = new Object();
@@ -180,6 +200,7 @@ public final class ServiceManager implements AutoCloseable {
         this.destroyGrace = b.destroyGrace;
         this.clock = b.clock;
         this.startGate = b.startGate;
+        this.templates = b.templates;
         ConfigSnapshot snapshot = config.get();
         this.nodeId = snapshot.cloud().nodeId();
         NodeConfig node = thisNode(snapshot);
@@ -260,6 +281,19 @@ public final class ServiceManager implements AutoCloseable {
      */
     public ServiceAuthenticator authenticator() {
         return tokens;
+    }
+
+    /**
+     * Fetches the software of a group ahead of its starts, through the node's
+     * {@link ServerSoftwareProvider#prepare}.
+     *
+     * @param groupName the group
+     * @param group     its configuration
+     * @return what is in place, or empty if the provider fetches on each start
+     * @throws IOException if something cannot be fetched
+     */
+    public Optional<String> prepareSoftware(String groupName, GroupConfig group) throws IOException {
+        return software.prepare(groupName, group);
     }
 
     // ------------------------------------------------------------------ orphans
@@ -640,7 +674,11 @@ public final class ServiceManager implements AutoCloseable {
             if (held.contains(id)) {
                 throw new ServiceException(id + " is held by a backup or restore; it starts once that is done");
             }
-            Path workDirectory = ServicePlanner.workDirectory(home, group, mode, id.value(), index);
+            // A dynamic service restarted after a crash keeps the folder of its run: launch() empties
+            // it before rendering, as for any dynamic start. Every other dynamic start gets a new run.
+            Path workDirectory = mode != TaskMode.DYNAMIC ? ServicePlanner.staticDirectory(home, id.value())
+                    : existing != null && !existing.spec.isStatic() ? existing.spec.workDirectory()
+                    : ServicePlanner.dynamicDirectory(home, id.value(), ServicePlanner.newRun());
             if (cleaning.contains(workDirectory)) {
                 throw new ServiceException("the folder of " + id + " is still being deleted");
             }
@@ -671,7 +709,7 @@ public final class ServiceManager implements AutoCloseable {
                 allocated = true;
             }
             ServiceSpec spec = new ServiceSpec(id, task.group(), taskName, index, group, mode,
-                    ServicePlanner.kindOf(group), home.resolve(group.template()).resolve("template"), workDirectory, port);
+                    ServicePlanner.kindOf(group), CloudHome.of(home).templateDir(group.template()), workDirectory, port);
             Service service = existing != null ? existing : new Service();
             int attempts = service.restartAttempts;
             service.reset(spec);
@@ -705,10 +743,9 @@ public final class ServiceManager implements AutoCloseable {
     }
 
     private int freeIndex(String group, TaskMode mode) throws ServiceException {
-        Path dynamicRoot = home.resolve(ServicePlanner.DYNAMIC_DIR);
         for (int index = 1; index <= ServiceIds.MAX_INDEX; index++) {
             ServiceId id = ServiceIds.of(group, index);
-            if (mode == TaskMode.DYNAMIC && cleaning.contains(dynamicRoot.resolve(id.value()))) {
+            if (mode == TaskMode.DYNAMIC && cleaning.stream().anyMatch(folder -> ServicePlanner.isRunOf(folder, id.value()))) {
                 // The folder of an earlier service with this id is still being deleted.
                 continue;
             }
@@ -755,6 +792,7 @@ public final class ServiceManager implements AutoCloseable {
                 checkDynamicRoot();
                 deleteDynamicFolder(spec.workDirectory());
             }
+            templates.ensure(spec.group().template());
             TemplateInstaller.install(spec.templateDir(), spec.workDirectory(), platform,
                     values, snapshot.cloud().eulaAccepted());
             // The software first: its sources state the Java minimum the runtime must meet.
@@ -1828,6 +1866,7 @@ public final class ServiceManager implements AutoCloseable {
         private Duration destroyGrace = Duration.ofSeconds(10);
         private Clock clock = Clock.systemUTC();
         private StartGate startGate = () -> { };
+        private TemplateSource templates = template -> { };
 
         private Builder(Path home, Supplier<ConfigSnapshot> config, SecretSource secrets) {
             this.home = Objects.requireNonNull(home, "home").toAbsolutePath().normalize();
@@ -1911,6 +1950,18 @@ public final class ServiceManager implements AutoCloseable {
          */
         public Builder startGate(StartGate value) {
             this.startGate = Objects.requireNonNull(value, "value");
+            return this;
+        }
+
+        /**
+         * Sets what writes a missing template before a service is rendered (default: nothing, the
+         * template must be there).
+         *
+         * @param value the source
+         * @return this builder
+         */
+        public Builder templates(TemplateSource value) {
+            this.templates = Objects.requireNonNull(value, "value");
             return this;
         }
 

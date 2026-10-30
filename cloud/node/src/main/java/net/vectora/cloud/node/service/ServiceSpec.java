@@ -20,7 +20,7 @@ import net.vectora.protocol.ServiceId;
  * @param group         the group configuration at the time the service was planned
  * @param mode          static (keeps its folder) or dynamic (works in {@code temp/}, deleted after the stop)
  * @param kind          the server kind of the group's template, empty for a custom template
- * @param templateDir   {@code <home>/<template>/template}
+ * @param templateDir   {@code <home>/local/templates/<template>/default}
  * @param workDirectory folder the process runs in
  * @param port          port the server listens on
  */

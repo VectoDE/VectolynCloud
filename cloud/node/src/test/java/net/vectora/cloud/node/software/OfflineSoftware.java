@@ -29,7 +29,7 @@ import net.vectora.cloud.setup.NetworkServer;
 
 /**
  * Prepares a home so that every default group of the setup finds its server jar and plugins
- * without the network: one file in {@code cache/artifacts/} and a {@code software.lock.yml} entry
+ * without the network: one file in {@code storage/artifacts/} and a {@code config/software.lock.yml} entry
  * for each catalog entry the node will ask for, all pointing at that file. The node then replays
  * the lock exactly as on a second start after real downloads.
  */
@@ -53,7 +53,7 @@ public final class OfflineSoftware {
         }, BridgePlugins.fromClassPath());
         byte[] bytes = Files.readAllBytes(jar);
         Checksum sha256 = Checksum.of(HashAlgorithm.SHA256, digest(bytes));
-        ArtifactCache cache = new ArtifactCache(home.resolve("cache"));
+        ArtifactCache cache = new ArtifactCache(home.resolve("storage"));
         Path part = cache.newPartFile();
         Files.write(part, bytes);
         cache.commit(part, sha256);

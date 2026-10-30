@@ -117,7 +117,7 @@ class NodeStarterTest {
 
     @Test
     void eachVersionHasItsOwnLibraryFolder(@TempDir Path home) {
-        Path libs = home.resolve("cache").resolve("libs");
+        Path libs = home.resolve("storage").resolve("libs");
         assertEquals(libs.resolve("0.1.0"), NodeStarter.libsDirectory(home, "0.1.0"));
         assertEquals(libs.resolve("0.2.0-SNAPSHOT"), NodeStarter.libsDirectory(home, "0.2.0-SNAPSHOT"));
         assertEquals(libs.resolve("dev"), NodeStarter.libsDirectory(home, "dev"));

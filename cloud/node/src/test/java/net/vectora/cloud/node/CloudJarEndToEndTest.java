@@ -41,7 +41,7 @@ import org.junit.jupiter.api.io.TempDir;
 /**
  * The real {@code VectoraCloud.jar} in an empty folder, as a separate process, without network:
  * launcher, embedded libraries, setup file, built-in templates, software from a pre-seeded
- * {@code software.lock.yml}, bridges, Java selection, every default server of the network, the
+ * {@code config/software.lock.yml}, the home layout and start output, bridges, Java selection, every default server of the network, the
  * proxies' server lists and the clean shutdown.
  *
  * <p>The server software is {@link FakeServerJar#writeConnected}, which logs in to the cloud channel
@@ -74,7 +74,7 @@ class CloudJarEndToEndTest {
     void theJarBringsUpTheWholeNetworkInAnEmptyFolderWithoutNetwork() throws Exception {
         Path home = Files.createDirectories(dir.resolve("home"));
         Map<String, List<String>> addons = OfflineSoftware.seed(home, FakeServerJar.writeConnected(dir.resolve("fake.jar")));
-        byte[] lockBefore = Files.readAllBytes(home.resolve("software.lock.yml"));
+        byte[] lockBefore = Files.readAllBytes(home.resolve("config/software.lock.yml"));
         Map<String, LockedArtifact> seeded = SoftwareLockStore.inHome(home).read().entries();
         Path output = dir.resolve("cloud.out");
         Process cloud = launch(home, output, """
@@ -104,10 +104,30 @@ class CloudJarEndToEndTest {
             Map<String, ServiceRecord> running = states(home);
 
             // The setup ran from the file, the templates came out of the jar.
-            String cloudYml = Files.readString(home.resolve("cloud.yml"));
+            String cloudYml = Files.readString(home.resolve("config/cloud.yml"));
             assertTrue(cloudYml.contains("setup-complete: true"), cloudYml);
-            assertTrue(Files.isRegularFile(home.resolve("Proxy/template/velocity.toml")));
-            assertTrue(Files.isRegularFile(home.resolve("Legacy-Server/template/pandaspigot.yml")));
+            assertTrue(Files.isRegularFile(home.resolve("local/templates/Proxy/default/velocity.toml")));
+            assertTrue(Files.isRegularFile(home.resolve("local/templates/Legacy-Server/default/pandaspigot.yml")));
+            assertFalse(Files.exists(home.resolve("local/templates/Database")), "the managed database has no template");
+
+            // The home layout of docs/cloud/architecture.md#cloud-home, nothing else at the top.
+            try (Stream<Path> top = Files.list(home)) {
+                List<String> names = top.map(p -> p.getFileName().toString()).sorted().toList();
+                assertTrue(List.of("backups", "config", "database", "local", "logs", "secrets", "state", "storage",
+                        "temp").containsAll(names), names.toString());
+            }
+            assertEquals("2", Files.readString(home.resolve("state/home-layout")).strip());
+            assertTrue(Files.isRegularFile(home.resolve("logs/cloud.log")), "the cloud writes its own log");
+            String console = read(output);
+            assertTrue(console.contains("VectoraCloud "), "the banner names the version: " + tail(output));
+            for (String step : List.of("[1/5] Configuration", "[2/5] Database", "[3/5] Software", "[4/5] Templates",
+                    "[5/5] Services")) {
+                assertTrue(console.contains(step), step + ": " + tail(output));
+            }
+            // The launcher's root warning box before the node starts is not a log line.
+            assertFalse(console.contains("INFORMATION") || console.contains("WARNUNG") || console.contains("\nWARNING ")
+                            || console.contains("\nINFO: ") || console.contains("\nSEVERE"),
+                    "one log format, no localized java.util.logging lines: " + tail(output));
 
             // Software: the lock was replayed, nothing was downloaded, nothing half-written is left.
             if (MANAGED) {
@@ -118,25 +138,26 @@ class CloudJarEndToEndTest {
                         .forEach(name -> assertTrue(name.contains("mariadb"), "only MariaDB was added: " + name));
                 assertTrue(read(output).contains("Database ready: mariadb"), tail(output));
             } else {
-                assertArrayEquals(lockBefore, Files.readAllBytes(home.resolve("software.lock.yml")),
+                assertArrayEquals(lockBefore, Files.readAllBytes(home.resolve("config/software.lock.yml")),
                         "software.lock.yml unchanged");
                 assertFalse(read(output).contains("Downloaded "), "no download happened");
                 assertTrue(read(output).contains("Database ready: h2"), tail(output));
             }
-            try (Stream<Path> files = Files.list(home.resolve("cache/artifacts"))) {
+            try (Stream<Path> files = Files.list(home.resolve("storage/artifacts"))) {
                 assertFalse(files.anyMatch(f -> f.getFileName().toString().endsWith(ArtifactCache.PART_SUFFIX)));
             }
 
             // Each server got its plugins from the catalog and the bridge of its platform.
-            assertManaged(home.resolve("Proxy/runtime/plugins"), addons.get("Proxy"), "VectoraCloudBridgeVelocity-");
-            assertManaged(home.resolve("Legacy-Proxy/runtime/plugins"), addons.get("Legacy-Proxy"), "VectoraCloudBridgeVelocity-");
-            assertManaged(home.resolve("Lobby-Server/runtime/plugins"), addons.get("Lobby-Server"), "VectoraCloudBridgePaper-");
-            assertManaged(home.resolve("Legacy-Server/runtime/plugins"), addons.get("Legacy-Server"), "VectoraCloudBridgeLegacy-");
-            assertManaged(home.resolve("Mod-Server/runtime/mods"), addons.get("Mod-Server"), null);
-            assertTrue(Files.isRegularFile(home.resolve("Proxy/runtime/velocity.jar")));
-            assertTrue(Files.isRegularFile(home.resolve("Legacy-Server/runtime/pandaspigot.jar")));
-            assertTrue(Files.isRegularFile(home.resolve("Lobby-Server/runtime/plugins/floodgate/key.pem")));
-            assertFalse(Files.exists(home.resolve("Legacy-Server/runtime/plugins/floodgate/key.pem")),
+            Path services = home.resolve("local/services");
+            assertManaged(services.resolve("proxy-1/plugins"), addons.get("Proxy"), "VectoraCloudBridgeVelocity-");
+            assertManaged(services.resolve("legacy-proxy-1/plugins"), addons.get("Legacy-Proxy"), "VectoraCloudBridgeVelocity-");
+            assertManaged(services.resolve("lobby-1/plugins"), addons.get("Lobby-Server"), "VectoraCloudBridgePaper-");
+            assertManaged(services.resolve("legacy-server-1/plugins"), addons.get("Legacy-Server"), "VectoraCloudBridgeLegacy-");
+            assertManaged(services.resolve("mod-1/mods"), addons.get("Mod-Server"), null);
+            assertTrue(Files.isRegularFile(services.resolve("proxy-1/velocity.jar")));
+            assertTrue(Files.isRegularFile(services.resolve("legacy-server-1/pandaspigot.jar")));
+            assertTrue(Files.isRegularFile(services.resolve("lobby-1/plugins/floodgate/key.pem")));
+            assertFalse(Files.exists(services.resolve("legacy-server-1/plugins/floodgate/key.pem")),
                     "no Floodgate key where the template has no Floodgate");
 
             // Java: 21 for PandaSpigot, 25 for everything else.
@@ -174,8 +195,8 @@ class CloudJarEndToEndTest {
                 assertNotNull(after.get(id), id);
                 assertEquals(ServiceState.STOPPED, after.get(id).state(), id);
             }
-            assertTrue(Files.exists(home.resolve("Lobby-Server/runtime/stopped-cleanly")), "lobby stopped with its command");
-            assertTrue(Files.exists(home.resolve("Proxy/runtime/stopped-cleanly")), "proxy stopped with its command");
+            assertTrue(Files.exists(services.resolve("lobby-1/stopped-cleanly")), "lobby stopped with its command");
+            assertTrue(Files.exists(services.resolve("proxy-1/stopped-cleanly")), "proxy stopped with its command");
         } finally {
             end(cloud);
         }
@@ -214,10 +235,10 @@ class CloudJarEndToEndTest {
             // RUNNING comes only from the bridge's ServiceReady on the cloud channel.
             await("every service running", () -> allRunning(home, services), cloud, output, Duration.ofMinutes(15));
             Map<String, ServiceRecord> running = states(home);
-            assertTrue(Files.isRegularFile(home.resolve("Proxy/runtime/velocity.jar")));
-            assertTrue(Files.isRegularFile(home.resolve("Lobby-Server/runtime/paper.jar")));
-            assertTrue(Files.isRegularFile(home.resolve("Legacy-Server/runtime/pandaspigot.jar")));
-            assertTrue(read(home.resolve("software.lock.yml")).contains("velocity"), "the downloads are pinned");
+            assertTrue(Files.isRegularFile(home.resolve("local/services/proxy-1/velocity.jar")));
+            assertTrue(Files.isRegularFile(home.resolve("local/services/lobby-1/paper.jar")));
+            assertTrue(Files.isRegularFile(home.resolve("local/services/legacy-server-1/pandaspigot.jar")));
+            assertTrue(read(home.resolve("config/software.lock.yml")).contains("velocity"), "the downloads are pinned");
             assertTrue(read(output).contains("Downloaded "), "the software was downloaded");
 
             Path logs = home.resolve("logs/services");
@@ -249,7 +270,8 @@ class CloudJarEndToEndTest {
         Path java25 = Path.of(property("vectora.e2e.java25"));
         Path java21 = Path.of(property("vectora.e2e.java21"));
         int[] ports = freePorts(4);
-        Files.writeString(home.resolve("nodes.yml"), """
+        Files.createDirectories(home.resolve("config"));
+        Files.writeString(home.resolve("config/nodes.yml"), """
                 schema-version: 1
                 nodes:
                   - id: node-1

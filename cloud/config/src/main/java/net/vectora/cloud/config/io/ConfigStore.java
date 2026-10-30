@@ -142,7 +142,7 @@ public final class ConfigStore {
 
     private <T> T readSingle(String file, ConfigFormat<T> format, List<ConfigError> errors, Set<String> missing,
                              Map<String, Integer> migrated) {
-        Path path = home.root().resolve(file);
+        Path path = home.configDir().resolve(file);
         RegularPaths.Kind kind;
         try {
             kind = RegularPaths.kind(path);
@@ -164,7 +164,7 @@ public final class ConfigStore {
     private <T> Map<String, T> readFolder(String folder, ConfigFormat<T> format, List<ConfigError> errors,
                                           Map<String, Integer> migrated) {
         Map<String, T> result = new TreeMap<>();
-        Path dir = home.root().resolve(folder);
+        Path dir = home.configDir().resolve(folder);
         RegularPaths.Kind dirKind;
         try {
             dirKind = RegularPaths.kind(dir);

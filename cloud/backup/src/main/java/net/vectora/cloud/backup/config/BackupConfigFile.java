@@ -14,6 +14,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.regex.Pattern;
 import net.vectora.cloud.backup.schedule.CronExpression;
+import net.vectora.cloud.config.CloudHome;
 import net.vectora.cloud.config.error.ConfigError;
 import net.vectora.cloud.config.error.ConfigException;
 import net.vectora.cloud.config.error.ErrorCode;
@@ -36,8 +37,8 @@ import net.vectora.cloud.config.validation.ConfigNames;
  */
 public final class BackupConfigFile {
 
-    /** File name, relative to the home. */
-    public static final String FILE = "backup.yml";
+    /** File name, relative to {@code config/} (as in messages): {@code <home>/config/backup.yml}. */
+    public static final String FILE = CloudHome.BACKUP_FILE;
     /** Format with its schema version. */
     public static final ConfigFormat<BackupConfig> FORMAT =
             new ConfigFormat<>(BackupConfig.class, BackupConfig.SCHEMA_VERSION, List.of());
@@ -54,7 +55,10 @@ public final class BackupConfigFile {
     public static final Duration MAX_DUMP_TIMEOUT = Duration.ofHours(6);
 
     private static final Pattern RELATIVE = Pattern.compile(ConfigNames.RELATIVE_PATH);
-    private static final List<String> RESERVED = List.of("secrets", "groups", "tasks", "state", "logs", "cache");
+    /** Folders of the home that belong to the cloud (docs/cloud/architecture.md#cloud-home), plus old names. */
+    private static final List<String> RESERVED = List.of(CloudHome.CONFIG_DIR, "local", CloudHome.TEMP_DIR,
+            CloudHome.DATABASE_DIR, CloudHome.STORAGE_DIR, CloudHome.SECRETS_DIR, CloudHome.STATE_DIR,
+            CloudHome.LOGS_DIR, "groups", "tasks", "cache", "jre");
 
     private static final String HEADER = """
             # Backup settings of VectoraCloud. Read again before every backup.
@@ -71,10 +75,10 @@ public final class BackupConfigFile {
      */
     public BackupConfigFile(Path home) {
         this.home = Objects.requireNonNull(home, "home").toAbsolutePath().normalize();
-        this.file = this.home.resolve(FILE);
+        this.file = CloudHome.of(this.home).backupFile();
     }
 
-    /** {@code <home>/backup.yml}. */
+    /** {@code <home>/config/backup.yml}. */
     public Path file() {
         return file;
     }

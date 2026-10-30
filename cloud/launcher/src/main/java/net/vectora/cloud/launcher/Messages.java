@@ -235,8 +235,8 @@ public final class Messages {
                     ? "Das Bibliotheksverzeichnis in VectoraCloud.jar ist ungültig (" + subject + "). Lade die Datei neu herunter."
                     : "The library index in VectoraCloud.jar is invalid (" + subject + "). Download the file again.";
             case IO -> de()
-                    ? "Die Bibliotheken ließen sich nicht nach cache/libs entpacken: " + e.getMessage()
-                    : "Could not unpack the libraries to cache/libs: " + e.getMessage();
+                    ? "Die Bibliotheken ließen sich nicht nach storage/libs entpacken: " + e.getMessage()
+                    : "Could not unpack the libraries to storage/libs: " + e.getMessage();
         };
     }
 

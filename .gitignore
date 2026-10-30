@@ -7,8 +7,8 @@
 /run/
 
 # --- Server runtime (worlds, jars, logs, real secrets) -------------------------
-# Only templates/<Server>/ is tracked. runtime/ folders, secrets and everything else the cloud
-# writes belong in run/ or in a cloud home outside the repository.
+# Only templates/<Server>/ is tracked. Everything the cloud writes belongs in run/ or in a cloud
+# home outside the repository.
 # Checkouts from before the layout change may still hold a Server-Network/ folder with runtime
 # data and secrets; it stays ignored as a whole so none of it can be committed by accident.
 Server-Network/
@@ -16,7 +16,18 @@ Server-Network/
 **/runtime/
 **/runtime-*/
 # A cloud home started directly in the repository root (working directory = checkout) instead of
-# run/; these root-anchored entries only keep its files out of commits.
+# run/; these root-anchored entries only keep its files out of commits. Current layout: config/,
+# local/, temp/, database/, storage/, secrets/, backups/, logs/, state/. The entries further down
+# belong to the older layout (cloud.yml, groups/, cache/, jre/, Database/, ...) and stay for
+# checkouts that still have them.
+/config/
+/local/
+/temp/
+/database/
+/storage/
+/state/
+/logs/
+/backups/
 /cloud.yml
 /nodes.yml
 /software.lock.yml
@@ -24,10 +35,7 @@ Server-Network/
 /monitor.yml
 /groups/
 /tasks/
-/backups/
-/state/
 /cache/
-/temp/
 /jre/
 /Proxy/
 /Legacy-Proxy/

@@ -2,7 +2,7 @@
 
 Module `cloud/api`. A JSON API over HTTP/1.1 plus a WebSocket for live events, for the dashboard (stage 8) and for scripts. The machine-readable description is [`api.openapi.yaml`](api.openapi.yaml). German: [api.de.md](api.de.md).
 
-The API is off by default. It starts with the node when `api.enabled: true` is set in `cloud.yml`:
+The API is off by default. It starts with the node when `api.enabled: true` is set in `config/cloud.yml`:
 
 ```yaml
 api:
@@ -128,7 +128,7 @@ Every error has the same body:
 }
 ```
 
-Messages name fields and rules, never values. Messages of the node (for example why a service did not start) pass the same redaction as the console output and are cut to 300 characters.
+File names in `file` and in the `files` of a reload are relative to `config/` (`groups/lobby.yml`), the same as in the console. Messages name fields and rules, never values. Messages of the node (for example why a service did not start) pass the same redaction as the console output and are cut to 300 characters.
 
 | Status | Codes |
 |---|---|

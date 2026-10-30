@@ -4,19 +4,21 @@ Module `cloud/config`, package `net.vectora.cloud.config`. This is the one confi
 
 ## Files in the cloud home
 
-The cloud home is the folder the cloud runs in (`VECTORA_HOME`, by default the folder of the start script). In production it lives outside any checkout. For local development and testing, `./gradlew :cloud:node:runLocal` builds `VectoraCloud.jar` and starts it with `run/` in the repository root as the home (see [launcher](launcher.md#local-start-from-the-repository)). `.gitignore` ignores `run/` as a whole, so its configuration, secrets, worlds, logs and downloads never reach a commit. If the cloud is started directly in the repository root by mistake, `.gitignore` also keeps its files (`cloud.yml`, `nodes.yml`, `groups/`, `tasks/`, `backups/`, `state/`, `cache/`, `temp/`, the server folders) out of commits, but backups and secrets would still sit loose in the working tree.
+The cloud home is the folder the cloud runs in (`VECTORA_HOME`, by default the folder of the start script). In production it lives outside any checkout. For local development and testing, `./gradlew :cloud:node:runLocal` builds `VectoraCloud.jar` and starts it with `run/` in the repository root as the home (see [launcher](launcher.md#local-start-from-the-repository)). `.gitignore` ignores `run/` as a whole, so its configuration, secrets, worlds, logs and downloads never reach a commit. If the cloud is started directly in the repository root by mistake, `.gitignore` also keeps its files (`config/`, `local/`, `database/`, `storage/`, `temp/`, `backups/`, `state/`, `logs/`) out of commits, but backups and secrets would still sit loose in the working tree.
 
 ```
-<home>/cloud.yml           network and this node
-<home>/nodes.yml           all nodes of the cluster
-<home>/groups/<name>.yml   what a service runs (template, software, version, heap, plugins)
-<home>/tasks/<name>.yml    how many services of a group run, and where
-<home>/secrets/vectora.env secrets, KEY=VALUE, owner-only
+<home>/config/cloud.yml           network and this node
+<home>/config/nodes.yml           all nodes of the cluster
+<home>/config/groups/<name>.yml   what a service runs (template, software, version, heap, plugins)
+<home>/config/tasks/<name>.yml    how many services of a group run, and where
+<home>/secrets/vectora.env        secrets, KEY=VALUE, owner-only
 ```
 
-`software.lock.yml`, `temp/`, `cache/`, `backups/`, `logs/` and `state/` belong to other modules.
+`config/monitor.yml`, `config/backup.yml` and `config/software.lock.yml` belong to other modules, as do `local/`, `temp/`, `database/`, `storage/`, `backups/`, `logs/` and `state/`; the whole layout is in [architecture](architecture.md#cloud-home).
 
-On the first start the cloud writes a default `cloud.yml` and `nodes.yml` and creates `groups/` and `tasks/`. Every file starts with `schema-version`. Field names are kebab-case, enum values lower case.
+File names in this document, in error messages, events, the API and the console are relative to `config/`: `cloud.yml`, `groups/lobby.yml`. A relative path inside a file (for example `api.tls.keystore`) is resolved against the home, not against `config/`. A home from before the `config/` folder is moved by the [home layout migration](node.md#home-layout-migration) at the first start.
+
+On the first start the cloud writes a default `cloud.yml` and `nodes.yml` into `config/` and creates `config/groups/` and `config/tasks/`. Every file starts with `schema-version`. Field names are kebab-case, enum values lower case.
 
 The cloud rewrites a file when it changes it. Comments in a file are not kept then; the cloud writes a short header instead. Keep notes elsewhere, for example in `docs/`.
 
@@ -70,7 +72,7 @@ Passwords are not in `cloud.yml`. They are in `secrets/vectora.env`.
 
 ```yaml
 schema-version: 1
-template: Lobby-Server       # folder in the home that holds template/
+template: Lobby-Server       # template name: local/templates/Lobby-Server/default/
 software: paper              # paper, velocity, fabric or pandaspigot
 minecraft-version: "26.3"    # quote it: an unquoted 1.20 would be a number
 java: auto                   # auto or a major version (8 to 99)
@@ -119,7 +121,7 @@ scaling:
 nodes: [node-1]              # empty: any node
 ```
 
-A task mixes static and dynamic services. The first `static-services` services are static: they keep their folder (`<template>/runtime`, `runtime-2`, …) and are never stopped by the scaler. Every service above that is dynamic: it runs in `temp/services/<id>` and its folder is deleted when it stops. `static-services = max-services` is a purely static task, `static-services = 0` a purely dynamic one.
+A task mixes static and dynamic services. The first `static-services` services are static: they keep their folder (`local/services/<id>`, for example `lobby-1`, `lobby-2`) and are never stopped by the scaler. Every service above that is dynamic: it runs in `temp/services/<id>_<run>` and its folder is deleted when it stops. `static-services = max-services` is a purely static task, `static-services = 0` a purely dynamic one.
 
 What the node does with these values (when a service starts or stops, the memory budget, what is never stopped) is in [scaling.md](scaling.md).
 
@@ -160,11 +162,11 @@ nodes:
 
 Group, task and node names match `[a-z0-9][a-z0-9_-]{0,31}` and must not be a Windows device name (`con`, `prn`, `aux`, `nul`, `com0` to `com9`, `lpt0` to `lpt9`); `console` or `con1` are fine. Group and task names are the file names, so they cannot disagree with the file. Only lower case is allowed because Windows and macOS do not tell `Lobby.yml` from `lobby.yml`. The rule is the same as for `GroupName` and `NodeId` in `common/protocol` (1 to 32 characters, lower case, no device names), so every configured name can be sent. A service id there (`ServiceId`) may have up to 64 characters, so that `<group>-<index>` fits.
 
-The cloud resolves a group or task file only directly inside `groups/` or `tasks/`; a name that would end up in another folder is rejected even if it slipped past the pattern.
+The cloud resolves a group or task file only directly inside `config/groups/` or `config/tasks/`; a name that would end up in another folder is rejected even if it slipped past the pattern.
 
 ### Symbolic links
 
-`cloud.yml`, `nodes.yml`, the files in `groups/` and `tasks/`, the folders `groups/`, `tasks/` and `secrets/`, and `secrets/vectora.env` must be real files and folders. A symbolic link, a Windows junction, a special file, or a file where a folder belongs is an error with the code `not-regular`:
+`cloud.yml`, `nodes.yml`, the files in `groups/` and `tasks/`, the folders `config/`, `groups/`, `tasks/` and `secrets/`, and `secrets/vectora.env` must be real files and folders. A symbolic link, a Windows junction, a special file, or a file where a folder belongs is an error with the code `not-regular`:
 
 - It is reported, never skipped silently. A link named like a configuration file (`groups/lobby.yml`) counts, a link with another name (`groups/notes.txt`) is ignored like any other file.
 - It is never followed. A dangling link where `cloud.yml` belongs does not count as a missing file, so the cloud does not write default files through it.
@@ -237,7 +239,7 @@ The service is thread-safe. `snapshot()` never blocks; changes and reloads run o
 
 ### Hand edits
 
-`startWatching()` watches `cloud.yml`, `nodes.yml`, `groups/` and `tasks/`. If a watched folder is deleted, renamed or unmounted, its watch key becomes invalid. The watcher then creates `groups/` or `tasks/` again (as on the first start), watches it again and reloads. If the folder cannot be watched again (for example a file now has its name), listeners get `reloadFailed` with `file-access` for that folder, and the other folders stay watched. After a burst of changes has been quiet for 200 ms, all files are read again:
+`startWatching()` watches `config/` (`cloud.yml`, `nodes.yml`), `groups/` and `tasks/`. If a watched folder is deleted, renamed or unmounted, its watch key becomes invalid. The watcher then creates `groups/` or `tasks/` again (as on the first start), watches it again and reloads. If the folder cannot be watched again (for example a file now has its name), listeners get `reloadFailed` with `file-access` for that folder, and the other folders stay watched. After a burst of changes has been quiet for 200 ms, all files are read again:
 
 - valid and different: it becomes the current snapshot, and listeners get a `ConfigChanged` with origin `FILE`;
 - invalid, or `cloud.yml`/`nodes.yml` deleted: the previous snapshot stays active, the errors are logged and listeners get `reloadFailed`;
@@ -258,7 +260,7 @@ A change that touches several files is written file by file. If writing fails ha
 Every file has `schema-version`. The current version is 2 for task files and 1 for the other three formats.
 
 - A file without `schema-version`, or with a version newer than the cloud knows, is an error.
-- A file with an older version runs through one `ConfigMigration` per version step (on the raw YAML tree, so renamed or removed fields can be handled), is then read normally, and is rewritten in the current format when the service opens or reloads it. The old file is kept as `<file>.v<version>.bak`.
+- A file with an older version runs through one `ConfigMigration` per version step (on the raw YAML tree, so renamed or removed fields can be handled), is then read normally, and is rewritten in the current format when the service opens or reloads it. The old file is kept as `<file>.v<version>.bak` next to it in `config/`.
 
 To change a format: raise `SCHEMA_VERSION` in the model record, change the record, and register a migration from the previous version in `ConfigFormat`. `ConfigFormat` refuses a chain with gaps.
 

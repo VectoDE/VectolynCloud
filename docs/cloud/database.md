@@ -15,7 +15,7 @@ The module does not start processes itself. In managed mode it says what to run,
 
 ## Modes
 
-`database.mode` in `cloud.yml` (see [configuration](config.md)) selects the provisioner. `DatabaseProvisioners.create(config, secrets, home, connector, managed)` returns it. Every provisioner has the same three calls:
+`database.mode` in `config/cloud.yml` (see [configuration](config.md)) selects the provisioner. `DatabaseProvisioners.create(config, secrets, home, connector, managed)` returns it. Every provisioner has the same three calls:
 
 - `provision()` brings the database into the wanted state and returns a `DatabaseEndpoint`. It is idempotent: a second call on a finished setup changes nothing.
 - `health()` returns a `HealthReport` (reachable, latency, short detail).
@@ -30,11 +30,11 @@ The module does not start processes itself. In managed mode it says what to run,
 
 ### Managed MariaDB
 
-Home: `<home>/Database/runtime/`. It holds the unpacked server, `data/`, `vectora-mariadb.ini` and `mariadb.log`.
+Home: `<home>/database/`. It holds the unpacked server, `data/`, `vectora-mariadb.ini` and `mariadb.log`. The cloud writes the ini itself; there is no `Database` template in the home any more. Older homes (`Database/runtime/`) are moved here by the [home layout migration](node.md#home-layout-migration).
 
 1. **Platform.** `ManagedPlatform.of(...)` accepts Windows x64 and Linux x86_64 with glibc, the two platforms MariaDB publishes server archives for. On every other platform (Linux on ARM or with musl, macOS, Windows on ARM) `DatabaseProvisioners.create` returns the embedded H2 fallback instead, so the cloud still starts. Its `notice()` names the platform and says how to get a shared database (`external` or `docker`); `cloud/node` logs it as a warning. `ManagedMariaDbProvisioner` used directly still fails there with `MANAGED_PLATFORM`.
 2. **Binaries.** `DownloadingMariaDbBinaries` gets the archive from the `mariadb` provider in [downloads](download.md) (checksum, cache, safe extraction). It unpacks into a temporary folder and then moves it into place, so a broken download never leaves a half folder. `mariadb-install.properties` records folder, version and SHA-256. A matching install is reused.
-3. **Config.** `MariaDbConfigFile` writes `vectora-mariadb.ini`: `bind-address=127.0.0.1`, `skip-name-resolve`, `max_connections=150`, `innodb_buffer_pool_size=256M`, `utf8mb4`, the port from `cloud.yml`. On Linux the socket goes to the temp directory. A test checks that every setting of the hand-written `templates/Database/vectora-mariadb.ini` is kept.
+3. **Config.** `MariaDbConfigFile` writes `vectora-mariadb.ini`: `bind-address=127.0.0.1`, `skip-name-resolve`, `max_connections=150`, `innodb_buffer_pool_size=256M`, `utf8mb4`, the port from `config/cloud.yml`. On Linux the socket goes to the temp directory. A test checks that every setting of the hand-written `templates/Database/vectora-mariadb.ini` is kept.
 4. **Initialise.** Only when `data/mysql` is missing. Windows: `bin/mariadb-install-db.exe`, with `bin/mysql_install_db.exe` as fallback for older archives. Linux: `scripts/mariadb-install-db --no-defaults --auth-root-authentication-method=normal --skip-name-resolve`. A non-empty `data/` without `mysql/` is someone else's data. The cloud stops there instead of overwriting it.
 5. **First start.** The server starts with `--init-file`. That file sets the root password before the server accepts its first connection, removes anonymous users and remote root accounts and drops the `test` database. It is written owner-only and deleted in a `finally` block, whether the start works or not. There is no window in which root has no password and accepts connections. Before `mariadb-install-db` runs, the cloud writes the marker `vectora-init.pending`; it is deleted only after root logged in with the generated password. If the first start fails (port taken, missing library), the next start sees the marker and passes the init file again, so the data directory never stays with a root account without password. A data directory without the marker (for example from the old start script) never gets the init file.
 6. **Setup.** As root over `127.0.0.1`: secure again (same rules, for data directories from older setups; the grants of the `test` databases are matched by their bytes (`HEX(Db)`) instead of a literal backslash, so the statement means the same with `NO_BACKSLASH_ESCAPES` in `sql_mode`), then create the application database and user (see [rights](#rights)). Afterwards the application user logs in once to prove the grant works.
@@ -47,10 +47,10 @@ Errors are `DatabaseException` with a `Reason` (`MANAGED_PLATFORM`, `INSTALL`, `
 
 ### Docker
 
-The cloud does not talk to the Docker socket. It writes `<home>/Database/runtime/compose.database.yml` (service `vectora-database`, image from `database.docker-image`, port bound to `127.0.0.1` only, data volume, health check, `--max-connections=150`). The root password comes from `secrets/vectora.env` at `docker compose` time and is never written into the file:
+The cloud does not talk to the Docker socket. It writes `<home>/database/compose.database.yml` (service `vectora-database`, image from `database.docker-image`, port bound to `127.0.0.1` only, data volume, health check, `--max-connections=150`). The root password comes from `secrets/vectora.env` at `docker compose` time and is never written into the file:
 
 ```
-docker compose --env-file ../../secrets/vectora.env -f compose.database.yml up -d
+docker compose --env-file ../secrets/vectora.env -f compose.database.yml up -d
 ```
 
 The cloud then waits 20 seconds for the container. If it does not answer, `provision()` fails with this command in the message. Once it answers, the cloud sets up database and user like in managed mode.
@@ -63,7 +63,7 @@ For a MariaDB or MySQL server the operator runs. The cloud only connects as the 
 
 ### H2 (embedded)
 
-The embedded fallback: chosen with `database.mode: h2`, and used automatically when `managed` is configured on a platform without a MariaDB server build or with `servers.database: false` in `cloud.yml` (the database server is not wanted, so the node starts none). Good for tests and for a single small setup without any database server. LuckPerms ships its own H2 driver and file storage, so the cloud adds no dependency and starts nothing. Each service then has its own rank data; nothing is shared between servers. For a network, use one of the other modes.
+The embedded fallback: chosen with `database.mode: h2`, and used automatically when `managed` is configured on a platform without a MariaDB server build or with `servers.database: false` in `config/cloud.yml` (the database server is not wanted, so the node starts none). Good for tests and for a single small setup without any database server. LuckPerms ships its own H2 driver and file storage, so the cloud adds no dependency and starts nothing. Each service then has its own rank data; nothing is shared between servers. For a network, use one of the other modes.
 
 H2 is dual-licensed under MPL 2.0 and EPL 1.0. MPL 2.0 allows combination with GPL code (section 3.3, "Secondary License"), so the choice is compatible with Vectora's GPL-3.0. Vectora does not distribute H2 anyway; LuckPerms downloads it at runtime.
 

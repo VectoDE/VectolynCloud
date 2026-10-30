@@ -4,7 +4,7 @@ Package `net.vectora.cloud.node.scaling` in `cloud/node`. The node keeps `min-se
 
 ## Configuration
 
-Scaling is set per task in `tasks/<name>.yml` (see [config.md](config.md#tasksnameyml)):
+Scaling is set per task in `config/tasks/<name>.yml` (see [config.md](config.md#tasksnameyml)):
 
 ```yaml
 schema-version: 2
@@ -25,8 +25,8 @@ nodes: []
 
 `static ≤ min ≤ max` must hold, and `scale-down-below` must be lower than `scale-up-at`.
 
-- **Static services** (`static-services`): the first ones of the task. Each has its own folder under the group's template (`runtime`, `runtime-2`, …) that survives every stop, and the scaler never stops one.
-- **Dynamic services**: everything above `static-services`, up to `max-services`. Each runs in `temp/services/<id>`, and that folder is deleted when the service stops.
+- **Static services** (`static-services`): the first ones of the task. Each has its own folder (`local/services/<id>`, for example `lobby-1` and `lobby-2`) that survives every stop, and the scaler never stops one.
+- **Dynamic services**: everything above `static-services`, up to `max-services`. Each runs in `temp/services/<id>_<run>`, and that folder is deleted when the service stops.
 
 A new service is static as long as the task has fewer static services than `static-services`, otherwise dynamic. The lobby above therefore has one static lobby and up to three dynamic ones. `static-services = max-services` is a purely static task (it never scales), `static-services = 0` a purely dynamic one.
 
@@ -38,7 +38,7 @@ The file, the console and the API all change it through `ConfigService.apply` an
 
 | Way | Example |
 |---|---|
-| File | edit `tasks/minigame.yml`; the node reloads it after 200 ms |
+| File | edit `config/tasks/minigame.yml`; the node reloads it after 200 ms |
 | Console | `task set minigame max-services 6`, `task set lobby static-services 2`, `task set minigame scale-down-below 40` |
 | API | `PUT /api/v1/tasks/minigame` with the whole task as JSON (scope `config:write`) |
 
@@ -161,7 +161,7 @@ The last three lines say why a service was not emptied: the time ran out, no oth
 
 ## Ids, folders and proxies
 
-A scaled service is an ordinary service of the service core ([node.md](node.md#ids-folders-and-ports)): id `<group>-<index>` with the lowest free index, dynamic folders in `temp/services/<id>`, a port from the node's `service-ports`, and the proxies learn about it through `RegisterServer` once it is running and through `UnregisterServer` when it stops.
+A scaled service is an ordinary service of the service core ([node.md](node.md#ids-folders-and-ports)): id `<group>-<index>` with the lowest free index, dynamic folders in `temp/services/<id>_<run>`, a port from the node's `service-ports`, and the proxies learn about it through `RegisterServer` once it is running and through `UnregisterServer` when it stops.
 
 ## Code
 

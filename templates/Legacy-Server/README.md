@@ -21,4 +21,4 @@ PandaSpigot does not check the `bungeeguard-token` itself. Until the Vectora bri
 
 ## Wanted or not
 
-Only groups marked as wanted are rendered from this template into `runtime/` and started. This README is documentation only; the cloud never copies it into `runtime/`. All placeholders: [`../placeholders.md`](../placeholders.md).
+Only groups marked as wanted are rendered from this template into their own folder under `local/services/` and started. This README is documentation only; the cloud never copies it into a service folder. All placeholders: [`../placeholders.md`](../placeholders.md).

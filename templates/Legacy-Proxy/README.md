@@ -15,4 +15,4 @@ Software: Velocity, same version as the main proxy. No plugins yet. Whether Bedr
 - `{{VECTORA_XMS}}`, `{{VECTORA_XMX}}` in `start.bat`
 - Generated file: `forwarding.secret`. The cloud writes `VECTORA_LEGACY_FORWARDING_SECRET` here, never `VECTORA_FORWARDING_SECRET` of the main proxy. Velocity sends it to the backends as `bungeeguard-token`, in plain text inside the handshake, so it must never equal the main proxy's modern-forwarding secret.
 
-This README is documentation only; the cloud never copies it into `runtime/`. All placeholders: [`../placeholders.md`](../placeholders.md).
+This README is documentation only; the cloud never copies it into a service folder. All placeholders: [`../placeholders.md`](../placeholders.md).

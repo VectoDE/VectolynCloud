@@ -72,7 +72,7 @@ Each server group runs on its own Java runtime, chosen by `JavaRequirement` in `
 
 The rule: `java: <major>` in the group file wins if it is not below the minimum. Otherwise legacy groups (PandaSpigot) get 21 and every other group 25. A minimum above that default wins. PandaSpigot gets 21 rather than 25 because Netty prints a `sun.misc.Unsafe` warning under Java 25 (spike PR 22, checked weekly by the legacy fork smoke test).
 
-An installed system Java is used if its feature version is exactly the chosen one; otherwise the cloud downloads Eclipse Temurin (JRE) from Adoptium into `<home>/jre/`. Temurin JREs 21 and 25 exist for Windows x64, Linux x64 and aarch64 and macOS x64 and aarch64 (checked on 2026-10-28). The weekly download smoke test resolves all of them and starts the JRE 21 it installs.
+An installed system Java is used if its feature version is exactly the chosen one; otherwise the cloud downloads Eclipse Temurin (JRE) from Adoptium into `<home>/storage/jre/`. Temurin JREs 21 and 25 exist for Windows x64, Linux x64 and aarch64 and macOS x64 and aarch64 (checked on 2026-10-28). The weekly download smoke test resolves all of them and starts the JRE 21 it installs.
 
 ## Marked Java 22+ spot: JLine terminal provider `ffm`
 

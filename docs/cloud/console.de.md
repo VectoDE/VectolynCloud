@@ -2,7 +2,9 @@
 
 Modul `cloud/console`. Die ausführliche Modulseite mit Terminal-Auswahl, Erweiterung und Frage-API steht auf Englisch in [console.md](console.md). Diese Seite beschreibt die Bedienung.
 
-Alle Texte der Konsole erscheinen in der Sprache aus `language` in `cloud.yml`. Ein `config set language de` wirkt sofort.
+Alle Texte der Konsole erscheinen in der Sprache aus `language` in `config/cloud.yml`. Ein `config set language de` wirkt sofort. Dateinamen in Meldungen und Befehlen (`groups/lobby.yml`) sind relativ zu `config/`.
+
+Alle Log-Zeilen haben ein Format: `HH:mm:ss LEVEL Nachricht`, mit den festen Stufen `ERROR`, `WARN `, `INFO `, `DEBUG` und `TRACE`, unabhängig von der Systemsprache. Bis die Konsole läuft, schreibt ein Handler auf die Standardausgabe in der Codepage der Konsole, damit Umlaute auch unter Windows stimmen. `logs/cloud.log` bekommt dieselben Einträge in UTF-8 mit Datum, Millisekunden, Logger und Stacktraces; pro Start wird rotiert (`cloud.1.log` bis `cloud.5.log`). Banner und Schritt-Zeilen des Starts stehen in [Start output](node.md#start-output) (Englisch).
 
 ## Bedienung
 

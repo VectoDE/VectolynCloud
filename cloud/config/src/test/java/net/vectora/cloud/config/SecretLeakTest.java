@@ -40,7 +40,8 @@ class SecretLeakTest {
             "schema-version: " + SECRET + "\n",
         };
         for (String content : files) {
-            Files.writeString(root.resolve("cloud.yml"), content);
+            Files.createDirectories(root.resolve("config"));
+            Files.writeString(root.resolve("config/cloud.yml"), content);
             ConfigException e = assertThrows(ConfigException.class, () -> ConfigService.open(CloudHome.of(root)));
             assertClean(e);
         }

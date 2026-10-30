@@ -1,5 +1,5 @@
 // Backups of VectoraCloud: archives of the static services (worlds and configuration from
-// runtime/), database dumps, manifest with hashes, retention, schedule, restore and the console
+// local/services/<id>/), database dumps, manifest with hashes, retention, schedule, restore and the console
 // commands. cloud-node implements the small interfaces (BackupTargets, ServiceControl,
 // DatabaseSource) and starts the scheduler. The manifest is read back from archives that may have
 // been edited or damaged, so its parser has a Jazzer fuzz test.
