@@ -64,7 +64,7 @@ What happens, in this order:
 5. **Services.** `<Server>/runtime` and `<Server>/runtime-<n>` become `local/services/<group>-<n>`, when exactly one group uses that template. If several groups use it, the folder stays where it is and the log says so.
 6. **Database.** `Database/runtime` becomes `database/`.
 7. **Storage.** `cache/` becomes `storage/` (`cache/libs` is dropped, the launcher unpacks the libraries again), `jre/` becomes `storage/jre/`.
-8. **Cleanup.** Old folders that are empty now are removed, then the marker is written.
+8. **Cleanup.** Old folders that are empty now are removed, then the marker is written. If the configuration could not be read in step 3, the worlds stay where they are and no marker is written: the start then fails on the configuration, and once it is fixed the next start finishes the move with the same backup.
 
 The migration can be repeated safely. A source that is gone counts as done, folders that exist on both sides are merged, and identical files count as moved. If two different files meet in one place, the start stops with an error that names both, and nothing is overwritten. When the file system does not allow a rename (another file system), the node copies, renames and then deletes.
 

@@ -463,17 +463,26 @@ public final class CloudNode implements AutoCloseable {
      * problem leaves the node without the file, never without its start.
      */
     private static LogHandlers.FileHandler openCloudLog(CloudHome home, SecretStore secrets) {
+        RedactingFilter redactor;
         try {
-            RedactingFilter redactor = secrets.redactingFilter();
+            redactor = secrets.redactingFilter();
+        } catch (IOException | EnvFormatException | RuntimeException e) {
+            LOG.log(System.Logger.Level.WARNING, "logs/cloud.log is not written, the secrets cannot be read to "
+                    + "take them out of it ({0})", e.getMessage());
+            return null;
+        }
+        // The console output first: without a console (systemd, Docker) this handler stays for the
+        // whole run, so it must not depend on whether the file can be opened.
+        for (Handler handler : Logger.getLogger("").getHandlers()) {
+            if (handler instanceof LogHandlers.StreamHandler stream) {
+                stream.redactor(redactor::redact);
+            }
+        }
+        try {
             LogHandlers.FileHandler handler = LogHandlers.file(home.logsDir(), redactor::redact);
             Logger.getLogger("").addHandler(handler);
-            for (Handler handler2 : Logger.getLogger("").getHandlers()) {
-                if (handler2 instanceof LogHandlers.StreamHandler stream) {
-                    stream.redactor(redactor::redact);
-                }
-            }
             return handler;
-        } catch (IOException | EnvFormatException | RuntimeException e) {
+        } catch (IOException | RuntimeException e) {
             LOG.log(System.Logger.Level.WARNING, "logs/cloud.log cannot be written ({0}); the log goes to the "
                     + "console only", e.getMessage());
             return null;

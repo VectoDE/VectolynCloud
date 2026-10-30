@@ -204,11 +204,18 @@ final class HomeLayoutMigration {
         }
         migrateStorage();
 
-        writeMarker();
-        Files.deleteIfExists(home.resolve(IN_PROGRESS));
         for (String line : kept) {
             LOG.log(System.Logger.Level.WARNING, "Home layout: left in place: {0}", line);
         }
+        if (config.isEmpty()) {
+            // Without the groups the worlds could not be assigned. No marker: the next start, with
+            // the configuration fixed, finishes the move instead of starting empty service folders.
+            LOG.log(System.Logger.Level.WARNING, "Home layout: not finished, the configuration in config/ cannot be "
+                    + "read; fix it and start again, the move then continues (backup in {0})", backup);
+            return new Result(Outcome.MIGRATED, Optional.of(backup), actions, kept);
+        }
+        writeMarker();
+        Files.deleteIfExists(home.resolve(IN_PROGRESS));
         LOG.log(System.Logger.Level.INFO, "Home layout: done, {0} change(s); backup in {1}", actions.size(), backup);
         return new Result(Outcome.MIGRATED, Optional.of(backup), actions, kept);
     }

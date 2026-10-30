@@ -229,6 +229,31 @@ class HomeLayoutMigrationTest {
     }
 
     @Test
+    void anUnreadableConfigurationLeavesTheWorldsAndTheNextStartFinishesTheMove() throws Exception {
+        oldHome();
+        String cloudYml = read("cloud.yml");
+        write("cloud.yml", "schema-version: [ broken\n");
+
+        HomeLayoutMigration.Result first = migration().run();
+
+        assertEquals(HomeLayoutMigration.Outcome.MIGRATED, first.outcome());
+        assertEquals("world 1", read("Lobby-Server/runtime/world/level.dat"), "no group known, so not moved");
+        assertFalse(Files.exists(home.resolve(HomeLayoutMigration.MARKER)), "not finished, no marker");
+        assertTrue(Files.exists(home.resolve(HomeLayoutMigration.IN_PROGRESS)));
+
+        // The operator fixes the file; the next start moves the worlds, with the same backup.
+        write("config/cloud.yml", cloudYml);
+        HomeLayoutMigration.Result second = migration().run();
+
+        assertEquals(HomeLayoutMigration.Outcome.MIGRATED, second.outcome());
+        assertEquals(first.backup(), second.backup());
+        assertEquals("world 1", read("local/services/lobby-1/world/level.dat"));
+        assertEquals("world 2", read("local/services/lobby-2/world/level.dat"));
+        assertEquals(HomeLayoutMigration.LAYOUT_VERSION, read(HomeLayoutMigration.MARKER).strip());
+        assertFalse(Files.exists(home.resolve(HomeLayoutMigration.IN_PROGRESS)));
+    }
+
+    @Test
     void aNewHomeOnlyGetsTheMarker() throws Exception {
         HomeLayoutMigration.Result result = migration().run();
 
