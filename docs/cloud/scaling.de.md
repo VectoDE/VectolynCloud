@@ -113,7 +113,15 @@ Hauptproxy und Legacy-Proxy arbeiten gleich. Der Node teilt den Proxys mit `Serv
 | Spieler pro Dienst | Der neueste Messwert des [Monitors](monitor.md): `ServiceStatus.playersOnline`, das die Bridge des Dienstes alle 5 Sekunden meldet, höchstens ihr eigenes `maxPlayers`. Ein Messwert älter als `stale-after` (60 s) zählt nicht. Solange ein Proxy verbunden ist, der den Dienst führt, gilt der kleinere Wert aus Bridge und Proxy (`PlayerJoin`, `PlayerSwitch`, siehe [bridges.md](bridges.md#player-events)). Ein manipulierter Server, der mehr Spieler meldet, als der Proxy auf ihm sieht, kann so keine Server starten. Ohne einen solchen Proxy gilt der Wert der Bridge. |
 | Speicher des Nodes | Der neueste Node-Messwert des Monitors (`node-memory`: belegter und gesamter Speicher der Maschine bzw. des Containers, wenn Java ein Limit sieht). |
 
-Eine unbekannte Zahl (noch kein Bericht, ein veralteter, ein Server ohne Bridge) gilt nie als voll und nie als leer. Sie macht die Last ihrer Gruppe unbekannt und blockiert damit Hoch- und Herunterskalieren der Gruppe. Die Node schreibt das je Dienst einmal als Warnung ins Log (`Scaling: group … is not scaled while … reports no player count`) und erst wieder, nachdem die Zahl zwischendurch bekannt war. Mit `enabled: false` in `monitor.yml` gibt es keine Messwerte. Der Scaler hält dann `min-services` und skaliert weder hoch noch herunter.
+Eine unbekannte Zahl (noch kein Bericht, ein veralteter, ein Server ohne Bridge) gilt nie als voll und nie als leer. Sie macht die Last ihrer Gruppe unbekannt und blockiert damit Hoch- und Herunterskalieren der Gruppe. Die Node schreibt das je Dienst einmal als Warnung ins Log und erst wieder, nachdem die Zahl zwischendurch bekannt war. Die Warnung nennt einen von drei Fällen:
+
+```text
+Scaling: group survival is not scaled while survival-1 reports no player count: its bridge has not reported for 75 s (stale-after 60 s of monitor.yml)
+Scaling: group survival is not scaled while survival-1 reports no player count: the monitor's newest sample is 80 s old (stale-after 60 s of monitor.yml), so the monitor has stopped sampling; look for "Monitor sample failed" in the cloud log
+Scaling: group survival is not scaled while survival-1 reports no player count: the monitor has no sample of it yet (enabled: false in monitor.yml switches sampling off)
+```
+
+Im ersten Fall liegt es am Server: Seine Bridge schweigt (ein Server, der kaum noch tickt, meldet seltener, siehe [monitor.md](monitor.md#what-the-bridges-report-and-what-the-monitor-expects)), oder sie hat seit dem Start nie gemeldet („has not reported since the server started“). Im zweiten liegt es am Node: Die Runden des Monitors stehen. Eine langsame Prozessabfrage (`tasklist` auf einem ausgelasteten Windows-Rechner) ist keins von beiden, weil sie in einem eigenen Thread läuft und die Runden nicht auf sie warten. Mit `enabled: false` in `monitor.yml` gibt es keine Messwerte. Der Scaler hält dann `min-services` und skaliert weder hoch noch herunter.
 
 ## Speicherbudget
 

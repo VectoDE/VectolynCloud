@@ -115,6 +115,7 @@ class MonitorCommandsTest {
         for (double value : tps) {
             monitor.statusReported(new ServiceStatus(new ServiceId("lobby-1"), 3, 100, value, 12.5, 512L << 20, 1L << 30));
             monitor.statusReported(new ServiceStatus(new ServiceId("proxy-1"), 3, 500, 20, 0, 100L << 20, 1L << 30));
+            monitor.probeNow();
             monitor.sampleNow();
             clock.advanceSeconds(10);
         }

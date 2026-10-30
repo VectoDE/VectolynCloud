@@ -52,7 +52,9 @@ import net.vectora.protocol.message.ServiceStatus;
  *       ({@code ServiceEvent.StatusReported}), with players, TPS, MSPT and heap;</li>
  *   <li>{@link #serviceStateChanged(ServiceId, ServicePhase, ServicePhase)}: every state change of the
  *       service core ({@code ServiceListener.stateChanged}), for crash counting;</li>
- *   <li>{@link MetricSource}: CPU and memory from the operating system.</li>
+ *   <li>{@link MetricSource}: CPU and memory from the operating system. The process values come
+ *       from a probe on a thread of its own ({@link #probeNow()}), so a slow helper program never
+ *       holds up a round.</li>
  * </ul>
  *
  * <p>A status report counts for {@code stale-after}; after that the bridge values are missing.
@@ -73,8 +75,21 @@ public final class Monitor implements AutoCloseable {
     private final Map<ServiceId, Track> tracks = new ConcurrentHashMap<>();
     private final RingBuffer<NodeSample> nodeHistory;
     private final Object sampling = new Object();
+    private final Object probing = new Object();
     private ScheduledExecutorService timer;
+    private ScheduledExecutorService probeTimer;
+    private volatile ProcessReading lastProbe = ProcessReading.NONE;
     private volatile boolean closed;
+
+    /**
+     * The newest result of the process probe.
+     *
+     * @param values CPU and memory per pid
+     * @param at     when the probe finished, or null before the first one
+     */
+    private record ProcessReading(Map<Long, MetricSource.ProcessMetrics> values, Instant at) {
+        static final ProcessReading NONE = new ProcessReading(Map.of(), null);
+    }
 
     private static final class Track {
         final RingBuffer<ServiceSample> history;
@@ -209,7 +224,10 @@ public final class Monitor implements AutoCloseable {
     /**
      * Starts sampling every {@code sample-interval} on the daemon thread {@code vectora-monitor},
      * and, with {@code history.persist}, reads the history file first and writes it every
-     * {@code persist-interval}. Does nothing if {@code enabled} is false.
+     * {@code persist-interval}. The process probe (CPU and memory of the server processes) runs on
+     * a thread of its own, {@code vectora-monitor-probe}, also every {@code sample-interval}: its
+     * helper program ({@code tasklist} on Windows) can take up to 30 s on a busy machine, and a
+     * round must not wait for it. Does nothing if {@code enabled} is false.
      */
     public synchronized void start() {
         if (timer != null || closed || !config.enabled()) {
@@ -218,17 +236,24 @@ public final class Monitor implements AutoCloseable {
         if (store != null) {
             store.load(clock.instant()).ifPresent(this::restore);
         }
-        timer = Executors.newSingleThreadScheduledExecutor(r -> {
-            Thread t = new Thread(r, "vectora-monitor");
-            t.setDaemon(true);
-            return t;
-        });
+        timer = Executors.newSingleThreadScheduledExecutor(daemon("vectora-monitor"));
+        probeTimer = Executors.newSingleThreadScheduledExecutor(daemon("vectora-monitor-probe"));
         long interval = config.sampleInterval().duration().toMillis();
+        // The probe starts at once, so the first round already has its values.
+        probeTimer.scheduleWithFixedDelay(this::probeSafely, 0, interval, TimeUnit.MILLISECONDS);
         timer.scheduleWithFixedDelay(this::sampleSafely, interval, interval, TimeUnit.MILLISECONDS);
         if (store != null) {
             long persist = config.history().persistInterval().duration().toMillis();
             timer.scheduleWithFixedDelay(this::persistSafely, persist, persist, TimeUnit.MILLISECONDS);
         }
+    }
+
+    private static java.util.concurrent.ThreadFactory daemon(String name) {
+        return r -> {
+            Thread t = new Thread(r, name);
+            t.setDaemon(true);
+            return t;
+        };
     }
 
     private void sampleSafely() {
@@ -242,6 +267,34 @@ public final class Monitor implements AutoCloseable {
         }
     }
 
+    private void probeSafely() {
+        try {
+            probeNow();
+        } catch (RuntimeException | LinkageError e) {
+            // As in sampleSafely: the probe must go on after a failed round.
+            LOG.log(Level.WARNING, "Monitor process probe failed", e);
+        }
+    }
+
+    /**
+     * Measures CPU and memory of every service process once and keeps the result for the next
+     * rounds. Called by the probe thread; tests call it directly. A round never waits for it: it
+     * uses the newest finished result, and none once that is older than {@code stale-after}.
+     */
+    public void probeNow() {
+        synchronized (probing) {
+            Set<Long> pids = new HashSet<>();
+            for (MonitoredService s : directory.services()) {
+                if (hasProcess(s.phase()) && s.pid().isPresent()) {
+                    pids.add(s.pid().getAsLong());
+                }
+            }
+            // One call for all processes (one tasklist run on Windows), never one per service.
+            Map<Long, MetricSource.ProcessMetrics> values = pids.isEmpty() ? Map.of() : Map.copyOf(source.processes(pids));
+            lastProbe = new ProcessReading(values, clock.instant());
+        }
+    }
+
     private void persistSafely() {
         try {
             persist();
@@ -252,25 +305,18 @@ public final class Monitor implements AutoCloseable {
 
     /**
      * Takes one sample of every service and of the node, evaluates the rules and delivers the
-     * events. Called by the timer; tests call it directly.
+     * events. Called by the timer; tests call it directly. CPU and memory of the processes come
+     * from the newest {@link #probeNow()}; the round does not wait for a probe that is running.
      *
      * @return the events of this round
      */
     public List<AlertEvent> sampleNow() {
         synchronized (sampling) {
             List<MonitoredService> services = directory.services();
-            Set<Long> pids = new HashSet<>();
-            for (MonitoredService s : services) {
-                if (hasProcess(s.phase()) && s.pid().isPresent()) {
-                    pids.add(s.pid().getAsLong());
-                }
-            }
-            Map<Long, MetricSource.ProcessMetrics> processes = pids.isEmpty() ? Map.of() : source.processes(pids);
-            // The time of the sample is taken after the process metrics: their helper program
-            // (tasklist on Windows) may take up to 30 s on a busy machine. Taken before, the sample
-            // would be that much older than the bridge reports it holds, and the autoscaler would
-            // count them as stale.
             Instant now = Instant.ofEpochSecond(clock.instant().getEpochSecond());
+            ProcessReading reading = lastProbe;
+            Map<Long, MetricSource.ProcessMetrics> processes = reading.at() != null
+                    && !reading.at().plus(config.staleAfter().duration()).isBefore(now) ? reading.values() : Map.of();
             List<AlertEvent> events = new ArrayList<>();
             Set<String> present = new HashSet<>();
             for (MonitoredService service : services) {
@@ -423,6 +469,24 @@ public final class Monitor implements AutoCloseable {
                 .toList();
     }
 
+    /**
+     * When the bridge of a service last sent a status report, for the autoscaler's warning about a
+     * missing player count. A report of a previous process of the service does not count.
+     *
+     * @param service the service
+     * @return the time, or empty if it has not reported since its process started
+     */
+    public Optional<Instant> lastStatusReport(ServiceId service) {
+        Track track = tracks.get(service);
+        return track == null ? Optional.empty() : Optional.ofNullable(track.statusAt);
+    }
+
+    /** The newest sample of one service; empty for an unknown service or before its first one. */
+    public Optional<ServiceSample> latest(ServiceId service) {
+        Track track = tracks.get(service);
+        return track == null ? Optional.empty() : Optional.ofNullable(track.history.latest());
+    }
+
     /** The samples of one service, oldest first; empty for an unknown service. */
     public List<ServiceSample> history(ServiceId service) {
         Track track = tracks.get(service);
@@ -491,19 +555,28 @@ public final class Monitor implements AutoCloseable {
     @Override
     public void close() {
         ScheduledExecutorService t;
+        ScheduledExecutorService p;
         synchronized (this) {
             if (closed) {
                 return;
             }
             closed = true;
             t = timer;
+            p = probeTimer;
         }
-        if (t != null) {
-            t.shutdownNow();
-            try {
-                t.awaitTermination(10, TimeUnit.SECONDS);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+        // The interrupt kills a helper program the probe waits for.
+        for (ScheduledExecutorService executor : new ScheduledExecutorService[] {p, t}) {
+            if (executor != null) {
+                executor.shutdownNow();
+            }
+        }
+        for (ScheduledExecutorService executor : new ScheduledExecutorService[] {p, t}) {
+            if (executor != null) {
+                try {
+                    executor.awaitTermination(10, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
             }
         }
         persistSafely();

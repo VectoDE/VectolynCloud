@@ -1,6 +1,7 @@
 package net.vectora.cloud.node.scaling;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -86,5 +87,107 @@ class ScalingSignalsTest {
         NodeSample unknownUsed = new NodeSample(NOW, 0.5, NodeSample.UNKNOWN, 8 * GB, 0, 0);
         assertEquals(Optional.empty(), merge(List.of(), Map.of(), Set.of(), Optional.of(unknownUsed)).memory());
         assertEquals(Optional.empty(), merge(List.of(), Map.of(), Set.of(), Optional.empty()).memory());
+    }
+
+    @Test
+    void theWarningTellsTheThreeCasesOfAMissingCountApart() {
+        ScalingSignals.Missing none = ScalingSignals.missing(Optional.empty(), Optional.empty(), NOW, STALE);
+        assertEquals(ScalingSignals.Missing.Cause.NO_SAMPLE, none.cause());
+        assertTrue(none.describe().contains("no sample"), none.describe());
+
+        // A recent sample without bridge values: the bridge is silent.
+        ServiceSample recent = new ServiceSample(NOW.minusSeconds(5), ServiceSample.UNKNOWN, ServiceSample.UNKNOWN,
+                Double.NaN, Double.NaN, ServiceSample.UNKNOWN, ServiceSample.UNKNOWN, Double.NaN, ServiceSample.UNKNOWN);
+        ScalingSignals.Missing silent = ScalingSignals.missing(Optional.of(recent), Optional.of(NOW.minusSeconds(75)),
+                NOW, STALE);
+        assertEquals(ScalingSignals.Missing.Cause.STALE_REPORT, silent.cause());
+        assertEquals("its bridge has not reported for 75 s (stale-after 30 s of monitor.yml)", silent.describe());
+        ScalingSignals.Missing never = ScalingSignals.missing(Optional.of(recent), Optional.empty(), NOW, STALE);
+        assertTrue(never.describe().contains("not reported since the server started"), never.describe());
+
+        // The newest sample is older than stale-after: the monitor has stopped, whatever the bridge does.
+        ServiceSample old = new ServiceSample(NOW.minusSeconds(31), 3, 50, 20, 5, GB, 2 * GB, 1, GB);
+        ScalingSignals.Missing stalled = ScalingSignals.missing(Optional.of(old), Optional.of(NOW.minusSeconds(1)),
+                NOW, STALE);
+        assertEquals(ScalingSignals.Missing.Cause.MONITOR_STALLED, stalled.cause());
+        assertEquals(Optional.of(Duration.ofSeconds(31)), stalled.age());
+        assertTrue(stalled.describe().contains("newest sample is 31 s old"), stalled.describe());
+        // Counter-check: exactly stale-after old is not stalled yet.
+        ServiceSample edge = new ServiceSample(NOW.minus(STALE), ServiceSample.UNKNOWN, 50, 20, 5, GB, 2 * GB, 1, GB);
+        assertEquals(ScalingSignals.Missing.Cause.STALE_REPORT,
+                ScalingSignals.missing(Optional.of(edge), Optional.empty(), NOW, STALE).cause());
+    }
+
+    /**
+     * The process probe of the monitor (tasklist on a busy Windows machine) takes longer than
+     * stale-after: the scaler still sees the player count of every round.
+     */
+    @Test
+    void aProbeSlowerThanStaleAfterLeavesThePlayerCountKnown() throws Exception {
+        java.util.concurrent.atomic.AtomicReference<Instant> time = new java.util.concurrent.atomic.AtomicReference<>(NOW);
+        java.time.Clock clock = new java.time.Clock() {
+            @Override
+            public java.time.ZoneId getZone() {
+                return java.time.ZoneOffset.UTC;
+            }
+
+            @Override
+            public java.time.Clock withZone(java.time.ZoneId zone) {
+                return this;
+            }
+
+            @Override
+            public Instant instant() {
+                return time.get();
+            }
+        };
+        java.util.concurrent.CountDownLatch inProbe = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        net.vectora.cloud.monitor.metric.MetricSource slow = new net.vectora.cloud.monitor.metric.MetricSource() {
+            @Override
+            public Map<Long, ProcessMetrics> processes(Set<Long> pids) {
+                inProbe.countDown();
+                try {
+                    release.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                return Map.of();
+            }
+
+            @Override
+            public NodeSample node(Instant at) {
+                return new NodeSample(at, 10, 2 * GB, 8 * GB, 0, 0);
+            }
+        };
+        net.vectora.cloud.monitor.ServiceDirectory directory = () -> List.of(new net.vectora.cloud.monitor.MonitoredService(
+                GAME, "minigame", false, net.vectora.cloud.monitor.ServicePhase.RUNNING, java.util.OptionalLong.of(7), 0));
+        net.vectora.cloud.monitor.Monitor monitor = net.vectora.cloud.monitor.Monitor.builder(directory, slow,
+                net.vectora.cloud.monitor.config.MonitorConfigLoader.parse(
+                        "schema-version: 1\nrules: []\n".getBytes(java.nio.charset.StandardCharsets.UTF_8)))
+                .clock(clock).build();
+        Thread probe = Thread.ofPlatform().daemon().start(monitor::probeNow);
+        try {
+            assertTrue(inProbe.await(10, java.util.concurrent.TimeUnit.SECONDS));
+            ScalingSignals signals = ScalingSignals.of(monitor,
+                    new net.vectora.cloud.node.channel.NetworkPlayers((proxy, name) -> Optional.empty()), id -> false,
+                    clock);
+            // 120 s of rounds every 10 s, twice the default stale-after, while the probe hangs.
+            for (int round = 0; round < 12; round++) {
+                monitor.statusReported(new net.vectora.protocol.message.ServiceStatus(GAME, 4, 50, 20, 5, GB, 2 * GB));
+                org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(Duration.ofSeconds(5), monitor::sampleNow);
+                time.set(time.get().plusSeconds(9));
+                assertEquals(Map.of(GAME, 4), signals.read().players(), "round " + round);
+                time.set(time.get().plusSeconds(1));
+            }
+            // Counter-check: once the rounds stop, the scaler sees the stalled monitor.
+            time.set(time.get().plus(Duration.ofSeconds(61)));
+            assertEquals(Map.of(), signals.read().players());
+            assertEquals(ScalingSignals.Missing.Cause.MONITOR_STALLED, signals.whyMissing(GAME).cause());
+        } finally {
+            release.countDown();
+            probe.join(10_000);
+            monitor.close();
+        }
     }
 }

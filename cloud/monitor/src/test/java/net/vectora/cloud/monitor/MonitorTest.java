@@ -48,6 +48,7 @@ class MonitorTest {
         if (status != null) {
             monitor.statusReported(status);
         }
+        monitor.probeNow();
         List<AlertEvent> round = monitor.sampleNow();
         clock.advanceSeconds(seconds);
         return round;
@@ -91,43 +92,113 @@ class MonitorTest {
         }
     }
 
-    @Test
-    void aSlowProcessProbeDoesNotMakeTheSampleOlderThanItsData() throws Exception {
-        directory.running("lobby-1", "lobby", 100);
-        // tasklist on a busy Windows machine: the process metrics take 30 s.
-        MetricSource slow = new MetricSource() {
-            @Override
-            public java.util.Map<Long, ProcessMetrics> processes(java.util.Set<Long> pids) {
-                clock.advanceSeconds(30);
-                return source.processes(pids);
-            }
+    /** A process probe that blocks until released, like tasklist on a busy Windows machine. */
+    private final class BlockingSource implements MetricSource {
+        final java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        final java.util.concurrent.CountDownLatch entered = new java.util.concurrent.CountDownLatch(1);
+        final java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+        volatile java.util.Set<Long> asked = java.util.Set.of();
 
-            @Override
-            public net.vectora.cloud.monitor.metric.NodeSample node(Instant at) {
-                return source.node(at);
+        @Override
+        public java.util.Map<Long, ProcessMetrics> processes(java.util.Set<Long> pids) {
+            calls.incrementAndGet();
+            asked = java.util.Set.copyOf(pids);
+            entered.countDown();
+            try {
+                release.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             }
-        };
-        MonitorConfigLoader.Settings settings = MonitorConfigLoader.parse(
-                "schema-version: 1\nrules: []\n".getBytes(StandardCharsets.UTF_8));
-        try (Monitor monitor = Monitor.builder(directory, slow, settings).clock(clock).build()) {
-            monitor.statusReported(status(LOBBY, 20, 1, 2));
-            monitor.sampleNow();
-            ServiceSample sample = monitor.history(LOBBY).getFirst();
-            assertEquals(T0.plusSeconds(30), sample.at(), "the time after the probe, not before it");
-            assertEquals(3, sample.playersOnline(), "the report of the same moment is still fresh");
+            return source.processes(pids);
+        }
+
+        @Override
+        public net.vectora.cloud.monitor.metric.NodeSample node(Instant at) {
+            return source.node(at);
         }
     }
 
     @Test
-    void anErrorInOneRoundDoesNotStopTheSampling() throws Exception {
+    void aProbeSlowerThanStaleAfterDoesNotHoldUpTheRounds() throws Exception {
+        directory.running("lobby-1", "lobby", 100).running("survival-1", "survival", 101);
+        source.processes.put(100L, new MetricSource.ProcessMetrics(12.5, 900L << 20));
+        BlockingSource slow = new BlockingSource();
+        MonitorConfigLoader.Settings settings = MonitorConfigLoader.parse(
+                "schema-version: 1\nstale-after: 30s\nrules: []\n".getBytes(StandardCharsets.UTF_8));
+        Thread probe = new Thread(() -> { }, "unused");
+        try (Monitor monitor = Monitor.builder(directory, slow, settings).clock(clock).build()) {
+            probe = Thread.ofPlatform().daemon().start(monitor::probeNow);
+            assertTrue(slow.entered.await(10, java.util.concurrent.TimeUnit.SECONDS));
+            assertEquals(java.util.Set.of(100L, 101L), slow.asked, "one probe for all processes");
+            // The probe stays busy for 90 s of monitor time, three times stale-after.
+            for (int round = 0; round < 9; round++) {
+                monitor.statusReported(status(LOBBY, 20, 1, 2));
+                List<AlertEvent> done = org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(
+                        java.time.Duration.ofSeconds(5), monitor::sampleNow, "round " + round + " waited for the probe");
+                assertTrue(done.isEmpty());
+                ServiceSample sample = monitor.history(LOBBY).getLast();
+                assertEquals(clock.instant(), sample.at(), "dated when it was taken");
+                assertEquals(3, sample.playersOnline(), "the bridge report is fresh in every round");
+                assertTrue(Double.isNaN(sample.cpu()), "no process values before the first probe ends");
+                clock.advanceSeconds(10);
+            }
+            assertEquals(1, slow.calls.get(), "the rounds did not start probes of their own");
+
+            slow.release.countDown();
+            probe.join(10_000);
+            monitor.statusReported(status(LOBBY, 20, 1, 2));
+            monitor.sampleNow();
+            assertEquals(12.5, monitor.history(LOBBY).getLast().cpu(), "the finished probe is used");
+
+            // A probe result older than stale-after counts as missing, like an old bridge report.
+            clock.advanceSeconds(31);
+            monitor.statusReported(status(LOBBY, 20, 1, 2));
+            monitor.sampleNow();
+            assertTrue(Double.isNaN(monitor.history(LOBBY).getLast().cpu()));
+            assertEquals(ServiceSample.UNKNOWN, monitor.history(LOBBY).getLast().rss());
+        } finally {
+            slow.release.countDown();
+            probe.join(10_000);
+        }
+    }
+
+    @Test
+    void theRunningMonitorSamplesWhileItsProbeIsStuck() throws Exception {
+        directory.running("lobby-1", "lobby", 100);
+        BlockingSource stuck = new BlockingSource();
+        // A real clock and the monitor's own threads: rounds every second, stale after 2 s, and a
+        // probe that does not end while the test runs.
+        MonitorConfigLoader.Settings settings = MonitorConfigLoader.parse(
+                "schema-version: 1\nsample-interval: 1s\nstale-after: 2s\nrules: []\n".getBytes(StandardCharsets.UTF_8));
+        try (Monitor monitor = Monitor.builder(directory, stuck, settings).build()) {
+            monitor.start();
+            assertTrue(stuck.entered.await(10, java.util.concurrent.TimeUnit.SECONDS), "the probe started");
+            long end = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(15);
+            int withPlayers = 0;
+            while (withPlayers < 3 && System.nanoTime() < end) {
+                monitor.statusReported(status(LOBBY, 20, 1, 2));
+                withPlayers = (int) monitor.history(LOBBY).stream().filter(s -> s.playersOnline() == 3).count();
+                Thread.sleep(100);
+            }
+            assertTrue(withPlayers >= 3, "three rounds with player counts while the probe hangs: "
+                    + monitor.history(LOBBY));
+            assertEquals(1, stuck.calls.get(), "still the first probe");
+        } finally {
+            stuck.release.countDown();
+        }
+    }
+
+    @Test
+    void anErrorInOneRoundDoesNotStopTheSamplingOrTheProbe() throws Exception {
         directory.running("lobby-1", "lobby", 100);
         // A class missing from a runtime image: an Error, not an Exception. A periodic task that
         // throws is never run again, so the samples would age and the scaler would see no counts.
         java.util.concurrent.atomic.AtomicInteger rounds = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.atomic.AtomicInteger probes = new java.util.concurrent.atomic.AtomicInteger();
         MetricSource failing = new MetricSource() {
             @Override
             public java.util.Map<Long, ProcessMetrics> processes(java.util.Set<Long> pids) {
-                if (rounds.incrementAndGet() == 1) {
+                if (probes.incrementAndGet() == 1) {
                     throw new NoClassDefFoundError("com/sun/management/OperatingSystemMXBean");
                 }
                 return source.processes(pids);
@@ -135,6 +206,9 @@ class MonitorTest {
 
             @Override
             public net.vectora.cloud.monitor.metric.NodeSample node(Instant at) {
+                if (rounds.incrementAndGet() == 1) {
+                    throw new NoClassDefFoundError("com/sun/management/OperatingSystemMXBean");
+                }
                 return source.node(at);
             }
         };
@@ -144,11 +218,28 @@ class MonitorTest {
              Monitor monitor = Monitor.builder(directory, failing, settings).build()) {
             monitor.start();
             long end = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
-            while (monitor.history(LOBBY).isEmpty() && System.nanoTime() < end) {
+            while ((rounds.get() < 2 || probes.get() < 2) && System.nanoTime() < end) {
                 Thread.sleep(50);
             }
-            assertFalse(monitor.history(LOBBY).isEmpty(), "the round after the failed one sampled");
+            assertTrue(rounds.get() >= 2, "the round after the failed one ran");
+            assertTrue(probes.get() >= 2, "the probe after the failed one ran");
             assertTrue(log.text().contains("Monitor sample failed"), "the failure is logged");
+            assertTrue(log.text().contains("Monitor process probe failed"), "the failure is logged");
+        }
+    }
+
+    @Test
+    void theLastBridgeReportIsKnownUntilTheServiceStops() throws Exception {
+        directory.running("lobby-1", "lobby", 100);
+        try (Monitor monitor = monitor("rules: []\n")) {
+            assertEquals(java.util.Optional.empty(), monitor.lastStatusReport(LOBBY));
+            assertEquals(java.util.Optional.empty(), monitor.latest(LOBBY));
+            monitor.statusReported(status(LOBBY, 20, 1, 2));
+            assertEquals(java.util.Optional.of(T0), monitor.lastStatusReport(LOBBY));
+            monitor.sampleNow();
+            assertEquals(T0, monitor.latest(LOBBY).orElseThrow().at());
+            monitor.serviceStateChanged(LOBBY, ServicePhase.STOPPED, ServicePhase.RUNNING);
+            assertEquals(java.util.Optional.empty(), monitor.lastStatusReport(LOBBY), "a report of the old process");
         }
     }
 
@@ -263,8 +354,9 @@ class MonitorTest {
         directory.running("lobby-1", "lobby", 100).put("lobby-2", "lobby", false, ServicePhase.STOPPED, 0, 0)
                 .put("lobby-3", "lobby", false, ServicePhase.PREPARED, 0, 0);
         try (Monitor monitor = monitor("rules: []\n")) {
+            monitor.probeNow();
             monitor.sampleNow();
-            assertEquals(List.of(java.util.Set.of(100L)), source.asked);
+            assertEquals(List.of(java.util.Set.of(100L)), source.asked, "one probe call, only for running processes");
             assertTrue(monitor.history(new ServiceId("lobby-2")).isEmpty(), "no samples without a process");
             assertEquals(3, monitor.services().size());
         }

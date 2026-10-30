@@ -370,14 +370,16 @@ public final class CloudNode implements AutoCloseable {
     /**
      * Monitoring, backups and the API of the node, built in {@link #open} and run by {@link #start}.
      *
-     * @param tokens     API tokens; {@code api token} works even while the API is off
+     * @param tokens     API tokens for {@code api token}, which works even while the API is off: the
+     *                   store the API server uses, or, if the file could not be read at the start,
+     *                   another attempt to open it each time
      * @param monitoring the monitor
      * @param backups    the backups
      * @param api        the node behind the API
      * @param apiServer  the API server, or null while {@code api.enabled} is off or it cannot be prepared
      * @param scaler     the autoscaler, started once the configured servers have started
      */
-    private record Ops(ApiTokens tokens, MonitorRuntime monitoring, BackupService backups, NodeApi api,
+    private record Ops(ApiCommands.TokenFile tokens, MonitorRuntime monitoring, BackupService backups, NodeApi api,
                        ApiServer apiServer, Autoscaler scaler) {
     }
 
@@ -386,7 +388,7 @@ public final class CloudNode implements AutoCloseable {
             throws IOException, ConfigException, EnvFormatException {
         String nodeId = config.snapshot().cloud().nodeId();
         RedactingFilter redactor = secrets.redactingFilter();
-        ApiTokens tokens = ApiTokens.open(home);
+        Optional<ApiTokens> tokens = apiTokens(home, config.snapshot().cloud().api());
 
         NodeMonitoring directory = new NodeMonitoring(services, config::snapshot);
         // An invalid monitor.yml fails here with every error, like the other configuration files.
@@ -413,14 +415,34 @@ public final class CloudNode implements AutoCloseable {
         Autoscaler scaler = Autoscaler.create(ScalingTarget.of(services, channel), config::snapshot,
                 ScalingSignals.of(monitoring.monitor(), channel.players(), channel::proxyWatches, Clock.systemUTC()));
         services.addListener(scaler);
-        return new Ops(tokens, monitoring, backups, api, apiServer(home, config, secrets, api, tokens), scaler);
+        ApiCommands.TokenFile tokenFile = tokens.isPresent() ? tokens::get : () -> ApiTokens.open(home);
+        return new Ops(tokenFile, monitoring, backups, api, apiServer(home, config, secrets, api, tokens), scaler);
+    }
+
+    /**
+     * Opens {@code secrets/api-tokens.json}. A file that cannot be read does not stop the node: with
+     * the API off it is a warning, with the API on the node runs without the API, as with TLS
+     * material it cannot use. The {@code api token} commands report the problem.
+     */
+    private static Optional<ApiTokens> apiTokens(CloudHome home, ApiConfig settings) {
+        try {
+            return Optional.of(ApiTokens.open(home));
+        } catch (IOException | RuntimeException e) {
+            boolean on = settings != null && settings.enabled();
+            LOG.log(on ? System.Logger.Level.ERROR : System.Logger.Level.WARNING,
+                    "secrets/" + ApiTokens.FILE_NAME + " cannot be read ({0}); "
+                            + (on ? "the API is switched on in cloud.yml, but the node runs without it."
+                                    : "no API token can be used until it is repaired or deleted.")
+                            + " \"api token list\" shows the problem. See docs/cloud/api.md.", e.getMessage());
+            return Optional.empty();
+        }
     }
 
     /** The API server when {@code api.enabled}; a problem leaves the node running without it. */
     private static ApiServer apiServer(CloudHome home, ConfigService config, SecretStore secrets, NodeApi api,
-                                       ApiTokens tokens) {
+                                       Optional<ApiTokens> tokens) {
         ApiConfig settings = config.snapshot().cloud().api();
-        if (settings == null || !settings.enabled()) {
+        if (settings == null || !settings.enabled() || tokens.isEmpty()) {
             return null;
         }
         try {
@@ -428,7 +450,7 @@ public final class CloudNode implements AutoCloseable {
                     ? Optional.of(ApiTls.prepare(home, settings.tls(), settings.bind(),
                             secrets.load().get(ApiTls.PASSWORD_KEY)))
                     : Optional.empty();
-            ApiServer server = ApiServer.builder(config, api, tokens).settings(ApiSettings.of(settings, tls)).build();
+            ApiServer server = ApiServer.builder(config, api, tokens.get()).settings(ApiSettings.of(settings, tls)).build();
             api.attach(server);
             return server;
         } catch (IOException | EnvFormatException | RuntimeException e) {
@@ -866,7 +888,8 @@ public final class CloudNode implements AutoCloseable {
         console.commands().register(ops.monitoring().commands().monitor());
         console.commands().register(ops.monitoring().commands().alerts());
         BackupCommands.register(console.commands(), ops.backups());
-        // Tokens can be made before the API is switched on.
+        // Tokens can be made before the API is switched on. A token file that could not be read at
+        // the start is tried again by each command, which reports the problem until it is fixed.
         console.commands().register(new ApiCommands(ops.tokens()).command());
     }
 

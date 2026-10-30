@@ -2,6 +2,7 @@ package net.vectora.cloud.api;
 
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.ChannelPipeline;
@@ -18,6 +19,7 @@ import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
 import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.util.concurrent.DefaultThreadFactory;
+import io.netty.util.concurrent.Future;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -122,7 +124,8 @@ public final class ApiServer implements AutoCloseable {
      *
      * @return the address it listens on
      * @throws ApiStartException if the bind address is not loopback and TLS is off, or the keystore cannot be used
-     * @throws IOException       if the address cannot be bound
+     * @throws IOException       if the address cannot be bound, for example because the port is in use;
+     *                           both event loop groups have ended by then
      */
     public synchronized InetSocketAddress start() throws IOException {
         if (closed || serverChannel != null) {
@@ -155,8 +158,11 @@ public final class ApiServer implements AutoCloseable {
                         initConnection(ch);
                     }
                 });
+        // await() instead of sync(): sync() rethrows a failed bind's BindException unchecked, past
+        // a catch for IOException, and the event loop groups would keep running without a listener.
+        ChannelFuture binding;
         try {
-            serverChannel = bootstrap.bind(new InetSocketAddress(address, settings.port())).sync().channel();
+            binding = bootstrap.bind(new InetSocketAddress(address, settings.port())).await();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             shutdownGroups();
@@ -165,6 +171,14 @@ public final class ApiServer implements AutoCloseable {
             shutdownGroups();
             throw new IOException("The API cannot listen on port " + settings.port() + ": " + e.getClass().getSimpleName(), e);
         }
+        if (!binding.isSuccess()) {
+            shutdownGroups();
+            Throwable cause = binding.cause();
+            String reason = cause == null ? "unknown reason"
+                    : cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName();
+            throw new IOException("The API cannot listen on port " + settings.port() + ": " + reason, cause);
+        }
+        serverChannel = binding.channel();
         InetSocketAddress bound = (InetSocketAddress) serverChannel.localAddress();
         LOG.log(System.Logger.Level.INFO, "API listening on {0}://{1}:{2,number,#}",
                 sslContext == null ? "http" : "https", bound.getAddress().getHostAddress(), bound.getPort());
@@ -302,13 +316,18 @@ public final class ApiServer implements AutoCloseable {
         executor.shutdownNow();
     }
 
+    /** Shuts both event loop groups down at the same time and waits until their threads have ended. */
     private void shutdownGroups() {
-        if (bossGroup != null) {
-            bossGroup.shutdownGracefully(0, 2, TimeUnit.SECONDS).syncUninterruptibly();
+        Future<?> boss = bossGroup == null ? null : bossGroup.shutdownGracefully(0, 2, TimeUnit.SECONDS);
+        Future<?> workers = workerGroup == null ? null : workerGroup.shutdownGracefully(0, 2, TimeUnit.SECONDS);
+        if (boss != null) {
+            boss.syncUninterruptibly();
         }
-        if (workerGroup != null) {
-            workerGroup.shutdownGracefully(0, 2, TimeUnit.SECONDS).syncUninterruptibly();
+        if (workers != null) {
+            workers.syncUninterruptibly();
         }
+        bossGroup = null;
+        workerGroup = null;
     }
 
     ApiSettings settings() {

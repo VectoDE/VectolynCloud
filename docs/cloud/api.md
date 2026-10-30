@@ -35,6 +35,7 @@ vectora> api scopes
 
 - Format: `vct_` followed by 43 characters `[A-Za-z0-9_-]` (32 random bytes from `SecureRandom`, Base64url).
 - The node stores only the SHA-256 of each token, in `<home>/secrets/api-tokens.json` (owner only, written atomically, symbolic links refused). Neither `list` nor the API ever shows a token or its hash.
+- A token file that cannot be read (malformed, a link, too large) does not stop the node. With `api.enabled: false` the node logs a warning; with the API on it logs an error and runs without the API, as with TLS material it cannot use. `api token create`, `list` and `revoke` then fail with the reason (`secrets/api-tokens.json cannot be read (…)`) and try the file again each time: once it is repaired, or deleted to start without tokens, they work. The API itself comes back with the next start of the node.
 - Checking a token compares its hash with every stored hash in constant time (`MessageDigest.isEqual`), without stopping at the first match.
 - Revoking works at once: the next request fails, and open WebSockets of that token are closed with code `1008`.
 - At most 100 tokens. Names follow the group name rule `[a-z0-9][a-z0-9_-]{0,31}`.
@@ -222,7 +223,7 @@ Groups can be written through the API, so `process.jvm-flags` has an allowlist: 
 
 `cloud/api` does not depend on `cloud/node`. The node provides an `ApiBackend` (`ops.NodeApi`) and starts the server. `CloudNode` follows these steps; player events come from the channel's `NetworkPlayers`. A refusal of the service core reaches the client only if it is one of its own short reasons and holds nothing like a path; any other message stays in the node log and the client gets a short text. `ApiSettings.of` refuses `api.tls.enabled` without key material and key material with TLS off. `runs` in the wanted endpoints is `GroupRules.isWanted` of cloud-config, the rule the node itself plans by.
 
-1. At start, after `ConfigService.open`: `ApiTokens tokens = ApiTokens.open(home)` and register `new ApiCommands(tokens).command()` in the console registry, so tokens can be created even while the API is off.
+1. At start, after `ConfigService.open`: `ApiTokens tokens = ApiTokens.open(home)` and register `new ApiCommands(tokens).command()` in the console registry, so tokens can be created even while the API is off. If `open` fails, the node logs it (a warning with the API off, an error with it on), starts no API server and registers `new ApiCommands(() -> ApiTokens.open(home))`, which tries again on each command and reports the reason while it fails.
 2. If `api.enabled`:
    ```java
    ApiConfig api = config.snapshot().cloud().api();
@@ -235,6 +236,7 @@ Groups can be written through the API, so `process.jvm-flags` has an allowlist: 
            .build();
    server.start();          // throws ApiStartException (an IOException) if it cannot bind
    ```
+   A failed bind (port in use, address not on this machine) throws an `IOException` that names the port, after both event loop groups have been shut down together and their threads have ended. The node logs it as an error and runs without the API.
 3. `ApiBackend` on top of the node:
    - `services()`: a `ServiceAccess` over `ServiceManager` (list, find, start by task, stop, restart, command), mapping a service to `ServiceView`. Failures are thrown as `ApiBackendException` with `NOT_FOUND`, `CONFLICT`, `UNAVAILABLE` or `INVALID`.
    - `node()`: `NodeStatus.ofThisJvm(nodeId, version, startedAt, shuttingDown, servicesTotal, servicesRunning)` and `shuttingDown()` of the node.
@@ -245,7 +247,7 @@ Groups can be written through the API, so `process.jvm-flags` has an allowlist: 
 
 ## Tests
 
-`ApiServerTest`, `EventStreamTest`, `ApiTlsTest`, `ApiTokensTest`, `RateLimiterTest`, `RouterTest` and `ApiCommandsTest` run against a real server on `127.0.0.1` with a random port. Fuzz targets (Jazzer, see [architecture](architecture.md#fuzz-tests)):
+`ApiServerTest`, `EventStreamTest`, `ApiTlsTest`, `ApiTokensTest`, `RateLimiterTest`, `RouterTest` and `ApiCommandsTest` run against a real server on `127.0.0.1` with a random port. `ApiServerTest.aPortInUseLeavesNoEventLoopThreadBehind` binds to a taken port and checks that no `vectora-api` thread is left; `ApiCommandsTest.aBrokenTokenFileIsReportedUntilItIsRepaired` covers the commands on a broken file. `NodeRobustnessTest` in `cloud/node` checks the same on the whole node: a broken token file with the API off and on, and a taken API port. Fuzz targets (Jazzer, see [architecture](architecture.md#fuzz-tests)):
 
 - `RouterFuzzTest.resolveNeverThrowsAndOnlyPassesCleanValues`: any request target resolves without an exception, and a found route only carries parameters and query values from the strict alphabets.
 - `ApiJsonFuzzTest.readFailsOnlyWithBadRequest`: any body becomes a value or fails with a `400` whose message has no control characters.

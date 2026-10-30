@@ -41,6 +41,63 @@ public interface ScalingSignals {
     }
 
     /**
+     * Why a running service has no known player count, for the autoscaler's warning. Called only
+     * for a service {@link #read()} left without a count.
+     *
+     * @param service the service
+     * @return the case; without a monitor, {@link Missing.Cause#NO_SAMPLE}
+     */
+    default Missing whyMissing(ServiceId service) {
+        return new Missing(Missing.Cause.NO_SAMPLE, Optional.empty(), reportGrace());
+    }
+
+    /**
+     * Why a player count is missing.
+     *
+     * @param cause      which case it is
+     * @param age        for {@link Cause#MONITOR_STALLED} the age of the newest sample, for
+     *                   {@link Cause#STALE_REPORT} the age of the bridge's last report (empty if it
+     *                   has not reported since its process started)
+     * @param staleAfter {@code stale-after} of {@code monitor.yml}
+     */
+    record Missing(Cause cause, Optional<Duration> age, Duration staleAfter) {
+
+        /** The cases. */
+        public enum Cause {
+            /** The monitor has no sample of the service: it has not sampled since it started, or is off. */
+            NO_SAMPLE,
+            /** The newest sample is recent, but the bridge's last report was older than {@code stale-after}. */
+            STALE_REPORT,
+            /** The newest sample itself is older than {@code stale-after}: the monitor has stopped sampling. */
+            MONITOR_STALLED
+        }
+
+        /** Checks the arguments. */
+        public Missing {
+            Objects.requireNonNull(cause, "cause");
+            Objects.requireNonNull(age, "age");
+            Objects.requireNonNull(staleAfter, "staleAfter");
+        }
+
+        /**
+         * The case for the log, for example {@code its bridge has not reported for 75 s}.
+         *
+         * @return the text
+         */
+        public String describe() {
+            String limit = " (stale-after " + staleAfter.toSeconds() + " s of monitor.yml)";
+            return switch (cause) {
+                case NO_SAMPLE -> "the monitor has no sample of it yet (enabled: false in monitor.yml switches sampling off)";
+                case STALE_REPORT -> age.map(a -> "its bridge has not reported for " + a.toSeconds() + " s" + limit)
+                        .orElse("its bridge has not reported since the server started" + limit);
+                case MONITOR_STALLED -> "the monitor's newest sample is " + age.map(a -> a.toSeconds() + " s").orElse("too")
+                        + " old" + limit + ", so the monitor has stopped sampling; look for \"Monitor sample failed\""
+                        + " in the cloud log";
+            };
+        }
+    }
+
+    /**
      * The newest report of a service's bridge.
      *
      * @param service the service
@@ -83,7 +140,34 @@ public interface ScalingSignals {
             public Duration reportGrace() {
                 return monitor.config().staleAfter().duration();
             }
+
+            @Override
+            public Missing whyMissing(ServiceId service) {
+                return missing(monitor.latest(service), monitor.lastStatusReport(service), clock.instant(),
+                        monitor.config().staleAfter().duration());
+            }
         };
+    }
+
+    /**
+     * Tells the cases of a missing player count apart, see {@link Missing.Cause}.
+     *
+     * @param latest     the newest monitor sample of the service
+     * @param lastReport when its bridge last reported
+     * @param now        now
+     * @param staleAfter {@code stale-after} of {@code monitor.yml}
+     * @return the case
+     */
+    static Missing missing(Optional<ServiceSample> latest, Optional<Instant> lastReport, Instant now,
+                           Duration staleAfter) {
+        if (latest.isEmpty()) {
+            return new Missing(Missing.Cause.NO_SAMPLE, Optional.empty(), staleAfter);
+        }
+        Duration sampleAge = Duration.between(latest.get().at(), now);
+        if (sampleAge.compareTo(staleAfter) > 0) {
+            return new Missing(Missing.Cause.MONITOR_STALLED, Optional.of(sampleAge), staleAfter);
+        }
+        return new Missing(Missing.Cause.STALE_REPORT, lastReport.map(at -> Duration.between(at, now)), staleAfter);
     }
 
     /**

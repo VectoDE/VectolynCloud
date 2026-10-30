@@ -214,19 +214,19 @@ With `prometheus.enabled: true` the cloud serves `GET /metrics` in the Prometheu
 | Console | after the console is built | `console.commands().register(monitoring.commands().monitor()); console.commands().register(monitoring.commands().alerts());` |
 | Start | after the cloud channel, before the first service | `monitoring.start();` |
 | Stop | `CloudNode.close()`, after the last service | `monitoring.close();` (writes the history file, sends queued notifications) |
-| Autoscaler | `CloudNode.buildOps` | `ScalingSignals.of(monitoring.monitor(), channel.players(), channel::proxyWatches, clock)`: `players` of the newest sample (at most what the proxies see on the backend while one is connected) and `node-memory` decide scaling ([scaling.md](scaling.md#signals)) |
+| Autoscaler | `CloudNode.buildOps` | `ScalingSignals.of(monitoring.monitor(), channel.players(), channel::proxyWatches, clock)`: `players` of the newest sample (at most what the proxies see on the backend while one is connected) and `node-memory` decide scaling ([scaling.md](scaling.md#signals)); `latest(id)` and `lastStatusReport(id)` tell its warning about a missing count which case it is |
 | API (PR 15) | | `monitoring.monitor().addListener(...)` for alert events; `services()`, `history(id)`, `node()`, `activeAlerts()` for reads; `PrometheusFormat.render(...)` for `/metrics` |
 
 `ServicePhase` has the same names as `ServiceState` in `cloud/node`, so the mapping is `valueOf(state.name())`. The calls return at once and are safe from Netty and node threads.
 
-Sampling runs on the daemon thread `vectora-monitor`, notifications on `vectora-monitor-notify`, the endpoint on `vectora-monitor-prometheus`. A change to `monitor.yml` takes effect at the next start of the cloud; `Monitor.replaceRules` is there for a reload hook later.
+Sampling runs on the daemon thread `vectora-monitor`, the process probe (CPU and memory of the server processes) on `vectora-monitor-probe`, notifications on `vectora-monitor-notify`, the endpoint on `vectora-monitor-prometheus`. The probe runs every `sample-interval` like the rounds, but a round never waits for it: it takes the newest finished probe result, and none (`-` for CPU and RSS) once that result is older than `stale-after`. A helper program that takes 30 s therefore makes CPU and RSS lag behind; player counts, TPS and the samples the autoscaler reads stay on time. A change to `monitor.yml` takes effect at the next start of the cloud; `Monitor.replaceRules` is there for a reload hook later.
 
 ## Platform notes
 
 | Platform | Process CPU | Process memory | Node |
 |---|---|---|---|
 | Linux | `ProcessHandle` | `/proc/<pid>/status` (`VmRSS`) | MXBean; `MemAvailable` outside containers |
-| Windows | `ProcessHandle` | `%SystemRoot%\System32\tasklist.exe /FO CSV /NH`, one call per sample for all processes; the locale's number format is handled | MXBean |
+| Windows | `ProcessHandle` | `%SystemRoot%\System32\tasklist.exe /FO CSV /NH`, one call per probe for all processes; the locale's number format is handled | MXBean |
 | macOS, BSD | `ProcessHandle` | `/bin/ps -o pid=,rss= -p ...`, one call per 100 processes | MXBean |
 | anything else | `ProcessHandle` if the JDK supports it | not measured (`-`) | MXBean if present |
 
@@ -239,12 +239,12 @@ Helper programs run by absolute path, without a shell and without the node's `VE
 | `RuleParserTest` | every rule of the syntax, each error reason with its position, units and ranges at their limits, canonical form, messages that never quote the input |
 | `RuleParserFuzzTest` (Jazzer) | any input fails only with `RuleSyntaxException` or parses into a condition within its ranges whose canonical form parses back equal |
 | `AlertEngineTest` | debounce (59 s does not fire, 60 s does; a short dip starts over), hysteresis with its counter-check without `clear at`, clear-after reset, strict and inclusive thresholds, missing values, group filter, node rules, gone services, rule changes, acknowledgement, crash windows |
-| `MonitorTest` | end to end with a fake clock, directory and metric source: TPS alert and log line, stale reports, a slow process probe (the sample is dated after it), an Error in one round (sampling goes on), proxies, unknown heap maximum, stop and crash, old reports after a stop, ring buffer size, persisted history across a restart |
+| `MonitorTest` | end to end with a fake clock, directory and metric source: TPS alert and log line, stale reports, a process probe that hangs for three times `stale-after` (every round still has a fresh player count, no round starts a probe of its own, an old probe result counts as missing), the same with the monitor's own threads and a real clock, an Error in a round or a probe (both go on), proxies, unknown heap maximum, stop and crash, old reports after a stop, ring buffer size, persisted history across a restart |
 | `MonitorConfigLoaderTest` | defaults, a full file, error paths without values, ranges and their limits, loopback-only bind without DNS lookups, strict reader, linked file refused |
 | `WebhookNotifierTest` | real HTTPS servers on loopback with a self-signed certificate: Discord body without mentions, Slack and JSON formats, redirect not followed (the second host gets nothing), timeout, HTTP 500, untrusted certificate, refused connection; no message contains the URL |
 | `WebhookUrlTest`, `NotificationDispatcherTest` | URL rules; filters, failures through the redactor, full queue drops without blocking |
 | `HistoryFileTest`, `HistoryFileFuzzTest` (Jazzer) | round trip with unknown values, damaged files, retention and cap, broken file moved aside, non-regular file left alone |
-| `ResidentMemoryProbeTest`, `SystemMetricSourceTest` | parsers for procfs, `ps` and `tasklist` in several locales; the probe of the running OS on the test process; CPU percentages; failure logged once |
+| `ResidentMemoryProbeTest`, `SystemMetricSourceTest` | parsers for procfs, `ps` and `tasklist` in several locales; one `tasklist` run for all processes; the probe of the running OS on the test process; CPU percentages; failure logged once |
 | `MonitorCommandsTest`, `TextChartTest` | console output in English and German, charts, unknown service or metric, `alerts list` and `ack` |
 | `PrometheusTest` | text format, labels, left-out unknowns, endpoint on loopback with Host check, 404, 405, `HEAD` |
 

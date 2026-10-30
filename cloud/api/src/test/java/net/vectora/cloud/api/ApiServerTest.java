@@ -667,4 +667,47 @@ class ApiServerTest {
             local.close();
         }
     }
+
+    @Test
+    void aPortInUseLeavesNoEventLoopThreadBehind() throws Exception {
+        java.util.Set<Thread> before = apiThreads();
+        try (var config = net.vectora.cloud.config.ConfigService.open(CloudHome.of(home));
+             java.net.ServerSocket taken = new java.net.ServerSocket(0, 1,
+                     java.net.InetAddress.getByName("127.0.0.1"))) {
+            var tokens = net.vectora.cloud.api.auth.ApiTokens.open(CloudHome.of(home));
+            ApiServer server = ApiServer.builder(config, new FakeBackend(), tokens)
+                    .settings(new ApiSettings("127.0.0.1", taken.getLocalPort(), java.util.Optional.empty(), List.of(),
+                            ApiLimits.defaults()))
+                    .build();
+            java.io.IOException failed = org.junit.jupiter.api.Assertions.assertThrows(java.io.IOException.class,
+                    server::start);
+            assertTrue(failed.getMessage().contains("cannot listen on port " + taken.getLocalPort()), failed.getMessage());
+            // The groups were shut down and waited for; a thread may need a moment to end after that.
+            long end = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
+            java.util.Set<Thread> left = leftOver(before);
+            while (!left.isEmpty() && System.nanoTime() < end) {
+                Thread.sleep(20);
+                left = leftOver(before);
+            }
+            assertEquals(java.util.Set.of(), left, "no vectora-api thread is left");
+            server.close();
+        }
+    }
+
+    private static java.util.Set<Thread> leftOver(java.util.Set<Thread> before) {
+        java.util.Set<Thread> now = apiThreads();
+        now.removeAll(before);
+        return now;
+    }
+
+    /** Live platform threads of an API server (event loops); virtual request threads do not show. */
+    private static java.util.Set<Thread> apiThreads() {
+        java.util.Set<Thread> threads = new java.util.HashSet<>();
+        for (Thread thread : Thread.getAllStackTraces().keySet()) {
+            if (thread.isAlive() && thread.getName().startsWith("vectora-api")) {
+                threads.add(thread);
+            }
+        }
+        return threads;
+    }
 }

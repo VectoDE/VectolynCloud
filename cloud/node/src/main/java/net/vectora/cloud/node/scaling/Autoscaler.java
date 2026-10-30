@@ -286,7 +286,7 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
             Instant since = unknownSince.computeIfAbsent(s.id(), id -> at);
             if (!since.plus(grace).isAfter(at) && unknownCounts.add(s.id())) {
                 LOG.log(System.Logger.Level.WARNING, "Scaling: group {0} is not scaled while {1} reports no player"
-                        + " count (no bridge report within stale-after of monitor.yml)", s.group(), s.id());
+                        + " count: {2}", s.group(), s.id(), signals.whyMissing(s.id()).describe());
             }
         }
         unknownSince.keySet().retainAll(now);

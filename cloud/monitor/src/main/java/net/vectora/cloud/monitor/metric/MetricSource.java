@@ -9,8 +9,11 @@ import java.util.Set;
  * machine, free space in the home. {@link SystemMetricSource} is the implementation for the running
  * node; tests pass a fake.
  *
- * <p>Called from the monitor thread only, once per sample interval. An implementation must not
- * throw for a value it cannot measure; it returns the unknown marker instead.
+ * <p>Each method is called once per sample interval: {@link #processes} from the monitor's probe
+ * thread, {@link #node} from its sampling thread, so the two may run at the same time, but neither
+ * runs twice at once. {@link #processes} may be slow (a helper program); {@link #node} must not
+ * be. An implementation must not throw for a value it cannot measure; it returns the unknown
+ * marker instead.
  */
 public interface MetricSource {
 
