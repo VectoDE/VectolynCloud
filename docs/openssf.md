@@ -2,7 +2,7 @@
 
 [Deutsch](openssf.de.md)
 
-The repository runs [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/VectoDE/VectolynCloud) on every push to `main`, weekly and on demand ([`scorecard.yml`](../.github/workflows/scorecard.yml)). Its findings show up under *Security and quality* next to CodeQL. The project also holds the [OpenSSF Best Practices badge](https://www.bestpractices.dev/projects/16026).
+The repository runs [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/VectoDE/VectolynCloud) on every push to `main`, weekly and on demand ([`scorecard.yml`](../.github/workflows/scorecard.yml)). Its findings show up under *Security and quality* next to CodeQL. The project also holds the [OpenSSF Best Practices badge](https://www.bestpractices.dev/projects/16102).
 
 ## The cleanup check
 
