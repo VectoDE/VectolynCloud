@@ -12,6 +12,17 @@ updates:
     groups:
       gradle-minor:
         update-types: [minor, patch]
+    ignore:
+      # PandaSpigot 1.8.8 declares Adventure 4.x and provides it at runtime. The legacy bridge
+      # compiles against exactly that version (gradle/libs.versions.toml), so Adventure 5 would
+      # compile against classes the servers do not have. Paper and Velocity bring their own 5.x.
+      - dependency-name: net.kyori:adventure-api
+        update-types: ['version-update:semver-major']
+      # JLine 4.4.8 no longer turns Ctrl+C into a UserInterruptException in LineReader.readLine
+      # (reproduced with a DumbTerminal; 3.30.17 does). Ctrl+C is how the console asks for
+      # shutdown. Revisit when a 4.x release fixes it (issue #71).
+      - dependency-name: org.jline:*
+        update-types: ['version-update:semver-major']
 
   - package-ecosystem: github-actions
     directory: /
@@ -34,6 +45,21 @@ updates:
     commit-message:
       prefix: build(deps)
     labels: [type:chore, area:infra]
+    ignore:
+      # MariaDB follows the long-term-support series (12.3 until 2029-06), the same one managed
+      # mode downloads. Rolling releases (12.4, 13.x) are moved to by hand.
+      - dependency-name: mariadb
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+
+  # Build image of the ClusterFuzzLite fuzzers.
+  - package-ecosystem: docker
+    directory: /.clusterfuzzlite
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: build(deps)
+    labels: [type:chore, area:infra]
 
   - package-ecosystem: docker-compose
     directory: /cloud/dist/docker
@@ -43,6 +69,11 @@ updates:
     commit-message:
       prefix: build(deps)
     labels: [type:chore, area:infra]
+    ignore:
+      # MariaDB follows the long-term-support series (12.3 until 2029-06), the same one managed
+      # mode downloads. Rolling releases (12.4, 13.x) are moved to by hand.
+      - dependency-name: mariadb
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
 
   # Enable once services/website exists (stage 8).
   # - package-ecosystem: npm

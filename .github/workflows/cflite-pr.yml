@@ -1,0 +1,65 @@
+name: ClusterFuzzLite
+
+# Fuzzes the parsers in .clusterfuzzlite/fuzzers for a short time on every pull request that
+# changes code. This is the fuzzing OpenSSF Scorecard can detect (it does not recognise Jazzer's
+# JUnit @FuzzTest); the longer runs stay in fuzz-nightly.yml. Setup and limits: docs/openssf.md
+
+on:
+  pull_request:
+    paths:
+      - 'cloud/**'
+      - 'plugins/**'
+      - 'common/**'
+      - '.clusterfuzzlite/**'
+      - '.github/workflows/cflite-pr.yml'
+
+permissions: read-all
+
+concurrency:
+  group: cflite-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fuzz:
+    name: Fuzz (address)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            objects.githubusercontent.com:443
+            gcr.io:443
+            storage.googleapis.com:443
+            repo1.maven.org:443
+            archive.ubuntu.com:80
+            security.ubuntu.com:80
+            ppa.launchpadcontent.net:443
+            pypi.org:443
+            files.pythonhosted.org:443
+            registry-1.docker.io:443
+            auth.docker.io:443
+            production.cloudflare.docker.com:443
+            ghcr.io:443
+            pkg-containers.githubusercontent.com:443
+
+      - name: Build fuzzers
+        id: build
+        uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          language: jvm
+          sanitizer: address
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run fuzzers
+        uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fuzz-seconds: 120
+          mode: code-change
+          sanitizer: address
+          report-unreproducible-crashes: false
