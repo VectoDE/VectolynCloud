@@ -9,12 +9,12 @@ package net.vectora.cloud.config.model;
  * @param port        port of the server
  * @param name        database name ({@code VECTORA_DB_NAME})
  * @param user        database user ({@code VECTORA_DB_USER})
- * @param dockerImage container image, only for mode {@code docker} (for example {@code mariadb:11.8}); null otherwise
+ * @param dockerImage container image, only for mode {@code docker} (for example {@code mariadb:12.3}); null otherwise
  */
 public record DatabaseConfig(DatabaseMode mode, String host, int port, String name, String user, String dockerImage) {
 
     /** Image used when switching to Docker mode without naming one. */
-    public static final String DEFAULT_DOCKER_IMAGE = "mariadb:11.8";
+    public static final String DEFAULT_DOCKER_IMAGE = "mariadb:12.3";
 
     /** Managed MariaDB on {@code 127.0.0.1:3307}, database and user {@code luckperms}. */
     public static DatabaseConfig defaults() {
