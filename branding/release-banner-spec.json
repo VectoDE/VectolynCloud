@@ -1,0 +1,64 @@
+{
+  "layout": {
+    "W": 1280,
+    "H": 320,
+    "x": 80,
+    "text_right": 860,
+    "wordmark_u": 3,
+    "version_u": [
+      12,
+      10,
+      8,
+      6
+    ],
+    "title_u": 3,
+    "date_u": 3,
+    "badge_u": 3,
+    "gap_wm_version": 20,
+    "gap_version_title": 24,
+    "gap_badge": 12,
+    "sep": 18,
+    "title_max_chars": 48,
+    "ellipsis": "…"
+  },
+  "badges": [
+    {
+      "match": "^alpha(\\.\\d+)?$",
+      "label": "ALPHA",
+      "fill": "#FF6B6B",
+      "text": "#14111F"
+    },
+    {
+      "match": "^beta(\\.\\d+)?$",
+      "label": "BETA",
+      "fill": "#FFD23F",
+      "text": "#14111F"
+    },
+    {
+      "match": "^rc(\\.\\d+)?$",
+      "label": "RC",
+      "fill": "#00E5FF",
+      "text": "#14111F"
+    },
+    {
+      "match": ".+",
+      "label": "PRE-RELEASE",
+      "fill": "#9EA3B8",
+      "text": "#14111F"
+    }
+  ],
+  "font": {
+    "family": "Pixelify Sans",
+    "weight": 700,
+    "font_pixel_em": 0.09143,
+    "tracking_em": -0.0286
+  },
+  "colors": {
+    "text": "#ECEEF4",
+    "muted": "#9EA3B8",
+    "point": "#FFD23F"
+  },
+  "date_format": "MMM d, yyyy (English)",
+  "background": "branding/png/release-banner-background.png (+@2x)",
+  "generator": "tools/release-banner (Java, Gradle :tools:release-banner:releaseBanner); reference: branding/tools/brand3.py release_text(version, title, date_iso)"
+}

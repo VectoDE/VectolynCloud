@@ -61,7 +61,7 @@ Leert den Bildschirm, wenn das Terminal ANSI kann.
 | `config list` | Alle Schlüssel mit Wert. |
 | `config reload` | Liest alle Konfigurationsdateien neu. Eine fehlerhafte Datei lässt die aktuelle Konfiguration aktiv und zeigt die Fehler. |
 
-Schlüssel: `network-name`, `language`, `eula-accepted`, `setup-complete`, `node-id`, `fallback-group`, `servers.<proxy|lobby|survival|creative|mod|end|database|minigame|legacy-server>`, `proxy.bind`, `proxy.port`, `proxy.bedrock-port`, `legacy-proxy.enabled`, `legacy-proxy.port`, `database.mode`, `database.host`, `database.port`, `database.name`, `database.user`, `database.docker-image`, `api.enabled`, `api.bind`, `api.port`, `api.tls.enabled`, `api.tls.keystore`, `api.cors-origins`.
+Schlüssel: `network-name`, `language`, `eula-accepted`, `setup-complete`, `node-id`, `fallback-group`, `servers.<proxy|lobby|survival|creative|mod|end|database|minigame|legacy-server>`, `proxy.bind`, `proxy.port`, `proxy.bedrock-port`, `legacy-proxy.enabled`, `legacy-proxy.port`, `database.mode`, `database.host`, `database.port`, `database.name`, `database.user`, `database.docker-image`, `api.enabled`, `api.bind`, `api.port`, `api.tls.enabled`, `api.tls.keystore`, `api.cors-origins`, `branding.powered-by`.
 
 Werte wie in der Datei: nur `true` oder `false`, ganze Zahlen, Enum-Werte klein geschrieben. `api.cors-origins` nimmt eine durch Komma getrennte Liste von Origins, `""` schaltet CORS aus. `fallback-group` muss eine bestehende Gruppe nennen, `""` setzt sie auf den Standard `lobby` zurück. Passwörter stehen nicht in `cloud.yml`, sondern in `secrets/vectolyn.env`.
 

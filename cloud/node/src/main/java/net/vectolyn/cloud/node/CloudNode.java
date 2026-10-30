@@ -323,6 +323,8 @@ public final class CloudNode implements AutoCloseable {
             ServiceManager.Builder builder = ServiceManager.builder(homePath, config::snapshot, secrets::load)
                     .javaRuntimes(java)
                     .serverSoftware(software)
+                    // Shown by the proxies in /version (branding.powered-by).
+                    .cloudVersion(settings.launcherVersion())
                     // A server switched on later gets its template right before its first start.
                     .templates(template -> builtIn.seed(homePath, Set.of(template)));
             Path databaseHome = home.databaseDir();

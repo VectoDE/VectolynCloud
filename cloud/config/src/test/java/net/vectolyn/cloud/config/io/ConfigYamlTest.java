@@ -2,6 +2,7 @@ package net.vectolyn.cloud.config.io;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -400,5 +401,21 @@ class ConfigYamlTest {
         CloudConfig without = read(yaml.replace("  legacy-server: true\n", ""), ConfigFormat.CLOUD);
         assertFalse(without.servers().isWanted(ServerKind.LEGACY_SERVER));
         assertTrue(without.servers().isWanted(ServerKind.MINIGAME));
+    }
+
+    @Test
+    void poweredByIsWrittenOnAndAMissingSectionCountsAsOn() throws ConfigException {
+        String yaml = new String(ConfigYaml.write(CloudConfig.defaults()), StandardCharsets.UTF_8);
+        assertTrue(yaml.contains("branding:\n  powered-by: true\n"), yaml);
+        CloudConfig without = read(yaml.replace("branding:\n  powered-by: true\n", ""), ConfigFormat.CLOUD);
+        assertNull(without.branding());
+        assertTrue(without.brandingOrDefault().poweredBy(), "a file from before the section keeps the line");
+        CloudConfig off = read(yaml.replace("powered-by: true", "powered-by: false"), ConfigFormat.CLOUD);
+        assertFalse(off.brandingOrDefault().poweredBy());
+        CloudConfig empty = read(yaml.replace("branding:\n  powered-by: true\n", "branding: {}\n"), ConfigFormat.CLOUD);
+        assertTrue(empty.brandingOrDefault().poweredBy(), "an empty section keeps the line, like a missing one");
+        assertEquals(ErrorCode.INVALID_VALUE, assertThrows(ConfigException.class,
+                () -> read(yaml.replace("powered-by: true", "powered-by: \"no\""), ConfigFormat.CLOUD))
+                .errors().getFirst().code());
     }
 }

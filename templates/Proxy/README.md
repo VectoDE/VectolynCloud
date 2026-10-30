@@ -12,6 +12,7 @@ Software: Velocity 4.3.0, Geyser-Velocity, Floodgate, LuckPerms-Velocity, ViaVer
 - `{{VECTOLYN_DB_HOST}}`, `{{VECTOLYN_DB_PORT}}`, `{{VECTOLYN_DB_NAME}}`, `{{VECTOLYN_DB_USER}}`, `{{VECTOLYN_DB_PASSWORD}}` in `plugins/luckperms/config.yml`
 - `{{VECTOLYN_DB_STORAGE_METHOD}}` (`mariadb`, `mysql` or `h2`) and `{{VECTOLYN_DB_POOL_SIZE}}` (pool size set centrally by the cloud, normally 4) in `plugins/luckperms/config.yml`
 - `{{VECTOLYN_XMS}}`, `{{VECTOLYN_XMX}}` in `start.bat`
+- `server-icon.png` (64 x 64, the Vectolyn mark) is copied unchanged; Velocity shows it in the server list
 - Generated files: `forwarding.secret` from `VECTOLYN_FORWARDING_SECRET`, `plugins/floodgate/key.pem` from `VECTOLYN_FLOODGATE_KEY_B64`
 
 ## Wanted or not

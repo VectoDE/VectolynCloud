@@ -35,7 +35,9 @@ FROM eclipse-temurin:25-jre-noble@sha256:ce8543ddd3070ccbeaac2106a74c9387ddeb8d4
 
 ARG VERSION=dev
 LABEL org.opencontainers.image.title="VectolynCloud" \
-      org.opencontainers.image.description="Cloud for a self-hosted Minecraft network (Java and Bedrock)" \
+      org.opencontainers.image.description="Run your own Minecraft network: VectolynCloud starts, watches and scales Java and Bedrock servers." \
+      org.opencontainers.image.vendor="Vectolyn" \
+      org.opencontainers.image.url="https://github.com/VectoDE/VectolynCloud" \
       org.opencontainers.image.source="https://github.com/VectoDE/VectolynCloud" \
       org.opencontainers.image.documentation="https://github.com/VectoDE/VectolynCloud/blob/main/docs/cloud/operations.md" \
       org.opencontainers.image.licenses="GPL-3.0-only" \

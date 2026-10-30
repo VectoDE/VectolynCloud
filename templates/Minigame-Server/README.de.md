@@ -16,6 +16,7 @@ Unterschiede zur Lobby: `gamemode=survival` und `spawn-protection=0`, weil die S
 - `{{VECTOLYN_DB_HOST}}`, `{{VECTOLYN_DB_PORT}}`, `{{VECTOLYN_DB_NAME}}`, `{{VECTOLYN_DB_USER}}`, `{{VECTOLYN_DB_PASSWORD}}` in `plugins/LuckPerms/config.yml`
 - `{{VECTOLYN_DB_STORAGE_METHOD}}` und `{{VECTOLYN_DB_POOL_SIZE}}` in `plugins/LuckPerms/config.yml`. Minigame-Gruppen laufen mit vielen Diensten gleichzeitig. Würde die Summe der Pools das Verbindungslimit der Datenbank überschreiten, verkleinert die Cloud den Pool je Dienst.
 - `{{VECTOLYN_XMS}}`, `{{VECTOLYN_XMX}}` in `start.bat`
+- `{{VECTOLYN_TAB_POWERED_BY}}` in `plugins/TAB/config.yml`: die letzte Fußzeile „Powered by VectolynCloud“, solange `branding.powered-by` in `cloud.yml` true ist (Standard), sonst nichts
 - Erzeugte Datei: `plugins/floodgate/key.pem` aus `VECTOLYN_FLOODGATE_KEY_B64`
 
 ## Gewollt oder nicht

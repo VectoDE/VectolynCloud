@@ -10,6 +10,7 @@ import net.vectolyn.cloud.config.model.NodeConfig;
 import net.vectolyn.cloud.config.model.ProxyConfig;
 import net.vectolyn.cloud.config.secret.EnvFile;
 import net.vectolyn.cloud.template.PlaceholderValues;
+import net.vectolyn.cloud.template.PoweredByLine;
 import net.vectolyn.cloud.template.ProxyBackend;
 import net.vectolyn.cloud.template.ProxyServerList;
 import net.vectolyn.cloud.template.ServerPlatform;
@@ -24,6 +25,7 @@ import net.vectolyn.cloud.template.TemplateInstaller;
  *   <li>database host, port, name and user from {@code cloud.yml};</li>
  *   <li>per service: {@code VECTOLYN_SERVER_PORT}, {@code VECTOLYN_SERVER_HOST}, {@code VECTOLYN_XMS},
  *       {@code VECTOLYN_XMX};</li>
+ *   <li>{@code VECTOLYN_TAB_POWERED_BY} from {@code branding.powered-by} ({@link PoweredByLine});</li>
  *   <li>for the proxy: bind, port, Bedrock port and the server list built from the backends; for
  *       the legacy proxy also {@code VECTOLYN_LEGACY_PROXY_PORT}.</li>
  * </ul>
@@ -63,6 +65,7 @@ final class ServicePlaceholders {
         values.put("VECTOLYN_SERVER_PORT", Integer.toString(spec.port()));
         values.put("VECTOLYN_XMS", spec.group().heap().min().toString());
         values.put("VECTOLYN_XMX", spec.group().heap().max().toString());
+        values.put(PoweredByLine.PLACEHOLDER, PoweredByLine.value(snapshot.cloud().brandingOrDefault().poweredBy()));
         PlaceholderValues source = PlaceholderValues.of(values);
         if (spec.isProxy()) {
             ProxyConfig proxy = snapshot.cloud().proxy();

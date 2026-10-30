@@ -2,9 +2,10 @@ name: Operations
 
 # Dry run of everything the release ships, without publishing anything:
 # start scripts on Linux, macOS and Windows, the release archives (cloud/dist/package.sh,
-# the same script release.yml runs), the systemd unit on a real systemd, the container image
-# (built from source and through the release path with the jar as named context, both without
-# push), compose.yml and the Pterodactyl egg. Nothing here has write permissions or secrets.
+# the same script release.yml runs), the release banner (tools/release-banner), the systemd
+# unit on a real systemd, the container image (built from source and through the release path
+# with the jar as named context, both without push), compose.yml and the Pterodactyl egg.
+# Nothing here has write permissions or secrets.
 
 on:
   pull_request:
@@ -23,6 +24,9 @@ on:
       - '.github/scripts/**'
       - '.github/workflows/operations.yml'
       - '.github/workflows/release.yml'
+      - 'tools/**'
+      - 'branding/fonts/**'
+      - 'branding/png/release-banner-background*.png'
   push:
     branches: [main]
     paths:
@@ -39,6 +43,9 @@ on:
       - '.github/scripts/**'
       - '.github/workflows/operations.yml'
       - '.github/workflows/release.yml'
+      - 'tools/**'
+      - 'branding/fonts/**'
+      - 'branding/png/release-banner-background*.png'
   workflow_dispatch:
 
 permissions:
@@ -82,7 +89,8 @@ jobs:
               echo "::error file=$f::needs CRLF line ends (.gitattributes)"; exit 1
             fi
           done
-          for f in cloud/dist/start.sh cloud/dist/package.sh .github/scripts/smoke-start-unix.sh gradle/update-verification-metadata.sh; do
+          for f in cloud/dist/start.sh cloud/dist/package.sh .github/scripts/smoke-start-unix.sh gradle/update-verification-metadata.sh \
+            tools/release-banner/banner-from-tag.sh; do
             if grep -q $'\r' "$f"; then
               echo "::error file=$f::needs LF line ends (.gitattributes)"; exit 1
             fi
@@ -94,7 +102,7 @@ jobs:
           set -euo pipefail
           shellcheck --version
           shellcheck cloud/dist/start.sh cloud/dist/package.sh .github/scripts/smoke-start-unix.sh \
-            gradle/update-verification-metadata.sh
+            gradle/update-verification-metadata.sh tools/release-banner/banner-from-tag.sh
           # The installer script inside the egg (runs with ash in ghcr.io/pterodactyl/installers:alpine).
           jq -r '.scripts.installation.script' cloud/dist/pterodactyl/egg-vectolyn-cloud.json \
             | shellcheck --shell=sh -
@@ -180,6 +188,48 @@ jobs:
             cloud/launcher/build/cloud/VectolynCloud.jar "$RUNNER_TEMP/again"
           (cd "$RUNNER_TEMP/again" && sha256sum -- *.jar *.zip *.tar.gz) | diff - <(cd ops-dist && sha256sum -- *.jar *.zip *.tar.gz)
           echo "Archives are reproducible."
+
+      # The banner step of release.yml (same script, same Gradle task) on local tags; nothing
+      # leaves the runner except a short-lived artifact to look at. Covers an annotated tag with
+      # a title, an empty message, a message that is only a signature, a lightweight tag and an
+      # invalid tag, and renders the first case twice to prove the PNGs are reproducible.
+      - name: Release banner (dry run)
+        env:
+          GIT_COMMITTER_DATE: '2026-10-30T12:00:00Z'
+        run: |
+          set -euo pipefail
+          tagger=(-c user.name=ci -c user.email=ci@invalid)
+          git "${tagger[@]}" tag -a -f v0.2.0-beta.2 -m 'Stage 2: cloud core' -m 'Body text, never shown.'
+          git "${tagger[@]}" tag -a -f v0.2.1 -m ''
+          printf -- '-----BEGIN PGP SIGNATURE-----\n\nci\n-----END PGP SIGNATURE-----\n' > "$RUNNER_TEMP/sig.txt"
+          git "${tagger[@]}" tag -a -f --cleanup=verbatim v0.2.2-rc.1 -F "$RUNNER_TEMP/sig.txt"
+          git tag -f v0.2.3
+          git tag -f v0.2
+          banner() {  # banner <tag> <out-dir> <expected summary>
+            bash tools/release-banner/banner-from-tag.sh "$1" "$2" --stacktrace | tee "$RUNNER_TEMP/banner.log"
+            grep -qF "Release banner for $1: $3" "$RUNNER_TEMP/banner.log"
+          }
+          banner v0.2.0-beta.2 ops-banner 'version u 10, badge BETA, title "Stage 2: cloud core", date Oct 30, 2026'
+          banner v0.2.1 ops-banner 'version u 12, badge none, title none, date Oct 30, 2026'
+          banner v0.2.2-rc.1 ops-banner 'version u 12, badge RC, title none, date Oct 30, 2026'
+          banner v0.2.3 ops-banner 'version u 12, badge none, title none, date'
+          if bash tools/release-banner/banner-from-tag.sh v0.2 "$RUNNER_TEMP/invalid"; then
+            echo "::error::an invalid tag must fail the banner"; exit 1
+          fi
+          (cd ops-banner && file -- *.png)
+          test "$(file -b ops-banner/VectolynCloud-0.2.0-beta.2-banner.png | cut -d, -f2)" = ' 1280 x 320'
+          test "$(file -b ops-banner/VectolynCloud-0.2.0-beta.2-banner-2x.png | cut -d, -f2)" = ' 2560 x 640'
+          banner v0.2.0-beta.2 "$RUNNER_TEMP/banner-again" 'version u 10'
+          (cd "$RUNNER_TEMP/banner-again" && sha256sum -- *.png) | diff - <(cd ops-banner && sha256sum -- VectolynCloud-0.2.0-beta.2-*.png)
+          echo "Banners are reproducible."
+
+      - name: Upload banner
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-banner-dry-run
+          path: ops-banner/
+          if-no-files-found: error
+          retention-days: 3
 
       - name: Upload
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

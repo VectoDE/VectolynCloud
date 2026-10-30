@@ -114,3 +114,10 @@ $RECYCLE.BIN/
 
 # --- Local worktrees -----------------------------------------------------------------
 .claude/worktrees/
+
+# --- Brand asset tooling (branding/tools) ---------------------------------------
+# Blender renders, scratch files, page screenshots and Python caches of the generators.
+/branding/tools/renders/
+/branding/tools/tmp/
+/branding/tools/shots/
+/branding/tools/__pycache__/

@@ -9,6 +9,7 @@ import java.util.function.Function;
 import net.vectolyn.cloud.config.CloudHome;
 import net.vectolyn.cloud.config.error.ConfigException;
 import net.vectolyn.cloud.config.model.ApiConfig;
+import net.vectolyn.cloud.config.model.BrandingConfig;
 import net.vectolyn.cloud.config.model.CloudConfig;
 import net.vectolyn.cloud.config.model.ConfigSnapshot;
 import net.vectolyn.cloud.config.model.DatabaseConfig;
@@ -128,6 +129,10 @@ final class ConfigKeys {
         }, List.of());
         add("api.cors-origins", c -> String.join(",", api(c).corsOrigins()), (s, v) -> new SetApi(api(s.cloud())
                 .withCorsOrigins(v.isEmpty() ? List.of() : List.of(v.split(",", -1)))), List.of());
+        add("branding.powered-by", c -> String.valueOf(c.brandingOrDefault().poweredBy()), (s, v) -> {
+            boolean value = Values.bool(FILE, "branding.powered-by", v);
+            return snapshot -> snapshot.withCloud(snapshot.cloud().withBranding(new BrandingConfig(value)));
+        }, bool);
     }
 
     private ConfigKeys() {

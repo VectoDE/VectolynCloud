@@ -1,5 +1,6 @@
 package net.vectolyn.cloud.node;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import net.vectolyn.cloud.node.service.ServiceInfo;
@@ -65,28 +66,70 @@ final class StartupReport {
     private StartupReport() {
     }
 
+    /** The lettering, at most 68 columns wide, so it fits an 80-column console. */
+    static final List<String> WIDE_LETTERING = List.of(
+            "  __     __        _        _              ____ _                 _",
+            "  \\ \\   / /__  ___| |_ ___ | |_   _ _ __  / ___| | ___  _   _  __| |",
+            "   \\ \\ / / _ \\/ __| __/ _ \\| | | | | '_ \\| |   | |/ _ \\| | | |/ _` |",
+            "    \\ V /  __/ (__| || (_) | | |_| | | | | |___| | (_) | |_| | (_| |",
+            "     \\_/ \\___|\\___|\\__\\___/|_|\\__, |_| |_|\\____|_|\\___/ \\__,_|\\__,_|",
+            "                              |___/");
+
+    /** The lettering for consoles narrower than {@value #NARROW_BELOW} columns, at most 55 wide. */
+    static final List<String> NARROW_LETTERING = List.of(
+            "  __   __      _       _           ___ _             _",
+            "  \\ \\ / /__ __| |_ ___| |_  _ _ _ / __| |___ _  _ __| |",
+            "   \\ V / -_) _|  _/ _ \\ | || | ' \\ (__| / _ \\ || / _` |",
+            "    \\_/\\___\\__|\\__\\___/_|\\_, |_||_\\___|_\\___/\\_,_\\__,_|",
+            "                         |__/");
+
+    /** Consoles with fewer columns than this get {@link #NARROW_LETTERING}. */
+    static final int NARROW_BELOW = 70;
+
     /**
-     * The banner, plain ASCII so every console shows it.
+     * The banner, plain ASCII so every console shows it. The console width comes from the
+     * {@code COLUMNS} environment variable; without it the wide lettering is used.
      *
      * @param version version of {@code VectolynCloud.jar}
      * @param home    the cloud home
      * @return the lines
      */
     static List<String> banner(String version, java.nio.file.Path home) {
+        return banner(version, home, System.getenv("COLUMNS"));
+    }
+
+    /**
+     * The banner for a console of the given width.
+     *
+     * @param version version of {@code VectolynCloud.jar}
+     * @param home    the cloud home
+     * @param columns console width as {@code COLUMNS} gives it; {@code null} or not a positive
+     *                number for the wide lettering
+     * @return blank line, lettering, blank line, info line, home, blank line
+     */
+    static List<String> banner(String version, java.nio.file.Path home, String columns) {
         String java = System.getProperty("java.version", "?") + " (" + System.getProperty("java.vendor", "?") + ")";
         String os = System.getProperty("os.name", "?") + " " + System.getProperty("os.arch", "?");
-        return List.of(
-                "",
-                "  __     __        _        _               ____ _                 _",
-                "  \\ \\   / /__  ___| |_ ___ | |_   _ _ __   / ___| | ___  _   _  __| |",
-                "   \\ \\ / / _ \\/ __| __/ _ \\| | | | | '_ \\ | |   | |/ _ \\| | | |/ _` |",
-                "    \\ V /  __/ (__| || (_) | | |_| | | | || |___| | (_) | |_| | (_| |",
-                "     \\_/ \\___|\\___|\\__\\___/|_|\\__, |_| |_| \\____|_|\\___/ \\__,_|\\__,_|",
-                "                              |___/",
-                "",
-                "  VectolynCloud " + version + "  |  Java " + java + "  |  " + os,
-                "  Home: " + home,
-                "");
+        List<String> lines = new ArrayList<>();
+        lines.add("");
+        lines.addAll(narrow(columns) ? NARROW_LETTERING : WIDE_LETTERING);
+        lines.add("");
+        lines.add("  VectolynCloud " + version + "  |  Java " + java + "  |  " + os);
+        lines.add("  Home: " + home);
+        lines.add("");
+        return List.copyOf(lines);
+    }
+
+    private static boolean narrow(String columns) {
+        if (columns == null) {
+            return false;
+        }
+        try {
+            int width = Integer.parseInt(columns.strip());
+            return width > 0 && width < NARROW_BELOW;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     /**

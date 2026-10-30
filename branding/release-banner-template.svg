@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 320" width="1280" height="320">
+<title>VectolynCloud release banner template</title>
+<desc>Text layer over png/release-banner-background.png. Pixelify Sans 700, outline to paths before export.
+One font pixel u = 0.09143 em. Tracking -0.0286 em (one font pixel between letters). Cap height 7u.
+y values are cap tops. Text column x 80 to 860; the 3D mark owns the area right of it.
+Block is centered vertically: wordmark (u 3) + 20 + version (7u) + 24 + title/date (u 3).
+version: u 12, falls back to 10, 8, 6 until it fits 780 px. Points of MAJOR.MINOR.PATCH in gold #FFD23F, rest #ECEEF4.
+title: first line of the tag message, u 3, #ECEEF4, max 48 characters, cut at a word end with an ellipsis,
+then shortened word by word if title + date exceed 780 px. Empty title: the line holds only the date.
+date: "Oct 30, 2026", u 3, #9EA3B8, after a 6 x 6 gold square with 18 px on each side.
+badge: SemVer prerelease -alpha.N ALPHA #FF6B6B, -beta.N BETA #FFD23F, -rc.N RC #00E5FF, other PRE-RELEASE #9EA3B8;
+stable: no badge. u 3, text #14111F, padding 2u x 1u (height 9u), corners cut by 1u, 12 px right of the wordmark,
+centered on its cap height.</desc>
+<rect id="safe-area" x="80" y="75" width="780" height="170" fill="none" stroke="#FF00FF" stroke-dasharray="4 4"/>
+<text id="slot-wordmark" x="80" y="96" font-family="Pixelify Sans" font-weight="700" font-size="32.8" letter-spacing="-0.94" fill="#ECEEF4">VECTOLYN<tspan fill="#00E5FF">CLOUD</tspan></text>
+<g id="slot-badge"><rect id="badge-bg" x="0" y="72" width="0" height="27" fill="#FFD23F"/><text x="0" y="96" font-family="Pixelify Sans" font-weight="700" font-size="32.8" letter-spacing="-0.94" fill="#14111F">BETA</text></g>
+<text id="slot-version" x="80" y="200" font-family="Pixelify Sans" font-weight="700" font-size="131.2" letter-spacing="-3.75" fill="#ECEEF4">v0.2.0</text>
+<text id="slot-title" x="80" y="245" font-family="Pixelify Sans" font-weight="700" font-size="32.8" letter-spacing="-0.94" fill="#ECEEF4">Stage 2: cloud core</text>
+<rect id="slot-separator" x="0" y="233" width="6" height="6" fill="#FFD23F"/>
+<text id="slot-date" x="0" y="245" font-family="Pixelify Sans" font-weight="700" font-size="32.8" letter-spacing="-0.94" fill="#9EA3B8">Oct 30, 2026</text>
+</svg>

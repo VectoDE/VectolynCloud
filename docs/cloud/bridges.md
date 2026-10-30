@@ -19,8 +19,9 @@ Each jar contains the bridge core, `common/client` and `common/protocol`, all Ve
 | `VECTOLYN_SERVICE_PLATFORM` | Velocity bridge | `cloud/node`, for every service | Name of cloud-template's `ServerPlatform`. `VELOCITY_LEGACY` makes the bridge the legacy proxy, anything else (also a missing value) the main proxy. The bridge logs the role it took; for a value other than `VELOCITY` or `VELOCITY_LEGACY` it logs a warning (without repeating the value). The Paper and legacy bridges log their role on enable as well. |
 | `VECTOLYN_LEGACY_FORWARDING_SECRET` | legacy bridge | `cloud/node`, for `PANDASPIGOT` services only | The forwarding secret of the legacy proxy, the same value as in `local/services/legacy-proxy-1/forwarding.secret`. Must follow the template's secret rule (16 or more characters from `A-Z a-z 0-9 . _ ~ + / = -`). Read from the environment only, never from a system property, which would show on the command line. |
 | `VECTOLYN_FALLBACK_GROUP` | Velocity bridge | `cloud/node`, for both proxies | The group a kicked player goes to when the own group has no free server: `fallback-group` of `cloud.yml`, default `lobby`. Read once when the bridge connects, so a change reaches a proxy with its next start. A missing value (a proxy started by an older node) or one that is no valid group name gives `lobby`; an invalid one is logged as a warning, without repeating it. |
+| `VECTOLYN_POWERED_BY`, `VECTOLYN_CLOUD_VERSION` | Velocity bridge | `cloud/node`, for both proxies | `branding.powered-by` of `cloud.yml` (`true` or `false`) and the version of `VectolynCloud.jar` (`dev` outside a release jar), for [`/version`](#version-on-the-proxy). Read once when the bridge connects. A missing switch counts as `true`, the cloud's default; any value other than `true` switches it off. A missing version, or one with characters other than letters, digits and `. + _ -`, is shown as `dev`. |
 
-All names are constants in `net.vectolyn.protocol.ServiceEnvironment` (`SERVICE_PLATFORM` and `LEGACY_FORWARDING_SECRET` added with this module, `FALLBACK_GROUP` later), so node and bridges cannot drift apart. `cloud/node` passes the services an environment without the cloud's own `VECTOLYN_*` variables (see [node.md](node.md#process)), so the node adds the last three explicitly: the platform for every service, the legacy secret only for `PANDASPIGOT`, the fallback group only for the two proxies.
+All names are constants in `net.vectolyn.protocol.ServiceEnvironment` (`SERVICE_PLATFORM` and `LEGACY_FORWARDING_SECRET` added with this module, `FALLBACK_GROUP`, `POWERED_BY` and `CLOUD_VERSION` later), so node and bridges cannot drift apart. `cloud/node` passes the services an environment without the cloud's own `VECTOLYN_*` variables (see [node.md](node.md#process)), so the node adds the last ones explicitly: the platform for every service, the legacy secret only for `PANDASPIGOT`, the fallback group, the powered-by switch and the cloud version only for the two proxies.
 
 ## Threads
 
@@ -124,6 +125,19 @@ Backend names: a dynamic server is registered under its service id. A static bac
 ### Status
 
 Players online and the shown player limit. A proxy has no game loop and reports 20 TPS and 0 MSPT. The players a backend reports are what the [autoscaler](scaling.md#signals) scales on, together with the players the proxy reports on it.
+
+### Version on the proxy
+
+While `branding.powered-by` in `cloud.yml` is true (the default), both proxies register the command `/version` when the bridge connects (`PoweredBy`, `VersionCommand`). It answers every player and the console with two lines:
+
+```
+This network runs VectolynCloud 0.2.0
+Open source (GPL-3.0): github.com/VectoDE/VectolynCloud
+```
+
+The labels are gray, the version cyan (`#00E5FF`) and the address white. On Java the address is a link to `https://github.com/VectoDE/VectolynCloud` (Adventure click event). Geyser drops click events, so Bedrock players get the same text without a link. A client set to German reads "Dieses Netzwerk läuft mit VectolynCloud 0.2.0" and "Open Source (GPL-3.0): ...", every other language and the console English, as with the [transfer messages](#choosing-the-server-and-moving-players). Arguments are ignored.
+
+With `branding.powered-by: false` the bridge registers nothing, so `/version` reaches the backend (Paper's own command) as before. The switch and the version come from the environment ([above](#environment)); a change reaches a proxy with its next start. The proxy's command takes the place of the backend's `/version` for every player, including `/version <plugin>`; the aliases `/ver` and `/about` still reach the backend.
 
 ## Paper bridge
 
@@ -233,6 +247,7 @@ The API has Java 8 class files, so the module needs no `disableAutoTargetJvm()`,
 | `BungeeGuardCheckTest`, `PropertiesJsonTest`, `AdmissionTicketsTest` | Right, wrong, empty and missing token, two tokens, the main proxy's secret, direct connection, host name as address, no secret; the token as Velocity's Gson writes it (`=` as `=`); the stored fuzz inputs reach the outcome their name says; token stripped; escapes and round trip; every malformed form; tickets used once and expiring. |
 | `HandshakeGuardTest`, `LoginGateTest` (legacy) | The guard on the real PandaSpigot events: right, wrong and missing token, direct connection, another plugin un-failing or cancelling, missing and invalid secret with the counter-check, log limit; logins with and without ticket, another plugin allowing a refused login (with the counter-check). |
 | `ForwardedHandshakeFuzzTest` | Jazzer: any handshake gives a result and never an exception, an accepted one never carries a token on; any properties JSON fails only with `MalformedHandshakeException` and what parses round-trips. |
+| `PoweredByTest`, `VersionMessageTest` (velocity) | The switch on by default and for `true`, off for `false` and any other value; the version passed through and checked (counter-checks: empty, markup, too long give `dev`); English for the console and other languages, German for `de`; colours of label, version and address, the link only on the address. `VersionMessageTest` loads only Adventure and runs on Java 21. |
 | `VelocityServersTest`, `VelocityBridgePluginTest`, `PluginDescriptorTest` | The Velocity adapter on a scripted `ProxyServer`; plugin descriptors, Guice constructor and event handlers. Tagged `requires-java25` where they load Velocity or Paper classes. |
 
 All tests of `plugins/bridge/common` and `plugins/bridge/legacy` run on Java 25 and, with `-PtestJava=21`, on Java 21.

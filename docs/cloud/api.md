@@ -108,6 +108,8 @@ Every write goes through `ConfigService.apply`: the whole configuration is valid
 
 **Fallback group.** `fallback-group` in `PUT /config` names the group the proxies send a kicked player to when the player's own group has no free server, for example `"fallback-group": "hub"`. It is optional (default `lobby`, then not returned); a group that does not exist answers `422 invalid-config` with `unknown-group`. Leaving the field out sets it back to the default. The proxies get it when they start (see [bridges.md](bridges.md#catching-kicks)).
 
+**Powered-by line.** `branding.powered-by` in `PUT /config` (for example `"branding": {"powered-by": false}`) switches the "Powered by VectolynCloud" TAB footer line and `/version` on the proxies on or off. Leaving the section or the key out (`"branding": {}`) counts as `true`. Services pick the value up at their next start (see [config.md](config.md#cloudyml)).
+
 **Groups.** `drain-timeout` is optional (5s to 10m, default 30s), for example `"drain-timeout": "45s"`; outside the range the answer is `422 out-of-range`.
 
 **Shutdown.** While the node shuts down, start, restart, reload and backup creation answer `503 shutting-down`. Reads and stops still work.

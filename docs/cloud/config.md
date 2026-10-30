@@ -65,9 +65,13 @@ api:
     enabled: false
     # keystore: secrets/api.p12  required when enabled, relative to the home
   # cors-origins: [https://dashboard.example.org]   optional, up to 16 origins, off when empty
+branding:
+  powered-by: true           # last TAB footer line "Powered by VectolynCloud" and /version on the proxies; false removes both
 ```
 
 Passwords are not in `cloud.yml`. They are in `secrets/vectolyn.env`.
+
+`branding.powered-by` is on by default, and a `cloud.yml` without the `branding` section, or with an empty one (`branding: {}`), counts as on. While it is on, the cloud fills `{{VECTOLYN_TAB_POWERED_BY}}` in the TAB footer of the backend templates with the dark gray line "Powered by VectolynCloud" ([template.md](template.md#powered-by-line)), and both proxies answer `/version` with the cloud's version and the address of its source code ([bridges.md](bridges.md#version-on-the-proxy)). With `false` the footer line is left out and `/version` reaches the backend as before. A service picks up a change at its next start, because the cloud renders the template and sets the proxy's environment only then. At the console: `config set branding.powered-by false`.
 
 ### `groups/<name>.yml`
 

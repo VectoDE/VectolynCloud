@@ -1,6 +1,7 @@
 package net.vectolyn.cloud.bridge.velocity;
 
 import com.google.inject.Inject;
+import com.velocitypowered.api.command.CommandManager;
 import com.velocitypowered.api.event.EventTask;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
@@ -23,10 +24,12 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import net.vectolyn.cloud.bridge.BridgeConnection;
 import net.vectolyn.cloud.bridge.BridgeSender;
 import net.vectolyn.cloud.bridge.KickOutcome;
+import net.vectolyn.cloud.bridge.PoweredBy;
 import net.vectolyn.cloud.bridge.ProxyBridge;
 import net.vectolyn.cloud.bridge.ProxyRole;
 import net.vectolyn.cloud.bridge.TransferMessages;
 import net.vectolyn.cloud.client.CloudClientSettings;
+import net.vectolyn.protocol.ServiceEnvironment;
 
 /**
  * VectolynCloud bridge for Velocity 4.3, in the main proxy and in the legacy proxy. Thin adapter
@@ -48,6 +51,8 @@ import net.vectolyn.cloud.client.CloudClientSettings;
  *       ({@code ProxyBridge.onEvent}).</li>
  *   <li>Closed servers: a server the cloud is emptying takes no player who switches to it, except
  *       with the bypass permission ({@code ProxyBridge.mayConnect}).</li>
+ *   <li>{@code /version}: answered by the proxy with the cloud's version while
+ *       {@code branding.powered-by} is on ({@link PoweredBy}).</li>
  * </ul>
  */
 public final class VelocityBridgePlugin {
@@ -258,9 +263,26 @@ public final class VelocityBridgePlugin {
         });
         statusTask = proxy.getScheduler().buildTask(this, this::reportStatus).delay(STATUS_PERIOD)
                 .repeat(STATUS_PERIOD).schedule();
+        registerVersionCommand();
         // Explicit registration: the handler needs nothing from the event.
         proxy.getEventManager().register(this, ProxyShutdownEvent.class, shutdown -> disconnect());
         return bridge;
+    }
+
+    /**
+     * Registers {@value PoweredBy#COMMAND} while {@code branding.powered-by} is on
+     * ({@value ServiceEnvironment#POWERED_BY}). Off, nothing is registered and the command reaches
+     * the backend as before.
+     */
+    private void registerVersionCommand() {
+        if (!PoweredBy.enabled(System::getenv)) {
+            LOG.log(System.Logger.Level.INFO, "/{0} is left to the backends (branding.powered-by is off)",
+                    PoweredBy.COMMAND);
+            return;
+        }
+        CommandManager commands = proxy.getCommandManager();
+        commands.register(commands.metaBuilder(PoweredBy.COMMAND).plugin(this).build(),
+                new VersionCommand(PoweredBy.version(System::getenv)));
     }
 
     /** Says goodbye to the cloud. */
