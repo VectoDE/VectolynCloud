@@ -60,12 +60,12 @@ MOTD18 = [
     [("VECTOLYN", AQUA, 1), (".NET", GOLD6, 1), (" ■ ", GOLD6, 0), ("[", GRAY_D, 1), ("1.8 - 26.3", WHITE, 1), ("]", GRAY_D, 1)],
     [("NEW LOBBY", WHITE, 1), (" • ", GRAY_D), ("JAVA & BEDROCK", GOLD6, 1)],
 ]
-# Legacy proxy (templates/Legacy-Proxy): its backends are PandaSpigot 1.8.8 (protocol 47) and it has no protocol
-# translation (no ViaVersion), so only Java 1.8 to 1.8.9 gets in. Java only, and the 1.8 palette (aqua §b, gold §6)
-# directly, since none of its clients shows hex colours.
+# Legacy proxy (templates/Legacy-Proxy): line 1 carries the network-wide version range like the main proxy, line 2
+# names the legacy section. Its backends are PandaSpigot 1.8.8 (protocol 47) without protocol translation, so its
+# clients are 1.8 clients: the 1.8 palette (aqua §b, gold §6) directly, since none of them shows hex colours.
 MOTD_LEGACY_PROXY = [
-    [("VECTOLYN", AQUA, 1), (".NET", GOLD6, 1), (" ■ ", GOLD6, 0), ("[", GRAY_D, 1), ("1.8 - 1.8.9", WHITE, 1), ("]", GRAY_D, 1)],
-    [("LEGACY SERVERS", WHITE, 1), (" • ", GRAY_D), ("JAVA", GOLD6, 1)],
+    [("VECTOLYN", AQUA, 1), (".NET", GOLD6, 1), (" ■ ", GOLD6, 0), ("[", GRAY_D, 1), ("1.8 - 26.3", WHITE, 1), ("]", GRAY_D, 1)],
+    [("LEGACY 1.8", WHITE, 1), (" • ", GRAY_D), ("JAVA & BEDROCK", GOLD6, 1)],
 ]
 # Bedrock: no Java version range, crossplay as text instead (Geyser's Bedrock range keeps changing).
 MOTD_BEDROCK =[("VECTOLYN", CY, 1), (".NET", GO, 1), (" ■ ", GO, 0), ("[", GRAY_D, 1), ("JAVA + BEDROCK", WHITE, 1), ("]", GRAY_D, 1)]
@@ -337,8 +337,8 @@ def motd_txt():
         "# via Adventure: cyan becomes §3 (dark aqua).\n"
         f'motd-legacy-1: "{" " * cen18[0][1]}{legacy_codes(MOTD18[0])}"\n'
         f'motd-legacy-2: "{" " * cen18[1][1]}{legacy_codes(MOTD18[1])}"\n\n'
-        "# Legacy proxy (templates/Legacy-Proxy/velocity.toml), MiniMessage, same centring. Only Java 1.8 to 1.8.9\n"
-        "# reaches it (PandaSpigot 1.8.8 backends, no ViaVersion): no Bedrock, and named 1.8 colours instead of hex.\n"
+        "# Legacy proxy (templates/Legacy-Proxy/velocity.toml), MiniMessage, same centring. Line 1 shows the network-wide\n"
+        "# range like the main proxy; its clients are 1.8 clients (PandaSpigot 1.8.8 backends), so named 1.8 colours.\n"
         f"# Line 1: {cenlp[0][2]} px -> {cenlp[0][1]} spaces; line 2: {cenlp[1][2]} px -> {cenlp[1][1]} spaces.\n"
         f'motd = "{mmlp}"\n\n'
         "# Geyser (plugins/Geyser-Velocity/config.yml), Bedrock § codes, not centred.\n"

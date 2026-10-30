@@ -8,10 +8,10 @@ bind = "{{VECTOLYN_PROXY_BIND}}:{{VECTOLYN_LEGACY_PROXY_PORT}}"
 # their server list. Only MiniMessage format is accepted.
 # Layout: two lines, each centered with leading spaces (about 270 px wide, 4 px per space,
 # bold 1 px more per glyph).
-# Line 1: network name and the versions this proxy serves, line 2: highlight and edition. Only
-# Java 1.8 to 1.8.9 gets through (PandaSpigot 1.8.8 backends, no ViaVersion), so no Bedrock and
+# Line 1: network name and the network-wide version range (as on the main proxy), line 2: the
+# legacy section and the editions. Its clients are 1.8 clients (PandaSpigot 1.8.8 backends), so
 # named 1.8 colours instead of hex. Source: branding/motd.txt. Change vectolyn.net to your domain.
-motd = "             <aqua><bold>VECTOLYN</bold><gold><bold>.NET</bold><gold> ■ <dark_gray><bold>[</bold><white><bold>1.8 - 1.8.9</bold><dark_gray><bold>]</bold>\n                 <white><bold>LEGACY SERVERS</bold><dark_gray> • <gold><bold>JAVA</bold>"
+motd = "              <aqua><bold>VECTOLYN</bold><gold><bold>.NET</bold><gold> ■ <dark_gray><bold>[</bold><white><bold>1.8 - 26.3</bold><dark_gray><bold>]</bold>\n             <white><bold>LEGACY 1.8</bold><dark_gray> • <gold><bold>JAVA & BEDROCK</bold>"
 
 # What should we display for the maximum number of players? (Velocity does not support a cap
 # on the number of players online.)
