@@ -16,25 +16,33 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.regex.Pattern;
+import net.vectora.cloud.config.CloudHome;
 
 /**
  * The server templates that travel inside the node ({@code docs/cloud/node.md#built-in-templates}),
- * so that {@code java -jar VectoraCloud.jar} in an empty folder has every
- * {@code <Server>/template/} it needs.
+ * so that {@code java -jar VectoraCloud.jar} in an empty folder has the templates of the servers it
+ * is asked to run.
  *
  * <p>The build copies the tracked files of {@code templates/<Server>/} of the repository to
- * {@code <Server>/template/} under {@value #RESOURCE_DIR}, without jars or key files, and lists each one with its SHA-256 in
- * {@value #INDEX}. On every start {@link #seed} writes the template folders the home does not
- * have. A folder that exists, also an empty one or a link, belongs to the operator and is never
- * touched; the cloud does not merge or update templates. Each folder is written into a staging
- * folder next to it first and moved into place once every file matched the index, so a crash
- * leaves either the whole template or none.
+ * {@code <Server>/template/} under {@value #RESOURCE_DIR}, without jars or key files, and lists each
+ * one with its SHA-256 in {@value #INDEX}. That resource layout is internal to the jar and has not
+ * changed with the home layout. {@link #seed} writes {@code <home>/local/templates/<Server>/default/}
+ * for the templates it is given, which the node asks for only for wanted servers: on every start
+ * for the groups that are wanted then, and later for a group that is switched on, right before
+ * its first service is rendered. A {@code default/} folder that exists, also an empty one or a
+ * link, belongs to the operator and is never touched; the cloud does not merge or update templates.
+ * Each folder is written into a staging folder next to it first and moved into place once every
+ * file matched the index, so a crash leaves either the whole template or none. Two services that
+ * start at once on one instance write a template only once ({@link #seed} is synchronized).
  */
 public final class BuiltInTemplates {
 
@@ -46,7 +54,7 @@ public final class BuiltInTemplates {
     /** Index of the template files: {@code <sha256>  <Server>/template/<path>} per line. */
     public static final String INDEX = "templates.index";
 
-    /** Staging folder inside {@code <home>/<Server>/} while a template is written. */
+    /** Staging folder inside {@code <home>/local/templates/<Server>/} while a template is written. */
     static final String STAGING = ".vectora-template-incoming";
 
     private static final Pattern INDEX_LINE = Pattern.compile("([0-9a-f]{64})  ([A-Za-z][A-Za-z0-9-]{0,31})/template/(.+)");
@@ -92,23 +100,43 @@ public final class BuiltInTemplates {
     }
 
     /**
-     * Writes every built-in template whose folder the home does not have.
+     * The names of the built-in templates, sorted.
      *
-     * @param home the cloud home
-     * @return the server folders that got their template, sorted
+     * @return the names, for example {@code Lobby-Server}
+     * @throws IOException if the index cannot be read or is malformed
+     */
+    public Set<String> names() throws IOException {
+        return new TreeSet<>(index().keySet());
+    }
+
+    /**
+     * Writes {@code <home>/local/templates/<name>/default/} for every name in {@code templates}
+     * that is a built-in template and that the home does not have. Other names (a template of the
+     * operator's own) are skipped.
+     *
+     * @param home      the cloud home
+     * @param templates the templates that are wanted, for example the {@code template} of every
+     *                  wanted group
+     * @return the templates that were written, sorted
      * @throws IOException if the index is malformed, a file does not match it, or writing fails
      */
-    public List<String> seed(Path home) throws IOException {
+    public synchronized List<String> seed(Path home, Collection<String> templates) throws IOException {
         Objects.requireNonNull(home, "home");
+        Set<String> wanted = Set.copyOf(templates);
+        CloudHome layout = CloudHome.of(home);
         List<String> written = new ArrayList<>();
         for (Map.Entry<String, List<Entry>> folder : index().entrySet()) {
-            Path server = home.resolve(folder.getKey());
-            Path target = server.resolve("template");
-            if (Files.exists(target, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(server)) {
+            if (!wanted.contains(folder.getKey())) {
                 continue;
             }
-            Files.createDirectories(server);
-            Path staging = server.resolve(STAGING);
+            Path target = layout.templateDir(folder.getKey());
+            Path parent = target.getParent();
+            if (Files.exists(target, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(parent)) {
+                continue;
+            }
+            refuseLinks(layout, parent);
+            Files.createDirectories(parent);
+            Path staging = parent.resolve(STAGING);
             deleteTree(staging);
             try {
                 for (Entry entry : folder.getValue()) {
@@ -128,6 +156,61 @@ public final class BuiltInTemplates {
             LOG.log(System.Logger.Level.INFO, "Wrote the built-in templates of {0}", String.join(", ", written));
         }
         return written;
+    }
+
+    /**
+     * Whether a folder holds exactly the built-in template {@code name}: the same files with the
+     * same content, nothing more, no links. The home migration drops such a copy of a server that
+     * is not wanted, because the node writes it again once the server is switched on.
+     *
+     * @param name   the template
+     * @param folder the folder to compare, for example an old {@code <home>/<Server>/template}
+     * @return whether it is an unchanged copy; false for a name that is no built-in template
+     * @throws IOException if the index or the folder cannot be read
+     */
+    public boolean isUnchangedCopy(String name, Path folder) throws IOException {
+        List<Entry> entries = index().get(name);
+        if (entries == null || !Files.isDirectory(folder, LinkOption.NOFOLLOW_LINKS)) {
+            return false;
+        }
+        Map<String, String> expected = new TreeMap<>();
+        for (Entry entry : entries) {
+            expected.put(entry.relative(), entry.sha256());
+        }
+        Map<String, String> actual = new TreeMap<>();
+        boolean[] plain = {true};
+        Files.walkFileTree(folder, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attributes) {
+                if (attributes.isSymbolicLink() || attributes.isOther()) {
+                    plain[0] = false;
+                    return FileVisitResult.TERMINATE;
+                }
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
+                if (!attributes.isRegularFile()) {
+                    plain[0] = false;
+                    return FileVisitResult.TERMINATE;
+                }
+                String relative = folder.relativize(file).toString().replace('\\', '/');
+                actual.put(relative, sha256(file));
+                return FileVisitResult.CONTINUE;
+            }
+        });
+        return plain[0] && expected.equals(actual);
+    }
+
+    /** {@code local/} and {@code local/templates/} must be real folders of the home, never links. */
+    private static void refuseLinks(CloudHome layout, Path parent) throws IOException {
+        for (Path dir = parent.getParent(); dir != null && !dir.equals(layout.root()); dir = dir.getParent()) {
+            if (Files.isSymbolicLink(dir)) {
+                throw new IOException(layout.root().relativize(dir).toString().replace('\\', '/')
+                        + " is a link, not a folder of the home");
+            }
+        }
     }
 
     private void write(Entry entry, Path staging) throws IOException {
@@ -214,6 +297,18 @@ public final class BuiltInTemplates {
                 return FileVisitResult.CONTINUE;
             }
         });
+    }
+
+    private static String sha256(Path file) throws IOException {
+        MessageDigest digest = sha256();
+        try (InputStream in = Files.newInputStream(file, LinkOption.NOFOLLOW_LINKS)) {
+            byte[] buffer = new byte[16 * 1024];
+            int read;
+            while ((read = in.read(buffer)) >= 0) {
+                digest.update(buffer, 0, read);
+            }
+        }
+        return HexFormat.of().formatHex(digest.digest());
     }
 
     private static MessageDigest sha256() {

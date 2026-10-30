@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import net.vectora.cloud.config.CloudHome;
 import net.vectora.cloud.config.model.CloudConfig;
 import net.vectora.cloud.config.model.ConfigSnapshot;
 import net.vectora.cloud.config.model.GroupConfig;
@@ -23,7 +24,7 @@ import net.vectora.cloud.config.model.WantedServers;
 public final class ServicePlanner {
 
     /** Folder below the home where dynamic services work. */
-    public static final String DYNAMIC_DIR = "temp/services";
+    public static final String DYNAMIC_DIR = CloudHome.DYNAMIC_SERVICES_DIR;
 
     /** Template folder of the legacy proxy (Velocity with {@code bungeeguard}, in front of the 1.8.8 groups). */
     public static final String LEGACY_PROXY_TEMPLATE = GroupRules.LEGACY_PROXY_TEMPLATE;
@@ -153,28 +154,65 @@ public final class ServicePlanner {
     }
 
     /**
-     * The folder a service works in.
-     * <ul>
-     *   <li>static, index 1: {@code <home>/<template>/runtime}, the folder that holds today's worlds;</li>
-     *   <li>static, index n &gt; 1: {@code <home>/<template>/runtime-<n>};</li>
-     *   <li>dynamic: {@code <home>/temp/services/<id>}, deleted after the stop.</li>
-     * </ul>
+     * The folder a static service works in: {@code <home>/local/services/<id>}, kept across stops
+     * (worlds, configs).
      *
-     * @param home     the cloud home
-     * @param group    the group
-     * @param mode     the mode of this service
-     * @param id       service id
-     * @param index    index within the group
+     * @param home the cloud home
+     * @param id   service id, for example {@code lobby-1}
      * @return the absolute folder
      */
-    public static Path workDirectory(Path home, GroupConfig group, TaskMode mode, String id, int index) {
-        Path root = home.toAbsolutePath().normalize();
-        if (mode == TaskMode.DYNAMIC) {
-            return root.resolve(DYNAMIC_DIR).resolve(id);
-        }
-        Path template = root.resolve(group.template());
-        return index == 1 ? template.resolve("runtime") : template.resolve("runtime-" + index);
+    public static Path staticDirectory(Path home, String id) {
+        return home.toAbsolutePath().normalize().resolve(STATIC_DIR).resolve(id);
     }
+
+    /**
+     * The folder one run of a dynamic service works in: {@code <home>/temp/services/<id>_<run>},
+     * deleted after the stop. Each start gets a new {@code run}, so a folder that is still being
+     * deleted never meets the next start of the same id.
+     *
+     * @param home the cloud home
+     * @param id   service id, for example {@code minigame-3}
+     * @param run  the run, see {@link #newRun()}
+     * @return the absolute folder
+     */
+    public static Path dynamicDirectory(Path home, String id, String run) {
+        if (run == null || !RUN.matcher(run).matches()) {
+            throw new IllegalArgumentException("a run is 8 lower-case hex digits");
+        }
+        return home.toAbsolutePath().normalize().resolve(DYNAMIC_DIR).resolve(id + RUN_SEPARATOR + run);
+    }
+
+    /**
+     * Whether a folder below {@code temp/services/} belongs to a run of the service {@code id}.
+     *
+     * @param folder the folder
+     * @param id     service id
+     * @return whether its name is {@code <id>_<run>}
+     */
+    public static boolean isRunOf(Path folder, String id) {
+        Path name = folder.getFileName();
+        if (name == null) {
+            return false;
+        }
+        String text = name.toString();
+        return text.startsWith(id + RUN_SEPARATOR) && RUN.matcher(text.substring(id.length() + 1)).matches();
+    }
+
+    /**
+     * A new run name for a dynamic service: 8 random lower-case hex digits.
+     *
+     * @return the run
+     */
+    public static String newRun() {
+        return String.format(java.util.Locale.ROOT, "%08x", RANDOM.nextInt());
+    }
+
+    /** Folder below the home where static services work. */
+    public static final String STATIC_DIR = CloudHome.STATIC_SERVICES_DIR;
+
+    private static final String RUN_SEPARATOR = "_";
+    private static final java.util.regex.Pattern RUN = java.util.regex.Pattern.compile("[0-9a-f]{8}");
+    private static final java.security.SecureRandom RANDOM = new java.security.SecureRandom();
 
     /**
      * Wait before restart number {@code attempt} after a crash: {@code backoff}, doubled for every

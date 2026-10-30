@@ -12,7 +12,7 @@ public final class LibraryException extends Exception {
     public enum Kind {
         /** {@code libs.index} has a line that is not {@code <sha256>  <file name>}. */
         INDEX_INVALID,
-        /** A file name in the index could leave {@code cache/libs} (zip slip) or is not a jar name. */
+        /** A file name in the index could leave {@code storage/libs} (zip slip) or is not a jar name. */
         UNSAFE_NAME,
         /** The index lists a jar that is not in {@code VectoraCloud.jar}. */
         MISSING,

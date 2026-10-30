@@ -22,7 +22,8 @@ class MonitorRuntimeTest {
     }
 
     private static void webhookOn(Path home) throws Exception {
-        Files.writeString(home.resolve("monitor.yml"),
+        Files.createDirectories(home.resolve("config"));
+        Files.writeString(home.resolve("config/monitor.yml"),
                 "schema-version: 1\nnotifications:\n  webhook:\n    enabled: true\n");
     }
 
@@ -90,7 +91,8 @@ class MonitorRuntimeTest {
 
     @Test
     void invalidMonitorFileFailsTheStart(@TempDir Path home) throws Exception {
-        Files.writeString(home.resolve("monitor.yml"), "schema-version: 1\nrules:\n  - name: x\n    when: tps <\n");
+        Files.createDirectories(home.resolve("config"));
+        Files.writeString(home.resolve("config/monitor.yml"), "schema-version: 1\nrules:\n  - name: x\n    when: tps <\n");
         assertThrows(ConfigException.class, () -> open(home));
     }
 
@@ -100,7 +102,8 @@ class MonitorRuntimeTest {
         try (java.net.ServerSocket free = new java.net.ServerSocket(0, 1, java.net.InetAddress.getLoopbackAddress())) {
             port = free.getLocalPort();
         }
-        Files.writeString(home.resolve("monitor.yml"),
+        Files.createDirectories(home.resolve("config"));
+        Files.writeString(home.resolve("config/monitor.yml"),
                 "schema-version: 1\nprometheus:\n  enabled: true\n  port: " + port + "\n");
         try (MonitorRuntime runtime = open(home)) {
             runtime.start();

@@ -42,7 +42,7 @@ class ConfigWatcherTest {
             service.startWatching();
             ConfigSnapshot before = service.snapshot();
 
-            Path cloud = root.resolve("cloud.yml");
+            Path cloud = root.resolve("config/cloud.yml");
             String text = Files.readString(cloud);
             new AtomicFileWriter().write(cloud, text.replace("language: en", "langauge: de").getBytes(StandardCharsets.UTF_8));
 
@@ -65,7 +65,7 @@ class ConfigWatcherTest {
             service.addListener(recorder);
             service.startWatching();
 
-            Files.write(root.resolve("groups/lobby.yml"), ConfigYaml.write(Samples.lobbyGroup()));
+            Files.write(root.resolve("config/groups/lobby.yml"), ConfigYaml.write(Samples.lobbyGroup()));
             ConfigChanged change = recorder.awaitChange(c -> c.current().groups().containsKey("lobby"));
             assertTrue(change.files().contains("groups/lobby.yml"));
         }
@@ -92,10 +92,10 @@ class ConfigWatcherTest {
             service.startWatching();
 
             // Deleting the folder invalidates its watch key (key.reset() returns false).
-            Files.delete(root.resolve("groups"));
-            awaitDirectory(root.resolve("groups"));
+            Files.delete(root.resolve("config/groups"));
+            awaitDirectory(root.resolve("config/groups"));
 
-            Files.write(root.resolve("groups/lobby.yml"), ConfigYaml.write(Samples.lobbyGroup()));
+            Files.write(root.resolve("config/groups/lobby.yml"), ConfigYaml.write(Samples.lobbyGroup()));
             ConfigChanged change = recorder.awaitChange(c -> c.current().groups().containsKey("lobby"));
             assertTrue(change.files().contains("groups/lobby.yml"), "changes in the new folder are seen again");
         }
@@ -109,7 +109,7 @@ class ConfigWatcherTest {
             service.addListener(recorder);
             service.startWatching();
 
-            replaceFolderWithFile(root.resolve("groups"));
+            replaceFolderWithFile(root.resolve("config/groups"));
 
             ConfigException error = recorder.awaitFailure(e -> e.errors().stream()
                     .anyMatch(err -> err.code() == ErrorCode.FILE_ACCESS && err.file().equals("groups/")));

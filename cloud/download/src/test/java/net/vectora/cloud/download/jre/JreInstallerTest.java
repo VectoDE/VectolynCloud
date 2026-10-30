@@ -36,12 +36,12 @@ class JreInstallerTest {
     }
 
     private Path archive(String name, byte[] content) throws Exception {
-        Path dir = Files.createDirectories(home.resolve("cache/artifacts"));
+        Path dir = Files.createDirectories(home.resolve("storage/artifacts"));
         return Files.write(dir.resolve(name), content);
     }
 
     private List<String> jreEntries() throws Exception {
-        try (Stream<Path> entries = Files.list(home.resolve("jre"))) {
+        try (Stream<Path> entries = Files.list(home.resolve("storage/jre"))) {
             return entries.map(p -> p.getFileName().toString()).sorted().toList();
         }
     }
@@ -65,7 +65,7 @@ class JreInstallerTest {
         JreInstaller installer = installer(LINUX_X64);
         JavaRuntime runtime = installer.install("temurin-21-linux-x64", archive("a", tar), LINUX_NAME, sha, 21);
 
-        Path target = home.resolve("jre/temurin-21-linux-x64");
+        Path target = home.resolve("storage/jre/temurin-21-linux-x64");
         assertEquals(target.resolve("jdk-21.0.13+9-jre").toRealPath(), runtime.home().toRealPath());
         assertEquals(runtime.home().resolve("bin/java"), runtime.executable());
         assertEquals(21, runtime.feature());
@@ -160,7 +160,7 @@ class JreInstallerTest {
                 JreArchives.sha256(second), 21);
         assertEquals("21.0.13", runtime.version());
         assertEquals(List.of("temurin-21-linux-x64"), jreEntries(), "the old install is gone");
-        try (Stream<Path> files = Files.list(home.resolve("jre/temurin-21-linux-x64"))) {
+        try (Stream<Path> files = Files.list(home.resolve("storage/jre/temurin-21-linux-x64"))) {
             assertEquals(2, files.count(), "only the new Java home and the marker");
         }
     }
@@ -170,7 +170,7 @@ class JreInstallerTest {
         byte[] tar = JreArchives.linuxTarGz("21.0.13", 0755);
         JreInstaller installer = installer(LINUX_X64);
         installer.install("temurin-21-linux-x64", archive("a", tar), LINUX_NAME, JreArchives.sha256(tar), 21);
-        Path marker = home.resolve("jre/temurin-21-linux-x64").resolve(JreInstaller.MARKER);
+        Path marker = home.resolve("storage/jre/temurin-21-linux-x64").resolve(JreInstaller.MARKER);
         String original = Files.readString(marker, StandardCharsets.ISO_8859_1);
         for (String value : new String[] {"../../..", "/usr/lib/jvm/x", "jdk/../../x", "", "C\\:/x"}) {
             Files.writeString(marker, original.replaceAll("(?m)^home=.*$", "home=" + value.replace("\\", "\\\\")),
@@ -184,10 +184,10 @@ class JreInstallerTest {
     @Test
     void removesLeftoversOfAnInterruptedInstall() throws Exception {
         JreInstaller installer = installer(LINUX_X64);
-        Files.createDirectories(home.resolve("jre/.staging-temurin-21-linux-x64-123/jdk/bin"));
-        Files.writeString(home.resolve("jre/.staging-temurin-21-linux-x64-123/jdk/bin/java"), "x");
-        Files.createDirectories(home.resolve("jre/.old-temurin-21-linux-x64-abc"));
-        Files.createDirectories(home.resolve("jre/temurin-25-linux-x64"));
+        Files.createDirectories(home.resolve("storage/jre/.staging-temurin-21-linux-x64-123/jdk/bin"));
+        Files.writeString(home.resolve("storage/jre/.staging-temurin-21-linux-x64-123/jdk/bin/java"), "x");
+        Files.createDirectories(home.resolve("storage/jre/.old-temurin-21-linux-x64-abc"));
+        Files.createDirectories(home.resolve("storage/jre/temurin-25-linux-x64"));
         assertEquals(2, installer.removeLeftovers());
         assertEquals(List.of("temurin-25-linux-x64"), jreEntries());
     }

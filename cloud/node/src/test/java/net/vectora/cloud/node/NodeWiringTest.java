@@ -70,9 +70,9 @@ class NodeWiringTest {
     @Test
     void theHomeLockKeepsASecondCloudOutAndLeftoversAreRemoved() throws Exception {
         NodeFixture fixture = NodeFixture.create(dir, false, List.of());
-        Path part = fixture.home.resolve("cache/artifacts/download-123.part");
-        Path staging = fixture.home.resolve("jre/.staging-123/bin/java");
-        Path kept = fixture.home.resolve("cache/artifacts/paper.jar");
+        Path part = fixture.home.resolve("storage/artifacts/download-123.part");
+        Path staging = fixture.home.resolve("storage/jre/.staging-123/bin/java");
+        Path kept = fixture.home.resolve("storage/artifacts/paper.jar");
         for (Path file : List.of(part, staging, kept)) {
             Files.createDirectories(file.getParent());
             Files.writeString(file, "x");
@@ -81,7 +81,7 @@ class NodeWiringTest {
         CloudNode node = CloudNode.open(fixture.settings(), fixture.options());
         try {
             assertFalse(Files.exists(part), "unfinished download removed");
-            assertFalse(Files.exists(fixture.home.resolve("jre/.staging-123")), "unfinished Java install removed");
+            assertFalse(Files.exists(fixture.home.resolve("storage/jre/.staging-123")), "unfinished Java install removed");
             assertTrue(Files.exists(kept), "finished downloads stay");
             HomeLock.HomeLockedException second = assertThrows(HomeLock.HomeLockedException.class,
                     () -> CloudNode.open(fixture.settings(), fixture.options()));
@@ -293,7 +293,7 @@ class NodeWiringTest {
                         "-Dfake.cloud=true")),
                 new PutTask("minigame", new TaskConfig(TaskConfig.SCHEMA_VERSION, "minigame",
                         new ScalingConfig(0, 1, 2, 2, 50, 25, TimeSpan.parse("0s"), TimeSpan.parse("0s")), List.of()))));
-        fixture.file("monitor.yml", "schema-version: 1\nsample-interval: 1s\n");
+        fixture.file("config/monitor.yml", "schema-version: 1\nsample-interval: 1s\n");
         ServiceId lobby = new ServiceId("lobby-1");
         ServiceId first = new ServiceId("minigame-1");
         ServiceId second = new ServiceId("minigame-2");
@@ -335,13 +335,13 @@ class NodeWiringTest {
                         "-Dfake.cloud=true")),
                 new PutTask("minigame", new TaskConfig(TaskConfig.SCHEMA_VERSION, "minigame",
                         new ScalingConfig(0, 2, 2, 10, 90, 50, TimeSpan.parse("0s"), TimeSpan.parse("0s")), List.of()))));
-        fixture.file("Proxy/template/velocity.toml", """
+        fixture.file("local/templates/Proxy/default/velocity.toml", """
                 bind = "{{VECTORA_PROXY_BIND}}:{{VECTORA_PROXY_PORT}}"
                 [servers]
                 {{VECTORA_PROXY_SERVERS}}
                 try = [ {{VECTORA_PROXY_TRY}} ]
                 """);
-        fixture.file("monitor.yml", "schema-version: 1\nsample-interval: 1s\n");
+        fixture.file("config/monitor.yml", "schema-version: 1\nsample-interval: 1s\n");
         ServiceId proxy = new ServiceId("proxy-1");
         ServiceId first = new ServiceId("minigame-1");
         ServiceId second = new ServiceId("minigame-2");
@@ -505,9 +505,10 @@ class NodeWiringTest {
                 new PutGroup("legacy", NodeFixture.group("Legacy-Server", ServerSoftware.PANDASPIGOT, "-Dfake.cloud=true")
                         .withMinecraftVersion("1.8.8")),
                 NodeFixture.task("legacy", "legacy", TaskMode.STATIC, 1, 1)));
-        fixture.file("Legacy-Proxy/template/velocity.toml", "bind = \"0.0.0.0:{{VECTORA_LEGACY_PROXY_PORT}}\"\n"
+        fixture.file("local/templates/Legacy-Proxy/default/velocity.toml",
+                "bind = \"0.0.0.0:{{VECTORA_LEGACY_PROXY_PORT}}\"\n"
                 + "[servers]\n{{VECTORA_PROXY_SERVERS}}\ntry = [ {{VECTORA_PROXY_TRY}} ]\n");
-        fixture.file("Legacy-Server/template/server.properties", "server-port={{VECTORA_SERVER_PORT}}\n");
+        fixture.file("local/templates/Legacy-Server/default/server.properties", "server-port={{VECTORA_SERVER_PORT}}\n");
         ServiceId legacy = new ServiceId("legacy-proxy-1");
         ServiceId panda = new ServiceId("legacy-1");
 

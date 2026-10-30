@@ -136,7 +136,7 @@ class SetupApplierTest {
     @Test
     void aConfigurationThatCannotBeWrittenWritesNoSecret() throws Exception {
         // The first setup creates the lobby group; a folder where its file belongs makes that write fail.
-        Path groupFile = config.home().root().resolve(CloudHome.GROUPS_DIR).resolve("lobby" + CloudHome.EXTENSION);
+        Path groupFile = config.home().groupsDir().resolve("lobby" + CloudHome.EXTENSION);
         Files.createDirectories(groupFile);
 
         assertThrows(IOException.class, () -> SetupApplier.apply(config, secrets, external("first-Pw-42"), env));

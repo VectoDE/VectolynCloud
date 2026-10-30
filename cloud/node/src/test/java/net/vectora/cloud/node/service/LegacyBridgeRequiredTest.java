@@ -28,7 +28,7 @@ class LegacyBridgeRequiredTest {
     Path dir;
 
     private static void legacyGroup(TestNetwork net) throws Exception {
-        net.file("Legacy-Server/template/server.properties", "server-port={{VECTORA_SERVER_PORT}}\n");
+        net.file("local/templates/Legacy-Server/default/server.properties", "server-port={{VECTORA_SERVER_PORT}}\n");
         GroupConfig group = new GroupConfig(GroupConfig.SCHEMA_VERSION, "Legacy-Server", ServerSoftware.PANDASPIGOT,
                 "1.8.8", JavaSelection.AUTO, new HeapConfig(MemorySize.parse("16M"), MemorySize.parse("64M")), List.of(),
                 CombatSystem.LEGACY, TestNetwork.process("normal", "20s", TestNetwork.noRestart()));

@@ -43,7 +43,8 @@ class SymlinkRuleTest {
     void linkedCloudFileIsAnError() throws Exception {
         Path target = outside.resolve("cloud.yml");
         Files.write(target, ConfigYaml.write(Samples.snapshot().cloud()));
-        link(root.resolve("cloud.yml"), target);
+        Files.createDirectories(root.resolve("config"));
+        link(root.resolve("config/cloud.yml"), target);
 
         ConfigException e = assertThrows(ConfigException.class, () -> new ConfigStore(CloudHome.of(root)).load());
         assertEquals(List.of(new Expected("cloud.yml")), expected(e));
@@ -51,7 +52,8 @@ class SymlinkRuleTest {
 
     @Test
     void danglingLinkIsAnErrorAndNotReplacedWithDefaults() throws Exception {
-        Path cloud = root.resolve("cloud.yml");
+        Files.createDirectories(root.resolve("config"));
+        Path cloud = root.resolve("config/cloud.yml");
         link(cloud, outside.resolve("missing.yml"));
 
         assertThrows(ConfigException.class, () -> ConfigService.open(CloudHome.of(root)));
@@ -61,10 +63,10 @@ class SymlinkRuleTest {
 
     @Test
     void linkedGroupFileIsAnErrorNotSkipped() throws Exception {
-        Files.createDirectories(root.resolve("groups"));
+        Files.createDirectories(root.resolve("config/groups"));
         Path target = outside.resolve("lobby.yml");
         Files.write(target, ConfigYaml.write(Samples.lobbyGroup()));
-        link(root.resolve("groups/lobby.yml"), target);
+        link(root.resolve("config/groups/lobby.yml"), target);
 
         ConfigException e = assertThrows(ConfigException.class, () -> new ConfigStore(CloudHome.of(root)).load());
         assertEquals(List.of(new Expected("groups/lobby.yml")), expected(e));
@@ -73,7 +75,8 @@ class SymlinkRuleTest {
     @Test
     void linkedTasksFolderIsAnError() throws Exception {
         Files.createDirectories(outside.resolve("tasks"));
-        link(root.resolve("tasks"), outside.resolve("tasks"));
+        Files.createDirectories(root.resolve("config"));
+        link(root.resolve("config/tasks"), outside.resolve("tasks"));
 
         ConfigException e = assertThrows(ConfigException.class, () -> new ConfigStore(CloudHome.of(root)).load());
         assertEquals(List.of(new Expected("tasks/")), expected(e));
@@ -82,7 +85,8 @@ class SymlinkRuleTest {
     @Test
     void regularFileWhereAFolderBelongsIsAnError() throws Exception {
         // Not a link, but the same rule: groups/ must be a real folder. Runs on every OS.
-        Files.writeString(root.resolve("groups"), "oops");
+        Files.createDirectories(root.resolve("config"));
+        Files.writeString(root.resolve("config/groups"), "oops");
         ConfigException e = assertThrows(ConfigException.class, () -> new ConfigStore(CloudHome.of(root)).load());
         assertEquals(List.of(new Expected("groups/")), expected(e));
     }
@@ -94,7 +98,7 @@ class SymlinkRuleTest {
         Path home = root.resolve("home-link");
         link(home, real);
         try (ConfigService service = ConfigService.open(CloudHome.of(home))) {
-            assertTrue(Files.isRegularFile(real.resolve("cloud.yml")));
+            assertTrue(Files.isRegularFile(real.resolve("config/cloud.yml")));
             assertEquals(Samples.snapshot().cloud().schemaVersion(), service.snapshot().cloud().schemaVersion());
         }
     }

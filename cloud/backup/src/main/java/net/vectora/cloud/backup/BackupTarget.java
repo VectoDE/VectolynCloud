@@ -12,7 +12,7 @@ import java.util.regex.Pattern;
  * @param serviceId the service id ({@code lobby-1})
  * @param group the group name
  * @param minecraftVersion the group's Minecraft version, for the manifest; empty if the group has none
- * @param directory the absolute service folder ({@code <home>/Lobby-Server/runtime})
+ * @param directory the absolute service folder ({@code <home>/local/services/lobby-1})
  * @param worldSaving whether the server saves worlds and understands {@code save-off},
  *     {@code save-all flush} and {@code save-on} (Paper, Fabric, PandaSpigot); false for proxies
  */

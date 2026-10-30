@@ -43,10 +43,10 @@ class ConfigServiceTest {
         try (ConfigService service = ConfigService.open(CloudHome.of(root))) {
             assertEquals(ConfigSnapshot.defaults(), service.snapshot());
         }
-        assertTrue(Files.isRegularFile(root.resolve("cloud.yml")));
-        assertTrue(Files.isRegularFile(root.resolve("nodes.yml")));
-        assertTrue(Files.isDirectory(root.resolve("groups")));
-        assertTrue(Files.isDirectory(root.resolve("tasks")));
+        assertTrue(Files.isRegularFile(root.resolve("config/cloud.yml")));
+        assertTrue(Files.isRegularFile(root.resolve("config/nodes.yml")));
+        assertTrue(Files.isDirectory(root.resolve("config/groups")));
+        assertTrue(Files.isDirectory(root.resolve("config/tasks")));
     }
 
     @Test
@@ -63,7 +63,7 @@ class ConfigServiceTest {
             assertEquals(3, change.operations().size());
             assertEquals(List.of(change), events);
             assertEquals(Language.DE, service.snapshot().cloud().language());
-            assertTrue(Files.readString(root.resolve("cloud.yml")).contains("language: de"));
+            assertTrue(Files.readString(root.resolve("config/cloud.yml")).contains("language: de"));
         }
         try (ConfigService reopened = ConfigService.open(CloudHome.of(root))) {
             assertEquals(Language.DE, reopened.snapshot().cloud().language());
@@ -76,7 +76,7 @@ class ConfigServiceTest {
         try (ConfigService service = ConfigService.open(CloudHome.of(root))) {
             List<ConfigChanged> events = new CopyOnWriteArrayList<>();
             service.addListener(events::add);
-            String before = Files.readString(root.resolve("cloud.yml"));
+            String before = Files.readString(root.resolve("config/cloud.yml"));
             ConfigSnapshot snapshot = service.snapshot();
 
             ConfigException e = assertThrows(ConfigException.class, () -> service.apply(new CompleteSetup()));
@@ -84,8 +84,8 @@ class ConfigServiceTest {
             ConfigException task = assertThrows(ConfigException.class, () -> service.apply(new PutTask("lobby", Samples.lobbyTask())));
             assertEquals(ErrorCode.UNKNOWN_GROUP, task.errors().getFirst().code());
 
-            assertEquals(before, Files.readString(root.resolve("cloud.yml")));
-            assertFalse(Files.exists(root.resolve("tasks/lobby.yml")));
+            assertEquals(before, Files.readString(root.resolve("config/cloud.yml")));
+            assertFalse(Files.exists(root.resolve("config/tasks/lobby.yml")));
             assertEquals(snapshot, service.snapshot());
             assertTrue(events.isEmpty());
         }
@@ -202,7 +202,7 @@ class ConfigServiceTest {
     void reloadPicksUpValidEditsAndRejectsInvalidOnes() throws Exception {
         try (ConfigService service = ConfigService.open(CloudHome.of(root))) {
             assertEquals(Optional.empty(), service.reload());
-            Path cloud = root.resolve("cloud.yml");
+            Path cloud = root.resolve("config/cloud.yml");
             Files.writeString(cloud, Files.readString(cloud).replace("language: en", "language: de"));
             ConfigChanged change = service.reload().orElseThrow();
             assertEquals(ConfigChanged.Origin.FILE, change.origin());
@@ -223,10 +223,11 @@ class ConfigServiceTest {
 
     @Test
     void openRefusesAnInvalidHome() throws IOException {
-        Files.writeString(root.resolve("nodes.yml"), "schema-version: 1\nnodes: []\n");
+        Files.createDirectories(root.resolve("config"));
+        Files.writeString(root.resolve("config/nodes.yml"), "schema-version: 1\nnodes: []\n");
         ConfigException e = assertThrows(ConfigException.class, () -> ConfigService.open(CloudHome.of(root)));
         assertTrue(e.errors().stream().anyMatch(err -> err.code() == ErrorCode.EMPTY));
-        assertFalse(Files.exists(root.resolve("cloud.yml")), "nothing is written for an invalid home");
+        assertFalse(Files.exists(root.resolve("config/cloud.yml")), "nothing is written for an invalid home");
     }
 
     @Test

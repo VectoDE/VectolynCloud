@@ -76,7 +76,7 @@ final class NodeFixture {
         Files.createDirectories(home);
         NodeFixture fixture = new NodeFixture(home, FakeServerJar.writeWithCloudClient(dir.resolve("fake-server.jar")));
         for (ServerKind kind : List.of(ServerKind.LOBBY, ServerKind.SURVIVAL, ServerKind.MINIGAME)) {
-            fixture.file(kind.templateFolder() + "/template/server.properties", """
+            fixture.file("local/templates/" + kind.templateFolder() + "/default/server.properties", """
                     server-port={{VECTORA_SERVER_PORT}}
                     db-pool={{VECTORA_DB_POOL_SIZE}}
                     """);

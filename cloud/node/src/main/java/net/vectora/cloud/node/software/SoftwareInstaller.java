@@ -111,6 +111,22 @@ public final class SoftwareInstaller implements ServerSoftwareProvider, ManagedJ
     }
 
     @Override
+    public Optional<String> prepare(String groupName, GroupConfig group) throws IOException {
+        CatalogEntry server = catalog.get(serverEntry(group.software()))
+                .orElseThrow(() -> new IOException("the download catalog has no entry for " + group.software()));
+        ArtifactSource files = source.get();
+        ArtifactSource.Fetched fetched = fetch(files, server, group);
+        minimums.put(groupName, fetched.javaMinimum());
+        List<CatalogEntry> addons = addonsOf(groupName, group);
+        for (CatalogEntry entry : addons) {
+            fetch(files, entry, group);
+        }
+        String version = group.minecraftVersion() == null ? "" : " " + group.minecraftVersion();
+        String kind = group.software() == ServerSoftware.FABRIC ? "mod" : "plugin";
+        return Optional.of(server.id() + version + " + " + addons.size() + " " + kind + (addons.size() == 1 ? "" : "s"));
+    }
+
+    @Override
     public OptionalInt[] of(String groupName, GroupConfig group) {
         return new OptionalInt[] {minimums.getOrDefault(groupName, OptionalInt.empty())};
     }

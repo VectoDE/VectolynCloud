@@ -131,8 +131,8 @@ class JvmFlagPolicyTest {
 
     @Test
     void serviceKeepsTheOperatorsFlagsAndReportsThemAsWarnings() throws Exception {
-        Files.createDirectories(root.resolve("groups"));
-        Files.writeString(root.resolve("groups/lobby.yml"), """
+        Files.createDirectories(root.resolve("config/groups"));
+        Files.writeString(root.resolve("config/groups/lobby.yml"), """
                 schema-version: 1
                 template: Lobby-Server
                 software: paper
@@ -149,7 +149,7 @@ class JvmFlagPolicyTest {
             assertEquals(List.of(ErrorCode.JVM_FLAG_FORBIDDEN), service.warnings().stream().map(ConfigError::code).toList());
             // Changing something else in the group keeps the old flag.
             service.apply(new SetGroupHeap("lobby", MemorySize.parse("512M"), MemorySize.parse("1G")));
-            assertTrue(Files.readString(root.resolve("groups/lobby.yml")).contains("-javaagent:spark.jar"));
+            assertTrue(Files.readString(root.resolve("config/groups/lobby.yml")).contains("-javaagent:spark.jar"));
             // The console is the operator's own: ConfigService itself does not refuse; the REST API does
             // (ApiServerTest), and the flag shows up as a warning.
             service.apply(new PutGroup("lobby", withFlags(Samples.lobbyGroup(), "-javaagent:spark.jar", "-Dmyplugin.x=1")));

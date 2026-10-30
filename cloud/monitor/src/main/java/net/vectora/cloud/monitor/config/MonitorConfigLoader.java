@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Pattern;
+import net.vectora.cloud.config.CloudHome;
 import net.vectora.cloud.config.error.ConfigError;
 import net.vectora.cloud.config.error.ConfigException;
 import net.vectora.cloud.config.error.ErrorCode;
@@ -34,8 +35,8 @@ import net.vectora.cloud.monitor.alert.RuleSyntaxException;
  */
 public final class MonitorConfigLoader {
 
-    /** File name in the cloud home. */
-    public static final String FILE = "monitor.yml";
+    /** File name, relative to {@code config/} (as in messages): {@code <home>/config/monitor.yml}. */
+    public static final String FILE = CloudHome.MONITOR_FILE;
 
     /** Most rules in one file. */
     public static final int MAX_RULES = 100;
@@ -67,14 +68,14 @@ public final class MonitorConfigLoader {
     }
 
     /**
-     * Reads {@code <home>/monitor.yml}; a missing file gives the defaults.
+     * Reads {@code <home>/config/monitor.yml}; a missing file gives the defaults.
      *
      * @param home cloud home
      * @return the checked settings
      * @throws ConfigException if the file is unreadable, not a regular file or invalid
      */
     public static Settings load(Path home) throws ConfigException {
-        Path file = home.resolve(FILE);
+        Path file = CloudHome.of(home).monitorFile();
         byte[] content;
         try {
             RegularPaths.requireFileOrMissing(file);

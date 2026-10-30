@@ -178,12 +178,12 @@ class ConsoleTest {
         LogRecord warning = new LogRecord(Level.WARNING, "Disk almost full");
         warning.setThrown(new IllegalStateException("only 1 GB left"));
         handler.publish(warning);
-        assertTrue(terminal.printed().get(0).endsWith("INFO Service lobby-1 started with ***"), terminal.printed().get(0));
-        assertTrue(terminal.printed().get(1).contains("WARNING Disk almost full (IllegalStateException: only 1 GB left)"));
+        assertTrue(terminal.printed().get(0).endsWith("INFO  Service lobby-1 started with ***"), terminal.printed().get(0));
+        assertTrue(terminal.printed().get(1).contains("WARN  Disk almost full (IllegalStateException: only 1 GB left)"));
         assertTrue(terminal.printed().get(1).startsWith("\u001b[33m"), "warnings are yellow on an ANSI terminal");
 
         handler.publish(new LogRecord(Level.INFO, "file \u001b[2Jname\rforged\u009b line\r\nnext\tcolumn"));
-        assertTrue(terminal.printed().get(2).endsWith("INFO file ?[2Jname?forged? line\nnext\tcolumn"), terminal.printed().get(2));
+        assertTrue(terminal.printed().get(2).endsWith("INFO  file ?[2Jname?forged? line\nnext\tcolumn"), terminal.printed().get(2));
     }
 
     @Test

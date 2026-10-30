@@ -23,7 +23,8 @@ class BackupConfigFileTest {
 
     private BackupConfig load(String yaml) throws ConfigException {
         try {
-            Files.writeString(home.resolve("backup.yml"), yaml, StandardCharsets.UTF_8);
+            Files.createDirectories(home.resolve("config"));
+            Files.writeString(home.resolve("config/backup.yml"), yaml, StandardCharsets.UTF_8);
         } catch (java.io.IOException e) {
             throw new IllegalStateException(e);
         }
@@ -134,6 +135,9 @@ class BackupConfigFileTest {
                 errors("schema-version: 1\nschedule: {enabled: true, interval: 1m}\n").getFirst().code());
         assertEquals(ErrorCode.NOT_ALLOWED, errors("schema-version: 1\ndirectory: secrets/backups\n").getFirst().code());
         assertEquals(ErrorCode.NOT_ALLOWED, errors("schema-version: 1\ndirectory: Groups\n").getFirst().code());
+        for (String reserved : new String[] {"config", "local", "temp", "database", "storage", "state", "logs", "tasks", "cache", "jre"}) {
+            assertEquals(ErrorCode.NOT_ALLOWED, errors("schema-version: 1\ndirectory: " + reserved + "\n").getFirst().code(), reserved);
+        }
     }
 
     @Test

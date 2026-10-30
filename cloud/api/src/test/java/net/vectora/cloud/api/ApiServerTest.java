@@ -158,7 +158,7 @@ class ApiServerTest {
             String typo = GROUP.replace("\"combat\"", "\"combatt\"");
             HttpResponse<String> group = api.send("PUT", "/api/v1/groups/lobby", api.admin, typo);
             assertEquals(400, group.statusCode());
-            assertFalse(Files.exists(home.resolve("groups/lobby.yml")));
+            assertFalse(Files.exists(home.resolve("config/groups/lobby.yml")));
 
             HttpResponse<String> type = api.send("PUT", "/api/v1/servers/mod", api.admin, "{\"wanted\":\"false\"}");
             assertEquals(400, type.statusCode());
@@ -188,7 +188,7 @@ class ApiServerTest {
             assertTrue(refused.body().contains("\"code\":\"jvm-flag-forbidden\""), refused.body());
             assertTrue(refused.body().contains("process.jvm-flags[0]"), refused.body());
             assertFalse(refused.body().contains("/tmp/x.jar"), "the flag must not be echoed");
-            assertFalse(Files.exists(home.resolve("groups/lobby.yml")));
+            assertFalse(Files.exists(home.resolve("config/groups/lobby.yml")));
 
             for (String flag : List.of("-XX:OnOutOfMemoryError=kill", "-agentpath:/x.so", "-XX:OnError=sh",
                     "-Dcom.sun.management.jmxremote.port=1")) {
@@ -204,7 +204,7 @@ class ApiServerTest {
                     "\"catalog\":[],\"process\":{\"jvm-flags\":[\"-XX:+UseG1GC\",\"-XX:MaxGCPauseMillis=200\"]}");
             HttpResponse<String> created = api.send("PUT", "/api/v1/groups/lobby", api.admin, good);
             assertEquals(201, created.statusCode(), created.body());
-            assertTrue(Files.readString(home.resolve("groups/lobby.yml")).contains("-XX:MaxGCPauseMillis=200"));
+            assertTrue(Files.readString(home.resolve("config/groups/lobby.yml")).contains("-XX:MaxGCPauseMillis=200"));
 
             // A property only some library reads (Fabric's extra mods, Paper's Maven mirror) is refused too.
             for (String flag : List.of("-Dfabric.addMods=//evil.example/share/x.jar",
@@ -244,7 +244,7 @@ class ApiServerTest {
             assertEquals("8G", node.maxMemory().toString());
             assertEquals("2G", node.memoryReserve().system().toString());
             assertEquals("256M", node.memoryReserve().nodeOverhead().toString(), "missing field: default");
-            assertTrue(Files.readString(home.resolve("nodes.yml")).contains("memory-reserve:"));
+            assertTrue(Files.readString(home.resolve("config/nodes.yml")).contains("memory-reserve:"));
             // The old ETag no longer fits.
             assertEquals(412, api.send(HttpRequest.newBuilder(api.uri("/api/v1/nodes/node-1"))
                     .header("Authorization", "Bearer " + api.admin).header("Content-Type", "application/json")
@@ -362,7 +362,7 @@ class ApiServerTest {
             var stored = api.config.snapshot().tasks().get("lobby").scaling();
             assertEquals(List.of(2, 2, 2, 25), List.of(stored.staticServices(), stored.minServices(), stored.maxServices(),
                     stored.scaleDownBelow()), "static = min = max, scale-down-below = min(50, 50 / 2)");
-            String file = Files.readString(home.resolve("tasks/lobby.yml"));
+            String file = Files.readString(home.resolve("config/tasks/lobby.yml"));
             assertTrue(file.contains("schema-version: 2") && file.contains("static-services: 2") && !file.contains("mode"), file);
             HttpResponse<String> dynamic = api.send("PUT", "/api/v1/tasks/fresh", api.admin,
                     v1.replace("\"static\"", "\"dynamic\""));
@@ -400,7 +400,7 @@ class ApiServerTest {
             assertEquals(422, api.send("DELETE", "/api/v1/groups/lobby?confirm=lobby", api.admin, null).statusCode());
             assertEquals(204, api.send("DELETE", "/api/v1/tasks/lobby?confirm=lobby", api.admin, null).statusCode());
             assertEquals(204, api.send("DELETE", "/api/v1/groups/lobby?confirm=lobby", api.admin, null).statusCode());
-            assertFalse(Files.exists(home.resolve("groups/lobby.yml")));
+            assertFalse(Files.exists(home.resolve("config/groups/lobby.yml")));
             assertEquals(404, api.get("/api/v1/groups/lobby", api.admin).statusCode());
 
             // cloud.yml: same validation as the console (setup-complete needs the EULA).

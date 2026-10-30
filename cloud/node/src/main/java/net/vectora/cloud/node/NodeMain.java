@@ -32,7 +32,30 @@ public final class NodeMain {
      * @throws IllegalStateException if a node already runs in this JVM
      */
     public static void start(Map<String, String> settings) throws IOException, ConfigException, EnvFormatException {
-        start(NodeSettings.parse(settings), options -> { });
+        NodeSettings parsed = NodeSettings.parse(settings);
+        installLogging();
+        for (String line : StartupReport.banner(parsed.launcherVersion(), parsed.home())) {
+            System.out.println(line);
+        }
+        System.out.flush();
+        start(parsed, options -> { });
+    }
+
+    /**
+     * Replaces the default console handler of {@code java.util.logging} (two lines per record,
+     * localized level names such as {@code INFORMATION} or {@code WARNUNG}, UTF-8 bytes on any
+     * console) with one in the cloud's log format on {@code System.out}, until the console takes
+     * over ({@code docs/cloud/node.md#start-output}).
+     */
+    static void installLogging() {
+        java.util.logging.Logger root = java.util.logging.Logger.getLogger("");
+        for (java.util.logging.Handler handler : root.getHandlers()) {
+            if (handler instanceof java.util.logging.ConsoleHandler
+                    || handler instanceof net.vectora.cloud.console.LogHandlers.StreamHandler) {
+                root.removeHandler(handler);
+            }
+        }
+        root.addHandler(net.vectora.cloud.console.LogHandlers.stream(System.out));
     }
 
     /**

@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.util.Optional;
+import net.vectora.cloud.config.model.GroupConfig;
 import net.vectora.cloud.config.model.ServerSoftware;
 
 /**
@@ -26,6 +28,21 @@ public interface ServerSoftwareProvider {
      * @throws IOException if the jar is missing and cannot be provided
      */
     String provide(ServiceSpec spec, Path workDirectory) throws IOException;
+
+    /**
+     * Fetches what the services of a group need (server jar, plugins or mods) ahead of their
+     * start, for the software step of the start ({@code docs/cloud/node.md#start-order}). The
+     * default does nothing; {@link #provide} still has to work without it.
+     *
+     * @param groupName the group
+     * @param group     its configuration
+     * @return a short description of what is in place, for example {@code paper 1.21.10 + 6 plugins},
+     *         or empty if this provider fetches nothing ahead
+     * @throws IOException if something cannot be fetched
+     */
+    default Optional<String> prepare(String groupName, GroupConfig group) throws IOException {
+        return Optional.empty();
+    }
 
     /**
      * Uses the jar that is already in the folder: {@code paper.jar}, {@code velocity.jar},

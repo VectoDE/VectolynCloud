@@ -24,7 +24,6 @@ import net.vectora.cloud.config.model.GroupConfig;
 import net.vectora.cloud.config.model.ServerKind;
 import net.vectora.cloud.config.model.ServerSoftware;
 import net.vectora.cloud.config.model.TaskConfig;
-import net.vectora.cloud.config.model.TaskMode;
 import net.vectora.cloud.config.secret.EnvFormatException;
 import net.vectora.cloud.config.secret.SecretStore;
 import net.vectora.cloud.database.managed.DownloadingMariaDbBinaries;
@@ -57,7 +56,7 @@ public final class NodeBackups implements BackupTargets, ServiceControl, Databas
      * @param services     the service core
      * @param config       the current configuration
      * @param secrets      {@code secrets/vectora.env}
-     * @param databaseHome {@code Database/runtime}, where a managed MariaDB is installed
+     * @param databaseHome {@code <home>/database}, where a managed MariaDB is installed
      */
     public NodeBackups(Path home, ServiceManager services, Supplier<ConfigSnapshot> config, SecretStore secrets,
                        Path databaseHome) {
@@ -86,7 +85,7 @@ public final class NodeBackups implements BackupTargets, ServiceControl, Databas
             }
             for (int index = 1; index <= task.scaling().maxServices(); index++) {
                 ServiceId id = ServiceIds.of(task.group(), index);
-                Path folder = ServicePlanner.workDirectory(home, group, TaskMode.STATIC, id.value(), index);
+                Path folder = ServicePlanner.staticDirectory(home, id.value());
                 // The static services static-services asks for, and any further one that has run before.
                 if (index > task.scaling().staticServices() && !Files.isDirectory(folder)) {
                     continue;

@@ -55,7 +55,7 @@ class NodeSignalTest {
             node.destroyForcibly();
         }
         String output = NodeFixture.read(dir.resolve("node.log"));
-        assertTrue(Files.exists(fixture.home.resolve("Lobby-Server/runtime/stopped-cleanly")),
+        assertTrue(Files.exists(fixture.home.resolve("local/services/lobby-1/stopped-cleanly")),
                 "the server got its stop command: " + output);
         try (HomeLock again = HomeLock.acquire(fixture.home)) {
             assertTrue(again.isHeld(), "the home lock is free again");

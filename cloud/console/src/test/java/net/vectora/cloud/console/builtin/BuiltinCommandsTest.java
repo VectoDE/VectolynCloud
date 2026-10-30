@@ -55,7 +55,7 @@ class BuiltinCommandsTest {
     }
 
     private String cloudFile() throws Exception {
-        return Files.readString(home.resolve("cloud.yml"), StandardCharsets.UTF_8);
+        return Files.readString(home.resolve("config/cloud.yml"), StandardCharsets.UTF_8);
     }
 
     @Test
@@ -131,11 +131,11 @@ class BuiltinCommandsTest {
     void configReloadPicksUpHandEdits() throws Exception {
         assertEquals(Outcome.DONE, run("config reload"));
         assertTrue(terminal.output().contains("No changes on disk."));
-        Files.writeString(home.resolve("cloud.yml"), cloudFile().replace("language: en", "language: de"));
+        Files.writeString(home.resolve("config/cloud.yml"), cloudFile().replace("language: en", "language: de"));
         assertEquals(Outcome.DONE, run("config reload"));
         assertEquals(Language.DE, config.snapshot().cloud().language());
         assertTrue(terminal.output().contains("Neu geladen: cloud.yml"), terminal.output());
-        Files.writeString(home.resolve("cloud.yml"), cloudFile().replace("language: de", "langauge: de"));
+        Files.writeString(home.resolve("config/cloud.yml"), cloudFile().replace("language: de", "langauge: de"));
         assertEquals(Outcome.FAILED, run("config reload"));
         assertTrue(terminal.output().contains("unknown-field") || terminal.output().contains("Unbekanntes Feld"), terminal.output());
         assertEquals(Language.DE, config.snapshot().cloud().language(), "the previous configuration stays");
@@ -144,7 +144,7 @@ class BuiltinCommandsTest {
     @Test
     void groupLifecycle() throws Exception {
         assertEquals(Outcome.DONE, run("group create lobby Lobby-Server paper 26.3"));
-        assertTrue(Files.isRegularFile(home.resolve("groups/lobby.yml")));
+        assertTrue(Files.isRegularFile(home.resolve("config/groups/lobby.yml")));
         assertEquals(ServerSoftware.PAPER, config.snapshot().groups().get("lobby").software());
         assertEquals(Outcome.FAILED, run("group create lobby Lobby-Server paper 26.3"));
         assertTrue(terminal.output().contains("\"lobby\" already exists."));
@@ -170,7 +170,7 @@ class BuiltinCommandsTest {
         assertTrue(config.snapshot().cloud().servers().isWanted(ServerKind.LOBBY));
 
         assertEquals(Outcome.DONE, run("group delete lobby --yes"));
-        assertFalse(Files.exists(home.resolve("groups/lobby.yml")));
+        assertFalse(Files.exists(home.resolve("config/groups/lobby.yml")));
     }
 
     @Test
@@ -201,7 +201,7 @@ class BuiltinCommandsTest {
         assertTrue(terminal.output().contains("drain-timeout     = 30s (default)"), terminal.output());
         assertEquals(Outcome.DONE, run("group set lobby drain-timeout 45s"));
         assertEquals(net.vectora.cloud.config.model.TimeSpan.parse("45s"), config.snapshot().groups().get("lobby").drainTimeout());
-        assertTrue(Files.readString(home.resolve("groups/lobby.yml")).contains("drain-timeout: \"45s\""));
+        assertTrue(Files.readString(home.resolve("config/groups/lobby.yml")).contains("drain-timeout: \"45s\""));
         // Out of range and wrong form are refused, the value stays.
         assertEquals(Outcome.FAILED, run("group set lobby drain-timeout 4s"));
         assertTrue(terminal.output().contains("Must be between 5s and 10m."), terminal.output());
@@ -213,7 +213,7 @@ class BuiltinCommandsTest {
         assertEquals(Outcome.DONE, run("group set lobby drain-timeout 5s"));
         assertEquals(Outcome.DONE, run("group set lobby drain-timeout default"));
         assertEquals(null, config.snapshot().groups().get("lobby").drainTimeout());
-        assertFalse(Files.readString(home.resolve("groups/lobby.yml")).contains("drain-timeout"));
+        assertFalse(Files.readString(home.resolve("config/groups/lobby.yml")).contains("drain-timeout"));
     }
 
     @Test
@@ -231,7 +231,7 @@ class BuiltinCommandsTest {
         assertEquals(Outcome.DONE, run("node set node-1 memory-reserve.database 1G"));
         assertEquals(new MemoryReserve(MemorySize.parse("2G"), null, MemorySize.parse("1G")), node().reserve());
         assertEquals(MemorySize.parse("256M"), node().memoryReserve().nodeOverhead());
-        String file = Files.readString(home.resolve("nodes.yml"));
+        String file = Files.readString(home.resolve("config/nodes.yml"));
         assertTrue(file.contains("memory-reserve:") && file.contains("max-memory: \"8G\""), file);
 
         // Refused like a hand edit: below 512M, above 64G, wrong form, unknown node or field.
@@ -249,7 +249,7 @@ class BuiltinCommandsTest {
         assertEquals(Outcome.DONE, run("node set node-1 memory-reserve.system default"));
         assertEquals(Outcome.DONE, run("node set node-1 memory-reserve.database default"));
         assertEquals(net.vectora.cloud.config.model.NodeConfig.defaults(), node());
-        assertFalse(Files.readString(home.resolve("nodes.yml")).contains("memory"));
+        assertFalse(Files.readString(home.resolve("config/nodes.yml")).contains("memory"));
     }
 
     private net.vectora.cloud.config.model.NodeConfig node() {
@@ -260,8 +260,8 @@ class BuiltinCommandsTest {
     void deleteAsksFirstAndEnterOrNoKeepsTheFile() throws Exception {
         run("group create lobby Lobby-Server paper 26.3");
         run("task create lobby lobby");
-        Path group = home.resolve("groups/lobby.yml");
-        Path task = home.resolve("tasks/lobby.yml");
+        Path group = home.resolve("config/groups/lobby.yml");
+        Path task = home.resolve("config/tasks/lobby.yml");
 
         terminal.type("n");
         assertEquals(Outcome.DONE, run("task delete lobby"));
@@ -313,8 +313,8 @@ class BuiltinCommandsTest {
         assertEquals(Outcome.FAILED, run("task delete nobody --yes"));
         assertTrue(terminal.output().contains("Task \"nobody\" does not exist."), terminal.output());
         assertEquals(reads, terminal.reads().size(), "a deletion that cannot work is not asked about");
-        assertTrue(Files.exists(home.resolve("groups/lobby.yml")));
-        assertTrue(Files.exists(home.resolve("tasks/lobby.yml")));
+        assertTrue(Files.exists(home.resolve("config/groups/lobby.yml")));
+        assertTrue(Files.exists(home.resolve("config/tasks/lobby.yml")));
     }
 
     @Test
@@ -397,7 +397,7 @@ class BuiltinCommandsTest {
         assertFalse(config.snapshot().cloud().servers().isWanted(ServerKind.LOBBY));
 
         assertEquals(Outcome.FAILED, run("group delete lobby --yes"), "a task still uses the group");
-        assertTrue(Files.exists(home.resolve("groups/lobby.yml")));
+        assertTrue(Files.exists(home.resolve("config/groups/lobby.yml")));
         assertEquals(Outcome.DONE, run("task delete lobby --yes"));
         assertEquals(Outcome.DONE, run("group delete lobby --yes"));
         terminal.clearOutput();
@@ -411,7 +411,7 @@ class BuiltinCommandsTest {
         FakeTerminal ansi = new FakeTerminal(true, true);
         Console colored = Console.builder().terminal(ansi).build();
         BuiltinCommands.register(colored, config, () -> { });
-        Files.writeString(home.resolve("groups/x\u001b]0;owned\u0007.yml"), "schema-version: 1\n");
+        Files.writeString(home.resolve("config/groups/x\u001b]0;owned\u0007.yml"), "schema-version: 1\n");
         assertEquals(Outcome.FAILED, colored.dispatcher().execute("config reload"));
         String printed = ansi.output();
         assertTrue(printed.contains("x?]0;owned?.yml"), printed);
