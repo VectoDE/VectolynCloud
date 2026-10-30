@@ -390,7 +390,12 @@ class CloudJarEndToEndTest {
         for (int i = 0; i < count; ) {
             try (ServerSocket socket = new ServerSocket(0)) {
                 int port = socket.getLocalPort();
-                if ((port < 30000 || port > 30999) && taken.add(port)) {
+                // Not next to another port: the OS hands out ports one after the other (on Windows
+                // nearly always), and Geyser's NetherNet takes the port after the Bedrock port, which
+                // the setup check refuses to share with the legacy port.
+                if ((port < 30000 || port > 30999) && !taken.contains(port - 1) && !taken.contains(port)
+                        && !taken.contains(port + 1)) {
+                    taken.add(port);
                     ports[i++] = port;
                 }
             }

@@ -16,11 +16,12 @@ import net.vectora.cloud.config.model.ConfigSnapshot;
 public interface PlaceholderContributor {
 
     /**
-     * Returns extra values for one service.
+     * Returns extra values for the service being prepared. The values depend on the configuration
+     * only (the database contributor derives the pool size from all tasks), so the service itself
+     * is not passed in; add it back once a contributor needs per-service values.
      *
-     * @param service  the service being prepared
-     * @param snapshot the configuration it was planned with
+     * @param snapshot the configuration the service was planned with
      * @return placeholder names without braces mapped to their values
      */
-    Map<String, String> values(ServiceSpec service, ConfigSnapshot snapshot);
+    Map<String, String> values(ConfigSnapshot snapshot);
 }

@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -141,8 +142,13 @@ class SystemJavaFinderTest {
     void theProcessProbeReadsARealJvm() throws Exception {
         Path home = Path.of(System.getProperty("java.home"));
         boolean windows = TargetPlatform.current().os() == Os.WINDOWS;
-        JavaSettings settings = JavaProbe.process().probe(home.resolve("bin").resolve(JavaRuntime.executableName(windows)))
-                .orElseThrow();
+        // This test checks the parsing of what a real JVM prints, not the timeout. With the
+        // production timeout of 15 seconds it failed now and then on a busy machine (parallel
+        // Gradle builds, e2e servers starting): the JVM start took longer, the probe killed it and
+        // returned empty.
+        JavaSettings settings = JavaProbe.process(Duration.ofMinutes(2))
+                .probe(home.resolve("bin").resolve(JavaRuntime.executableName(windows)))
+                .orElseThrow(() -> new AssertionError("the probe got no answer from " + home));
         assertEquals(Runtime.version().feature(), settings.feature().orElseThrow());
         assertEquals(home.toRealPath(), Path.of(settings.home().orElseThrow()).toRealPath());
         assertTrue(JavaProbe.process().probe(dir.resolve("no-such-java")).isEmpty());
