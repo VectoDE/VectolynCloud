@@ -15,6 +15,9 @@ jobs:
       contents: read
       id-token: write       # keyless signing (cosign) and attestations
       attestations: write   # actions/attest-build-provenance
+    outputs:
+      channel: ${{ steps.tag.outputs.channel }}
+      prerelease: ${{ steps.tag.outputs.prerelease }}
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
@@ -52,6 +55,26 @@ jobs:
         uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
           cache-disabled: true
+
+      # The version rules, checked before anything is built or signed (docs/cloud/operations.md#versions-and-tags):
+      # v<MAJOR>.<MINOR>.<PATCH> with -dev[.N] (the only choice below 1.0.0), -alpha[.N], -beta[.N],
+      # -rc[.N], -lts or no suffix. The parser is the one that draws the banner (tools/release-banner,
+      # ReleaseVersion); operations.yml runs the same script on every rule on each pull request.
+      # Its result sets the GitHub pre-release flag and the image's "latest" tag below.
+      - name: Check release tag
+        id: tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if ! result=$(bash tools/release-banner/check-tag.sh "$TAG" --no-daemon --no-build-cache 2> "$RUNNER_TEMP/tag.log"); then
+            cat "$RUNNER_TEMP/tag.log"
+            reason=$(grep -m1 '^error: ' "$RUNNER_TEMP/tag.log" || echo "error: see the log of this step")
+            reason=${reason#error: }
+            echo "::error title=Release tag rejected::${reason//%/%25}"
+            exit 1
+          fi
+          printf '%s\n' "$result" | tee -a "$GITHUB_OUTPUT"
 
       # The tag (v1.2.3) sets the version of every module. The full build runs all tests, but
       # only VectolynCloud.jar is released: the plugin jars are not part of a release (the
@@ -168,8 +191,8 @@ jobs:
   # Container image on GHCR with the signed VectolynCloud.jar of the build job (not rebuilt: the
   # named build context "jar" replaces the Dockerfile's build stage). Signed with cosign keyless,
   # with a GitHub build provenance attestation and BuildKit's SBOM and provenance in the registry.
-  # "latest" only for stable releases (same rule as the GitHub release: v0.* and v*-* are
-  # pre-releases).
+  # "latest" only for releases that are not GitHub pre-releases (stable and -lts): the same flag as
+  # the GitHub release, from the tag check of the build job.
   image:
     name: Container image
     needs: build
@@ -225,14 +248,16 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
           OWNER: ${{ github.repository_owner }}
+          PRERELEASE: ${{ needs.build.outputs.prerelease }}
         run: |
           set -euo pipefail
           version="${TAG#v}"
           image="ghcr.io/${OWNER,,}/vectolyn-cloud"
           tags="${image}:${version}"
-          case "$TAG" in
-            v0.*|*-*) echo "Pre-release: no latest tag." ;;
-            *) tags="${tags},${image}:latest" ;;
+          case "$PRERELEASE" in
+            true) echo "Pre-release: no latest tag." ;;
+            false) tags="${tags},${image}:latest" ;;
+            *) echo "::error::no pre-release flag from the tag check"; exit 1 ;;
           esac
           {
             echo "image=${image}"
@@ -322,13 +347,20 @@ jobs:
           TAG: ${{ github.ref_name }}
           IMAGE: ${{ needs.image.outputs.image }}
           DIGEST: ${{ needs.image.outputs.digest }}
+          PRERELEASE: ${{ needs.build.outputs.prerelease }}
         run: |
           set -euo pipefail
+          # -dev, -alpha, -beta and -rc are pre-releases; -lts and stable releases are not and
+          # become the "Latest" release (the owner's rule of 2026-10-30). The flag comes from the
+          # tag check of the build job.
           prerelease=""
-          # 0.x versions and tags with a suffix (v1.0.0-rc.1) are pre-releases.
-          case "$TAG" in v0.*|*-*) prerelease="--prerelease" ;; esac
+          case "$PRERELEASE" in
+            true) prerelease="--prerelease" ;;
+            false) ;;
+            *) echo "::error::no pre-release flag from the tag check"; exit 1 ;;
+          esac
           # The banner on top, from this release's own assets (the 2x file, shown at 1280 px).
-          # TAG passed the strict version check of the banner step, so it is safe inside HTML.
+          # TAG passed the version rules of the build job, so it is safe inside HTML.
           banner="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/VectolynCloud-${TAG#v}-banner-2x.png"
           notes=$(printf '%s\n' \
             "<img src=\"${banner}\" alt=\"VectolynCloud ${TAG}\" width=\"1280\">" \

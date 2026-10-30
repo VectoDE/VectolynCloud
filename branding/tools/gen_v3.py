@@ -167,14 +167,21 @@ def main():
     # Text layers of the banners (composited in export_v3.py)
     f["layers/social-text.svg"] = B.social_text()
     f["layers/release-text.svg"] = B.release_text()
-    REL_CASES = [("stable", "v0.2.0", "Stage 2: cloud core"), ("alpha", "v0.3.0-alpha.1", "Stage 3: Bedrock tab list"),
-                 ("beta", "v0.3.0-beta.2", "Stage 3: Bedrock tab list"), ("rc", "v0.3.0-rc.1", "Stage 3: Bedrock tab list"),
-                 ("pre", "v0.3.0-nightly.20261030", "Nightly build"), ("notitle", "v0.2.1", ""),
+    REL_CASES = [("stable", "v1.0.0", "Stage 2: cloud core"), ("dev", "v0.3.0-dev.2", "Stage 3: Bedrock tab list"),
+                 ("alpha", "v1.1.0-alpha.1", "Stage 3: Bedrock tab list"), ("beta", "v1.1.0-beta.2", "Stage 3: Bedrock tab list"),
+                 ("rc", "v1.1.0-rc.1", "Stage 3: Bedrock tab list"), ("lts", "v1.4.0-lts", "Long-term support"),
+                 ("notitle", "v1.0.1", ""),
                  ("long", "v10.12.3-beta.12", "Stage 12: a much longer release title that needs to be shortened somewhere")]
     for name, v, ttl in REL_CASES:
         f[f"layers/release-text-{name}.svg"] = B.release_text(v, ttl, "2026-10-30")
     f["release-banner-template.svg"] = B.release_template()
     f["release-banner-spec.json"] = json.dumps(dict(layout=B.REL, badges=[dict(match=r, label=l, fill=c, text="#14111F") for r, l, c in B.BADGES],
+                                                    versions=dict(tag="v<MAJOR>.<MINOR>.<PATCH>[-<suffix>], numbers without leading zeros, no +<build>",
+                                                                  suffixes="-dev[.N], -alpha[.N], -beta[.N], -rc[.N], -lts (no counter), none = stable",
+                                                                  below_1_0_0="-dev only",
+                                                                  github_prerelease=["dev", "alpha", "beta", "rc"], github_release=["lts", "stable"],
+                                                                  lts_fill="color.success (dark), 10.4:1 with #14111F",
+                                                                  rules="tools/release-banner ReleaseVersion; anything else fails the release"),
                                                     font=dict(family="Pixelify Sans", weight=700, font_pixel_em=0.09143, tracking_em=-0.0286),
                                                     colors=dict(text="#ECEEF4", muted="#9EA3B8", point="#FFD23F"),
                                                     date_format="MMM d, yyyy (English)", background="branding/png/release-banner-background.png (+@2x)",

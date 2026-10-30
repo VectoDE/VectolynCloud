@@ -23,30 +23,53 @@
   },
   "badges": [
     {
-      "match": "^alpha(\\.\\d+)?$",
+      "match": "^dev(\\.(0|[1-9]\\d*))?$",
+      "label": "PRE-RELEASE",
+      "fill": "#9EA3B8",
+      "text": "#14111F"
+    },
+    {
+      "match": "^alpha(\\.(0|[1-9]\\d*))?$",
       "label": "ALPHA",
       "fill": "#FF6B6B",
       "text": "#14111F"
     },
     {
-      "match": "^beta(\\.\\d+)?$",
+      "match": "^beta(\\.(0|[1-9]\\d*))?$",
       "label": "BETA",
       "fill": "#FFD23F",
       "text": "#14111F"
     },
     {
-      "match": "^rc(\\.\\d+)?$",
+      "match": "^rc(\\.(0|[1-9]\\d*))?$",
       "label": "RC",
       "fill": "#00E5FF",
       "text": "#14111F"
     },
     {
-      "match": ".+",
-      "label": "PRE-RELEASE",
-      "fill": "#9EA3B8",
+      "match": "^lts$",
+      "label": "LTS",
+      "fill": "#5BD98A",
       "text": "#14111F"
     }
   ],
+  "versions": {
+    "tag": "v<MAJOR>.<MINOR>.<PATCH>[-<suffix>], numbers without leading zeros, no +<build>",
+    "suffixes": "-dev[.N], -alpha[.N], -beta[.N], -rc[.N], -lts (no counter), none = stable",
+    "below_1_0_0": "-dev only",
+    "github_prerelease": [
+      "dev",
+      "alpha",
+      "beta",
+      "rc"
+    ],
+    "github_release": [
+      "lts",
+      "stable"
+    ],
+    "lts_fill": "color.success (dark), 10.4:1 with #14111F",
+    "rules": "tools/release-banner ReleaseVersion; anything else fails the release"
+  },
   "font": {
     "family": "Pixelify Sans",
     "weight": 700,

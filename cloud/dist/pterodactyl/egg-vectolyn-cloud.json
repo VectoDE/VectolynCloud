@@ -31,7 +31,7 @@
     "variables": [
         {
             "name": "VectolynCloud version",
-            "description": "Release to install: latest (newest release, including pre-releases) or a version such as 0.2.0. Takes effect on reinstall.",
+            "description": "Release to install: latest (newest release, including pre-releases) or a version such as 0.2.0-dev. Takes effect on reinstall.",
             "env_variable": "VECTOLYN_VERSION",
             "default_value": "latest",
             "user_viewable": true,

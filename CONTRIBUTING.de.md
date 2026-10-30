@@ -52,6 +52,10 @@ Vergessen? `git commit --amend -s` für den letzten Commit, `git rebase --signof
 - Jeder Spielmodus muss für Bedrock-Spieler funktionieren. Menüs sind Inventar-Menüs, keine Bedrock-Formulare.
 - Nie Secrets, IPs, Spielerdaten, Welten oder Server-Jars committen. `templates/` enthält nur Vorlagen; Server-Laufzeiten liegen in `run/` (lokale Entwicklung, von Git ignoriert) oder in einem Cloud-Home außerhalb des Repositorys.
 
+## Releases
+
+Ein Maintainer veröffentlicht, indem er einen Tag pusht, und der Tag muss den [Versionsregeln](docs/cloud/operations.de.md#versionen-und-tags) folgen: unter 1.0.0 nur `-dev` (`v0.2.0-dev`, `v0.2.0-dev.3`); ab 1.0.0 auch `-alpha`, `-beta` und `-rc` (jeweils mit optionalem `.N`), `-lts` ohne Zähler oder kein Zusatz für ein stabiles Release. Jeder andere Tag bricht das Release ab, bevor etwas gebaut wird. Einen Tag vorher prüfen: `bash tools/release-banner/check-tag.sh <tag>`.
+
 ## Sprachen
 
 - Code, Bezeichner, Commit-Nachrichten und Code-Kommentare: Englisch.

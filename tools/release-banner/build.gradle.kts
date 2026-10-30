@@ -4,9 +4,9 @@
 // job (through banner-from-tag.sh) and attaches the two PNGs to the release.
 // Details: docs/cloud/operations.md#release-banner
 //
-// Preview:  ./gradlew :tools:release-banner:releaseBanner -PbannerVersion=v0.2.0-beta.2 \
+// Preview:  ./gradlew :tools:release-banner:releaseBanner -PbannerVersion=v1.0.0-beta.2 \
 //             -PbannerTitle="Stage 2: cloud core" -PbannerDate=2026-10-30
-// Output:   tools/release-banner/build/release-banner/VectolynCloud-0.2.0-beta.2-banner.png (+ -2x.png)
+// Output:   tools/release-banner/build/release-banner/VectolynCloud-1.0.0-beta.2-banner.png (+ -2x.png)
 // Each value can also come from BANNER_VERSION, BANNER_TITLE, BANNER_DATE and BANNER_OUT
 // (output directory); a Gradle property wins over the environment variable.
 
@@ -68,7 +68,34 @@ tasks.register<JavaExec>("releaseBanner") {
     }
 }
 
+// The version rules (ReleaseVersion) for one tag, before anything is built: release.yml runs it
+// through check-tag.sh. Writes "channel=..." and "prerelease=true|false" to -PreleaseTagOut
+// (or RELEASE_TAG_OUT); a tag that breaks the rules fails the task.
+tasks.register<JavaExec>("releaseTag") {
+    group = "release"
+    description = "Checks a release tag against the version rules (-PreleaseTag, -PreleaseTagOut)."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass = "net.vectolyn.tools.releasebanner.ReleaseTagCheck"
+
+    val tag = setting("releaseTag", "RELEASE_TAG")
+    val root = layout.settingsDirectory
+    val outFile = setting("releaseTagOut", "RELEASE_TAG_OUT").map { root.file(it) }
+    argumentProviders.add(CommandLineArgumentProvider {
+        listOf("--out", (outFile.orNull
+            ?: throw GradleException("set -PreleaseTagOut=<file> (or RELEASE_TAG_OUT)")).asFile.absolutePath)
+    })
+    // The tag reaches the program as an environment variable, like the banner values.
+    doFirst {
+        val exec = this as JavaExec
+        exec.environment("RELEASE_TAG", tag.orNull
+            ?: throw GradleException("set -PreleaseTag=v1.2.3 (or RELEASE_TAG)"))
+    }
+}
+
 tasks.test {
+    val spec = layout.settingsDirectory.file("branding/release-banner-spec.json")
+    inputs.file(spec).withPropertyName("bannerSpec")
+    systemProperty("banner.spec", spec.asFile.absolutePath)
     val font = brandFont
     val background = brandBackground
     val background2x = brandBackground2x

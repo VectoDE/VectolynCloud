@@ -17,7 +17,7 @@ FIN = TOOLS.parent  # branding/
 REN = TOOLS / "renders"  # Blender output (render_all.sh)
 WORK = TOOLS / "tmp"  # scratch files
 PNG, VID, SHOTS = FIN / "png", FIN / "video", TOOLS / "shots"
-VERSION = ("0.2.0", "First light", "2026-10-30")
+VERSION = ("0.2.0-dev", "First light", "2026-10-30")
 
 
 def comp_html(w, h, layers):
@@ -86,7 +86,7 @@ def assets(pw):
             shoot(page, comp_html(w, h, [p.as_uri() for p in lay]), w, h, PNG / f"{name}{'@2x' if k == 2 else ''}.png")
         page.close()
     page = b.new_page(device_scale_factor=1)
-    for case in ("stable", "alpha", "beta", "rc", "pre", "notitle", "long"):
+    for case in ("stable", "dev", "alpha", "beta", "rc", "lts", "notitle", "long"):
         shoot(page, comp_html(1280, 320, [(tmpd / "release_obs.png").as_uri(), (FIN / f"layers/release-text-{case}.svg").as_uri()]),
               1280, 320, PNG / f"release-example-{case}.png")
     page.close()

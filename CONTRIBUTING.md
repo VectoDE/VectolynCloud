@@ -53,6 +53,10 @@ Forgot it? `git commit --amend -s` for the last commit, `git rebase --signoff ma
 - Every game mode has to work for Bedrock players. Menus are inventory menus, no Bedrock forms.
 - Never commit secrets, IPs, player data, worlds or server jars. `templates/` holds templates only; server runtimes live in `run/` (local development, ignored by Git) or in a cloud home outside the repository.
 
+## Releases
+
+A maintainer releases by pushing a tag, and the tag has to follow the [version rules](docs/cloud/operations.md#versions-and-tags): below 1.0.0 only `-dev` (`v0.2.0-dev`, `v0.2.0-dev.3`); from 1.0.0 also `-alpha`, `-beta` and `-rc` (each with an optional `.N`), `-lts` without a counter, or no suffix for a stable release. Any other tag stops the release before anything is built. Check a tag first with `bash tools/release-banner/check-tag.sh <tag>`.
+
 ## Languages
 
 - Code, identifiers, commit messages and code comments: English.

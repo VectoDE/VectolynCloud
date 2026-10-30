@@ -316,7 +316,7 @@ def social_block():
     return svg(W, H, body, "VectolynCloud social preview", c["bg"], fd + vd)
 
 
-def release_block(version="v0.2.0", name="Stage 2: cloud core", date="30 Oct 2026"):
+def release_block(version="v0.2.0-dev", name="Stage 2: cloud core", date="30 Oct 2026"):
     W, H = 1280, 320
     c = DARK
     s = 31
@@ -429,25 +429,35 @@ REL = dict(
     gap_wm_version=20, gap_version_title=24, gap_badge=12, sep=18,
     title_max_chars=48, ellipsis="…",
 )
-BADGES = [  # (rule on the prerelease part, label, fill colour); text colour is always obsidian
-    (r"^alpha(\.\d+)?$", "ALPHA", "#FF6B6B"),
-    (r"^beta(\.\d+)?$", "BETA", "#FFD23F"),
-    (r"^rc(\.\d+)?$", "RC", "#00E5FF"),
-    (r".+", "PRE-RELEASE", "#9EA3B8"),
+BADGES = [  # (rule on the version suffix, label, fill colour); text colour is always obsidian. Same rules as
+    # tools/release-banner (ReleaseVersion): -dev[.N] (the only suffix below 1.0.0), -alpha[.N], -beta[.N], -rc[.N],
+    # -lts without counter, no suffix = stable without badge; anything else is no release tag.
+    (r"^dev(\.(0|[1-9]\d*))?$", "PRE-RELEASE", "#9EA3B8"),
+    (r"^alpha(\.(0|[1-9]\d*))?$", "ALPHA", "#FF6B6B"),
+    (r"^beta(\.(0|[1-9]\d*))?$", "BETA", "#FFD23F"),
+    (r"^rc(\.(0|[1-9]\d*))?$", "RC", "#00E5FF"),
+    (r"^lts$", "LTS", "#5BD98A"),  # color.success (dark)
 ]
 MONTHS = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split()
 
 
 def release_badge(version):
-    m = _re.match(r"^v?\d+\.\d+\.\d+(?:-([0-9A-Za-z.-]+))?$", version)
+    m = _re.fullmatch(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z.-]+))?", version, _re.ASCII)
     if not m:
-        raise ValueError(f"no SemVer without build metadata: {version}")
-    pre = m.group(1)
+        raise ValueError(f"not a release tag: {version}")
+    pre = m.group(4)
     if not pre:
+        if m.group(1) == "0":
+            raise ValueError(f"a 0.x version may only be released with -dev: {version}")
         return None
+    if _re.fullmatch(r"lts\.[0-9]+", pre):
+        raise ValueError(f"-lts takes no counter, the patch version counts LTS releases: {version}")
     for rx, label, col in BADGES:
-        if _re.match(rx, pre):
+        if _re.fullmatch(rx, pre, _re.ASCII):
+            if m.group(1) == "0" and label != "PRE-RELEASE":
+                raise ValueError(f"a 0.x version may only be released with -dev: {version}")
             return label, col
+    raise ValueError(f"unknown suffix -{pre}: {version}")
 
 
 def release_date(iso):
@@ -467,8 +477,8 @@ def badge(label, col, x, y, u):
             f'{ga.p(dt[None], C["obsidian"])}</g>'), pw, ph
 
 
-def release_text(version="v0.2.0", title="Stage 2: cloud core", date="2026-10-30"):
-    """Text layer 1280 x 320 for the release banner. version: SemVer with or without v. title may be empty."""
+def release_text(version="v0.2.0-dev", title="Stage 2: cloud core", date="2026-10-30"):
+    """Text layer 1280 x 320 for the release banner. version: a release tag with v (release_badge rules). title may be empty."""
     c, R = DARK, REL
     x, maxw = R["x"], R["text_right"] - R["x"]
     # Version: largest u at which the line fits
@@ -531,13 +541,13 @@ version: u 12, falls back to 10, 8, 6 until it fits 780 px. Points of MAJOR.MINO
 title: first line of the tag message, u 3, #ECEEF4, max 48 characters, cut at a word end with an ellipsis,
 then shortened word by word if title + date exceed 780 px. Empty title: the line holds only the date.
 date: "Oct 30, 2026", u 3, #9EA3B8, after a 6 x 6 gold square with 18 px on each side.
-badge: SemVer prerelease -alpha.N ALPHA #FF6B6B, -beta.N BETA #FFD23F, -rc.N RC #00E5FF, other PRE-RELEASE #9EA3B8;
-stable: no badge. u 3, text #14111F, padding 2u x 1u (height 9u), corners cut by 1u, 12 px right of the wordmark,
-centered on its cap height.</desc>
+badge: by version suffix -dev[.N] PRE-RELEASE #9EA3B8, -alpha[.N] ALPHA #FF6B6B, -beta[.N] BETA #FFD23F, -rc[.N] RC #00E5FF,
+-lts LTS #5BD98A; stable (no suffix): no badge. 0.x versions are -dev only; any other suffix is no release tag.
+u 3, text #14111F, padding 2u x 1u (height 9u), corners cut by 1u, 12 px right of the wordmark, centered on its cap height.</desc>
 <rect id="safe-area" x="80" y="{y0}" width="780" height="{320 - 2 * y0}" fill="none" stroke="#FF00FF" stroke-dasharray="4 4"/>
 <text id="slot-wordmark" x="80" y="{y0 + 21}" {f} font-size="32.8" letter-spacing="-0.94" fill="#ECEEF4">VECTOLYN<tspan fill="#00E5FF">CLOUD</tspan></text>
 <g id="slot-badge"><rect id="badge-bg" x="0" y="{y0 - 3}" width="0" height="27" fill="#FFD23F"/><text x="0" y="{y0 + 21}" {f} font-size="32.8" letter-spacing="-0.94" fill="#14111F">BETA</text></g>
-<text id="slot-version" x="80" y="{yv + 84}" {f} font-size="131.2" letter-spacing="-3.75" fill="#ECEEF4">v0.2.0</text>
+<text id="slot-version" x="80" y="{yv + 84}" {f} font-size="131.2" letter-spacing="-3.75" fill="#ECEEF4">v1.0.0</text>
 <text id="slot-title" x="80" y="{yt + 21}" {f} font-size="32.8" letter-spacing="-0.94" fill="#ECEEF4">Stage 2: cloud core</text>
 <rect id="slot-separator" x="0" y="{yt + 9}" width="6" height="6" fill="#FFD23F"/>
 <text id="slot-date" x="0" y="{yt + 21}" {f} font-size="32.8" letter-spacing="-0.94" fill="#9EA3B8">Oct 30, 2026</text>

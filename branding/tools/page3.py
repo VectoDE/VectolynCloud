@@ -396,7 +396,7 @@ def page(f, mc, tokens, console):
     def dl(n, label=None):
         return f'<li><a href="{E(n)}" download>{E(label or n)}</a></li>'
     files = "".join(dl(n) for n in sorted(k for k in f if not k.startswith("layers/") and not k.startswith("mc-")))
-    files += "".join(dl(n.split(" ")[0], n) for n in ("png/social-preview.png (+@2x)", "png/release-banner-v0.2.0.png (+@2x)", "png/release-banner-background.png (+@2x)",
+    files += "".join(dl(n.split(" ")[0], n) for n in ("png/social-preview.png (+@2x)", "png/release-banner-v0.2.0-dev.png (+@2x)", "png/release-banner-background.png (+@2x)",
                                                   "png/readme-header-dark.png (+@2x)", "png/readme-header-light.png (+@2x)",
                                                   "png/keyart-3840x2160.png (+.jpg, 1920 x 1080 .jpg)", "png/mark-3d-2048.png (+512)", "png/server-icon.png", "png/favicon-48.png", "png/apple-touch-icon.png",
                                                   "png/favicon-16.png", "png/favicon-32.png", "video/mark-turntable.mp4",
@@ -519,15 +519,15 @@ docker pull ghcr.io/vectode/vectolyn-cloud:0.2.0</code></pre><figcaption><b>Mono
     S.append(sec("banners", "Imagery and 3D", "The mark as a physical object, rendered in Blender Cycles on the GPU. Type is set on top as vector paths.", f'''
 <figure><img class="wide" src="png/social-preview@2x.png" width="1280" height="640" alt="VectolynCloud social preview"><figcaption><b>Social preview, 1280 x 640.</b> Upload png/social-preview.png to the repository settings.</figcaption></figure>
 <figure><img class="at600" src="png/social-preview@2x.png" width="600" height="300" alt="Social preview at link card size"><figcaption><b>At link-card size, 600 px.</b> Wordmark and mark still read.</figcaption></figure>
-<figure><img class="wide" src="png/release-banner-v0.2.0@2x.png" width="1280" height="320" alt="Release banner v0.2.0"><figcaption><b>Release banner, 1280 x 320.</b> Generated for every release; see the release banner system below.</figcaption></figure>
+<figure><img class="wide" src="png/release-banner-v0.2.0-dev@2x.png" width="1280" height="320" alt="Release banner v0.2.0-dev"><figcaption><b>Release banner, 1280 x 320.</b> Generated for every release; see the release banner system below.</figcaption></figure>
 <figure><img class="wide" src="png/readme-header-dark@2x.png" width="1280" height="280" alt="README header, dark"><img class="wide" src="png/readme-header-light@2x.png" width="1280" height="280" alt="README header, light" style="margin-top:12px"><figcaption><b>README header, dark and light.</b></figcaption></figure>
 <pre class="code"><code>{readme_snip}</code></pre>
 <figure><video class="vid" src="video/mark-turntable.mp4" poster="png/keyart-1920x1080.jpg" controls muted loop playsinline preload="none"></video><figcaption><b>Turntable, 4 s loop.</b> MP4 (H.264) and WebM (VP9) in video/. Cyan lacquer with clear coat, polished gold, area lights with light linking, Khronos PBR Neutral view transform.</figcaption></figure>
 <figure><div class="well" style="background:repeating-conic-gradient(#1E1A2E 0 25%,#14111F 0 50%) 0 0/24px 24px"><img src="png/mark-3d-2048.png" width="420" height="420" alt="3D mark on transparent background" style="display:block;margin:auto;max-width:100%;height:auto"></div><figcaption><b>3D mark, transparent, 2048 px.</b> For press and presentations. No floor shadow, so it sits on any background.</figcaption></figure>'''))
 
-    cases = [("stable", "Stable release, v0.2.0: no badge"), ("alpha", "v0.3.0-alpha.1: ALPHA badge, red"),
-             ("beta", "v0.3.0-beta.2: BETA badge, gold"), ("rc", "v0.3.0-rc.1: RC badge, cyan"),
-             ("pre", "Any other prerelease, here -nightly: PRE-RELEASE badge, gray"),
+    cases = [("stable", "Stable release, v1.0.0: no badge"), ("dev", "v0.3.0-dev.2: PRE-RELEASE badge, gray"),
+             ("alpha", "v1.1.0-alpha.1: ALPHA badge, red"), ("beta", "v1.1.0-beta.2: BETA badge, gold"),
+             ("rc", "v1.1.0-rc.1: RC badge, cyan"), ("lts", "v1.4.0-lts: LTS badge, green"),
              ("notitle", "Empty tag message: the date moves into the title line"),
              ("long", "Long version and long title: version steps down to a smaller font pixel, title is cut at a word end")]
     rel_figs = "".join(f'<figure><img class="wide" src="png/release-example-{k}.png" width="1280" height="320" alt="Release banner example: {E(t)}" loading="lazy"><figcaption>{E(t)}.</figcaption></figure>' for k, t in cases)
@@ -540,7 +540,7 @@ docker pull ghcr.io/vectode/vectolyn-cloud:0.2.0</code></pre><figcaption><b>Mono
 <tr><th scope="row">title</th><td>u 3</td><td>#ECEEF4</td><td>Max 48 characters, cut at a word end with an ellipsis; shortened further word by word if title and date exceed 780 px. Empty: line holds only the date</td></tr>
 <tr><th scope="row">date</th><td>u 3</td><td>#9EA3B8</td><td>English, "Oct 30, 2026", after a 6 x 6 gold square</td></tr>
 </tbody></table></div>
-<p>Badges follow the SemVer prerelease: <code>-alpha.N</code> ALPHA in red #FF6B6B, <code>-beta.N</code> BETA in gold, <code>-rc.N</code> RC in cyan, anything else PRE-RELEASE in gray #9EA3B8. Stable versions carry no badge. The block of wordmark, version and title line is centered vertically, so a smaller version size keeps the balance. Template with named slots: <a href="release-banner-template.svg">release-banner-template.svg</a>; all values: <a href="release-banner-spec.json">release-banner-spec.json</a>.</p>
+<p>Badges follow the version suffix: <code>-dev[.N]</code> PRE-RELEASE in gray #9EA3B8, <code>-alpha[.N]</code> ALPHA in red #FF6B6B, <code>-beta[.N]</code> BETA in gold, <code>-rc[.N]</code> RC in cyan, <code>-lts</code> LTS in green #5BD98A (the success color, 10.4:1 with the obsidian text). Stable versions carry no badge. Versions below 1.0.0 are released only as <code>-dev</code>; any other suffix is not a release tag and stops the release. The block of wordmark, version and title line is centered vertically, so a smaller version size keeps the balance. Template with named slots: <a href="release-banner-template.svg">release-banner-template.svg</a>; all values: <a href="release-banner-spec.json">release-banner-spec.json</a>.</p>
 {rel_figs}'''))
     S.append(sec("writing", "Writing", "English by default. Other languages only where VectolynCloud offers a choice.", f'''
 <div class="tw"><table><thead><tr><th scope="col">Where</th><th scope="col">Write</th><th scope="col">Avoid</th><th scope="col">Rule</th></tr></thead><tbody>{spelling}</tbody></table></div>

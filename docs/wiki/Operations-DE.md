@@ -16,7 +16,18 @@ Jedes [Release](https://github.com/VectoDE/VectolynCloud/releases) enthält:
 
 Mehr nicht: Die Plugin-Jars gehören nicht zum Release.
 
-Das Container-Image heißt `ghcr.io/vectode/vectolyn-cloud:<version>`. `latest` zeigt nur auf das neueste stabile Release. Dockerfile, `compose.yml`, die systemd-Unit und das Pterodactyl-Egg liegen in [`cloud/dist/`](https://github.com/VectoDE/VectolynCloud/tree/main/cloud/dist).
+Das Container-Image heißt `ghcr.io/vectode/vectolyn-cloud:<version>`. `latest` zeigt auf das neueste Release, das keine Vorabversion ist (stabil oder `-lts`). Dockerfile, `compose.yml`, die systemd-Unit und das Pterodactyl-Egg liegen in [`cloud/dist/`](https://github.com/VectoDE/VectolynCloud/tree/main/cloud/dist).
+
+## Versionen
+
+| Tag | Bedeutung | Auf GitHub |
+|---|---|---|
+| `v0.2.0-dev`, `v0.2.0-dev.3` | Entwicklungsstand; unter 1.0.0 die einzige Form | Vorabversion |
+| `v1.0.0-alpha.1`, `v1.0.0-beta.2`, `v1.0.0-rc.1` | Testversionen, ab 1.0.0 | Vorabversion |
+| `v1.4.0-lts` | Linie mit Langzeit-Support, ab 1.0.0, ohne Zähler | Release |
+| `v1.0.0` | stabil, ab 1.0.0 | Release |
+
+Jeder andere Tag bricht das Release ab, bevor etwas gebaut wird. Details: [Versionen und Tags](https://github.com/VectoDE/VectolynCloud/blob/main/docs/cloud/operations.de.md#versionen-und-tags).
 
 ## Wo es läuft
 
