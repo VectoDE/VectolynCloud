@@ -7,11 +7,12 @@ State of [#73](https://github.com/VectoDE/VectolynCloud/issues/73), built in ste
 | Step | Content | State |
 |---|---|---|
 | 1 | CA, join tokens, join, mutual TLS cluster port, revocation, version and database checks | this page |
-| 2 | config mirror (members read `config/` of the head), placement of tasks on nodes, template sync, services and players across nodes | next |
+| 2a | requests and pushes on the session, config mirror (`nodes.yml`, groups, tasks from the head), template sync, `cluster sync` | this page |
+| 2b | placement of tasks on nodes, service registry and autoscaler across nodes, players across nodes | next |
 | 3 | manual promotion of a member to head (failover) | later |
 | 4 | moving static services between nodes with their world data | later |
 
-Until step 2 a member runs its own configuration and services as before; the cluster only connects the nodes and decides who belongs.
+Since step 2a a member takes `nodes.yml`, the groups, the tasks and the templates from the head ([Config mirror](#config-mirror), [Template sync](#template-sync)); its `cloud.yml` stays its own. Until step 2b each node still starts the services of its own tasks only.
 
 ## Quick start
 
@@ -36,8 +37,9 @@ On the new node (its `cloud.yml` has `node-id: node-2`, same VectolynCloud versi
 | `cluster token create <node-id> [lifetime]` | head | a join token for exactly this node id, 1m to 24h (default 1h) |
 | `cluster token list` / `revoke <id>` | head | open tokens (id, node, expiry, never the secret); delete one |
 | `cluster join <host:port> <head-id> <token> <ca-pin>` | new node | joins, see [Join](#join) |
-| `cluster status` (`nodes`, `info`) | any | role, head, version, CA pin, certificate expiry, members and their connection, link state |
-| `cluster remove <node-id>` | head | revokes the member's certificate and ends its session at once |
+| `cluster status` (`nodes`, `info`) | any | role, head, version, CA pin, certificate expiry, members and their connection, link state, config revision, templates and the last sync problem |
+| `cluster sync` | any | head: renders the config again, rescans the templates and tells every member to sync; member: syncs with the head now (waits up to 30 s, then goes on in the background) |
+| `cluster remove <node-id>` | head | revokes the member's certificate and ends its session at once (its entry in `nodes.yml` stays; remove it with the console when no task names it) |
 
 The whole `cluster` command is sensitive: none of its lines reaches the console history. `cluster token create` still prints the join line on the console once; when the node runs under Docker or systemd that output also lands in `docker logs` or the journal. Treat those logs like `secrets/` for the token's lifetime, or give the token a short one (`cluster token create <node-id> 10m`).
 
@@ -66,6 +68,9 @@ The whole `cluster` command is sensitive: none of its lines reaches the console 
 | Frames | 4 KiB until the hello is accepted, then 1 MiB. |
 | Idle | 30 s without a frame ends a session; both sides ping every 10 s. More than 32 pings from a member per 10 s end its session. A send that cannot get to the connection within a second, because a write is stuck on a peer that does not read, ends that session; closing waits at most a second for that write (`SO_LINGER`), then cuts the socket. |
 | Members | 64 per cluster; 32 open join tokens. |
+| Requests on a session | 16 open per side (more fail at once with `busy`), 30 s timeout each. Incoming requests and pushes wait in a queue of 64 for the session's worker; a peer that fills it loses the session (`PROTOCOL_ERROR`). An answer is at most 64 KiB, a file chunk 48 KiB. |
+| Config mirror | 1024 files, 1 MiB each (the limit of the config reader), 32 MiB together; a manifest page has 256 entries. |
+| Template sync | 256 templates, 16 GiB together; per template 20 000 files, 1 GiB per file, 4 GiB together; a path has at most 240 bytes, 16 segments of 120 bytes; a manifest page has 128 entries. A template above a limit is not offered (the head logs it). |
 
 ## Join
 
@@ -75,17 +80,61 @@ The whole `cluster` command is sensitive: none of its lines reaches the console 
 2. makes its key and a certification request with keytool;
 3. connects to the head with TLS 1.3 and checks the head's CA against the pin and its certificate against the head id;
 4. sends node id, token, its version and the request;
-5. installs the certificate in front of its key, writes `config/cluster.yml` (head id, host, port) and connects.
+5. installs the certificate in front of its key, writes `config/cluster.yml` (head id, host, port), switches its configuration to the [mirror mode](#config-mirror) and connects.
+
+Once the join is accepted, the head adds the new node to its `nodes.yml` (through the same validated change as the console): host is the address the join came from, port 7010 and service ports 30000 to 30999 as for a new home. An entry that exists already is kept. If the change does not validate, the join still stands and the head logs what to add by hand.
 
 The head answers, in this order: `VERSION_MISMATCH` and the database refusals without touching the token, then `INVALID_TOKEN`, `NODE_EXISTS`, `BAD_REQUEST` (the request did not check out), `ACCEPTED`. A join that fails on the new node removes its key again. If the answer to an accepted join is lost on the way, the member exists on the head but not on the node: `cluster remove <node-id>` on the head, a new token, join again.
 
+## Config mirror
+
+The head owns the configuration of the cluster. Exactly these files are mirrored to every member:
+
+| Mirrored | Never mirrored |
+|---|---|
+| `nodes.yml`, `groups/<name>.yml`, `tasks/<name>.yml` (name `[a-z0-9][a-z0-9_-]{0,31}`) | `cloud.yml` (each node's own: `node-id`, database, API, proxy ports), `monitor.yml`, `backup.yml`, `software.lock.yml`, `cluster.yml`, anything in `secrets/` |
+
+The head renders the files from its configuration with the same writer that puts them on its disk, so a member gets the head's bytes. Their digest (SHA-256 over path, size and SHA-256 of every file) has a **revision**: a number that rises by one whenever the digest changes, kept in `state/cluster/config-revision`, so it keeps rising across restarts. Every change of the head's configuration (console, setup, API, a hand edit it reloads) is pushed to the connected members as `changed(revision)`.
+
+A member syncs when its session starts, when the head pushes, and on `cluster sync`:
+
+1. it reads the manifest (revision, digest, every file with path, size and SHA-256, in pages) and refuses it as a whole if a path is not one of the three kinds above, a file or the sum is above a [limit](#limits-on-the-cluster-port), two paths differ in case only, the pages do not belong together or the digest is not the digest of the entries;
+2. an older revision than the one it took over last, or the same revision with another digest, is refused as **stale** (a head whose `state/cluster/` was lost starts again at 1; the members keep refusing until its revision passes theirs, or until `state/cluster/config-applied` is deleted on the member). A `config-applied` that cannot be read stops the config mirror the same way, because without it the member could not tell an older revision; revisions have at most 18 digits;
+3. it downloads the files whose content differs from its own (chunks of 48 KiB) and checks each against its SHA-256;
+4. it parses each with the strict reader of its kind (the same `schema-version` as its own) and builds a configuration from **its own `cloud.yml`** and the mirrored files, which must pass the whole validation (for example: the member's `node-id` must be in the head's `nodes.yml`, which the head sees to at the join);
+5. it writes the files (each atomically), deletes group and task files that are not in the set, and writes `state/cluster/config-applied` last, so a sync that stopped half way runs again in full.
+
+Anything refused leaves the member's files as they were; the reason is logged and shown by `cluster status`.
+
+**Mirror mode.** On a member the configuration layer refuses every change to `nodes.yml`, the groups and the tasks with `managed-by-head` ("This file is managed by the cluster head; change it on the head."). That covers the console, the setup assistant and the REST API, which all change the configuration the same way. `cloud.yml` stays editable. A hand edit of a mirrored file on a member is not taken over: the next reload writes the mirrored content back and logs a warning. Joining replaces the member's own `nodes.yml`, groups and tasks with the head's.
+
+## Template sync
+
+Every folder directly under `local/templates/` is a template (`<template>/<variant>/...`). Every template of the head is mirrored in full (recommended: keep all templates on the head and edit them only there):
+
+| On the member | What the sync does |
+|---|---|
+| a template the head has | downloaded when its digest differs from the one synced last; it replaces a folder of the same name, also one made on the member (that folder is moved to `local/.cluster-sync/replaced/<name>-<time>` and kept until the operator deletes it) |
+| a template the head no longer has, synced before | deleted, but at most half of the synced templates per listing (one is always allowed); a listing without any template, or one that drops more, removes nothing (see below) |
+| a folder the mirror never synced | left as it is (logged once) |
+
+**No sync from a head that is not sure.** The head answers the template list only once its first scan of `local/templates/` finished (`not-ready` before, and after a scan that could not read the folder), and the first scan always tells the members to ask again. A template that cannot be read completely or is above a limit stays offered as it was before, so its files' SHA-256 checks fail on the member, which keeps its copy. On the member, a listing that would take away every synced template, or more than half of them (more than one), is not followed: that looks like a head whose templates are missing (a lost mount, a wrong home), not like deleted templates. They stay, `cluster status` reports the problem, and an operator who really wants them gone deletes them on the member by hand.
+
+The last row matters for built-in templates: a node writes `local/templates/<Server>/default` for the template of a wanted group when that folder is missing ([built-in templates](node.md#built-in-templates)), also on a member. Such a folder stays until the head offers a template of the same name, which then replaces it. To have the same files on every node, keep the template on the head.
+
+**Head.** A scan walks each template without following links and offers regular files only: symbolic links, Windows junctions and special files are left out, and so is anything that looks like a secret: `forwarding.secret`, `vectolyn.env`, `.env` and `.env.*`, any name ending in `.env`, `.secret`, `.pem`, `.key`, `.p12`, `.pfx`, `.jks`, `.keystore` or `.kdbx` (also with a further extension such as `.bak`), SSH and credential files (`id_rsa`, `id_ed25519`, ..., `.netrc`, `.git-credentials`, `.pgpass`) and everything in a folder named `secrets`, `.git`, `.ssh` or `.gnupg`. A secret inside an ordinary file (an RCON password in `server.properties`, a filled-in forwarding secret in a Paper config) is not detected; keep such values out of templates (the built-in ones use placeholders). Also left out: a path the member would refuse (below) and the second of two paths that differ in case only. A template above a limit is not offered (one offered before stays offered as it was). SHA-256s are cached by size and modification time, so a rescan reads only what changed. The head rescans every 60 s and on `cluster sync`, and pushes `templates changed` when something changed (`cluster sync` always pushes). A chunk is served only for a path of the current manifest, and only after checking again that every part of the path is a real folder or file inside the template and no link, and that the file still has its size.
+
+**Member.** Every path is checked: relative, `/` between segments, no `..`, `.` or empty segment, no backslash, colon or `<>"|?*`, no control, format (bidi override, zero-width) or private-use character and no separator other than the space (names reach logs and the console), no segment ending in a dot or space, no Windows device name (`CON`, `NUL`, `COM1`, ... also with an extension), the length limits above, no path inside another file's path, nothing that looks like a secret. The manifest must have exactly the file count and size the template list gave, so the list's total limit holds for what is downloaded. `local/templates`, `local/.cluster-sync` and its `staging`, `old` and `replaced` must be real folders (no link or junction), and deleting a folder removes links and junctions inside it without following them. A template is downloaded into `local/.cluster-sync/staging/<name>` (next to `local/templates/`, so on the same file system); each file is created new without following links, and its size and SHA-256 are checked while it is written. Files the old copy has with the same content are copied from it instead (checked the same way). Any mismatch deletes the staging folder and keeps the old template. Then the old template is renamed to `local/.cluster-sync/old/<name>`, the staging folder renamed into its place (atomic renames) and the old copy deleted. A crash in between is put right at the next start: a template renamed away but not replaced comes back, an old copy next to its replacement is deleted. A service that starts on the member in the moment of a swap may find its template folder missing and fail to start (the swap is two renames; the window is short). The synced digests are kept in `state/cluster/templates`.
+
+**What the head can do to a member.** The head is trusted with the configuration and the templates, and templates hold plugins, so a head can run code on every member. The rules above keep its files inside `local/templates/` and `config/` and keep a member from being filled beyond the limits; they do not make a hostile head harmless. A group from the head may carry JVM flags the member's policy only warns about (as for files written by hand). On the head, a chunk is read after checking its path, not through the folder it was scanned from; someone who can swap a folder of a template for a link at that moment could serve another file of the same size, which the member's SHA-256 check then refuses. Write access to `local/templates/` on the head is therefore as sensitive as the head itself.
+
 ## Database
 
-Multi-node needs MariaDB that every node reaches over the cluster network. The head refuses `cluster token create` and every join while `database.mode` is `h2`: H2 is embedded and serves one node. The same rule holds for sessions: if the head is switched back to `h2` (or to a database on loopback), its members get `DATABASE_SINGLE_NODE` at their next hello and stay out until it is changed again. A join from another machine is refused while the head's database listens on loopback only: `managed` and `docker` always bind MariaDB to 127.0.0.1 today, and an `external` server with `database.host` on a loopback or wildcard address (`127.x.x.x` in any form, `::1`, `0.0.0.0`, `localhost`, `*.localhost`) is out of reach as well. This is a check of the obvious mistakes, not proof that the new node reaches the database: names are not resolved, and a join that arrives over loopback (a tunnel, for example) is not checked. So for nodes on several machines use `external` with a MariaDB server on an address of the cluster network. Binding the head's own managed MariaDB to the cluster network follows with step 2. Use TLS for the database connection where the server offers it ([database.md](database.md)).
+Multi-node needs MariaDB that every node reaches over the cluster network. The head refuses `cluster token create` and every join while `database.mode` is `h2`: H2 is embedded and serves one node. The same rule holds for sessions: if the head is switched back to `h2` (or to a database on loopback), its members get `DATABASE_SINGLE_NODE` at their next hello and stay out until it is changed again. A join from another machine is refused while the head's database listens on loopback only: `managed` and `docker` always bind MariaDB to 127.0.0.1 today, and an `external` server with `database.host` on a loopback or wildcard address (`127.x.x.x` in any form, `::1`, `0.0.0.0`, `localhost`, `*.localhost`) is out of reach as well. This is a check of the obvious mistakes, not proof that the new node reaches the database: names are not resolved, and a join that arrives over loopback (a tunnel, for example) is not checked. So for nodes on several machines use `external` with a MariaDB server on an address of the cluster network. Binding the head's own managed MariaDB to the cluster network follows with step 2b. Use TLS for the database connection where the server offers it ([database.md](database.md)).
 
 ## Firewall
 
-Open the cluster port (TCP 7011 by default) on the head **for the other nodes only**. The port does not trust the network: every peer is checked by certificate, and without one only a join request with a valid token changes anything. But anyone who reaches the port learns the head's node id and version from a refused join, and a flood of connections that never authenticate fills the 64 slots before authentication, so members cannot reconnect until it stops. The firewall is what keeps both out. From step 2 on the proxies reach backends on other nodes: then the service ports of each node (`service-ports` in `nodes.yml`) have to be open for the proxy nodes, and the database port for every node; that part is described with step 2.
+Open the cluster port (TCP 7011 by default) on the head **for the other nodes only**. The port does not trust the network: every peer is checked by certificate, and without one only a join request with a valid token changes anything. But anyone who reaches the port learns the head's node id and version from a refused join, and a flood of connections that never authenticate fills the 64 slots before authentication, so members cannot reconnect until it stops. The firewall is what keeps both out. From step 2b on the proxies reach backends on other nodes: then the service ports of each node (`service-ports` in `nodes.yml`) have to be open for the proxy nodes, and the database port for every node; that part is described with step 2b.
 
 ## Files
 
@@ -96,6 +145,11 @@ secrets/cluster/                  owner only
   node.p12, node.password         this node's key and certificate
   join-tokens.yml                 open join tokens, SHA-256 of the secret only (head only)
   work/                           certification requests while keytool signs them, emptied right after
+state/cluster/
+  config-revision                 head: revision and digest of the mirrored config
+  config-applied                  member: revision and digest it took over last
+  templates                       member: name and digest of every template it synced
+local/.cluster-sync/              member: staging and old copies while a template is swapped
 ```
 
 `config/cluster.yml` is written by the `cluster` commands; a hand edit takes effect at the next start. A file that cannot be read does not stop the node: it runs outside the cluster, the error is logged, and the `cluster` commands report it until the file is repaired.
@@ -124,7 +178,13 @@ Back up `secrets/cluster/` of the head together with the rest of `secrets/`: wit
 
 ## Wire format
 
-The cluster port carries the frames of the [cloud channel](protocol.md) over TLS. The handshake is a `Request` on the channel `cluster.join` or `cluster.hello` and its `Response`; the session uses `Ping`, `Pong` and `Disconnect`. Payloads (`ClusterMessages`):
+The cluster port carries the frames of the [cloud channel](protocol.md) over TLS. The handshake is a `Request` on the channel `cluster.join` or `cluster.hello` and its `Response`; the session uses `Ping`, `Pong` and `Disconnect`, plus `Request`/`Response` and `ChannelMessage` (push) in both directions (`ClusterSession`, `ClusterHandlers`):
+
+- Each side numbers its own requests (request id from 2 up; 0 is no request, 1 the hello). The answer is `OK` with the result or `ERROR` with a short code of `[a-z0-9-]` (`bad-request`, `not-found`, `not-ready`, `changed`, `failed`), never an exception text.
+- Incoming requests and pushes run off the reader thread, one at a time on the session's worker.
+- Every node of a cluster runs the same version, so both ends know the same channels: a request or push on a channel without a handler, an answer to a request that was never sent, or a full queue end the session with `PROTOCOL_ERROR`. An answer that arrives after its request timed out is dropped.
+
+Payloads of the handshake (`ClusterMessages`):
 
 | Payload | Fields |
 |---|---|
@@ -133,7 +193,19 @@ The cluster port carries the frames of the [cloud channel](protocol.md) over TLS
 | `NodeHello` | node id, version |
 | `NodeWelcome` | outcome (0 `ACCEPTED`, 1 `VERSION_MISMATCH`, 2 `UNKNOWN_NODE`, 3 `NODE_MISMATCH`, 4 `REVOKED`, 5 `NOT_HEAD`), head node id, head version |
 
-Every reader throws only `ProtocolException` and checks each length before it allocates; `JoinRequest.toString()` does not show the secret.
+Channels and payloads of the mirror (`MirrorMessages`; member asks, head answers, except the pushes):
+
+| Channel | Kind | Payload | Answer |
+|---|---|---|---|
+| `cluster.config.manifest` | request | `ManifestRequest`: template (empty), digest (empty on page 0, else 32 bytes), page (VarInt) | `Manifest`: revision (VarLong), digest (32 bytes), total entries, page, entries (≤ 256: path ≤ 240 bytes, size VarLong, SHA-256 32 bytes) |
+| `cluster.config.chunk` | request | `ChunkRequest`: template (empty), digest of the manifest, path, offset (VarLong), length (1 to 49152) | the bytes; `changed` if the head's config has another digest by now |
+| `cluster.config.changed` | push | `Changed`: revision (VarLong) | |
+| `cluster.templates.list` | request | `ManifestRequest` (empty template, page 0) | `TemplateList`: ≤ 256 × name (≤ 64), digest, files, bytes |
+| `cluster.templates.manifest` | request | `ManifestRequest`: template, digest, page | `Manifest` (revision 0, ≤ 128 entries per page) |
+| `cluster.templates.chunk` | request | `ChunkRequest`: template, digest, path, offset, length | the bytes |
+| `cluster.templates.changed` | push | `Changed` (0) | |
+
+Every reader throws only `ProtocolException` and checks each length before it allocates; `JoinRequest.toString()` does not show the secret. A path in a manifest or chunk request that breaks the [path rules](#template-sync) is a decoding error.
 
 ## Tests
 
@@ -145,3 +217,8 @@ Every reader throws only `ProtocolException` and checks each length before it al
 | `JoinTokensTest` | One use, expiry, the right secret for the wrong node, three wrong secrets, unknown id, no secret in the file, lifetime and count limits. |
 | `ClusterMessagesTest`, `ClusterConfigTest` | Round trips, limits, the redacted secret, `cluster.yml` validation (also a member with a revoked certificate), expired revocations leave the list, local database hosts, pins. |
 | `ClusterMessagesFuzzTest` | Jazzer: arbitrary bytes as every payload (decoded values encode back to the same bytes) and through the frame reader. |
+| `ClusterMirrorTest` | Head and member on loopback: the member takes over `nodes.yml`, groups and tasks with the head's bytes, never `cloud.yml`; the head adds the joined node to `nodes.yml`; a change and a removal arrive by push; changes on the member refused (`managed-by-head`) while its `cloud.yml` stays editable; a hand edit undone on reload; a stale revision refused; the revision survives a restart of the head; templates mirrored with nested and empty files, without secrets and links, a local template left alone, an update, a new and a removed template after `cluster sync`, no staging left. |
+| `MirrorRulesTest` | A crafted head on an in-memory session: `../`, absolute and backslash paths, a wrong SHA-256 (staging removed, old template intact), a chunk of the wrong size, a file and the entry count above the limit, a template list above the total, a digest that does not match, secret-looking files and files inside files; `cloud.yml`, an oversize file or an invalid group in the config manifest; the path rules; the head serves only manifest paths and no file replaced by a link, never scans through a linked folder or (Windows) a junction; deleting a template never follows a link, also a nested one, or (Windows) a nested junction; a linked sync folder (or, on Windows, a junction) is refused; a folder made on the member is kept in `replaced/` when the head's template replaces it; secret-looking names; a manifest that does not match the list's file count or size; an unreadable template on the head keeps its last catalog entry, an unreadable new one is not offered; revisions above 18 digits and a broken `config-applied` are refused; an interrupted swap is put right; the head refuses the list before its first scan and the member then removes nothing; a listing without all or most synced templates removes none, one of three may go. |
+| `ClusterSessionTest`, `ClusterPortTest` (session part) | Requests, answers and pushes; error answers carry only their code; unknown channel and unknown answer end the session (also over TLS); a late answer after a timeout is dropped; 16 open requests at most; the end of the session fails open requests; a peer that fills the queue ends the session. |
+| `MirrorMessagesTest`, `MirrorMessagesFuzzTest` | Round trips; full pages fit into one answer; Jazzer: arbitrary bytes as every mirror payload and as an error code, any text against the path rules. |
+| `ConfigServiceMirrorTest` (cloud-config) | Mirror mode: `apply` refuses mirrored files, `applyMirror` writes the set and deletes the rest, an invalid mirror is not written, a hand edit is undone on reload. |

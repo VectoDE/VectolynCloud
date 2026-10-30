@@ -5,6 +5,10 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import net.vectolyn.cloud.config.model.TimeSpan;
 import net.vectolyn.cloud.console.ConsoleOutput;
 import net.vectolyn.cloud.console.Text;
@@ -23,7 +27,8 @@ import net.vectolyn.protocol.NodeId;
  *   <tr><td>{@code cluster token list}</td><td>open tokens without their secret</td></tr>
  *   <tr><td>{@code cluster token revoke <id>}</td><td>deletes a token</td></tr>
  *   <tr><td>{@code cluster join <host:port> <head-id> <token> <ca-pin>}</td><td>joins the cluster of a head</td></tr>
- *   <tr><td>{@code cluster status}</td><td>role, head, CA pin, members, link</td></tr>
+ *   <tr><td>{@code cluster status}</td><td>role, head, CA pin, members, link, config revision, templates</td></tr>
+ *   <tr><td>{@code cluster sync}</td><td>head: rescan and tell the members; member: sync with the head now</td></tr>
  *   <tr><td>{@code cluster remove <node-id>}</td><td>revokes a member's certificate and ends its session</td></tr>
  * </table>
  *
@@ -34,6 +39,8 @@ public final class ClusterCommands {
 
     /** Default cluster port. */
     public static final int DEFAULT_PORT = 7011;
+    /** How long {@code cluster sync} waits before it leaves the sync to the background. */
+    private static final Duration SYNC_WAIT = Duration.ofSeconds(30);
 
     private final ClusterService cluster;
 
@@ -103,6 +110,11 @@ public final class ClusterCommands {
                         .description(Text.of("Shows role, head, CA pin and members.",
                                 "Zeigt Rolle, Head, CA-Pin und Mitglieder."))
                         .executes(c -> status(c.out())))
+                .subcommand(Command.builder("sync")
+                        .description(Text.of("Head: rescans templates and config and tells the members. Member: "
+                                + "syncs with the head now.", "Head: liest Templates und Konfiguration neu ein und "
+                                + "benachrichtigt die Mitglieder. Mitglied: gleicht sich jetzt mit dem Head ab."))
+                        .executes(c -> sync(c.out())))
                 .subcommand(Command.builder("remove")
                         .description(Text.of("Removes a member: revokes its certificate and ends its session.",
                                 "Entfernt ein Mitglied: widerruft sein Zertifikat und beendet seine Sitzung."))
@@ -217,12 +229,44 @@ public final class ClusterCommands {
         status.link().ifPresent(state -> out.println(Text.of("  Link:        %1$s%2$s", "  Verbindung:  %1$s%2$s"),
                 state.name().toLowerCase(java.util.Locale.ROOT),
                 status.lastRefusal().map(r -> " (" + r.name().toLowerCase(java.util.Locale.ROOT) + ")").orElse("")));
+        status.mirror().ifPresent(mirror -> {
+            out.println(Text.of("  Config:      revision %1$s", "  Konfig:      Revision %1$s"), mirror.configRevision());
+            out.println(Text.of("  Templates:   %1$s%2$s", "  Templates:   %1$s%2$s"), mirror.templates(),
+                    mirror.lastSync().map(at -> ", " + at).orElse(""));
+            mirror.problem().ifPresent(problem -> out.warning(Text.of("  Sync:        %1$s", "  Abgleich:    %1$s"),
+                    problem));
+        });
         if (status.role() == ClusterService.Role.HEAD) {
             out.println(Text.of("  Revoked:     %1$s", "  Widerrufen:  %1$s"), status.revoked());
             for (ClusterService.MemberStatus member : status.members()) {
                 out.println("  - " + member.id() + "  " + (member.connected() ? "connected" : "offline") + "  "
                         + member.joinedAt());
             }
+        }
+    }
+
+    private void sync(ConsoleOutput out) throws Exception {
+        CompletableFuture<Void> done = call(cluster::sync);
+        boolean head = cluster.role() == ClusterService.Role.HEAD;
+        try {
+            done.get(SYNC_WAIT.toSeconds(), TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            out.println(Text.of("The sync goes on in the background; \"cluster status\" shows when it is done.",
+                    "Der Abgleich läuft im Hintergrund weiter; „cluster status“ zeigt, wann er fertig ist."));
+            return;
+        } catch (ExecutionException e) {
+            throw new CommandException(Text.of("Sync failed: %1$s", "Abgleich fehlgeschlagen: %1$s"),
+                    String.valueOf(e.getCause().getMessage()));
+        }
+        ClusterService.MirrorStatus mirror = cluster.status().mirror().orElseThrow();
+        if (head) {
+            out.success(Text.of("Config revision %1$s and %2$s templates; the members were told to sync.",
+                    "Konfigurations-Revision %1$s und %2$s Templates; die Mitglieder gleichen sich ab."),
+                    mirror.configRevision(), mirror.templates());
+        } else {
+            out.success(Text.of("Synced with the head: config revision %1$s, %2$s templates.",
+                    "Mit dem Head abgeglichen: Konfigurations-Revision %1$s, %2$s Templates."),
+                    mirror.configRevision(), mirror.templates());
         }
     }
 

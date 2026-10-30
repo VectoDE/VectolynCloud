@@ -16,7 +16,12 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.Supplier;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.SSLContext;
@@ -26,11 +31,18 @@ import net.vectolyn.cloud.cluster.ClusterMessages.JoinReply;
 import net.vectolyn.cloud.cluster.ClusterMessages.JoinRequest;
 import net.vectolyn.cloud.cluster.ClusterMessages.NodeHello;
 import net.vectolyn.cloud.cluster.ClusterMessages.NodeWelcome;
-import net.vectolyn.cloud.config.model.ConfigSnapshot;
+import net.vectolyn.cloud.config.ConfigListener;
+import net.vectolyn.cloud.config.ConfigService;
+import net.vectolyn.cloud.config.error.ConfigException;
 import net.vectolyn.cloud.config.model.DatabaseConfig;
 import net.vectolyn.cloud.config.model.DatabaseMode;
+import net.vectolyn.cloud.config.model.Language;
+import net.vectolyn.cloud.config.model.NodeConfig;
+import net.vectolyn.cloud.config.operation.PutNode;
 import net.vectolyn.cloud.config.secret.Secret;
+import net.vectolyn.protocol.ChannelName;
 import net.vectolyn.protocol.NodeId;
+import net.vectolyn.protocol.PacketReader;
 import net.vectolyn.protocol.message.Disconnect;
 
 /**
@@ -59,6 +71,8 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
     private static final Pattern LOOPBACK_NAME = Pattern.compile("(?i)(.+\\.)?localhost\\.?|ip6-localhost|ip6-loopback");
     /** An IPv4 literal in any form Java reads ({@code 127.1}) or an IPv6 literal. */
     private static final Pattern IP_LITERAL = Pattern.compile("[0-9.]{1,15}|[0-9A-Fa-f.]{0,40}:[0-9A-Fa-f:.]{1,44}");
+    /** How often the head looks for changed templates. */
+    static final Duration TEMPLATE_RESCAN = Duration.ofSeconds(60);
 
     /** The role of this node. */
     public enum Role {
@@ -130,19 +144,54 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
      * @param link             the link state (member only)
      * @param lastRefusal      why the head refused this member last (member only)
      * @param certificateUntil when this node's certificate expires
+     * @param mirror           the config mirror and the template sync, if in a cluster
      */
     public record Status(Role role, Optional<NodeId> head, Optional<String> headAddress, Optional<CaPin> pin,
                          List<MemberStatus> members, int revoked, Optional<ClusterLink.State> link,
-                         Optional<HelloOutcome> lastRefusal, Optional<Instant> certificateUntil) {
+                         Optional<HelloOutcome> lastRefusal, Optional<Instant> certificateUntil,
+                         Optional<MirrorStatus> mirror) {
+    }
+
+    /**
+     * The config mirror and the template sync.
+     *
+     * @param configRevision the head's revision (head) or the one taken over last (member), 0 for none
+     * @param templates      templates offered (head) or synced (member)
+     * @param lastSync       the last rescan (head) or the last complete sync (member)
+     * @param problem        why the last sync failed, if it did
+     */
+    public record MirrorStatus(long configRevision, int templates, Optional<Instant> lastSync,
+                               Optional<String> problem) {
     }
 
     private final ClusterPaths paths;
     private final NodeId self;
     private final String version;
-    private final Supplier<ConfigSnapshot> config;
+    private final ConfigService config;
     private final VersionPolicy versions;
     private final Clock clock;
     private final JoinTokens tokens;
+    // The mirror: the head's sources and a member's sinks; the handlers are fixed before any start.
+    private final ConfigMirrorSource configSource;
+    private final TemplateSource templateSource;
+    private final ConfigMirrorSink configSink;
+    private final TemplateSink templateSink;
+    private final ClusterHandlers headHandlers;
+    private final ClusterHandlers memberHandlers;
+    /** Head: renders, rescans and pushes. Member: syncs. One task at a time, off every network thread. */
+    private final ExecutorService mirrorWorker = Executors.newSingleThreadExecutor(
+            Thread.ofVirtual().name("vectolyn-cluster-mirror").factory());
+    private final ScheduledExecutorService mirrorTimer = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread thread = new Thread(r, "vectolyn-cluster-mirror-timer");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private final Object syncLock = new Object();
+    private final ConfigListener configListener = change -> runMirror(this::refreshConfig);
+    /** The member's next sync, while one is queued; guarded by {@link #syncLock}. */
+    private CompletableFuture<Void> queuedSync;
+    private volatile Instant lastSync;
+    private volatile String mirrorProblem;
     private final Object joinLock = new Object();
     private final java.util.concurrent.atomic.AtomicLong refusedJoins = new java.util.concurrent.atomic.AtomicLong();
     private final java.util.concurrent.atomic.AtomicLong refusedHellos = new java.util.concurrent.atomic.AtomicLong();
@@ -154,7 +203,7 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
     /** Why {@code cluster.yml} could not be read at the start, or null. */
     private volatile String broken;
 
-    private ClusterService(ClusterPaths paths, NodeId self, String version, Supplier<ConfigSnapshot> config,
+    private ClusterService(ClusterPaths paths, NodeId self, String version, ConfigService config,
                            VersionPolicy versions, Clock clock, ClusterConfig cluster) {
         this.paths = paths;
         this.self = self;
@@ -164,6 +213,26 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
         this.clock = clock;
         this.cluster = cluster;
         this.tokens = new JoinTokens(paths.joinTokens());
+        this.configSource = new ConfigMirrorSource(paths.configRevision(), config::snapshot);
+        this.templateSource = new TemplateSource(paths.templatesDir());
+        this.configSink = new ConfigMirrorSink(config, paths.configApplied());
+        this.templateSink = new TemplateSink(paths.templatesDir(), paths.syncWorkDir(), paths.templatesState());
+        this.headHandlers = ClusterHandlers.builder()
+                .request(MirrorMessages.CONFIG_MANIFEST, configSource::manifest)
+                .request(MirrorMessages.CONFIG_CHUNK, (peer, payload) -> configSource.chunk(payload))
+                .request(MirrorMessages.TEMPLATE_LIST, (peer, payload) -> templateSource.list(payload))
+                .request(MirrorMessages.TEMPLATE_MANIFEST, (peer, payload) -> templateSource.manifest(payload))
+                .request(MirrorMessages.TEMPLATE_CHUNK, (peer, payload) -> templateSource.chunk(payload))
+                .build();
+        this.memberHandlers = ClusterHandlers.builder()
+                .push(MirrorMessages.CONFIG_CHANGED,
+                        (peer, payload) -> pushed(peer, MirrorMessages.CONFIG_CHANGED, payload))
+                .push(MirrorMessages.TEMPLATES_CHANGED,
+                        (peer, payload) -> pushed(peer, MirrorMessages.TEMPLATES_CHANGED, payload))
+                .build();
+        if (cluster != null && !cluster.head().id().equals(self.value())) {
+            config.mirrorMode(true);
+        }
     }
 
     /**
@@ -172,13 +241,14 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
      * @param paths    files of the home
      * @param self     this node ({@code node-id} of {@code cloud.yml})
      * @param version  this node's VectolynCloud version
-     * @param config   the configuration (database mode, network name)
+     * @param config   the configuration (database mode, network name; the head mirrors it, a
+     *                 member's is switched to the mirror mode)
      * @param versions the version rule
      * @param clock    time source
      * @return the service
      * @throws IOException if {@code cluster.yml} exists but cannot be read or is invalid
      */
-    public static ClusterService open(ClusterPaths paths, NodeId self, String version, Supplier<ConfigSnapshot> config,
+    public static ClusterService open(ClusterPaths paths, NodeId self, String version, ConfigService config,
                                       VersionPolicy versions, Clock clock) throws IOException {
         Objects.requireNonNull(paths, "paths");
         Objects.requireNonNull(self, "self");
@@ -195,7 +265,7 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
      * until the file is repaired and the node restarted.
      */
     public static ClusterService openOrStandalone(ClusterPaths paths, NodeId self, String version,
-                                                  Supplier<ConfigSnapshot> config, VersionPolicy versions, Clock clock) {
+                                                  ConfigService config, VersionPolicy versions, Clock clock) {
         try {
             return open(paths, self, version, config, versions, clock);
         } catch (IOException e) {
@@ -274,7 +344,7 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
         boolean done = false;
         try {
             Secret caPassword = ClusterPaths.newPassword(paths.caPassword());
-            ClusterCa ca = ClusterCa.create(paths.caKeystore(), caPassword, config.get().cloud().networkName());
+            ClusterCa ca = ClusterCa.create(paths.caKeystore(), caPassword, config.snapshot().cloud().networkName());
             NodeIdentity identity = NodeIdentity.generate(paths.nodeKeystore(), ClusterPaths.newPassword(paths.nodePassword()));
             X509Certificate certificate = ca.issue(identity.certificationRequest(paths.workDir()), self, paths.workDir());
             identity.install(certificate, ca.certificate());
@@ -313,7 +383,7 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
         if (cluster.member(node).isPresent()) {
             throw new ClusterException("Node " + node + " is a member already.", "Node " + node + " ist schon Mitglied.");
         }
-        DatabaseConfig database = config.get().cloud().database();
+        DatabaseConfig database = config.snapshot().cloud().database();
         if (database == null || database.mode() == DatabaseMode.H2) {
             throw new ClusterException("The cloud runs the embedded H2 database, which serves one node only. Switch "
                     + "database.mode in cloud.yml to external, a MariaDB server the nodes reach, first.",
@@ -443,7 +513,9 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
             ClusterFile.write(paths.clusterFile(), joined);
             cluster = joined;
             done = true;
-            LOG.log(System.Logger.Level.INFO, "Cluster: joined the cluster of {0}", reply.head());
+            LOG.log(System.Logger.Level.INFO, "Cluster: joined the cluster of {0}; nodes.yml, groups, tasks and "
+                    + "templates come from the head from now on", reply.head());
+            config.mirrorMode(true);
             startLink();
         } finally {
             if (!done) {
@@ -533,11 +605,23 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
                 ClusterTrust.peers(ca, (node, fingerprint) -> { }));
         ClusterConfig.Head head = cluster.head();
         ClusterServer created = new ClusterServer(ClusterServer.Settings.of(head.bindAddress(), head.port(), self, version),
-                context, this);
+                context, this, headHandlers);
         InetSocketAddress bound = created.start();
         server = created;
         LOG.log(System.Logger.Level.INFO, "Cluster: head, cluster port {0}:{1,number,#} (mutual TLS 1.3)",
                 bound.getHostString(), bound.getPort());
+        // The mirror: the first render and scan off this thread (hashing large templates takes a
+        // while); every change of the config and every rescan that finds a change is pushed. Until
+        // the first scan is done the template list is refused (not-ready), so a member that asked
+        // early keeps its templates; the first scan always tells the members to ask again.
+        config.addListener(configListener);
+        runMirror(() -> {
+            refreshConfig();
+            rescanTemplates(true);
+        });
+        long rescan = TEMPLATE_RESCAN.toMillis();
+        mirrorTimer.scheduleWithFixedDelay(() -> runMirror(() -> rescanTemplates(false)), rescan, rescan,
+                TimeUnit.MILLISECONDS);
     }
 
     private void startLink() throws IOException {
@@ -557,11 +641,19 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
                 throw new CertificateException("the head's certificate is revoked");
             }
         }));
+        try {
+            templateSink.recover();
+        } catch (IOException e) {
+            LOG.log(System.Logger.Level.WARNING, "Cluster: an interrupted template sync cannot be put right ({0}); "
+                    + "see local/.cluster-sync/", e.getMessage());
+        }
         ClusterLink created = new ClusterLink(ClusterLink.Settings.of(self, version,
                 new InetSocketAddress(current.head().host(), current.head().port())), context, new ClusterLink.Listener() {
                     @Override
                     public void connected(NodeId node) {
                         LOG.log(System.Logger.Level.INFO, "Cluster: connected to the head {0}", node);
+                        // on the mirror's worker: this thread reads the answers
+                        requestSync();
                     }
 
                     @Override
@@ -581,7 +673,7 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
                     public void disconnected() {
                         LOG.log(System.Logger.Level.DEBUG, "Cluster: session with the head ended");
                     }
-                });
+                }, memberHandlers);
         created.start();
         link = created;
     }
@@ -611,11 +703,201 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
             }
         }
         ClusterLink running = link;
+        Optional<MirrorStatus> mirror = switch (role) {
+            case HEAD -> Optional.of(new MirrorStatus(configSource.revision(), templateSource.catalog().size(),
+                    Optional.ofNullable(lastSync), headProblem()));
+            case MEMBER -> Optional.of(new MirrorStatus(configSink.applied().map(MirrorState.Revision::revision).orElse(0L),
+                    templateSink.synced().size(), Optional.ofNullable(lastSync), Optional.ofNullable(mirrorProblem)));
+            case STANDALONE -> Optional.empty();
+        };
         return new Status(role, current == null ? Optional.empty() : Optional.of(new NodeId(current.head().id())),
                 current == null ? Optional.empty() : Optional.of(hostPort(current.head().host(), current.head().port())),
                 pin, List.copyOf(members), current == null ? 0 : current.revoked().size(),
                 running == null ? Optional.empty() : Optional.of(running.state()),
-                running == null ? Optional.empty() : Optional.ofNullable(running.lastRefusal()), until);
+                running == null ? Optional.empty() : Optional.ofNullable(running.lastRefusal()), until, mirror);
+    }
+
+    // ---------------------------------------------------------------- the mirror
+
+    /**
+     * {@code cluster sync}. On the head: rescans the templates, renders the config again and tells
+     * every member to sync. On a member: syncs with the head now.
+     *
+     * @return done when the head has pushed or the member's sync has finished
+     * @throws ClusterException if this node is in no cluster
+     */
+    public CompletableFuture<Void> sync() throws ClusterException {
+        requireOpen();
+        return switch (role()) {
+            case HEAD -> {
+                CompletableFuture<Void> done = new CompletableFuture<>();
+                runMirror(() -> {
+                    try {
+                        refreshConfig();
+                        rescanTemplates(true);
+                        Optional<String> problem = headProblem();
+                        if (problem.isPresent()) {
+                            done.completeExceptionally(new IOException(problem.get()));
+                        } else {
+                            done.complete(null);
+                        }
+                    } catch (RuntimeException e) {
+                        done.completeExceptionally(e);
+                        throw e;
+                    }
+                });
+                yield done;
+            }
+            case MEMBER -> requestSync();
+            case STANDALONE -> throw new ClusterException("This node is in no cluster.", "Dieser Node ist in keinem Cluster.");
+        };
+    }
+
+    /** Head: what keeps the mirror from being current, if anything. */
+    private Optional<String> headProblem() {
+        String config = mirrorProblem;
+        Optional<String> templates = templateSource.problem();
+        if (config != null && templates.isPresent()) {
+            return Optional.of(config + "; " + templates.get());
+        }
+        return config != null ? Optional.of(config) : templates;
+    }
+
+    /** Runs a task on the mirror's worker; after close nothing runs any more. */
+    private void runMirror(Runnable task) {
+        try {
+            mirrorWorker.execute(() -> {
+                try {
+                    task.run();
+                } catch (RuntimeException e) {
+                    LOG.log(System.Logger.Level.WARNING, "Cluster: the mirror failed", e);
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            // closed
+        }
+    }
+
+    /** Head: renders the config again and, if its revision changed, tells every member. */
+    private void refreshConfig() {
+        try {
+            if (configSource.refresh()) {
+                LOG.log(System.Logger.Level.DEBUG, "Cluster: config revision {0}", configSource.revision());
+                pushAll(MirrorMessages.CONFIG_CHANGED, new MirrorMessages.Changed(configSource.revision()).write());
+            }
+            mirrorProblem = null;
+        } catch (IOException e) {
+            mirrorProblem = "state/cluster/config-revision: " + e.getMessage();
+            LOG.log(System.Logger.Level.ERROR, "Cluster: the config revision cannot be saved ({0}); the members keep "
+                    + "the previous one", e.getMessage());
+        }
+    }
+
+    /** Head: rescans the templates and tells every member if they changed (or always). */
+    private void rescanTemplates(boolean always) {
+        boolean changed = templateSource.rescan();
+        lastSync = clock.instant();
+        if (changed || always) {
+            pushAll(MirrorMessages.TEMPLATES_CHANGED, new MirrorMessages.Changed(0).write());
+        }
+    }
+
+    /**
+     * Tells every member, each from its own virtual thread: a member that stops reading blocks only
+     * the push to itself (until its session ends), never the mirror's worker or the other members.
+     */
+    private void pushAll(ChannelName channel, byte[] payload) {
+        ClusterServer running = server;
+        if (running != null) {
+            for (ClusterSession session : running.sessions()) {
+                Thread.ofVirtual().name("vectolyn-cluster-push").start(() -> session.push(channel, payload));
+            }
+        }
+    }
+
+    /** Member: the head pushed a change. */
+    private void pushed(NodeId head, ChannelName channel, byte[] payload) throws ClusterRpcException {
+        ConfigMirrorSource.read(() -> MirrorMessages.Changed.read(new PacketReader(payload)));
+        LOG.log(System.Logger.Level.DEBUG, "Cluster: the head {0} pushed {1}; syncing", head, channel);
+        requestSync();
+    }
+
+    /** Member: queues a sync, or joins the one queued already. */
+    private CompletableFuture<Void> requestSync() {
+        synchronized (syncLock) {
+            if (queuedSync != null) {
+                return queuedSync;
+            }
+            CompletableFuture<Void> next = new CompletableFuture<>();
+            queuedSync = next;
+            try {
+                mirrorWorker.execute(() -> {
+                    synchronized (syncLock) {
+                        queuedSync = null;
+                    }
+                    try {
+                        memberSync();
+                        next.complete(null);
+                    } catch (IOException | RuntimeException e) {
+                        next.completeExceptionally(e);
+                    }
+                });
+            } catch (RejectedExecutionException e) {
+                queuedSync = null;
+                next.completeExceptionally(new IOException("the node is shutting down"));
+            }
+            return next;
+        }
+    }
+
+    /** Member: takes over the head's config, then its templates. */
+    private void memberSync() throws IOException {
+        ClusterLink running = link;
+        Optional<ClusterSession> session = running == null ? Optional.empty() : running.session();
+        if (session.isEmpty()) {
+            throw new IOException("no session with the head");
+        }
+        try {
+            ConfigMirrorSink.Outcome outcome = configSink.sync(session.get());
+            if (outcome.changed()) {
+                LOG.log(System.Logger.Level.INFO, "Cluster: config revision {0} of the head taken over", outcome.revision());
+            }
+            TemplateSink.Outcome templates = templateSink.sync(session.get());
+            if (templates.updated() > 0 || templates.removed() > 0) {
+                LOG.log(System.Logger.Level.INFO, "Cluster: templates synced ({0} updated, {1} removed, {2} in total)",
+                        templates.updated(), templates.removed(), templates.templates());
+            }
+            lastSync = clock.instant();
+            mirrorProblem = null;
+        } catch (IOException e) {
+            mirrorProblem = e.getMessage();
+            LOG.log(e instanceof MirrorException ? System.Logger.Level.ERROR : System.Logger.Level.WARNING,
+                    "Cluster: sync with the head failed: {0}", e.getMessage());
+            throw e;
+        }
+    }
+
+    /** Head: adds a node that just joined to {@code nodes.yml}, unless it is there already. */
+    private void addNode(NodeId node, InetAddress from) {
+        if (config.snapshot().nodes().find(node.value()).isPresent()) {
+            return;
+        }
+        String host = from.getHostAddress();
+        int scope = host.indexOf('%');
+        if (scope >= 0) {
+            host = host.substring(0, scope);
+        }
+        NodeConfig defaults = NodeConfig.defaults();
+        try {
+            config.apply(new PutNode(new NodeConfig(node.value(), host, defaults.port(), defaults.servicePorts())));
+            LOG.log(System.Logger.Level.INFO, "Cluster: {0} added to nodes.yml with host {1}", node, host);
+        } catch (ConfigException e) {
+            LOG.log(System.Logger.Level.WARNING, "Cluster: {0} could not be added to nodes.yml; add it by hand:{1}{2}",
+                    node, System.lineSeparator(), e.describe(Language.EN));
+        } catch (IOException | IllegalStateException e) {
+            LOG.log(System.Logger.Level.WARNING, "Cluster: {0} could not be added to nodes.yml ({1}); add it by hand",
+                    node, e.getMessage());
+        }
     }
 
     private static String hostPort(String host, int port) {
@@ -641,7 +923,7 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
                         + "runs {3}", request.node(), from.getHostAddress(), request.version(), version);
                 return JoinReply.refused(JoinOutcome.VERSION_MISMATCH, version, head);
             }
-            Optional<JoinOutcome> database = databaseRefusal(config.get().cloud().database(), from);
+            Optional<JoinOutcome> database = databaseRefusal(config.snapshot().cloud().database(), from);
             if (database.isPresent()) {
                 LOG.log(refusalLevel(), "Cluster: join of {0} refused: {1}", request.node(), database.get());
                 return JoinReply.refused(database.get(), version, head);
@@ -695,6 +977,7 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
                     cluster = next;
                 }
                 LOG.log(System.Logger.Level.INFO, "Cluster: {0} joined from {1}", request.node(), from.getHostAddress());
+                addNode(request.node(), from);
                 return new JoinReply(JoinOutcome.ACCEPTED, version, head, certificate.getEncoded(),
                         caCertificate.getEncoded());
             } catch (IOException | CertificateEncodingException | IllegalArgumentException e) {
@@ -726,7 +1009,7 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
         }
         // The database rule holds for sessions too: a head switched back to H2 (or to a database
         // on loopback) serves no member on another machine, not only no new one.
-        if (databaseRefusal(config.get().cloud().database(), from).isPresent()) {
+        if (databaseRefusal(config.snapshot().cloud().database(), from).isPresent()) {
             LOG.log(helloRefusalLevel(), "Cluster: {0} stays out: the head's database serves this node only",
                     hello.node());
             return new NodeWelcome(HelloOutcome.DATABASE_SINGLE_NODE, self, version);
@@ -811,7 +1094,7 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
     }
 
     private void warnAboutDatabase() {
-        DatabaseConfig database = config.get().cloud().database();
+        DatabaseConfig database = config.snapshot().cloud().database();
         if (database == null || database.mode() == DatabaseMode.H2) {
             LOG.log(System.Logger.Level.WARNING, "Cluster: the cloud runs the embedded H2 database, which serves one "
                     + "node only; no node can join until database.mode is external, a MariaDB server the nodes "
@@ -858,6 +1141,9 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
     @Override
     public synchronized void close() {
         closed = true;
+        config.removeListener(configListener);
+        mirrorTimer.shutdownNow();
+        mirrorWorker.shutdownNow();
         ClusterServer runningServer = server;
         if (runningServer != null) {
             runningServer.close();

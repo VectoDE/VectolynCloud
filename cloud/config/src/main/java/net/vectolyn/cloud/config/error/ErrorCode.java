@@ -93,7 +93,13 @@ public enum ErrorCode {
             "Dieses JVM-Flag steht nicht auf der Allowlist in docs/cloud/config.md."),
     /** An origin for CORS that is not {@code http(s)://host[:port]}. */
     INVALID_ORIGIN("Must be an origin like https://dashboard.example.org or http://localhost:5173, without path.",
-            "Muss ein Origin wie https://dashboard.example.org oder http://localhost:5173 sein, ohne Pfad.");
+            "Muss ein Origin wie https://dashboard.example.org oder http://localhost:5173 sein, ohne Pfad."),
+    /**
+     * A change to {@code nodes.yml}, a group or a task on a cluster member: the head owns these
+     * files and mirrors them to its members (docs/cloud/cluster.md).
+     */
+    MANAGED_BY_HEAD("This file is managed by the cluster head; change it on the head.",
+            "Diese Datei verwaltet der Cluster-Head; auf dem Head ändern.");
 
     private final String english;
     private final String german;

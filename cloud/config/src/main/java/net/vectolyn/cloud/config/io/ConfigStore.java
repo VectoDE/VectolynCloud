@@ -8,6 +8,7 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -119,6 +120,80 @@ public final class ConfigStore {
             }
         }
         return touched;
+    }
+
+    /**
+     * Reads {@code cloud.yml} alone: on a cluster member the other files come from the head.
+     *
+     * @return the file's content, migrated to the current format
+     * @throws ConfigException if the file is missing, no regular file or invalid
+     */
+    public CloudConfig loadCloud() throws ConfigException {
+        List<ConfigError> errors = new ArrayList<>();
+        Set<String> missing = new LinkedHashSet<>();
+        CloudConfig cloud = readSingle(CloudHome.CLOUD_FILE, ConfigFormat.CLOUD, errors, missing, new LinkedHashMap<>());
+        if (!missing.isEmpty()) {
+            errors.add(ConfigError.of(CloudHome.CLOUD_FILE, "", ErrorCode.FILE_MISSING));
+        }
+        if (!errors.isEmpty() || cloud == null) {
+            throw new ConfigException(errors.isEmpty()
+                    ? List.of(ConfigError.of(CloudHome.CLOUD_FILE, "", ErrorCode.FILE_ACCESS)) : errors);
+        }
+        return cloud;
+    }
+
+    /**
+     * Brings {@code nodes.yml}, {@code groups/} and {@code tasks/} on disk to exactly the content
+     * of {@code snapshot}, as a cluster member keeps the files its head mirrors: every file whose
+     * bytes differ from {@link ConfigYaml#write} of the snapshot is replaced atomically, and every
+     * other {@code .yml} or {@code .yaml} entry in {@code groups/} and {@code tasks/} (also a link
+     * named like one) is deleted. {@code cloud.yml} is not touched.
+     *
+     * @return the files written or deleted, relative to {@code config/}
+     * @throws IOException if a file cannot be read, written or deleted
+     */
+    public Set<String> writeMirrored(ConfigSnapshot snapshot) throws IOException {
+        Map<String, Object> wanted = files(snapshot);
+        wanted.remove(CloudHome.CLOUD_FILE);
+        Set<String> touched = new LinkedHashSet<>();
+        for (Map.Entry<String, Object> entry : wanted.entrySet()) {
+            Path path = home.resolve(entry.getKey());
+            byte[] content = ConfigYaml.write(entry.getValue());
+            if (!sameContent(path, content)) {
+                writer.write(path, content);
+                touched.add(entry.getKey());
+            }
+        }
+        for (String folder : List.of(CloudHome.GROUPS_DIR, CloudHome.TASKS_DIR)) {
+            Path dir = home.configDir().resolve(folder);
+            if (RegularPaths.kind(dir) != RegularPaths.Kind.DIRECTORY) {
+                continue;
+            }
+            List<Path> entries = new ArrayList<>();
+            try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir)) {
+                stream.forEach(entries::add);
+            }
+            for (Path entry : entries) {
+                String fileName = entry.getFileName().toString();
+                String relative = folder + "/" + fileName;
+                boolean config = fileName.endsWith(".yml") || fileName.endsWith(".yaml");
+                if (!config || fileName.startsWith(".") || wanted.containsKey(relative)
+                        || RegularPaths.kind(entry) == RegularPaths.Kind.DIRECTORY) {
+                    continue;
+                }
+                Files.deleteIfExists(entry);
+                touched.add(relative);
+            }
+        }
+        return touched;
+    }
+
+    /** Whether {@code path} is a regular file with exactly {@code content}. */
+    private static boolean sameContent(Path path, byte[] content) throws IOException {
+        if (RegularPaths.kind(path) != RegularPaths.Kind.FILE || Files.size(path) != content.length) {
+            return false;
+        }
+        return Arrays.equals(Files.readAllBytes(path), content);
     }
 
     /**

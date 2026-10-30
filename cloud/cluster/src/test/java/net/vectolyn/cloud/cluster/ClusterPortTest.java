@@ -212,6 +212,69 @@ class ClusterPortTest {
         return stream;
     }
 
+    /** The reason of the next Disconnect, skipping pings and pushes; null if the connection just ends. */
+    private static Disconnect.Reason endReason(FrameStream stream) {
+        try {
+            while (true) {
+                if (stream.read(1 << 20).message() instanceof Disconnect d) {
+                    return d.reason();
+                }
+            }
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    @Test
+    void aRequestOnTheSessionIsAnswered() throws Exception {
+        SSLContext context = ClusterTls.context(memberIdentity().keyManagers().getKeyManagers(), trustCa());
+        try (SSLSocket socket = connect(context)) {
+            FrameStream stream = session(socket);
+            stream.write(new Envelope(2, new Request(MirrorMessages.TEMPLATE_LIST,
+                    new MirrorMessages.ManifestRequest("", new byte[0], 0).write())));
+            stream.write(new Envelope(3, new Request(MirrorMessages.TEMPLATE_MANIFEST,
+                    new MirrorMessages.ManifestRequest("Missing", new byte[0], 0).write())));
+            Response list = null;
+            Response missing = null;
+            while (list == null || missing == null) {
+                Envelope next = stream.read(1 << 20);
+                if (next.message() instanceof Response r) {
+                    if (next.requestId() == 2) {
+                        list = r;
+                    } else if (next.requestId() == 3) {
+                        missing = r;
+                    }
+                }
+            }
+            assertEquals(Response.Status.OK, list.status());
+            assertTrue(MirrorMessages.TemplateList.read(new net.vectolyn.protocol.PacketReader(list.payload()))
+                    .templates().isEmpty());
+            assertEquals(Response.Status.ERROR, missing.status());
+            assertEquals(ClusterRpcException.NOT_FOUND, ClusterRpcException.code(missing.payload()),
+                    "an error answer carries its code and nothing else");
+        }
+    }
+
+    @Test
+    void aRequestOnAnUnknownChannelEndsTheSession() throws Exception {
+        SSLContext context = ClusterTls.context(memberIdentity().keyManagers().getKeyManagers(), trustCa());
+        try (SSLSocket socket = connect(context)) {
+            FrameStream stream = session(socket);
+            stream.write(new Envelope(2, new Request(new net.vectolyn.protocol.ChannelName("cluster.nope"), new byte[0])));
+            assertEquals(Disconnect.Reason.PROTOCOL_ERROR, endReason(stream));
+        }
+    }
+
+    @Test
+    void anAnswerToNoRequestEndsTheSession() throws Exception {
+        SSLContext context = ClusterTls.context(memberIdentity().keyManagers().getKeyManagers(), trustCa());
+        try (SSLSocket socket = connect(context)) {
+            FrameStream stream = session(socket);
+            stream.write(new Envelope(99, new Response(Response.Status.OK, new byte[0])));
+            assertEquals(Disconnect.Reason.PROTOCOL_ERROR, endReason(stream));
+        }
+    }
+
     @Test
     void aMemberThatFloodsPingsLosesItsSession() throws Exception {
         SSLContext context = ClusterTls.context(memberIdentity().keyManagers().getKeyManagers(), trustCa());

@@ -10,6 +10,8 @@ import java.net.SocketTimeoutException;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -161,6 +163,7 @@ public final class ClusterServer implements AutoCloseable {
     private final Settings settings;
     private final SSLContext context;
     private final Handler handler;
+    private final ClusterHandlers handlers;
     // 128 connections, 16 per address; before authentication 64, 8 per address. A connection
     // leaves the unauthenticated pool once its hello is accepted and the member admitted, so a
     // removed node with its old certificate counts like any anonymous peer.
@@ -178,11 +181,13 @@ public final class ClusterServer implements AutoCloseable {
      * @param settings where and how
      * @param context  TLS context with this head's certificate and {@link ClusterTrust#peers}
      * @param handler  join and hello decisions
+     * @param handlers what the head answers on a member's session
      */
-    public ClusterServer(Settings settings, SSLContext context, Handler handler) {
+    public ClusterServer(Settings settings, SSLContext context, Handler handler, ClusterHandlers handlers) {
         this.settings = Objects.requireNonNull(settings, "settings");
         this.context = Objects.requireNonNull(context, "context");
         this.handler = Objects.requireNonNull(handler, "handler");
+        this.handlers = Objects.requireNonNull(handlers, "handlers");
         this.timer = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread thread = new Thread(r, "vectolyn-cluster-timer");
             thread.setDaemon(true);
@@ -218,6 +223,28 @@ public final class ClusterServer implements AutoCloseable {
     /** The members connected now. */
     public Set<NodeId> connected() {
         return Set.copyOf(sessions.keySet());
+    }
+
+    /**
+     * The session of a member, for requests and pushes from the head.
+     *
+     * @param node the member
+     * @return its session, if it has one now
+     */
+    public Optional<ClusterSession> session(NodeId node) {
+        Session session = sessions.get(node);
+        return session == null || session.ended.get() ? Optional.empty() : Optional.of(session.rpc);
+    }
+
+    /** The sessions of every member connected now. */
+    public List<ClusterSession> sessions() {
+        List<ClusterSession> all = new ArrayList<>();
+        for (Session session : sessions.values()) {
+            if (!session.ended.get()) {
+                all.add(session.rpc);
+            }
+        }
+        return all;
     }
 
     /**
@@ -336,7 +363,7 @@ public final class ClusterServer implements AutoCloseable {
                 return;
             }
             member = hello.node();
-            session = new Session(member, socket, stream, settings.pingInterval());
+            session = new Session(member, socket, stream, settings.pingInterval(), handlers);
             Session old = sessions.put(member, session);
             if (old != null) {
                 old.end(Disconnect.Reason.REPLACED);
@@ -379,6 +406,9 @@ public final class ClusterServer implements AutoCloseable {
             LOG.log(System.Logger.Level.WARNING, "Cluster port: error on a connection", e);
         } finally {
             deadline.cancel(false);
+            if (session != null) {
+                session.rpc.close();
+            }
             if (member != null && session != null && sessions.remove(member, session)) {
                 handler.disconnected(member);
             }
@@ -468,14 +498,16 @@ public final class ClusterServer implements AutoCloseable {
         private final FrameStream stream;
         private final long window;
         private final AtomicBoolean ended = new AtomicBoolean();
+        private final ClusterSession rpc;
         private long windowStart = System.nanoTime();
         private int pings;
 
-        Session(NodeId node, SSLSocket socket, FrameStream stream, Duration pingInterval) {
+        Session(NodeId node, SSLSocket socket, FrameStream stream, Duration pingInterval, ClusterHandlers handlers) {
             this.node = node;
             this.socket = socket;
             this.stream = stream;
             this.window = pingInterval.toNanos();
+            this.rpc = new ClusterSession(node, handlers, this::trySend);
         }
 
         void run() throws IOException {
@@ -500,8 +532,11 @@ public final class ClusterServer implements AutoCloseable {
                         return;
                     }
                     default -> {
-                        endHere(Disconnect.Reason.PROTOCOL_ERROR);
-                        return;
+                        // requests, answers and pushes; anything else breaks the protocol
+                        if (!rpc.receive(envelope)) {
+                            endHere(Disconnect.Reason.PROTOCOL_ERROR);
+                            return;
+                        }
                     }
                 }
             }
@@ -517,16 +552,23 @@ public final class ClusterServer implements AutoCloseable {
         }
 
         void send(Envelope envelope) {
+            trySend(envelope);
+        }
+
+        /** Sends a frame; if that fails, the session ends. */
+        boolean trySend(Envelope envelope) {
             if (ended.get()) {
-                return;
+                return false;
             }
             try {
-                if (!stream.tryWrite(envelope, WRITE_WAIT)) {
-                    end(null);
+                if (stream.tryWrite(envelope, WRITE_WAIT)) {
+                    return true;
                 }
             } catch (IOException e) {
-                end(null);
+                // ended below
             }
+            end(null);
+            return false;
         }
 
         /**
