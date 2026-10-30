@@ -26,7 +26,7 @@ SOURCEPATH="${SOURCEPATH#:}"
 
 mkdir -p "$OUT/classes"
 mapfile -t TARGETS < <(find .clusterfuzzlite/fuzzers -name '*Fuzzer.java')
-javac --release 17 -proc:none -nowarn \
+javac --release 17 -encoding UTF-8 -proc:none -nowarn \
   -cp "$JAZZER_API_PATH:$JACKSON_ANNOTATIONS" \
   -sourcepath "$SOURCEPATH" \
   -d "$OUT/classes" \
