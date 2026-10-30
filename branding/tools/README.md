@@ -83,3 +83,16 @@ The banner of every release is produced in CI by the Java module `tools/release-
 in `brand3.py` is the Python reference for its layout. [`../release-banner-spec.json`](../release-banner-spec.json)
 and [`../release-banner-template.svg`](../release-banner-template.svg) describe the layout and slots, and
 `../png/release-banner-background@2x.png` is the rendered background.
+
+Badges follow the version rules of the Java module (`ReleaseVersion`, documented in
+[docs/cloud/operations.md](../../docs/cloud/operations.md#versions-and-tags)): `-dev[.N]` PRE-RELEASE gray #9EA3B8,
+`-alpha[.N]` ALPHA red #FF6B6B, `-beta[.N]` BETA gold #FFD23F, `-rc[.N]` RC cyan #00E5FF, `-lts` LTS green #5BD98A
+(the dark `color.success` token, 10.4:1 with the obsidian badge text), no badge for a stable release. `BADGES` and
+`release_badge` in `brand3.py` mirror these rules; a unit test of the Java module compares them with
+`release-banner-spec.json`, so change both sides together.
+
+The release examples in `../png/` (`release-example-*.png`, `release-banner-v0.2.0-dev*.png`) are normally written
+by `export_v3.py`. When the 3D renders are not at hand, render them with the Java module over the committed
+background, which gives the same picture as the CI release:
+`java -cp tools/release-banner/build/classes/java/main net.vectolyn.tools.releasebanner.ReleaseBanner --font ... --name release-example-lts`
+(run `./gradlew :tools:release-banner:classes` first; the options are listed in `ReleaseBanner.java`).

@@ -41,7 +41,10 @@ class BannerLayoutTest {
         "To AV Yo LY|3|154.4132",
         "…|3|17.6200",
         "v10.12.3-beta.12|8|640.1400",
-        "v0.3.0-nightly.20261030|6|712.2695",
+        "LTS|3|48.8833",
+        "v0.2.0-dev.3|12|714.1726",
+        "v1.4.0-lts|12|542.6578",
+        "v1.0.0-dev.20261030|6|593.1226",
     })
     void widthsMatchTheReferenceGenerator(String text, int u, double expected) {
         assertEquals(expected, font.width(text, u), 0.02, text);
@@ -59,12 +62,14 @@ class BannerLayoutTest {
 
     @ParameterizedTest
     @CsvSource({
-        "v0.2.0, 12",
-        "v0.3.0-rc.1, 12",
-        "v0.3.0-alpha.1, 10",
-        "v0.3.0-beta.2, 10",
+        "v1.0.0, 12",
+        "v1.3.0-rc.1, 12",
+        "v0.2.0-dev.3, 12",
+        "v1.4.0-lts, 12",
+        "v1.3.0-alpha.1, 10",
+        "v1.3.0-beta.2, 10",
         "v10.12.3-beta.12, 8",
-        "v0.3.0-nightly.20261030, 6",
+        "v1.0.0-dev.20261030, 6",
     })
     void versionTakesTheLargestSizeThatFits(String tag, int u) {
         assertEquals(u, layout.versionU(tag));
@@ -73,7 +78,7 @@ class BannerLayoutTest {
 
     @Test
     void versionTooLongEvenAtTheSmallestSizeFails() {
-        ReleaseVersion v = ReleaseVersion.parse("v1.0.0-nightly.20261030.123456789");
+        ReleaseVersion v = ReleaseVersion.parse("v1.0.0-dev.20261030123456");
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> layout.layout(v, "", DATE));
         assertTrue(e.getMessage().contains("too long"), e.getMessage());
     }
@@ -91,7 +96,7 @@ class BannerLayoutTest {
         "'  padded title  '|padded title",
     })
     void titleIsShortenedLikeTheReference(String title, String shown) {
-        assertEquals(shown, layout.layout(ReleaseVersion.parse("v0.2.0"), title, DATE).title());
+        assertEquals(shown, layout.layout(ReleaseVersion.parse("v1.0.0"), title, DATE).title());
     }
 
     @Test
@@ -143,8 +148,8 @@ class BannerLayoutTest {
     @ParameterizedTest
     @ValueSource(strings = {"", "   ", "\t \n"})
     void emptyTitleLeavesOnlyTheDate(String title) {
-        BannerLayout.Banner withTitle = layout.layout(ReleaseVersion.parse("v0.2.0"), "Stage 2: cloud core", DATE);
-        BannerLayout.Banner without = layout.layout(ReleaseVersion.parse("v0.2.0"), title, DATE);
+        BannerLayout.Banner withTitle = layout.layout(ReleaseVersion.parse("v1.0.0"), "Stage 2: cloud core", DATE);
+        BannerLayout.Banner without = layout.layout(ReleaseVersion.parse("v1.0.0"), title, DATE);
         assertEquals("", without.title());
         // Title and separator square are gone.
         assertEquals(withTitle.layers().size() - 2, without.layers().size());
@@ -156,7 +161,7 @@ class BannerLayoutTest {
 
     @Test
     void dateFollowsTitleAndSeparator() {
-        BannerLayout.Banner b = layout.layout(ReleaseVersion.parse("v0.2.0"), "Stage 2: cloud core", DATE);
+        BannerLayout.Banner b = layout.layout(ReleaseVersion.parse("v1.0.0"), "Stage 2: cloud core", DATE);
         double tw = font.width("Stage 2: cloud core", 3);
         Rectangle2D sep = b.layers().get(b.layers().size() - 2).shape().getBounds2D();
         assertEquals(Math.rint(BannerLayout.X + tw + 15), sep.getMinX());
@@ -170,21 +175,21 @@ class BannerLayoutTest {
     @Test
     void blockIsCentredVertically() {
         // u 12: block 21 + 20 + 84 + 24 + 21 = 170, so the wordmark's cap top is at 75.
-        BannerLayout.Banner b = layout.layout(ReleaseVersion.parse("v0.2.0"), "", DATE);
+        BannerLayout.Banner b = layout.layout(ReleaseVersion.parse("v1.0.0"), "", DATE);
         Rectangle2D wordmark = b.layers().getFirst().shape().getBounds2D();
         assertEquals(75, wordmark.getMinY(), 0.3);
         // u 10: 156, cap top at 82.
-        BannerLayout.Banner b10 = layout.layout(ReleaseVersion.parse("v0.3.0-beta.2"), "", DATE);
+        BannerLayout.Banner b10 = layout.layout(ReleaseVersion.parse("v1.3.0-beta.2"), "", DATE);
         assertEquals(82, b10.layers().getFirst().shape().getBounds2D().getMinY(), 0.3);
     }
 
     @Test
     void stableHasNoBadgeAndPrereleaseHasOne() {
-        BannerLayout.Banner stable = layout.layout(ReleaseVersion.parse("v0.2.0"), "x", DATE);
+        BannerLayout.Banner stable = layout.layout(ReleaseVersion.parse("v1.0.0"), "x", DATE);
         assertFalse(stable.badge().isPresent());
         assertTrue(stable.layers().stream().noneMatch(l -> l.color().equals(Badge.TEXT)));
 
-        BannerLayout.Banner beta = layout.layout(ReleaseVersion.parse("v0.3.0-beta.2"), "x", DATE);
+        BannerLayout.Banner beta = layout.layout(ReleaseVersion.parse("v1.3.0-beta.2"), "x", DATE);
         assertEquals(Badge.BETA, beta.badge().orElseThrow());
         BannerLayout.Layer plate = beta.layers().stream().filter(l -> l.color().equals(Badge.BETA.fill()))
                 .findFirst().orElseThrow();
@@ -197,9 +202,23 @@ class BannerLayoutTest {
     }
 
     @Test
+    void ltsAndDevGetTheirBadges() {
+        BannerLayout.Banner lts = layout.layout(ReleaseVersion.parse("v1.4.0-lts"), "x", DATE);
+        assertEquals(Badge.LTS, lts.badge().orElseThrow());
+        assertTrue(lts.layers().stream().anyMatch(l -> l.color().equals(Badge.LTS.fill())));
+        // Badge width: label + 2u padding on each side.
+        BannerLayout.Layer plate = lts.layers().stream().filter(l -> l.color().equals(Badge.LTS.fill()))
+                .findFirst().orElseThrow();
+        assertEquals(Math.round(font.width("LTS", 3) + 12), Math.round(plate.shape().getBounds2D().getWidth()));
+
+        BannerLayout.Banner dev = layout.layout(ReleaseVersion.parse("v0.2.0-dev.3"), "x", DATE);
+        assertEquals(Badge.PRE_RELEASE, dev.badge().orElseThrow());
+    }
+
+    @Test
     void onlyThePointsOfTheVersionCoreAreGold() {
         // alpha: the badge is red, so every gold layer belongs to the version.
-        BannerLayout.Banner b = layout.layout(ReleaseVersion.parse("v0.3.0-alpha.1"), "", DATE);
+        BannerLayout.Banner b = layout.layout(ReleaseVersion.parse("v1.3.0-alpha.1"), "", DATE);
         long gold = b.layers().stream().filter(l -> l.color().equals(BannerLayout.GOLD)).count();
         assertEquals(2, gold);
     }
@@ -208,29 +227,29 @@ class BannerLayoutTest {
     @ValueSource(strings = {"Stage\t2", "Stage\u0000", "a‮b", "line two", "zero​width", "bell\u0007"})
     void controlAndFormatCharactersAreRejected(String title) {
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-                () -> layout.layout(ReleaseVersion.parse("v0.2.0"), title, DATE));
+                () -> layout.layout(ReleaseVersion.parse("v1.0.0"), title, DATE));
         assertTrue(e.getMessage().contains("U+"), e.getMessage());
     }
 
     @Test
     void characterWithoutGlyphFailsAndNamesTheCodePoint() {
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-                () -> layout.layout(ReleaseVersion.parse("v0.2.0"), "Launch 🚀", DATE));
+                () -> layout.layout(ReleaseVersion.parse("v1.0.0"), "Launch 🚀", DATE));
         assertTrue(e.getMessage().contains("U+1F680"), e.getMessage());
         IllegalArgumentException cjk = assertThrows(IllegalArgumentException.class,
-                () -> layout.layout(ReleaseVersion.parse("v0.2.0"), "日本", DATE));
+                () -> layout.layout(ReleaseVersion.parse("v1.0.0"), "日本", DATE));
         assertTrue(cjk.getMessage().contains("U+65E5"), cjk.getMessage());
     }
 
     @Test
     void latinCyrillicAndTypographicCharactersAreFine() {
         String title = "Über café – “quoted” вет";
-        assertEquals(title, layout.layout(ReleaseVersion.parse("v0.2.0"), title, DATE).title());
+        assertEquals(title, layout.layout(ReleaseVersion.parse("v1.0.0"), title, DATE).title());
     }
 
     @Test
     void everythingStaysInsideTheTextColumn() {
-        for (String tag : new String[] {"v0.2.0", "v10.12.3-beta.12", "v0.3.0-nightly.20261030"}) {
+        for (String tag : new String[] {"v1.0.0", "v10.12.3-beta.12", "v1.0.0-dev.20261030", "v1.4.0-lts"}) {
             BannerLayout.Banner b = layout.layout(ReleaseVersion.parse(tag),
                     "Stage 12: a much longer release title that needs to be shortened somewhere", DATE);
             for (BannerLayout.Layer l : b.layers()) {

@@ -48,9 +48,9 @@ class ReleaseBannerTest {
 
     @Test
     void writesBothSizes() throws IOException {
-        String log = run(tmp, env("v0.2.0-beta.2", "Stage 2: cloud core", "2026-10-30"));
-        BufferedImage one = BannerRenderer.read(tmp.resolve("VectolynCloud-0.2.0-beta.2-banner.png"));
-        BufferedImage two = BannerRenderer.read(tmp.resolve("VectolynCloud-0.2.0-beta.2-banner-2x.png"));
+        String log = run(tmp, env("v1.0.0-beta.2", "Stage 2: cloud core", "2026-10-30"));
+        BufferedImage one = BannerRenderer.read(tmp.resolve("VectolynCloud-1.0.0-beta.2-banner.png"));
+        BufferedImage two = BannerRenderer.read(tmp.resolve("VectolynCloud-1.0.0-beta.2-banner-2x.png"));
         assertEquals(1280, one.getWidth());
         assertEquals(320, one.getHeight());
         assertEquals(2560, two.getWidth());
@@ -67,10 +67,10 @@ class ReleaseBannerTest {
     void outputIsByteIdenticalAcrossRuns() throws IOException {
         Path a = tmp.resolve("a");
         Path b = tmp.resolve("b");
-        Map<String, String> env = env("v0.2.0-rc.1", "Stage 2: cloud core", "2026-10-30");
+        Map<String, String> env = env("v1.0.0-rc.1", "Stage 2: cloud core", "2026-10-30");
         run(a, env);
         run(b, env);
-        for (String name : List.of("VectolynCloud-0.2.0-rc.1-banner.png", "VectolynCloud-0.2.0-rc.1-banner-2x.png")) {
+        for (String name : List.of("VectolynCloud-1.0.0-rc.1-banner.png", "VectolynCloud-1.0.0-rc.1-banner-2x.png")) {
             assertArrayEquals(Files.readAllBytes(a.resolve(name)), Files.readAllBytes(b.resolve(name)), name);
         }
     }
@@ -78,50 +78,52 @@ class ReleaseBannerTest {
     @Test
     void optionsWinOverEnvironmentAndNameCanBeSet() throws IOException {
         String log = run(tmp, env("v9.9.9", "ignored", "2020-01-01"),
-                "--version", "v0.2.0", "--title", "", "--date", "2026-10-30", "--name", "preview");
+                "--version", "v1.0.0", "--title", "", "--date", "2026-10-30", "--name", "preview");
         assertTrue(Files.exists(tmp.resolve("preview.png")));
         assertTrue(Files.exists(tmp.resolve("preview-2x.png")));
-        assertTrue(log.contains("v0.2.0"), log);
+        assertTrue(log.contains("v1.0.0"), log);
         assertTrue(log.contains("badge none"), log);
         assertTrue(log.contains("title none"), log);
     }
 
     @Test
     void missingTitleMeansNoTitle() throws IOException {
-        String log = run(tmp, Map.of("BANNER_VERSION", "v0.2.0", "BANNER_DATE", "2026-10-30"));
+        String log = run(tmp, Map.of("BANNER_VERSION", "v1.0.0", "BANNER_DATE", "2026-10-30"));
         assertTrue(log.contains("title none"), log);
     }
 
     @Test
     void invalidInputWritesNothing() {
         assertThrows(IllegalArgumentException.class, () -> run(tmp, env("0.2.0", "x", "2026-10-30")));
-        assertThrows(IllegalArgumentException.class, () -> run(tmp, env("v0.2.0", "x", "30.10.2026")));
-        assertThrows(IllegalArgumentException.class, () -> run(tmp, env("v0.2.0", "a\u0000b", "2026-10-30")));
-        assertThrows(IllegalArgumentException.class, () -> run(tmp, env("v0.2.0", "🚀", "2026-10-30")));
+        // The version rules apply to the banner as well: 0.x only as -dev.
+        assertThrows(IllegalArgumentException.class, () -> run(tmp, env("v0.2.0", "x", "2026-10-30")));
+        assertThrows(IllegalArgumentException.class, () -> run(tmp, env("v1.0.0", "x", "30.10.2026")));
+        assertThrows(IllegalArgumentException.class, () -> run(tmp, env("v1.0.0", "a\u0000b", "2026-10-30")));
+        assertThrows(IllegalArgumentException.class, () -> run(tmp, env("v1.0.0", "🚀", "2026-10-30")));
         assertThrows(IllegalArgumentException.class,
                 () -> run(tmp, Map.of("BANNER_TITLE", "x", "BANNER_DATE", "2026-10-30")));
-        assertThrows(IllegalArgumentException.class, () -> run(tmp, env("v0.2.0", "x", "2026-10-30"), "--name", "../x"));
-        assertThrows(IllegalArgumentException.class, () -> run(tmp, env("v0.2.0", "x", "2026-10-30"), "--bogus", "1"));
-        assertThrows(IllegalArgumentException.class, () -> run(tmp, env("v0.2.0", "x", "2026-10-30"), "--name"));
+        assertThrows(IllegalArgumentException.class, () -> run(tmp, env("v1.0.0", "x", "2026-10-30"), "--name", "../x"));
+        assertThrows(IllegalArgumentException.class, () -> run(tmp, env("v1.0.0", "x", "2026-10-30"), "--bogus", "1"));
+        assertThrows(IllegalArgumentException.class, () -> run(tmp, env("v1.0.0", "x", "2026-10-30"), "--name"));
         assertThrows(IllegalArgumentException.class,
-                () -> ReleaseBanner.run(new String[0], env("v0.2.0", "x", "2026-10-30"), System.out));
+                () -> ReleaseBanner.run(new String[0], env("v1.0.0", "x", "2026-10-30"), System.out));
         assertFalse(Files.exists(tmp.resolve("VectolynCloud-0.2.0-banner.png")));
     }
 
     @Test
     void wrongBackgroundSizeIsRejected() throws IOException {
         BannerLayout.Banner banner = new BannerLayout(BrandFiles.font())
-                .layout(ReleaseVersion.parse("v0.2.0"), "", LocalDate.of(2026, 10, 30));
+                .layout(ReleaseVersion.parse("v1.0.0"), "", LocalDate.of(2026, 10, 30));
         BufferedImage bg1 = BannerRenderer.read(BrandFiles.background());
         assertThrows(IllegalArgumentException.class, () -> BannerRenderer.render(banner, bg1, 2));
         assertThrows(IllegalArgumentException.class,
-                () -> run(tmp, env("v0.2.0", "x", "2026-10-30"), "--background-2x", BrandFiles.background().toString()));
+                () -> run(tmp, env("v1.0.0", "x", "2026-10-30"), "--background-2x", BrandFiles.background().toString()));
     }
 
     @Test
     void textIsDrawnAndBackgroundOutsideTheTextIsUntouched() throws IOException {
         BannerLayout.Banner banner = new BannerLayout(BrandFiles.font())
-                .layout(ReleaseVersion.parse("v0.2.0"), "Stage 2: cloud core", LocalDate.of(2026, 10, 30));
+                .layout(ReleaseVersion.parse("v1.0.0"), "Stage 2: cloud core", LocalDate.of(2026, 10, 30));
         BufferedImage bg = BannerRenderer.read(BrandFiles.background());
         BufferedImage img = BannerRenderer.render(banner, bg, 1);
         // The 3D mark on the right and the corners are left alone.

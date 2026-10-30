@@ -33,7 +33,35 @@ Bevor ein Tag gepusht wird, und am Ende jeder Etappe, läuft die Aufräum-Prüfu
 
 Die Startskripte kommen als ein Archiv pro Betriebssystem, nicht als lose Dateien. Ein heruntergeladenes `start.sh` verliert sein Ausführungsrecht, im tar bleibt es erhalten. Das zip behält die CRLF-Zeilenenden, die die Windows-Skripte brauchen. Und jedes Archiv ist ein einziger Download mit dem passenden Jar. Das Jar hängt zusätzlich einzeln am Release. Die Archive sind reproduzierbar (feste Reihenfolge, feste Besitzer und Zeitstempel), derselbe Tag ergibt also beim zweiten Bauen dieselbe SHA-256.
 
-Das Container-Image landet unter `ghcr.io/vectode/vectolyn-cloud` mit der Version als Tag (`0.2.0`, ohne `v`). `latest` bekommen nur stabile Releases. `v0.*` und Tags mit Zusatz (`v1.0.0-rc.1`) sind Vorabversionen und verschieben `latest` nicht. Im Image steckt genau das `VectolynCloud.jar` des Releases: Der Workflow übergibt das signierte Jar an den Image-Build, statt es neu zu kompilieren, und prüft vorher seine SHA-256 gegen `SHA256SUMS`.
+Das Container-Image landet unter `ghcr.io/vectode/vectolyn-cloud` mit der Version als Tag (`1.0.0`, ohne `v`). `latest` wandert nur mit Releases, die keine Vorabversionen sind, also mit stabilen und `-lts`-Tags; `-dev`, `-alpha`, `-beta` und `-rc` lassen es stehen (siehe [Versionen und Tags](#versionen-und-tags)). Im Image steckt genau das `VectolynCloud.jar` des Releases: Der Workflow übergibt das signierte Jar an den Image-Build, statt es neu zu kompilieren, und prüft vorher seine SHA-256 gegen `SHA256SUMS`.
+
+## Versionen und Tags
+
+Ein Release beginnt mit einem gepushten Tag. Der erste Schritt von `release.yml` prüft ihn, bevor irgendetwas gebaut oder signiert wird, und bricht das Release mit einer Meldung ab, die die verletzte Regel nennt.
+
+| Tag | Erlaubt | Badge im Banner | Auf GitHub |
+|---|---|---|---|
+| `v0.2.0-dev`, `v0.2.0-dev.3` | jede Version; unter 1.0.0 die einzige Form | PRE-RELEASE, grau | Vorabversion |
+| `v1.0.0-alpha`, `v1.0.0-alpha.1` | ab 1.0.0 | ALPHA, rot | Vorabversion |
+| `v1.0.0-beta.2` | ab 1.0.0 | BETA, gold | Vorabversion |
+| `v1.0.0-rc.1` | ab 1.0.0 | RC, cyan | Vorabversion |
+| `v1.4.0-lts` | ab 1.0.0 | LTS, grün | Release, wird Latest |
+| `v1.0.0` | ab 1.0.0 | keins | Release, wird Latest |
+
+- `MAJOR`, `MINOR`, `PATCH` und der Zähler `.N` sind Zahlen ohne führende Nullen. Der Zähler ist optional.
+- `-lts` hat keinen Zähler. Eine LTS-Linie zählt ihre Releases mit der Patch-Version: `v1.4.0-lts`, `v1.4.1-lts`.
+- Alles andere bricht das Release ab: eine 0.x-Version ohne `-dev` oder mit anderem Zusatz (`v0.2.0`, `v0.2.0-alpha.1`), ein unbekannter Zusatz (`-nightly`, `-RC.1`), Build-Metadaten (`+build.7`; GitHub kann das `+` in Dateinamen umschreiben) und kaputte Tags (`v1.0`, `v01.0.0`).
+- Das Image-Tag `latest` folgt derselben Einordnung: Stabile und `-lts`-Releases verschieben es, Vorabversionen nicht.
+
+Die Regeln stehen an einer Stelle, in `ReleaseVersion` in [`tools/release-banner`](../../tools/release-banner); das Banner liest den Tag mit demselben Code. Einen Tag vor dem Pushen prüfen:
+
+```sh
+bash tools/release-banner/check-tag.sh v1.0.0-rc.1
+# channel=rc
+# prerelease=true
+```
+
+Ein Tag, der eine Regel verletzt, gibt den Grund aus und endet mit einem Fehler. Wurde so ein Tag schon gepusht: löschen (`git push --delete origin <tag>` und `git tag -d <tag>`), korrigieren, neu pushen.
 
 ## Voraussetzungen
 
@@ -276,7 +304,7 @@ Ein Cluster besteht aus einem Head und seinen Mitgliedern; Ablauf, Vertrauensmod
 
 ## Ein Release prüfen
 
-Jede Datei eines Releases ist mit cosign keyless signiert (Sigstore, die GitHub-Actions-Identität von `release.yml`). Die fünf Dateien aus `SHA256SUMS` (die Banner-Bilder eingeschlossen) haben zusätzlich eine Build-Provenance-Attestierung von GitHub (SLSA-Provenance, mit Sigstore signiert). `vectolyn.intoto.jsonl` ist dieselbe Attestierung als Datei, sie lässt sich also auch ohne Abfrage bei GitHub prüfen; `SHA256SUMS` selbst sichert seine Signatur ab. Ersetze `v0.2.0` durch den Tag, den du heruntergeladen hast.
+Jede Datei eines Releases ist mit cosign keyless signiert (Sigstore, die GitHub-Actions-Identität von `release.yml`). Die fünf Dateien aus `SHA256SUMS` (die Banner-Bilder eingeschlossen) haben zusätzlich eine Build-Provenance-Attestierung von GitHub (SLSA-Provenance, mit Sigstore signiert). `vectolyn.intoto.jsonl` ist dieselbe Attestierung als Datei, sie lässt sich also auch ohne Abfrage bei GitHub prüfen; `SHA256SUMS` selbst sichert seine Signatur ab. Ersetze `v0.2.0-dev` durch den Tag, den du heruntergeladen hast.
 
 Jedes Release ist als `VectoDE/VectolynCloud` signiert, wie in den Befehlen unten. Die Provenance erzeugt `actions/attest-build-provenance` im Build-Job; der Release-Workflow pinnt jede Action auf einen Commit-SHA. Die Provenance-Datei ist ein Sigstore-Bundle, das `gh attestation verify --bundle` liest.
 
@@ -287,7 +315,7 @@ sha256sum --check --ignore-missing SHA256SUMS
 # 2. cosign: signiert von release.yml dieses Repositorys bei diesem Tag
 cosign verify-blob VectolynCloud.jar \
   --bundle VectolynCloud.jar.sigstore.json \
-  --certificate-identity "https://github.com/VectoDE/VectolynCloud/.github/workflows/release.yml@refs/tags/v0.2.0" \
+  --certificate-identity "https://github.com/VectoDE/VectolynCloud/.github/workflows/release.yml@refs/tags/v0.2.0-dev" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
 # 3. GitHub-Attestierung (Build-Provenance)
@@ -297,54 +325,54 @@ gh attestation verify VectolynCloud.jar --repo VectoDE/VectolynCloud
 gh attestation verify VectolynCloud.jar --repo VectoDE/VectolynCloud \
   --bundle vectolyn.intoto.jsonl \
   --signer-workflow VectoDE/VectolynCloud/.github/workflows/release.yml \
-  --source-ref refs/tags/v0.2.0
+  --source-ref refs/tags/v0.2.0-dev
 ```
 
 Die Banner-Bilder prüfst du genauso, zum Beispiel:
 
 ```sh
-cosign verify-blob VectolynCloud-0.2.0-banner-2x.png \
-  --bundle VectolynCloud-0.2.0-banner-2x.png.sigstore.json \
-  --certificate-identity "https://github.com/VectoDE/VectolynCloud/.github/workflows/release.yml@refs/tags/v0.2.0" \
+cosign verify-blob VectolynCloud-0.2.0-dev-banner-2x.png \
+  --bundle VectolynCloud-0.2.0-dev-banner-2x.png.sigstore.json \
+  --certificate-identity "https://github.com/VectoDE/VectolynCloud/.github/workflows/release.yml@refs/tags/v0.2.0-dev" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
-gh attestation verify VectolynCloud-0.2.0-banner-2x.png --repo VectoDE/VectolynCloud
+gh attestation verify VectolynCloud-0.2.0-dev-banner-2x.png --repo VectoDE/VectolynCloud
 ```
 
 Das Container-Image, immer über Digest oder Tag eines Releases:
 
 ```sh
-cosign verify ghcr.io/vectode/vectolyn-cloud:0.2.0 \
-  --certificate-identity "https://github.com/VectoDE/VectolynCloud/.github/workflows/release.yml@refs/tags/v0.2.0" \
+cosign verify ghcr.io/vectode/vectolyn-cloud:0.2.0-dev \
+  --certificate-identity "https://github.com/VectoDE/VectolynCloud/.github/workflows/release.yml@refs/tags/v0.2.0-dev" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
-gh attestation verify oci://ghcr.io/vectode/vectolyn-cloud:0.2.0 --repo VectoDE/VectolynCloud
+gh attestation verify oci://ghcr.io/vectode/vectolyn-cloud:0.2.0-dev --repo VectoDE/VectolynCloud
 
 # SBOM und BuildKit-Provenance, die mit dem Image gespeichert sind
-docker buildx imagetools inspect ghcr.io/vectode/vectolyn-cloud:0.2.0 --format '{{ json .SBOM }}'
-docker buildx imagetools inspect ghcr.io/vectode/vectolyn-cloud:0.2.0 --format '{{ json .Provenance }}'
+docker buildx imagetools inspect ghcr.io/vectode/vectolyn-cloud:0.2.0-dev --format '{{ json .SBOM }}'
+docker buildx imagetools inspect ghcr.io/vectode/vectolyn-cloud:0.2.0-dev --format '{{ json .Provenance }}'
 ```
 
-Ob das Image das veröffentlichte Jar enthält: `docker run --rm --entrypoint sha256sum ghcr.io/vectode/vectolyn-cloud:0.2.0 /opt/vectolyn/VectolynCloud.jar` muss die Zeile aus `SHA256SUMS` ausgeben.
+Ob das Image das veröffentlichte Jar enthält: `docker run --rm --entrypoint sha256sum ghcr.io/vectode/vectolyn-cloud:0.2.0-dev /opt/vectolyn/VectolynCloud.jar` muss die Zeile aus `SHA256SUMS` ausgeben.
 
 ## Release-Banner
 
-Jedes Release beginnt mit einem Banner: die Wortmarke VectolynCloud, der Tag (`v0.2.0-beta.2`), bei Vorabversionen ein Badge (`-alpha.N` ALPHA, `-beta.N` BETA, `-rc.N` RC, jeder andere Zusatz PRE-RELEASE, bei stabilen Versionen keins), die erste Zeile der Tag-Nachricht als Titel und das Datum des Tags. Der Build-Job von `release.yml` zeichnet es mit [`tools/release-banner`](../../tools/release-banner) (reines Java, ohne Abhängigkeiten) auf den vorgerenderten Hintergrund aus [`branding/png/`](../../branding/png), in Pixelify Sans Bold aus [`branding/fonts/`](../../branding/fonts). Beide Größen sind Release-Dateien: Sie stehen in `SHA256SUMS`, sind signiert und von der Provenance abgedeckt wie die anderen, und die Release Notes zeigen die 2x-Datei.
+Jedes Release beginnt mit einem Banner: die Wortmarke VectolynCloud, der Tag (`v1.0.0-beta.2`), ein Badge für den Zusatz (`-dev` PRE-RELEASE, `-alpha` ALPHA, `-beta` BETA, `-rc` RC, `-lts` LTS, bei stabilen Versionen keins; siehe [Versionen und Tags](#versionen-und-tags)), die erste Zeile der Tag-Nachricht als Titel und das Datum des Tags. Der Build-Job von `release.yml` zeichnet es mit [`tools/release-banner`](../../tools/release-banner) (reines Java, ohne Abhängigkeiten) auf den vorgerenderten Hintergrund aus [`branding/png/`](../../branding/png), in Pixelify Sans Bold aus [`branding/fonts/`](../../branding/fonts). Beide Größen sind Release-Dateien: Sie stehen in `SHA256SUMS`, sind signiert und von der Provenance abgedeckt wie die anderen, und die Release Notes zeigen die 2x-Datei.
 
 Was ins Banner kommt:
 
-- **Titel:** die erste Zeile der Nachricht des annotierten Tags, also eine kurze Überschrift: `git tag -a v0.2.0 -m "Stage 2: cloud core" -m "Längere Notizen ..."`. Ab 49 Zeichen wird sie am Wortende mit `…` gekürzt, und weiter gekürzt, wenn sie nicht neben das Datum passt. Ein Tag ohne Nachricht, eine Nachricht, die nur aus einer Signatur besteht, und ein Lightweight-Tag ergeben ein Banner ohne Titel.
+- **Titel:** die erste Zeile der Nachricht des annotierten Tags, also eine kurze Überschrift: `git tag -a v0.2.0-dev -m "Stage 2: cloud core" -m "Längere Notizen ..."`. Ab 49 Zeichen wird sie am Wortende mit `…` gekürzt, und weiter gekürzt, wenn sie nicht neben das Datum passt. Ein Tag ohne Nachricht, eine Nachricht, die nur aus einer Signatur besteht, und ein Lightweight-Tag ergeben ein Banner ohne Titel.
 - **Datum:** das Datum des Taggers in UTC (bei einem Lightweight-Tag das Commit-Datum), angezeigt als `Oct 30, 2026`.
-- **Strenge Prüfung:** Der Tag muss `v<MAJOR>.<MINOR>.<PATCH>` sein, mit optionalem SemVer-Vorab-Teil und ohne Build-Metadaten (`+...`: GitHub kann das `+` in Release-Dateinamen umschreiben, und ein Bindestrich darin würde das Release als Vorab-Release markieren), der Titel darf keine Steuer- oder Formatzeichen enthalten, und jedes Zeichen muss in Pixelify Sans vorhanden sein (Lateinisch, Lateinisch erweitert und ein Teil des Kyrillischen; keine Emoji). Stimmt etwas nicht, schlägt das Release fehl, bevor etwas veröffentlicht ist; dann den Tag löschen, korrigieren und neu pushen.
+- **Strenge Prüfung:** Der Tag muss den [Versionsregeln](#versionen-und-tags) folgen, der Titel darf keine Steuer- oder Formatzeichen enthalten, und jedes Zeichen muss in Pixelify Sans vorhanden sein (Lateinisch, Lateinisch erweitert und ein Teil des Kyrillischen; keine Emoji). Stimmt etwas nicht, schlägt das Release fehl, bevor etwas veröffentlicht ist; dann den Tag löschen, korrigieren und neu pushen.
 
 Vor dem Taggen lässt sich ein Banner lokal ansehen (die Ausgabe landet in `tools/release-banner/build/release-banner/`, außer `-PbannerOut` nennt ein anderes Verzeichnis):
 
 ```sh
-./gradlew :tools:release-banner:releaseBanner -PbannerVersion=v0.2.0-beta.2 \
+./gradlew :tools:release-banner:releaseBanner -PbannerVersion=v1.0.0-beta.2 \
   -PbannerTitle="Stage 2: cloud core" -PbannerDate=2026-10-30
 ```
 
-Genau das, was das Release für einen lokal vorhandenen Tag zeigen wird, erzeugt das Skript des Workflows: `tools/release-banner/banner-from-tag.sh v0.2.0 out/`.
+Genau das, was das Release für einen lokal vorhandenen Tag zeigen wird, erzeugt das Skript des Workflows: `tools/release-banner/banner-from-tag.sh v0.2.0-dev out/`.
 
 ## Was wo getestet wird
 
@@ -356,5 +384,6 @@ Genau das, was das Release für einen lokal vorhandenen Tag zeigen wird, erzeugt
 | Image | aus den Quellen und über den Release-Weg, amd64 und arm64, Start als UID 1000, root abgelehnt, Healthcheck, sauberes `docker stop` | Push nach GHCR, cosign-Signatur, Attestierungen, die `latest`-Regel |
 | compose.yml | `docker compose config` | einen vollständigen Start mit MariaDB |
 | Egg | Struktur, Variablen, Regeln gegen ihre Standardwerte, die Setup-Datei, die Wings schreiben würde, ShellCheck des Installers | Import in ein Panel, den Download des Installers, einen Lauf unter Wings |
-| Release-Banner | Unit-Tests (Badge-Regeln, Kürzen des Titels, Größen, bytegleiche Ausgabe); das Release-Skript auf lokalen Tags (mit Titel, leere Nachricht, nur Signatur, Lightweight, ungültig), zweimal erzeugt und verglichen | den Abruf des Tags von GitHub und das Bild in den veröffentlichten Notes |
+| Release-Tag | Unit-Tests jeder Regel; `check-tag.sh` auf jeder erlaubten Form (Kanal und Vorab-Kennzeichen) und jeder abgelehnten Form (der Grund) | die Prüfung eines gepushten Tags, das Vorab-Kennzeichen und `latest` auf GitHub und GHCR |
+| Release-Banner | Unit-Tests (Badge je Zusatz, Kürzen des Titels, Größen, bytegleiche Ausgabe); das Release-Skript auf lokalen Tags (jedes Badge, mit Titel, leere Nachricht, nur Signatur, Lightweight, Tags, die die Regeln verletzen), zweimal erzeugt und verglichen | den Abruf des Tags von GitHub und das Bild in den veröffentlichten Notes |
 | Release-Workflow | actionlint | Signieren, Provenance und Veröffentlichen bei einem Tag |

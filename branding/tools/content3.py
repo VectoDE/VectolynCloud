@@ -60,6 +60,13 @@ MOTD18 = [
     [("VECTOLYN", AQUA, 1), (".NET", GOLD6, 1), (" ■ ", GOLD6, 0), ("[", GRAY_D, 1), ("1.8 - 26.3", WHITE, 1), ("]", GRAY_D, 1)],
     [("NEW LOBBY", WHITE, 1), (" • ", GRAY_D), ("JAVA & BEDROCK", GOLD6, 1)],
 ]
+# Legacy proxy (templates/Legacy-Proxy): its backends are PandaSpigot 1.8.8 (protocol 47) and it has no protocol
+# translation (no ViaVersion), so only Java 1.8 to 1.8.9 gets in. Java only, and the 1.8 palette (aqua §b, gold §6)
+# directly, since none of its clients shows hex colours.
+MOTD_LEGACY_PROXY = [
+    [("VECTOLYN", AQUA, 1), (".NET", GOLD6, 1), (" ■ ", GOLD6, 0), ("[", GRAY_D, 1), ("1.8 - 1.8.9", WHITE, 1), ("]", GRAY_D, 1)],
+    [("LEGACY SERVERS", WHITE, 1), (" • ", GRAY_D), ("JAVA", GOLD6, 1)],
+]
 # Bedrock: no Java version range, crossplay as text instead (Geyser's Bedrock range keeps changing).
 MOTD_BEDROCK =[("VECTOLYN", CY, 1), (".NET", GO, 1), (" ■ ", GO, 0), ("[", GRAY_D, 1), ("JAVA + BEDROCK", WHITE, 1), ("]", GRAY_D, 1)]
 COUNT = ("128", "500")
@@ -316,6 +323,8 @@ def bedrock_codes(segs, table):
 def motd_txt():
     cen = [U.center(l) for l in MOTD]
     cen18 = [U.center(l) for l in MOTD18]
+    cenlp = [U.center(l) for l in MOTD_LEGACY_PROXY]
+    mmlp = "\\n".join(" " * n + mm(l) for (_, n, _w), l in zip(cenlp, MOTD_LEGACY_PROXY))
     mml = "\\n".join(" " * n + mm(l) for (_, n, _w), l in zip(cen, MOTD))
     bt = {CY: "b", GO: "p", GRAY_D: "8", WHITE: "f"}
     return (
@@ -328,6 +337,10 @@ def motd_txt():
         "# via Adventure: cyan becomes §3 (dark aqua).\n"
         f'motd-legacy-1: "{" " * cen18[0][1]}{legacy_codes(MOTD18[0])}"\n'
         f'motd-legacy-2: "{" " * cen18[1][1]}{legacy_codes(MOTD18[1])}"\n\n'
+        "# Legacy proxy (templates/Legacy-Proxy/velocity.toml), MiniMessage, same centring. Only Java 1.8 to 1.8.9\n"
+        "# reaches it (PandaSpigot 1.8.8 backends, no ViaVersion): no Bedrock, and named 1.8 colours instead of hex.\n"
+        f"# Line 1: {cenlp[0][2]} px -> {cenlp[0][1]} spaces; line 2: {cenlp[1][2]} px -> {cenlp[1][1]} spaces.\n"
+        f'motd = "{mmlp}"\n\n'
         "# Geyser (plugins/Geyser-Velocity/config.yml), Bedrock § codes, not centred.\n"
         "# Bedrock shows motd1 in the server list; per a Geyser source comment the sub-MOTD only shows locally.\n"
         f'primary-motd: "{bedrock_codes(MOTD_BEDROCK, bt)}"\n'
