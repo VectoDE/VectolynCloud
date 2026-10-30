@@ -158,6 +158,7 @@ The launcher refuses to run as root or administrator. If your development shell 
 
 ## Documentation and community
 
+- [Project page](https://vectode.github.io/VectolynCloud/) with the [brand guide](https://vectode.github.io/VectolynCloud/brand/) (sources in `site/` and `branding/`)
 - [Wiki](https://github.com/VectoDE/VectolynCloud/wiki) (English and German, sources in `docs/wiki/`)
 - [Discussions](https://github.com/VectoDE/VectolynCloud/discussions) for questions, ideas and announcements
 - [Contributing](CONTRIBUTING.md) · [Code of Conduct](CODE_OF_CONDUCT.md) · [Security](SECURITY.md)

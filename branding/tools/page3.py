@@ -163,6 +163,7 @@ border-bottom:1px solid var(--line)}
 .bar nav a{color:var(--muted);text-decoration:none;font-size:14px;white-space:nowrap}
 .bar nav a:hover{color:var(--text)}
 .bar button{font:inherit;font-size:14px;background:none;color:var(--muted);border:1px solid var(--line);padding:4px 10px;cursor:pointer;white-space:nowrap}
+.bar .home{font-size:14px;color:var(--muted);text-decoration:none;white-space:nowrap}.bar .home:hover{color:var(--text)}
 .hero{background:#14111F;color:#ECEEF4;position:relative}
 .hero .media{position:relative;aspect-ratio:16/9;max-height:78vh;width:100%;overflow:hidden;background:#14111F}
 .hero .media video,.hero .media img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
@@ -248,7 +249,7 @@ pre.console{font-size:13px;line-height:1.35;border-top:28px solid #1E1A2E;positi
 .bar{padding:10px 16px;gap:14px}.duo,.facts,.tone{grid-template-columns:minmax(0,1fr)}.colors .meta{grid-template-columns:minmax(0,1fr)}
 .files{columns:1}.ladder{grid-template-columns:repeat(3,auto)}.well{padding:16px}}
 .jump{display:none;font:inherit;font-size:14px;background:var(--bg);color:var(--text);border:1px solid var(--line);padding:4px 6px;max-width:44vw}
-@media (max-width:560px){.bar nav{display:none}.bar{justify-content:space-between;gap:8px}.jump{display:block;flex:1;max-width:none;min-width:0}.bar .brand span{display:none}.bar button{padding:4px 6px}}
+@media (max-width:560px){.bar nav{display:none}.bar{justify-content:space-between;gap:8px}.jump{display:block;flex:1;max-width:none;min-width:0}.bar .brand span{display:none}.bar button{padding:4px 6px}.bar .home{font-size:13px}}
 .note-box{border-left:2px solid var(--line);padding:4px 0 4px 18px;margin:0 0 8px;color:var(--muted);font-size:14px}
 .note-box h3{margin-top:0;color:var(--text)}.note-box ul{padding-left:18px}
 """
@@ -555,6 +556,8 @@ docker pull ghcr.io/vectode/vectolyn-cloud:0.2.0</code></pre><figcaption><b>Mono
                                                         ("writing", "Voice"), ("open", "Not verified"), ("files", "Downloads")))
     jump = '<option value="top">Sections</option>' + "".join(f'<option value="{i}">{t}</option>' for i, t in re.findall(r'href="#([a-z]+)">([^<]+)<', nav))
     small = img("mark-on-dark.svg", f["mark-on-dark.svg"], 0.375, "", "px")
+    # Optional "site" in brand.json: the project page the guide is published under; adds a link back to it.
+    home = f'<a class="home" href="{E(ga.BRAND["site"])}">Project page</a>' if ga.BRAND.get("site") else ""
     return f'''<!doctype html>
 <html lang="en">
 <head>
@@ -566,7 +569,7 @@ docker pull ghcr.io/vectode/vectolyn-cloud:0.2.0</code></pre><figcaption><b>Mono
 <style>{CSS}</style>
 </head>
 <body>
-<header class="bar"><a class="brand" href="#top" aria-label="Vectolyn brand guidelines, back to top">{small}<span style="margin-left:6px">Brand guidelines</span></a><nav aria-label="Sections">{nav}</nav><select class="jump" aria-label="Jump to section" onchange="location.hash=this.value">{jump}</select><button id="theme" type="button">Theme: system</button></header>
+<header class="bar"><a class="brand" href="#top" aria-label="Vectolyn brand guidelines, back to top">{small}<span style="margin-left:6px">Brand guidelines</span></a><nav aria-label="Sections">{nav}</nav><select class="jump" aria-label="Jump to section" onchange="location.hash=this.value">{jump}</select>{home}<button id="theme" type="button">Theme: system</button></header>
 <div class="hero" id="top">
   <div class="media"><video autoplay muted loop playsinline poster="png/keyart-1920x1080.jpg" aria-label="The Vectolyn mark turning"><source src="video/mark-turntable.webm" type="video/webm"><source src="video/mark-turntable.mp4" type="video/mp4"></video>
   <img src="png/keyart-1920x1080.jpg" alt="The Vectolyn mark as a 3D object"></div>

@@ -2,6 +2,8 @@
 
 Brand assets for Vectolyn and VectolynCloud. Open [`index.html`](index.html) in a browser for the full brand
 guide: mark, lockups, colors, type, in-game design, banners, voice and tone, and a download list.
+The same page is published at <https://vectode.github.io/VectolynCloud/brand/>, next to the project page from
+[`../site/`](../site); `site/build.sh` assembles both and `.github/workflows/pages.yml` deploys them.
 
 | Path | Content |
 |---|---|
