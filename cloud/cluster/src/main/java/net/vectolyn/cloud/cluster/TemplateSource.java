@@ -85,6 +85,7 @@ final class TemplateSource {
      * has no templates, and they would remove the ones they synced.
      */
     private volatile boolean ready;
+    private volatile String problem;
 
     /**
      * Creates the source; nothing is offered until {@link #rescan()} finished once.
@@ -176,9 +177,16 @@ final class TemplateSource {
         } catch (IOException e) {
             LOG.log(System.Logger.Level.WARNING, "Cluster: local/templates cannot be read ({0}); the templates offered "
                     + "stay as they were", e.getMessage());
+            problem = "local/templates cannot be read: " + e.getMessage();
             return false;
         }
+        problem = null;
         return replace(next, seen);
+    }
+
+    /** Why the last scan could not read {@code local/templates}, if it could not. */
+    java.util.Optional<String> problem() {
+        return java.util.Optional.ofNullable(problem);
     }
 
     private boolean replace(Map<String, Template> next, Set<Path> seen) {

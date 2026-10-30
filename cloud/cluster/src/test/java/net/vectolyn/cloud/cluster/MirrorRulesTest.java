@@ -249,6 +249,58 @@ class MirrorRulesTest {
     }
 
     @Test
+    void aFolderMadeOnTheMemberIsKeptWhenTheHeadsTemplateReplacesIt() throws Exception {
+        Path own = Files.createDirectories(dir.resolve("local/templates/Lobby"));
+        Files.writeString(own.resolve("mine.txt"), "mine");
+        List<FileEntry> entries = List.of(new FileEntry("a.txt", 5, sha("hello")));
+        byte[] digest = MirrorMessages.digest(entries);
+        try (SessionPair pair = new SessionPair(ClusterHandlers.NONE, head(digest,
+                (peer, payload) -> new Manifest(0, digest, 1, 0, entries).write(),
+                (peer, payload) -> "hello".getBytes(StandardCharsets.UTF_8)))) {
+            assertEquals(1, sink().sync(pair.member).updated());
+        }
+        assertEquals("hello", Files.readString(dir.resolve("local/templates/Lobby/a.txt")));
+        assertFalse(Files.exists(dir.resolve("local/templates/Lobby/mine.txt")));
+        List<Path> kept;
+        try (var stream = Files.list(dir.resolve("local/.cluster-sync/replaced"))) {
+            kept = stream.toList();
+        }
+        assertEquals(1, kept.size());
+        assertTrue(kept.getFirst().getFileName().toString().startsWith("Lobby-"));
+        assertEquals("mine", Files.readString(kept.getFirst().resolve("mine.txt")));
+
+        // Once synced, a newer version of the template replaces it without keeping a copy.
+        List<FileEntry> next = List.of(new FileEntry("a.txt", 5, sha("HELLO")));
+        byte[] nextDigest = MirrorMessages.digest(next);
+        try (SessionPair pair = new SessionPair(ClusterHandlers.NONE, head(nextDigest,
+                (peer, payload) -> new Manifest(0, nextDigest, 1, 0, next).write(),
+                (peer, payload) -> "HELLO".getBytes(StandardCharsets.UTF_8)))) {
+            assertEquals(1, sink().sync(pair.member).updated());
+        }
+        assertEquals("HELLO", Files.readString(dir.resolve("local/templates/Lobby/a.txt")));
+        try (var stream = Files.list(dir.resolve("local/.cluster-sync/replaced"))) {
+            assertEquals(1, stream.count());
+        }
+        assertFalse(Files.exists(dir.resolve("local/.cluster-sync/old/Lobby")));
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    void aSyncFolderThatIsAJunctionIsRefused() throws Exception {
+        Path elsewhere = Files.createDirectories(dir.resolve("elsewhere"));
+        Path old = Files.createDirectories(elsewhere.resolve("old/Lobby"));
+        Files.writeString(old.resolve("a.txt"), "not the sync's");
+        Files.createDirectories(dir.resolve("local/templates/Lobby"));
+        ClusterMirrorTest.junction(dir.resolve("local/.cluster-sync"), elsewhere);
+        try {
+            assertThrows(IOException.class, () -> sink().recover());
+            assertEquals("not the sync's", Files.readString(old.resolve("a.txt")));
+        } finally {
+            Files.delete(dir.resolve("local/.cluster-sync"));
+        }
+    }
+
+    @Test
     void anUnreadableTemplateOnTheHeadKeepsItsLastCatalogEntry() throws Exception {
         Path root = Files.createDirectories(dir.resolve("head/Lobby"));
         Files.writeString(root.resolve("a.txt"), "hello");

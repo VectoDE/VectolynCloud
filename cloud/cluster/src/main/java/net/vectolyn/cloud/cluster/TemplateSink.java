@@ -34,7 +34,8 @@ import net.vectolyn.protocol.ProtocolException;
 
 /**
  * The member's side of the template sync. Every template of the head is mirrored: it is
- * downloaded when its digest changed and replaces a folder of the same name, and one the head no
+ * downloaded when its digest changed and replaces a folder of the same name (one made on this node
+ * is kept in {@code local/.cluster-sync/replaced/}), and one the head no
  * longer has is deleted if this member synced it. A folder the mirror never synced (a built-in
  * template the node wrote for one of its wanted servers, or the operator's own) is left as it is.
  *
@@ -67,6 +68,7 @@ final class TemplateSink {
     private final Path workDir;
     private final Path staging;
     private final Path old;
+    private final Path replaced;
     private final Path stateFile;
     /** Folders not managed by the mirror that were logged already, so each is logged once. */
     private final Set<String> unmanagedLogged = ConcurrentHashMap.newKeySet();
@@ -83,6 +85,7 @@ final class TemplateSink {
         this.workDir = workDir;
         this.staging = workDir.resolve("staging");
         this.old = workDir.resolve("old");
+        this.replaced = workDir.resolve("replaced");
         this.stateFile = Objects.requireNonNull(stateFile, "stateFile");
     }
 
@@ -128,7 +131,7 @@ final class TemplateSink {
      * moves of the sync at another folder.
      */
     private void requireRealWorkDir() throws IOException {
-        for (Path dir : List.of(templatesDir, workDir, staging, old)) {
+        for (Path dir : List.of(templatesDir, workDir, staging, old, replaced)) {
             RegularPaths.requireDirectoryOrMissing(dir);
         }
     }
@@ -172,7 +175,7 @@ final class TemplateSink {
                 continue;
             }
             try {
-                download(session, template);
+                download(session, template, had != null);
                 now.put(template.name(), template.digest());
                 updated++;
             } catch (MirrorException | ClusterRpcException e) {
@@ -259,7 +262,7 @@ final class TemplateSink {
     }
 
     /** Downloads one template into staging and swaps it into place. */
-    private void download(ClusterSession session, TemplateEntry template) throws IOException {
+    private void download(ClusterSession session, TemplateEntry template, boolean managed) throws IOException {
         MirrorClient.Listing listing = MirrorClient.manifest(session, MirrorMessages.TEMPLATE_MANIFEST, template.name(),
                 MirrorMessages.TEMPLATE_PAGE, MirrorPaths.MAX_TEMPLATE_FILES, MirrorPaths.MAX_TEMPLATE_FILE_BYTES,
                 MirrorPaths.MAX_TEMPLATE_BYTES);
@@ -293,7 +296,7 @@ final class TemplateSink {
             for (FileEntry entry : listing.entries()) {
                 write(session, template, entry, target, current);
             }
-            swap(target, current, template.name());
+            swap(target, current, template.name(), managed);
             done = true;
         } finally {
             if (!done) {
@@ -376,10 +379,15 @@ final class TemplateSink {
         return file;
     }
 
-    private void swap(Path ready, Path current, String name) throws IOException {
-        Path aside = old.resolve(name);
+    /**
+     * Moves the staged template into place. A folder the mirror synced before is deleted; one it
+     * never synced (made on this node) is kept in {@code local/.cluster-sync/replaced/<name>-<time>}
+     * for the operator, never deleted.
+     */
+    private void swap(Path ready, Path current, String name, boolean managed) throws IOException {
+        Path aside = managed ? old.resolve(name) : replaced.resolve(name + "-" + System.currentTimeMillis());
         deleteTree(aside);
-        Files.createDirectories(old);
+        Files.createDirectories(aside.getParent());
         Files.createDirectories(templatesDir);
         boolean moved = false;
         if (RegularPaths.kind(current) != RegularPaths.Kind.MISSING) {
@@ -397,7 +405,12 @@ final class TemplateSink {
             }
             throw e;
         }
-        deleteTree(aside);
+        if (managed) {
+            deleteTree(aside);
+        } else if (moved) {
+            LOG.log(System.Logger.Level.WARNING, "Cluster: the head's template {0} replaced a folder made on this node; "
+                    + "that folder is kept in local/.cluster-sync/replaced/{1}", name, aside.getFileName());
+        }
     }
 
     private static List<Path> list(Path dir) throws IOException {

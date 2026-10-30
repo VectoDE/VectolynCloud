@@ -15,8 +15,8 @@ import net.vectolyn.cloud.config.validation.ConfigNames;
  *
  * <p>A path is relative, with {@code /} between its segments, and must be usable on every system
  * the cloud runs on: no {@code ..}, {@code .} or empty segment, no leading {@code /}, no
- * backslash, colon, {@code <>"|?*}, no control, format (bidi, zero-width), private-use or
- * unassigned character, no separator other than the space, no segment that ends in a dot or space,
+ * backslash, colon, {@code <>"|?*}, no control, format (bidi, zero-width) or private-use
+ * character, no separator other than the space, no segment that ends in a dot or space,
  * no Windows device name ({@code CON}, {@code NUL}, {@code COM1}, ... also with an extension), at
  * most {@link #MAX_PATH_BYTES} bytes and {@link #MAX_DEPTH} segments.
  */
@@ -95,12 +95,14 @@ public final class MirrorPaths {
             }
         }
         // No control (C0, DEL, C1), format (bidi overrides, zero-width), separator other than the
-        // space, private-use or unassigned character: names reach logs and the console.
+        // space or private-use character: names reach logs and the console. Unassigned characters
+        // are not refused: which ones those are depends on the Unicode version of the JDK, and head
+        // and member must agree on every path.
         for (int i = 0; i < segment.length(); ) {
             int cp = segment.codePointAt(i);
             int type = Character.getType(cp);
             if (type == Character.CONTROL || type == Character.FORMAT || type == Character.PRIVATE_USE
-                    || type == Character.UNASSIGNED || type == Character.LINE_SEPARATOR
+                    || type == Character.LINE_SEPARATOR
                     || type == Character.PARAGRAPH_SEPARATOR || (type == Character.SPACE_SEPARATOR && cp != ' ')) {
                 return false;
             }

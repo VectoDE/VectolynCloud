@@ -703,7 +703,7 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
         ClusterLink running = link;
         Optional<MirrorStatus> mirror = switch (role) {
             case HEAD -> Optional.of(new MirrorStatus(configSource.revision(), templateSource.catalog().size(),
-                    Optional.ofNullable(lastSync), Optional.ofNullable(mirrorProblem)));
+                    Optional.ofNullable(lastSync), headProblem()));
             case MEMBER -> Optional.of(new MirrorStatus(configSink.applied().map(MirrorState.Revision::revision).orElse(0L),
                     templateSink.synced().size(), Optional.ofNullable(lastSync), Optional.ofNullable(mirrorProblem)));
             case STANDALONE -> Optional.empty();
@@ -733,7 +733,12 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
                     try {
                         refreshConfig();
                         rescanTemplates(true);
-                        done.complete(null);
+                        Optional<String> problem = headProblem();
+                        if (problem.isPresent()) {
+                            done.completeExceptionally(new IOException(problem.get()));
+                        } else {
+                            done.complete(null);
+                        }
                     } catch (RuntimeException e) {
                         done.completeExceptionally(e);
                         throw e;
@@ -744,6 +749,16 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
             case MEMBER -> requestSync();
             case STANDALONE -> throw new ClusterException("This node is in no cluster.", "Dieser Node ist in keinem Cluster.");
         };
+    }
+
+    /** Head: what keeps the mirror from being current, if anything. */
+    private Optional<String> headProblem() {
+        String config = mirrorProblem;
+        Optional<String> templates = templateSource.problem();
+        if (config != null && templates.isPresent()) {
+            return Optional.of(config + "; " + templates.get());
+        }
+        return config != null ? Optional.of(config) : templates;
     }
 
     /** Runs a task on the mirror's worker; after close nothing runs any more. */
