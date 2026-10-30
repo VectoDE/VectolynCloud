@@ -1,5 +1,8 @@
 package net.vectora.lobby;
 
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
 import org.bukkit.GameRule;
 import org.bukkit.Location;
@@ -7,6 +10,8 @@ import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.Sign;
+import org.bukkit.block.sign.Side;
+import org.bukkit.block.sign.SignSide;
 import org.bukkit.entity.Enemy;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
@@ -125,8 +130,10 @@ public final class VectoraLobby extends JavaPlugin implements Listener {
         Block signBlock = world.getBlockAt(px, Y + 3, pz - 1);
         signBlock.setType(Material.OAK_SIGN, false);
         if (signBlock.getState() instanceof Sign sign) {
-            sign.setLine(0, "§b§l" + title);
-            sign.setLine(1, "§7" + subtitle);
+            // Adventure components instead of the deprecated Sign.setLine with § colour codes.
+            SignSide front = sign.getSide(Side.FRONT);
+            front.line(0, Component.text(title, NamedTextColor.AQUA, TextDecoration.BOLD));
+            front.line(1, Component.text(subtitle, NamedTextColor.GRAY));
             sign.update();
         }
     }

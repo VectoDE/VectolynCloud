@@ -136,7 +136,7 @@ class NodeDatabaseTest {
         };
         logger.addHandler(handler);
         try {
-            assertTrue(database.values(null, snapshot).isEmpty(), "no values before the database is set up");
+            assertTrue(database.values(snapshot).isEmpty(), "no values before the database is set up");
             ServiceException failed = assertThrows(ServiceException.class, database::beforeStart);
             assertTrue(failed.getMessage().contains("server down"), failed.getMessage());
             assertTrue(database.endpoint().isEmpty());
@@ -150,7 +150,7 @@ class NodeDatabaseTest {
         }
         assertEquals(Map.of("VECTORA_DB_HOST", "db.example", "VECTORA_DB_PORT", "3306", "VECTORA_DB_NAME", "vectora",
                 "VECTORA_DB_USER", "vectora", "VECTORA_DB_STORAGE_METHOD", "mariadb", "VECTORA_DB_POOL_SIZE", "4"),
-                database.values(null, snapshot));
+                database.values(snapshot));
         assertTrue(database.health().orElseThrow().healthy());
 
         database.shutdown();
@@ -171,12 +171,12 @@ class NodeDatabaseTest {
         provisioner.budget = new ConnectionBudget(100, 10); // 90 for 30 services: 3 each
         NodeDatabase database = new NodeDatabase(() -> snapshot, () -> EnvFile.empty(), (s, secrets) -> provisioner);
         database.beforeStart();
-        assertEquals("3", database.values(null, snapshot).get(DatabaseEndpoint.POOL_SIZE));
+        assertEquals("3", database.values(snapshot).get(DatabaseEndpoint.POOL_SIZE));
 
         provisioner.budget = new ConnectionBudget(60, 10); // 50 for 30 services: below the minimum of 2
         NodeDatabase tight = new NodeDatabase(() -> snapshot, () -> EnvFile.empty(), (s, secrets) -> provisioner);
         tight.beforeStart();
-        IllegalStateException refused = assertThrows(IllegalStateException.class, () -> tight.values(null, snapshot));
+        IllegalStateException refused = assertThrows(IllegalStateException.class, () -> tight.values(snapshot));
         assertTrue(refused.getMessage().contains("max_connections"), refused.getMessage());
     }
 
@@ -191,7 +191,7 @@ class NodeDatabaseTest {
         });
         database.beforeStart();
         assertEquals(0, created.get(), "no MariaDB provisioner for a database that is not wanted");
-        assertEquals("h2", database.values(null, snapshot).get(DatabaseEndpoint.STORAGE_METHOD));
+        assertEquals("h2", database.values(snapshot).get(DatabaseEndpoint.STORAGE_METHOD));
     }
 
     @Test

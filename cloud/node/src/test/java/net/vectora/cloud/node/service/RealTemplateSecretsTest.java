@@ -167,7 +167,7 @@ class RealTemplateSecretsTest {
         database.put("VECTORA_DB_POOL_SIZE", "4");
         database.put("VECTORA_DB_STORAGE_METHOD", "mariadb");
         return ServicePlaceholders.build(spec, platform, ConfigSnapshot.defaults(), NodeConfig.defaults(), env,
-                List.of(), List.of(), List.of((service, snapshot) -> database));
+                List.of(), List.of(), List.of(snapshot -> database));
     }
 
     private static String readAll(Path root) throws IOException {
