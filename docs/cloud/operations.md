@@ -277,12 +277,7 @@ A cluster is one head and its members; the details, the trust model and the comm
 
 Every file of a release is signed with cosign keyless (Sigstore, the GitHub Actions identity of `release.yml`). The three files in `SHA256SUMS` also have a GitHub build provenance attestation (SLSA provenance, signed with Sigstore). `vectolyn.intoto.jsonl` is the same attestation as a file, so it can be checked without asking GitHub; `SHA256SUMS` itself is covered by its signature. Replace `v0.2.0` with the tag you downloaded.
 
-v0.1.0 is checked differently from later releases:
-
-- **v0.1.0**: check it against the owner, not the repository: certificate identity regexp `^https://github[.]com/VectoDE/[A-Za-z0-9._-]+/[.]github/workflows/release[.]yml@refs/tags/v0[.]1[.]0$`, `gh attestation verify ... --owner VectoDE`. This owner check is weaker than a repository pin: it accepts `release.yml` of any `VectoDE` repository at tag v0.1.0. For `slsa-verifier`, read the source from the provenance file with `jq -r .payload <file> | base64 -d | jq -r .predicate.invocation.configSource.uri` and use it as `--source-uri` without the `git+https://` prefix and the `@refs/...` suffix; it must start with `github.com/VectoDE/`. v0.1.0 contains the plugin jars and `SHA256SUMS`, not `VectolynCloud.jar`.
-- **Every later release** is signed as `VectoDE/VectolynCloud`, as in the commands below.
-
-Up to v0.1.0, the provenance file (the release asset ending in `.intoto.jsonl`) came from slsa-github-generator and is checked with `slsa-verifier verify-artifact ... --provenance-path <that file> --source-uri <source from the provenance> --source-tag v0.1.0`. Later releases build the provenance with `actions/attest-build-provenance` in the build job: the SLSA generator can only be referenced by tag, and the release workflow pins every action to a commit SHA. The file is then a Sigstore bundle, which `gh attestation verify --bundle` reads.
+Every release is signed as `VectoDE/VectolynCloud`, as in the commands below. The provenance comes from `actions/attest-build-provenance` in the build job; the release workflow pins every action to a commit SHA. The provenance file is a Sigstore bundle, which `gh attestation verify --bundle` reads.
 
 ```sh
 # 1. Checksums (only integrity: SHA256SUMS comes from the same place)

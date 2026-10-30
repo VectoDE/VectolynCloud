@@ -277,12 +277,7 @@ Ein Cluster besteht aus einem Head und seinen Mitgliedern; Ablauf, Vertrauensmod
 
 Jede Datei eines Releases ist mit cosign keyless signiert (Sigstore, die GitHub-Actions-Identität von `release.yml`). Die drei Dateien aus `SHA256SUMS` haben zusätzlich eine Build-Provenance-Attestierung von GitHub (SLSA-Provenance, mit Sigstore signiert). `vectolyn.intoto.jsonl` ist dieselbe Attestierung als Datei, sie lässt sich also auch ohne Abfrage bei GitHub prüfen; `SHA256SUMS` selbst sichert seine Signatur ab. Ersetze `v0.2.0` durch den Tag, den du heruntergeladen hast.
 
-v0.1.0 wird anders geprüft als spätere Releases:
-
-- **v0.1.0**: gegen den Owner prüfen, nicht gegen das Repository: Zertifikats-Identität als Regexp `^https://github[.]com/VectoDE/[A-Za-z0-9._-]+/[.]github/workflows/release[.]yml@refs/tags/v0[.]1[.]0$`, `gh attestation verify ... --owner VectoDE`. Diese Owner-Prüfung ist schwächer als eine Bindung an das Repository: Sie akzeptiert `release.yml` jedes `VectoDE`-Repositorys mit Tag v0.1.0. Für `slsa-verifier` die Quelle aus der Provenance-Datei lesen, mit `jq -r .payload <file> | base64 -d | jq -r .predicate.invocation.configSource.uri`, und ohne das Präfix `git+https://` und den Zusatz `@refs/...` als `--source-uri` übergeben; sie muss mit `github.com/VectoDE/` beginnen. v0.1.0 enthält die Plugin-Jars und `SHA256SUMS`, kein `VectolynCloud.jar`.
-- **Alle späteren Releases** sind als `VectoDE/VectolynCloud` signiert, wie in den Befehlen unten.
-
-Bis v0.1.0 stammt die Provenance-Datei (das Release-Asset mit der Endung `.intoto.jsonl`) aus slsa-github-generator und wird mit `slsa-verifier verify-artifact ... --provenance-path <diese Datei> --source-uri <Quelle aus der Provenance> --source-tag v0.1.0` geprüft. Spätere Releases erzeugen die Provenance mit `actions/attest-build-provenance` im Build-Job: Der SLSA-Generator lässt sich nur über einen Tag einbinden, der Release-Workflow pinnt aber jede Action auf einen Commit-SHA. Die Datei ist dann ein Sigstore-Bundle, das `gh attestation verify --bundle` liest.
+Jedes Release ist als `VectoDE/VectolynCloud` signiert, wie in den Befehlen unten. Die Provenance erzeugt `actions/attest-build-provenance` im Build-Job; der Release-Workflow pinnt jede Action auf einen Commit-SHA. Die Provenance-Datei ist ein Sigstore-Bundle, das `gh attestation verify --bundle` liest.
 
 ```sh
 # 1. Prüfsummen (nur Integrität: SHA256SUMS kommt vom selben Ort)

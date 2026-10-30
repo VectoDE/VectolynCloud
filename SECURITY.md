@@ -58,8 +58,6 @@ cosign verify-blob VectolynCloud.jar \
 gh attestation verify VectolynCloud.jar --repo VectoDE/VectolynCloud
 ```
 
-v0.1.0 is verified against the owner instead of the repository: `--certificate-identity-regexp '^https://github[.]com/VectoDE/[A-Za-z0-9._-]+/[.]github/workflows/release[.]yml@refs/tags/v0[.]1[.]0$'` and `gh attestation verify ... --owner VectoDE`. This is weaker than a repository pin: it accepts `release.yml` of any `VectoDE` repository at that tag. Later releases use `VectoDE/VectolynCloud` as above.
-
 All steps, including the image: [docs/cloud/operations.md](docs/cloud/operations.md#verifying-a-release).
 
 ---

@@ -61,4 +61,4 @@ gh attestation verify VectolynCloud.jar --repo VectoDE/VectolynCloud
 gh attestation verify oci://ghcr.io/vectode/vectolyn-cloud:<version> --repo VectoDE/VectolynCloud
 ```
 
-Das gilt für alle Releases nach v0.1.0. v0.1.0 gegen den Owner prüfen (`gh attestation verify ... --owner VectoDE`). Details: [docs/cloud/operations.de.md](https://github.com/VectoDE/VectolynCloud/blob/main/docs/cloud/operations.de.md#ein-release-prüfen).
+Details: [docs/cloud/operations.de.md](https://github.com/VectoDE/VectolynCloud/blob/main/docs/cloud/operations.de.md#ein-release-prüfen).

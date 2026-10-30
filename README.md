@@ -16,7 +16,7 @@ The long-term goal: you run `java -jar VectolynCloud.jar` on Windows, Linux, mac
 
 ## Status
 
-**Stage 2 of 8: VectolynCloud core.** Stage 1, the foundation, is finished and out as the signed pre-release [v0.1.0](https://github.com/VectoDE/VectolynCloud/releases/tag/v0.1.0). Stage 2 builds the cloud module by module; the task list is in [#11](https://github.com/VectoDE/VectolynCloud/issues/11), the overall plan on the roadmap. There is no usable cloud release yet, v0.1.0 only contains the foundation. Much of the *Architecture* section is still the plan, not working code.
+**Stage 2 of 8: VectolynCloud core.** Stage 1, the foundation, is finished and out as the signed pre-release [v0.1.1](https://github.com/VectoDE/VectolynCloud/releases/tag/v0.1.1). Stage 2 builds the cloud module by module; the task list is in [#11](https://github.com/VectoDE/VectolynCloud/issues/11), the overall plan on the roadmap. There is no usable cloud release yet; v0.1.1 is an early pre-release. Much of the *Architecture* section is still the plan, not working code.
 
 - Roadmap and progress: [Vectolyn Roadmap](https://github.com/users/VectoDE/projects/11)
 - Current stage: [#11 Stage 2: VectolynCloud core](https://github.com/VectoDE/VectolynCloud/issues/11)
