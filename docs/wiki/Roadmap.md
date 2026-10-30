@@ -8,7 +8,7 @@ Vectolyn is built in eight stages. Each stage gets its own plan and ends in a ru
 
 ## 1. Foundation ([#1](https://github.com/VectoDE/VectolynCloud/issues/1))
 
-**Status: done.** Released as the signed pre-release [v0.1.1](https://github.com/VectoDE/VectolynCloud/releases/tag/v0.1.1).
+**Status: done.** Released as the signed pre-release [v0.1.1-dev](https://github.com/VectoDE/VectolynCloud/releases/tag/v0.1.1-dev).
 
 Stop the servers and back up worlds and state locally; move the server folders to `Server-Network/` with a template/runtime split (since replaced by `templates/<Server>/` in the repository and the cloud home outside it); adjust start scripts and ini paths; `.gitignore`; move secrets out and regenerate them; fix known problems (Floodgate on Fabric, ViaBackwards/ViaRewind, DB pools, ini paths); Gradle build for the existing plugins; repository basics; GitHub setup; first push after a gitleaks check.
 

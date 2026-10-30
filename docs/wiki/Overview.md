@@ -8,7 +8,7 @@ We do not run a network, servers or a domain, and we host no website, Discord bo
 
 ## Status
 
-The project is in **stage 2 of 8** (VectolynCloud core). Stage 1, the foundation, is finished and out as the signed pre-release [v0.1.1](https://github.com/VectoDE/VectolynCloud/releases/tag/v0.1.1). There is no usable cloud release yet. Progress: [Roadmap](Roadmap) and [#11](https://github.com/VectoDE/VectolynCloud/issues/11).
+The project is in **stage 2 of 8** (VectolynCloud core). Stage 1, the foundation, is finished and out as the signed pre-release [v0.1.1-dev](https://github.com/VectoDE/VectolynCloud/releases/tag/v0.1.1-dev). There is no usable cloud release yet. Progress: [Roadmap](Roadmap) and [#11](https://github.com/VectoDE/VectolynCloud/issues/11).
 
 ## Goal
 
