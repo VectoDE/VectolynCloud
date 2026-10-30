@@ -2,7 +2,7 @@
 
 [English](openssf.md)
 
-Das Repository lässt [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/VectoDE/VectolynCloud) bei jedem Push auf `main`, wöchentlich und auf Abruf laufen ([`scorecard.yml`](../.github/workflows/scorecard.yml)). Die Funde stehen unter *Security and quality* neben denen von CodeQL. Außerdem hat das Projekt das [OpenSSF-Best-Practices-Badge](https://www.bestpractices.dev/projects/16026).
+Das Repository lässt [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/VectoDE/VectolynCloud) bei jedem Push auf `main`, wöchentlich und auf Abruf laufen ([`scorecard.yml`](../.github/workflows/scorecard.yml)). Die Funde stehen unter *Security and quality* neben denen von CodeQL. Außerdem hat das Projekt das [OpenSSF-Best-Practices-Badge](https://www.bestpractices.dev/projects/16102).
 
 ## Die Aufräum-Prüfung
 

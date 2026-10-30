@@ -10,7 +10,7 @@
 [![CI](https://github.com/VectoDE/VectolynCloud/actions/workflows/ci.yml/badge.svg)](https://github.com/VectoDE/VectolynCloud/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/VectoDE/VectolynCloud/actions/workflows/codeql.yml/badge.svg)](https://github.com/VectoDE/VectolynCloud/actions/workflows/codeql.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/VectoDE/VectolynCloud/badge)](https://scorecard.dev/viewer/?uri=github.com/VectoDE/VectolynCloud)
-[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/16026/badge)](https://www.bestpractices.dev/projects/16026)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/16102/badge)](https://www.bestpractices.dev/projects/16102)
 [![Lizenz: GPL-3.0](https://img.shields.io/github/license/VectoDE/VectolynCloud)](LICENSE)
 
 [English](README.md) · **Deutsch**
