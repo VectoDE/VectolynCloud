@@ -13,7 +13,8 @@ import net.vectolyn.cloud.config.operation.ConfigOperation;
  * @param current    snapshot after the change, already on disk
  * @param files      files that were written or deleted, relative to the home ({@code groups/lobby.yml})
  * @param origin     what caused the change
- * @param operations the operations applied, in order; empty for {@link Origin#FILE}
+ * @param operations the operations applied, in order; empty for {@link Origin#FILE} and
+ *                   {@link Origin#MIRROR}
  */
 public record ConfigChanged(ConfigSnapshot previous, ConfigSnapshot current, Set<String> files, Origin origin,
                             List<ConfigOperation> operations) {
@@ -23,7 +24,9 @@ public record ConfigChanged(ConfigSnapshot previous, ConfigSnapshot current, Set
         /** {@code ConfigService.apply} (console, setup assistant, API). */
         OPERATION,
         /** A file was edited by hand and reloaded. */
-        FILE
+        FILE,
+        /** A cluster member took over {@code nodes.yml}, groups and tasks from its head. */
+        MIRROR
     }
 
     /** Copies the collections. */

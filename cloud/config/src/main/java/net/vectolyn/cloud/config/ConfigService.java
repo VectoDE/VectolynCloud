@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.time.Duration;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -16,7 +17,11 @@ import net.vectolyn.cloud.config.error.ConfigError;
 import net.vectolyn.cloud.config.error.ConfigException;
 import net.vectolyn.cloud.config.error.ErrorCode;
 import net.vectolyn.cloud.config.io.ConfigStore;
+import net.vectolyn.cloud.config.model.CloudConfig;
 import net.vectolyn.cloud.config.model.ConfigSnapshot;
+import net.vectolyn.cloud.config.model.GroupConfig;
+import net.vectolyn.cloud.config.model.NodesConfig;
+import net.vectolyn.cloud.config.model.TaskConfig;
 import net.vectolyn.cloud.config.operation.ConfigOperation;
 import net.vectolyn.cloud.config.validation.ConfigValidator;
 import net.vectolyn.cloud.config.validation.JvmFlagPolicy;
@@ -50,6 +55,8 @@ public final class ConfigService implements AutoCloseable {
     private final ArrayDeque<Runnable> pendingEvents = new ArrayDeque<>();
     private boolean dispatching;
     private volatile ConfigSnapshot current;
+    /** Mirror mode of a cluster member, see {@link #mirrorMode(boolean)}. */
+    private volatile boolean mirrored;
     private ConfigWatcher watcher;
     private boolean closed;
 
@@ -131,6 +138,9 @@ public final class ConfigService implements AutoCloseable {
             for (ConfigOperation operation : operations) {
                 after = Objects.requireNonNull(operation.apply(after), "operation returned null");
             }
+            if (mirrored) {
+                requireOwnFilesOnly(before, after);
+            }
             requireValid(after);
             Set<String> files = store.save(before, after, Set.of());
             current = after;
@@ -155,6 +165,9 @@ public final class ConfigService implements AutoCloseable {
         lock.lock();
         try {
             ensureOpen();
+            if (mirrored) {
+                return reloadMirrored();
+            }
             ConfigStore.Loaded loaded = store.load();
             if (!loaded.missingFiles().isEmpty()) {
                 throw new ConfigException(loaded.missingFiles().stream()
@@ -175,6 +188,107 @@ public final class ConfigService implements AutoCloseable {
             return Optional.of(change);
         } finally {
             lock.unlock();
+        }
+    }
+
+    /**
+     * Switches the mirror mode of a cluster member on or off. In mirror mode {@code nodes.yml},
+     * {@code groups/} and {@code tasks/} belong to the cluster head:
+     * <ul>
+     *   <li>{@link #apply} refuses a change to them with {@link ErrorCode#MANAGED_BY_HEAD}, so the
+     *       console, the setup assistant and the REST API cannot change them here;</li>
+     *   <li>{@link #reload} reads {@code cloud.yml} only and writes the mirrored files back over a
+     *       hand edit, with a warning;</li>
+     *   <li>only {@link #applyMirror} changes them.</li>
+     * </ul>
+     *
+     * @param value whether this node mirrors its head
+     */
+    public void mirrorMode(boolean value) {
+        lock.lock();
+        try {
+            mirrored = value;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /** Whether the mirror mode is on, see {@link #mirrorMode(boolean)}. */
+    public boolean mirrorMode() {
+        return mirrored;
+    }
+
+    /**
+     * Takes over the files a cluster head mirrors: the snapshot becomes this node's own
+     * {@code cloud.yml} with these nodes, groups and tasks, is validated as a whole and then written
+     * (each file atomically; group and task files that are not in the set are deleted).
+     *
+     * @param nodes  the head's {@code nodes.yml}
+     * @param groups the head's groups by name
+     * @param tasks  the head's tasks by name
+     * @return the change; empty if the files were the same already
+     * @throws ConfigException if the result is invalid; nothing is written then
+     * @throws IOException     if a file cannot be written
+     * @throws IllegalStateException if the mirror mode is off
+     */
+    public ConfigChanged applyMirror(NodesConfig nodes, Map<String, GroupConfig> groups, Map<String, TaskConfig> tasks)
+            throws ConfigException, IOException {
+        Objects.requireNonNull(nodes, "nodes");
+        lock.lock();
+        try {
+            ensureOpen();
+            if (!mirrored) {
+                throw new IllegalStateException("the mirror mode is off");
+            }
+            ConfigSnapshot before = current;
+            ConfigSnapshot after = ConfigSnapshot.of(before.cloud(), nodes, groups, tasks);
+            requireValid(after);
+            Set<String> files = new LinkedHashSet<>(store.writeMirrored(after));
+            files.addAll(changedFiles(before, after));
+            current = after;
+            ConfigChanged change = new ConfigChanged(before, after, files, ConfigChanged.Origin.MIRROR, List.of());
+            if (!after.equals(before)) {
+                logWarnings(after);
+                notifyChanged(change);
+            }
+            return change;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /** Mirror mode: {@code cloud.yml} from disk, the mirrored files written back over any hand edit. */
+    private Optional<ConfigChanged> reloadMirrored() throws ConfigException, IOException {
+        CloudConfig cloud = store.loadCloud();
+        ConfigSnapshot before = current;
+        ConfigSnapshot after = before.withCloud(cloud);
+        requireValid(after);
+        Set<String> restored = store.writeMirrored(after);
+        if (!restored.isEmpty()) {
+            LOG.log(System.Logger.Level.WARNING, "{0} managed by the cluster head; the hand edit is undone. Change "
+                    + "them on the head (docs/cloud/cluster.md).", String.join(", ", restored));
+        }
+        if (after.equals(before)) {
+            return Optional.empty();
+        }
+        current = after;
+        logWarnings(after);
+        ConfigChanged change = new ConfigChanged(before, after, Set.of(CloudHome.CLOUD_FILE), ConfigChanged.Origin.FILE,
+                List.of());
+        notifyChanged(change);
+        return Optional.of(change);
+    }
+
+    /** Mirror mode: a change must leave {@code nodes.yml}, the groups and the tasks as they are. */
+    private static void requireOwnFilesOnly(ConfigSnapshot before, ConfigSnapshot after) throws ConfigException {
+        List<ConfigError> errors = new ArrayList<>();
+        for (String file : changedFiles(before, after)) {
+            if (!file.equals(CloudHome.CLOUD_FILE)) {
+                errors.add(ConfigError.of(file, "", ErrorCode.MANAGED_BY_HEAD));
+            }
+        }
+        if (!errors.isEmpty()) {
+            throw new ConfigException(errors);
         }
     }
 
