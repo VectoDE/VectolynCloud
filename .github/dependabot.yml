@@ -13,11 +13,12 @@ updates:
       gradle-minor:
         update-types: [minor, patch]
     ignore:
-      # PandaSpigot 1.8.8 declares Adventure 4.x and provides it at runtime. The legacy bridge
-      # compiles against exactly that version (gradle/libs.versions.toml), so Adventure 5 would
-      # compile against classes the servers do not have. Paper and Velocity bring their own 5.x.
+      # The version is the one pandaspigot-api 1.8.8 declares (4.24.0), and PandaSpigot provides
+      # exactly that at runtime. The legacy bridge compiles against the same version
+      # (gradle/libs.versions.toml), so neither 5.x nor a newer 4.x is wanted: both would compile
+      # against classes the servers do not have. It moves when pandaspigot-api moves. Paper and
+      # Velocity bring their own Adventure 5.x.
       - dependency-name: net.kyori:adventure-api
-        update-types: ['version-update:semver-major']
       # JLine 4.4.8 no longer turns Ctrl+C into a UserInterruptException in LineReader.readLine
       # (reproduced with a DumbTerminal; 3.30.17 does). Ctrl+C is how the console asks for
       # shutdown. Revisit when a 4.x release fixes it (issue #71).
