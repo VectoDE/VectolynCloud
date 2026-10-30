@@ -1,0 +1,73 @@
+{
+  "_comment": "Brand constants read by the generators. Override the file with VECTOLYN_BRAND=/path/to/brand.json.",
+  "url": "github.com/VectoDE/VectolynCloud",
+  "facts": [
+    "Java 1.8 to 26.3",
+    "Bedrock via Geyser",
+    "Signed releases",
+    "GPL-3.0"
+  ],
+  "mark": [
+    "XX....XX",
+    ".XX..XX.",
+    ".XX..XX.",
+    "..XXXX..",
+    "...XX...",
+    "........",
+    "...GG...",
+    "...GG..."
+  ],
+  "palette": {
+    "cyan": "#00E5FF",
+    "cyan_l": "#00707F",
+    "gold": "#FFD23F",
+    "gold_l": "#8A6100",
+    "obsidian": "#14111F",
+    "obsidian2": "#1E1A2E",
+    "obsidian3": "#2A2440",
+    "ink": "#0B0913",
+    "quartz": "#F3F5F7",
+    "quartz2": "#E4E8ED",
+    "quartz3": "#CDD3DB",
+    "text_d": "#ECEEF4",
+    "muted_d": "#9EA3B8",
+    "subtle_d": "#6B7088",
+    "text_l": "#14111F",
+    "muted_l": "#4B5263",
+    "subtle_l": "#6B7280",
+    "success_d": "#5BD98A",
+    "success_l": "#17703A",
+    "warn_d": "#FFB547",
+    "warn_l": "#8A5300",
+    "error_d": "#FF6B6B",
+    "error_l": "#B42318"
+  },
+  "vox": {
+    "dark": {
+      "cf": "#00E5FF",
+      "cf2": "#00C4DB",
+      "ct": "#A6F8FF",
+      "cr": "#00879A",
+      "ce": "#E9FEFF",
+      "gf": "#FFD23F",
+      "gf2": "#F2B81E",
+      "gt": "#FFEDA8",
+      "gr": "#A87A0C",
+      "ge": "#FFF8DC",
+      "sh": "#0A0811"
+    },
+    "light": {
+      "cf": "#12B4C8",
+      "cf2": "#0E9DB0",
+      "ct": "#8FE3EC",
+      "cr": "#00707F",
+      "ce": "#DDF8FB",
+      "gf": "#E8B92A",
+      "gf2": "#D3A11A",
+      "gt": "#F6DC85",
+      "gr": "#8A6100",
+      "ge": "#FFF3CF",
+      "sh": "#C9D0D8"
+    }
+  }
+}

@@ -25,7 +25,31 @@ A second `start` in the same JVM is an error.
 
 ## Start output
 
-The start is shown as a banner and a few lines, not as a stream of log messages. The banner has the ASCII "VectolynCloud" logo, the version, Java version and vendor, operating system and architecture, and the home. Then every step logs one line in the same format (`StartupReport`):
+The start is shown as a banner and a few lines, not as a stream of log messages. The banner is a blank line, the ASCII "VectolynCloud" lettering, a blank line, a line with the version, Java version and vendor, operating system and architecture, the home and a blank line:
+
+```
+  __     __        _        _              ____ _                 _
+  \ \   / /__  ___| |_ ___ | |_   _ _ __  / ___| | ___  _   _  __| |
+   \ \ / / _ \/ __| __/ _ \| | | | | '_ \| |   | |/ _ \| | | |/ _` |
+    \ V /  __/ (__| || (_) | | |_| | | | | |___| | (_) | |_| | (_| |
+     \_/ \___|\___|\__\___/|_|\__, |_| |_|\____|_|\___/ \__,_|\__,_|
+                              |___/
+
+  VectolynCloud 0.2.0  |  Java 21.0.5 (Eclipse Adoptium)  |  Windows 11 amd64
+  Home: C:\vectolyn
+```
+
+The lettering is plain ASCII and at most 68 columns wide, so it fits an 80-column console. When the `COLUMNS` environment variable says the console is narrower than 70 columns, a narrow lettering of at most 55 columns is printed instead; without `COLUMNS` (most consoles that start a Java process do not pass it) the wide one is used:
+
+```
+  __   __      _       _           ___ _             _
+  \ \ / /__ __| |_ ___| |_  _ _ _ / __| |___ _  _ __| |
+   \ V / -_) _|  _/ _ \ | || | ' \ (__| / _ \ || / _` |
+    \_/\___\__|\__\___/_|\_, |_||_\___|_\___/\_,_\__,_|
+                         |__/
+```
+
+Then every step logs one line in the same format (`StartupReport`):
 
 ```
 10:15:02 INFO  [1/5] Configuration  ok       9 groups, 9 tasks, node node-1
@@ -199,6 +223,7 @@ The node starts the server JVM directly with `ProcessBuilder`, without a wrapper
 | `VECTOLYN_SERVICE_PLATFORM` | the `ServerPlatform` name (`VELOCITY`, `VELOCITY_LEGACY`, `PAPER`, `FABRIC`, `PANDASPIGOT`), so the bridge knows what it runs on |
 | `VECTOLYN_LEGACY_FORWARDING_SECRET` | only for `PANDASPIGOT`: the `bungeeguard` token its bridge checks. No other service gets it in its environment. |
 | `VECTOLYN_FALLBACK_GROUP` | only for `VELOCITY` and `VELOCITY_LEGACY`: `fallback-group` of `cloud.yml`, or `lobby` without it. |
+| `VECTOLYN_POWERED_BY`, `VECTOLYN_CLOUD_VERSION` | only for `VELOCITY` and `VELOCITY_LEGACY`: `branding.powered-by` of `cloud.yml` (`true` without the section) and the version of `VectolynCloud.jar` (`dev` outside a release jar), for `/version` on the proxies ([bridges.md](bridges.md#version-on-the-proxy)). |
 | `VECTOLYN_CLOUD_HOST`, `VECTOLYN_CLOUD_PORT` | where this node's channel listens, as bound. A wildcard bind (`0.0.0.0`, `::`) is passed as `127.0.0.1` or `::1`. |
 
 ## Life cycle

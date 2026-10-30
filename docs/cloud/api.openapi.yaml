@@ -777,6 +777,16 @@ components:
             Group the proxies send a kicked player to when no other server of the player's own group is
             free. Optional, default lobby (then not returned). When set it must be an existing group,
             otherwise 422 invalid-config with the error code unknown-group. The proxies read it when they start.
+        branding:
+          type: object
+          description: "Optional; a missing section or a missing powered-by means powered-by true."
+          properties:
+            powered-by:
+              type: boolean
+              default: true
+              description: >-
+                Whether the TAB footer ends with "Powered by VectolynCloud" and the proxies answer /version
+                with the cloud's version. Services pick it up when they are rendered and started.
     NodeStatus:
       type: object
       properties:

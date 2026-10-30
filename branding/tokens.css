@@ -1,0 +1,81 @@
+/* Vectolyn design tokens, version 3. Light is the default; dark via system setting or data-theme. */
+:root {
+  --vl-color-surface: #F3F5F7;
+  --vl-color-surface-raised: #E4E8ED;
+  --vl-color-surface-sunken: #FFFFFF;
+  --vl-color-border: #CDD3DB;
+  --vl-color-text: #14111F;
+  --vl-color-text-muted: #4B5263;
+  --vl-color-text-subtle: #6B7280;
+  --vl-color-primary: #00707F;
+  --vl-color-accent: #8A6100;
+  --vl-color-success: #17703A;
+  --vl-color-warning: #8A5300;
+  --vl-color-error: #B42318;
+  --vl-font-text: 'Atkinson Hyperlegible Next', system-ui, sans-serif;
+  --vl-font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --vl-font-display: 'Pixelify Sans', monospace; /* wordmark, headlines; weight 700 */
+  --vl-display-d1: 22px;
+  --vl-display-d2: 33px;
+  --vl-display-d3: 44px;
+  --vl-display-d4: 66px;
+  --vl-display-d5: 88px;
+  --vl-text-xs: 12px/16px;
+  --vl-text-sm: 14px/20px;
+  --vl-text-md: 16px/26px;
+  --vl-text-lg: 20px/30px;
+  --vl-text-xl: 25px/32px;
+  --vl-text-2xl: 31px/38px;
+  --vl-text-3xl: 39px/44px;
+  --vl-text-4xl: 49px/54px;
+  --vl-text-5xl: 61px/64px;
+  --vl-text-display: 76px/76px;
+  --vl-space-0: 0px;
+  --vl-space-1: 4px;
+  --vl-space-2: 8px;
+  --vl-space-3: 12px;
+  --vl-space-4: 16px;
+  --vl-space-5: 24px;
+  --vl-space-6: 32px;
+  --vl-space-7: 48px;
+  --vl-space-8: 64px;
+  --vl-space-9: 96px;
+  --vl-space-10: 128px;
+  --vl-radius: 0px;
+  --vl-elevation-1: 4px 4px 0 #0B0913;
+  --vl-elevation-2: 8px 8px 0 #0B0913;
+  --vl-glow: 0 0 0 1px rgba(0,229,255,.35), 0 0 32px rgba(0,229,255,.18);
+  --vl-duration: 200ms;
+  --vl-ease: cubic-bezier(.2,0,0,1);
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --vl-color-surface: #14111F;
+    --vl-color-surface-raised: #1E1A2E;
+    --vl-color-surface-sunken: #0B0913;
+    --vl-color-border: #2A2440;
+    --vl-color-text: #ECEEF4;
+    --vl-color-text-muted: #9EA3B8;
+    --vl-color-text-subtle: #6B7088;
+    --vl-color-primary: #00E5FF;
+    --vl-color-accent: #FFD23F;
+    --vl-color-success: #5BD98A;
+    --vl-color-warning: #FFB547;
+    --vl-color-error: #FF6B6B;
+  }
+}
+:root[data-theme="dark"] {
+  --vl-color-surface: #14111F;
+  --vl-color-surface-raised: #1E1A2E;
+  --vl-color-surface-sunken: #0B0913;
+  --vl-color-border: #2A2440;
+  --vl-color-text: #ECEEF4;
+  --vl-color-text-muted: #9EA3B8;
+  --vl-color-text-subtle: #6B7088;
+  --vl-color-primary: #00E5FF;
+  --vl-color-accent: #FFD23F;
+  --vl-color-success: #5BD98A;
+  --vl-color-warning: #FFB547;
+  --vl-color-error: #FF6B6B;
+}

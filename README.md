@@ -1,4 +1,11 @@
-# VectolynCloud
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="branding/png/readme-header-dark@2x.png">
+    <img alt="VectolynCloud" src="branding/png/readme-header-light@2x.png" width="1280">
+  </picture>
+</h1>
+
+<p align="center"><strong>Run your own Minecraft network.</strong></p>
 
 [![CI](https://github.com/VectoDE/VectolynCloud/actions/workflows/ci.yml/badge.svg)](https://github.com/VectoDE/VectolynCloud/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/VectoDE/VectolynCloud/actions/workflows/codeql.yml/badge.svg)](https://github.com/VectoDE/VectolynCloud/actions/workflows/codeql.yml)

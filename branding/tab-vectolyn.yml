@@ -1,0 +1,53 @@
+# TAB design with Vectolyn branding (MiniMessage, components.minimessage-support: true).
+# Addresses are examples. \uE000 is the mark glyph (U+E000) and replaces the V of VECTOLYN; use it only once
+# the resource pack provides it. Without the pack, write the name in full (VECTOLYN.NET). Never \uE000 followed by VECTOLYN.
+# The last footer line is the powered-by line; it follows branding.powered-by (default true) in cloud.yml.
+# config.yml
+header-footer:
+  designs:
+    vectolyn:
+      header:
+        - "<gradient:#00E5FF:#FFD23F><st>                                                </st></gradient>"
+        - "<white>\uE000<#00E5FF><bold>ECTOLYN</bold><#FFD23F><bold>.NET</bold>"
+        - ""
+        - "<dark_gray><bold>» </bold><gray>%animation:VectolynWelcome% <#00E5FF><bold>%player%</bold><gray>!<dark_gray><bold> «</bold>"
+        - "<gray>Online players: <white>%online%"
+        - "<gray>Online staff: <#FFD23F>%staffonline%"
+        - ""
+      footer:
+        - "%animation:VectolynTime%"
+        - "<gray>Ping: <green>%ping% ms"
+        - "<gray>Used memory: <white>%memory-used% MB<dark_gray> / <white>%memory-max% MB"
+        - ""
+        - "<gray>Discord: <white>discord.gg/vectolyn"
+        - "<gray>TeamSpeak: <white>ts.vectolyn.net"
+        - "<gray>Website: <#FFD23F>vectolyn.net"
+        - "<gradient:#00E5FF:#FFD23F><st>                                                </st></gradient>"
+        - "<dark_gray>Powered by VectolynCloud"
+placeholders:
+  time-format: "HH:mm"
+  date-format: "yyyy-MM-dd"
+
+# animations.yml
+VectolynWelcome:
+  change-interval: 400
+  texts:
+    - "W"
+    - "We"
+    - "Wel"
+    - "Welc"
+    - "Welco"
+    - "Welcom"
+    - "Welcome"
+    - "Welcome,"
+    - "Welcome,"
+    - "Welcome,"
+    - "Welcome,"
+    - "Welcome,"
+    - "Welcome,"
+    - "Welcome,"
+VectolynTime:
+  change-interval: 3000
+  texts:
+    - "<gray>Time <#00E5FF>%time%"
+    - "<gray>Date <#00E5FF>%date%"

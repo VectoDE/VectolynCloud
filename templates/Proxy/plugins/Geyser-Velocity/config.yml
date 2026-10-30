@@ -97,8 +97,10 @@ java:
 motd:
   # The MOTD that will be broadcasted to Minecraft: Bedrock Edition clients. This is irrelevant if "passthrough-motd" is set to true.
   # If either of these are empty, the respective string will default to "Geyser"
-  primary-motd: "§8» §b§lVECTOLYN§6§l.NET §8« §7[1.8 - 26.3]"
-  secondary-motd: "§c§lNEW LOBBY §8• §a§lJAVA & BEDROCK"
+  # Bedrock colour codes: §b is the cyan of VECTOLYN, §p is Bedrock's material gold. Bedrock shows the
+  # secondary MOTD only for servers on the local network.
+  primary-motd: "§b§lVECTOLYN§p§l.NET§p ■ §8§l[§f§lJAVA + BEDROCK§8§l]"
+  secondary-motd: "§f§lNEW LOBBY§8 • §p§lJAVA & BEDROCK"
 
   # Whether Geyser should relay the MOTD from the Java server to Bedrock players.
   passthrough-motd: false

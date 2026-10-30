@@ -111,6 +111,7 @@ class RealTemplatesTest {
         values.put("VECTOLYN_DB_POOL_SIZE", "4");
         values.put("VECTOLYN_DB_STORAGE_METHOD", "mariadb");
         values.put("VECTOLYN_LEGACY_PROXY_PORT", "25564");
+        values.put(PoweredByLine.PLACEHOLDER, PoweredByLine.value(true));
         List<ProxyBackend> backends = BACKENDS.stream()
                 .map(b -> new ProxyBackend(b.name(), b.host(), b.port(), wanted.contains(b.name())))
                 .toList();
@@ -175,7 +176,8 @@ class RealTemplatesTest {
             try (Stream<Path> files = Files.walk(template)) {
                 for (Path source : files.filter(Files::isRegularFile).toList()) {
                     Path target = runtime.resolve(template.relativize(source));
-                    if (!Files.exists(target)) {
+                    // Binary files (server-icon.png) are copied byte for byte and have no line endings.
+                    if (!Files.exists(target) || !TemplateRenderer.isRenderedFile(source.toString())) {
                         continue;
                     }
                     String before = Files.readString(source);
@@ -382,6 +384,68 @@ class RealTemplatesTest {
         String conf = Files.readString(runtime.resolve("config/luckperms/luckperms.conf"));
         assertTrue(conf.contains("storage-method = \"" + method + "\""), conf);
         assertTrue(conf.lines().anyMatch(l -> l.strip().equals("maximum-pool-size = 3")), conf);
+    }
+
+    /** Every template with a TAB config; their header and footer are the same design. */
+    private static final List<String> TAB_SERVERS = List.of("Lobby-Server", "Survival-Server", "Creative-Server",
+            "End-Server", "Minigame-Server");
+
+    @ParameterizedTest(name = "powered-by {0}")
+    @ValueSource(booleans = {true, false})
+    void tabFooterEndsWithThePoweredByLineOnlyWhileItIsOn(boolean poweredBy) throws Exception {
+        PlaceholderValues values = PoweredByLine.placeholderValues(poweredBy).orElse(values(ALL_BUT_SURVIVAL));
+        for (String server : TAB_SERVERS) {
+            Path template = template(server);
+            Path runtime = out.resolve(String.valueOf(poweredBy)).resolve(server);
+            TemplateInstaller.install(template, runtime, platformOf(template), values, false);
+            tools.jackson.databind.JsonNode tab = new YAMLMapper()
+                    .readTree(Files.readString(runtime.resolve("plugins/TAB/config.yml")));
+            tools.jackson.databind.JsonNode designs = tab.get("header-footer").get("designs");
+            assertEquals(1, designs.size(), server + ": only the default design, no demo designs");
+            tools.jackson.databind.JsonNode design = designs.get("default");
+            List<String> footer = new ArrayList<>();
+            design.get("footer").forEach(line -> footer.add(line.asString()));
+            String rule = "<gradient:#00E5FF:#FFD23F><st>" + " ".repeat(48) + "</st></gradient>";
+            List<String> expected = new ArrayList<>(List.of("%animation:VectolynTime%", "<gray>Ping: <green>%ping% ms",
+                    "<gray>Used memory: <white>%memory-used% MB<dark_gray> / <white>%memory-max% MB", "",
+                    "<gray>Discord: <white>discord.gg/vectolyn", "<gray>TeamSpeak: <white>ts.vectolyn.net",
+                    "<gray>Website: <#FFD23F>vectolyn.net", rule));
+            if (poweredBy) {
+                expected.add("<dark_gray>Powered by VectolynCloud");
+            }
+            assertEquals(expected, footer, server);
+            assertEquals("<#00E5FF><bold>VECTOLYN</bold><#FFD23F><bold>.NET</bold>",
+                    design.get("header").get(1).asString(), server + ": the full name, no resource pack glyph");
+            assertEquals("HH:mm", tab.get("placeholders").get("time-format").asString(), server);
+            assertEquals("yyyy-MM-dd", tab.get("placeholders").get("date-format").asString(), server);
+            tools.jackson.databind.JsonNode animations = new YAMLMapper()
+                    .readTree(Files.readString(runtime.resolve("plugins/TAB/animations.yml")));
+            for (String used : List.of("VectolynWelcome", "VectolynTime", "MyAnimation1", "barcolors")) {
+                assertTrue(animations.has(used), server + " lacks the animation " + used);
+            }
+        }
+    }
+
+    @Test
+    void bothProxiesShowTheVectolynIconAndMotd() throws Exception {
+        for (String server : List.of("Proxy", "Legacy-Proxy")) {
+            Path template = template(server);
+            Path runtime = out.resolve(server);
+            RenderReport report = TemplateInstaller.install(template, runtime, platformOf(template),
+                    values(ALL_BUT_SURVIVAL), false);
+            assertTrue(report.copied().contains("server-icon.png"), server + ": " + report.copied());
+            byte[] icon = Files.readAllBytes(runtime.resolve("server-icon.png"));
+            assertArrayEquals(Files.readAllBytes(template.resolve("server-icon.png")), icon, server);
+            // Velocity only takes a 64 x 64 PNG: signature, then IHDR with width and height.
+            assertArrayEquals(new byte[] {(byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'},
+                    java.util.Arrays.copyOf(icon, 8), server);
+            java.nio.ByteBuffer header = java.nio.ByteBuffer.wrap(icon, 16, 8);
+            assertEquals(64, header.getInt(), server);
+            assertEquals(64, header.getInt(), server);
+            String velocity = Files.readString(runtime.resolve("velocity.toml"));
+            assertTrue(velocity.contains("motd = \"              <#00E5FF><bold>VECTOLYN</bold><#FFD23F><bold>.NET"
+                    + "</bold>"), server);
+        }
     }
 
     @Test

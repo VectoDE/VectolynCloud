@@ -84,6 +84,8 @@ Jeder Schreibzugriff läuft über `ConfigService.apply`. Geprüft wird die ganze
 
 **Ausweichgruppe.** `fallback-group` in `PUT /config` nennt die Gruppe, auf die die Proxys einen gekickten Spieler schicken, wenn seine eigene Gruppe keinen freien Server hat, zum Beispiel `"fallback-group": "hub"`. Das Feld ist optional (Standard `lobby`, dann fehlt es in der Antwort); eine Gruppe, die es nicht gibt, beantwortet die API mit `422 invalid-config` und `unknown-group`. Ohne das Feld gilt wieder der Standard. Die Proxys übernehmen den Wert bei ihrem Start (siehe [bridges.md](bridges.md#catching-kicks)).
 
+**Powered-by-Zeile.** `branding.powered-by` in `PUT /config` (zum Beispiel `"branding": {"powered-by": false}`) schaltet die TAB-Fußzeile „Powered by VectolynCloud“ und `/version` auf den Proxys ein oder aus. Fehlt der Abschnitt oder der Schlüssel (`"branding": {}`), gilt `true`. Dienste übernehmen den Wert bei ihrem nächsten Start (siehe [config.md](config.md#cloudyml)).
+
 **Gruppen.** `drain-timeout` ist optional (5s bis 10m, Default 30s), zum Beispiel `"drain-timeout": "45s"`; außerhalb der Grenzen antwortet die API mit `422 out-of-range`.
 
 **Herunterfahren.** Während der Node herunterfährt, beantworten Start, Neustart, Reload und das Erstellen eines Backups die Anfrage mit `503 shutting-down`. Lesen und Stoppen gehen weiter.

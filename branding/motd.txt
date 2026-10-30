@@ -1,0 +1,15 @@
+# Velocity (templates/Proxy/velocity.toml), MiniMessage, two centred lines.
+# Centred with the font's advance table: area 270 px, space 4 px, bold +1 px per glyph.
+# Line 1: 161 px -> 14 spaces; line 2: 166 px -> 13 spaces.
+motd = "              <#00E5FF><bold>VECTOLYN</bold><#FFD23F><bold>.NET</bold><#FFD23F> ■ <dark_gray><bold>[</bold><white><bold>1.8 - 26.3</bold><dark_gray><bold>]</bold>\n             <white><bold>NEW LOBBY</bold><dark_gray> • <#FFD23F><bold>JAVA & BEDROCK</bold>"
+
+# Java 1.8 to 1.15 (no hex colours): planned as a separate MOTD from our own proxy plugin (stage 3),
+# § codes, same centring. Until then these clients get the MOTD above, which Velocity downsamples
+# via Adventure: cyan becomes §3 (dark aqua).
+motd-legacy-1: "              §b§lVECTOLYN§6§l.NET§6 ■ §8§l[§f§l1.8 - 26.3§8§l]"
+motd-legacy-2: "             §f§lNEW LOBBY§8 • §6§lJAVA & BEDROCK"
+
+# Geyser (plugins/Geyser-Velocity/config.yml), Bedrock § codes, not centred.
+# Bedrock shows motd1 in the server list; per a Geyser source comment the sub-MOTD only shows locally.
+primary-motd: "§b§lVECTOLYN§p§l.NET§p ■ §8§l[§f§lJAVA + BEDROCK§8§l]"
+secondary-motd: "§f§lNEW LOBBY§8 • §p§lJAVA & BEDROCK"

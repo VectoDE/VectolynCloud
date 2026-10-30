@@ -16,6 +16,7 @@ The module does not read `config/cloud.yml` or `secrets/` itself. The caller (la
 | `PlaceholderValues` | Source of the values. `PlaceholderValues.of(map)`, `a.orElse(b)`, `none()`. |
 | `ProxyServerList.of(backends, tryOrder, forcedHosts)` | Values for `VECTOLYN_PROXY_SERVERS`, `VECTOLYN_PROXY_TRY` and `VECTOLYN_PROXY_FORCED_HOSTS`. |
 | `ProxyBackend(name, host, port, wanted)` | One backend as the proxy sees it. |
+| `PoweredByLine` | Value of `VECTOLYN_TAB_POWERED_BY` from `branding.powered-by` (see [Powered-by line](#powered-by-line)). |
 | `GeneratedFiles` | Writes `forwarding.secret`, Floodgate's `key.pem` and `eula.txt`. |
 | `SpigotRestart` (package-private) | Turns Spigot's own restart off in the service's `spigot.yml` of Paper and PandaSpigot (see [Restarts are the node's job](#restarts-are-the-nodes-job)). |
 | `ServerPlatform` | `VELOCITY`, `VELOCITY_LEGACY`, `PAPER`, `PANDASPIGOT`, `FABRIC` or `NONE`. Decides which files are generated and where. |
@@ -140,9 +141,22 @@ An unwanted server is dropped from the try order and from every forced host. A f
 
 Names must be 1 to 64 letters, digits, `_` or `-`, and unique ignoring case. Hosts are host names or IP addresses (IPv6 is put in brackets). Forced hosts are plain host names. A try entry or forced host that names an unknown server is an error. These checks keep anything from breaking out of the TOML quoting.
 
+## Powered-by line
+
+The TAB config of every backend with TAB (`plugins/TAB/config.yml` of `Lobby-Server`, `Survival-Server`, `Creative-Server`, `End-Server` and `Minigame-Server`) ends its footer with a line of its own:
+
+```yaml
+        - "<gradient:#00E5FF:#FFD23F><st>                                                </st></gradient>"
+        {{VECTOLYN_TAB_POWERED_BY}}
+```
+
+`PoweredByLine.value(poweredBy)` gives the whole YAML list item `- "<dark_gray>Powered by VectolynCloud"` while `branding.powered-by` in `cloud.yml` is true (the default, [config.md](config.md#cloudyml)), and an empty string while it is false. Off, the line holds only spaces, which YAML ignores, so the footer ends with the gradient rule and has no empty line. The value is a constant of the cloud, never user input, and contains no line break, so it passes the [value rules](#allowed-values). The node adds it for every service (`ServicePlaceholders`); a template without the placeholder is not affected.
+
+The rest of the TAB design (header with the full name `VECTOLYN.NET`, the `VectolynWelcome` and `VectolynTime` animations, the example Discord, TeamSpeak and website lines) is plain template text that operators edit like any other file.
+
 ## Tests
 
-- `RealTemplatesTest` renders every real `templates/<Server>/` with test values into a temporary folder. Afterwards no file may contain `{{`. Every YAML and JSON file must parse with Jackson, every `.properties` file with `java.util.Properties`, and every TOML file must pass a plausibility check (no TOML library in the build). The test also checks that a proxy without the survival server never mentions it, checks that the rendered `spigot.yml` of every Paper and PandaSpigot template turns Spigot's restart off without the node having to change it, checks that no template turns command blocks on, and compares the part of `velocity.toml` from `[servers]` up to `[advanced]` for 1, 3 and 6 wanted servers with the golden files in `src/test/resources/net/vectolyn/cloud/template/golden/`. When a template change is intended, the actual output lands in `build/golden-actual/` for review.
+- `RealTemplatesTest` renders every real `templates/<Server>/` with test values into a temporary folder. Afterwards no file may contain `{{`. Every YAML and JSON file must parse with Jackson, every `.properties` file with `java.util.Properties`, and every TOML file must pass a plausibility check (no TOML library in the build). The test also checks that a proxy without the survival server never mentions it, checks that the rendered `spigot.yml` of every Paper and PandaSpigot template turns Spigot's restart off without the node having to change it, checks that no template turns command blocks on, checks the TAB footer with the powered-by line on and off, checks that both proxies get their 64 x 64 `server-icon.png` byte for byte and the Vectolyn MOTD, and compares the part of `velocity.toml` from `[servers]` up to `[advanced]` for 1, 3 and 6 wanted servers with the golden files in `src/test/resources/net/vectolyn/cloud/template/golden/`. When a template change is intended, the actual output lands in `build/golden-actual/` for review.
 - `PlaceholderRendererFuzzTest` is a Jazzer target: arbitrary bytes may only end in a `TemplateException`, and text without `{{` must come back byte for byte. Seeds are in `PlaceholderRendererFuzzTestInputs/`. A `.gitattributes` next to that folder marks them binary, so git keeps their CRLF and invalid UTF-8. Local run:
 
   ```sh

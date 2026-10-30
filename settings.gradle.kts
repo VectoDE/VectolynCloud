@@ -69,3 +69,6 @@ include(
     "plugins:lobby:paper",
     "plugins:portal:paper",
 )
+
+// Build tools that are not shipped: tools/release-banner renders the image of every GitHub release.
+include("tools:release-banner")

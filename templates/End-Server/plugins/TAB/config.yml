@@ -1,28 +1,34 @@
 # https://github.com/NEZNAMY/TAB/wiki/Feature-guide:-Header-&-Footer
+# Vectolyn design, written in MiniMessage (components.minimessage-support below is true).
 header-footer:
   enabled: true
   designs:
-    world-test:
-      display-condition: "%world%=test"
-      header:
-        - "Test header in world 'test'"
-      footer:
-        - "Test footer in world 'test'"
     default:
       header:
-        - "<#FFFFFF>&m                                                </#FFFF00>"
-        - "&3&lServer name"
-        - "&r&7&l>> %animation:Welcome%&3 &l%player%&7&l! &7&l<<"
-        - "&r&7Online players: &f%online%"
-        - "&6Online staff: &e%staffonline%"
+        - "<gradient:#00E5FF:#FFD23F><st>                                                </st></gradient>"
+        # The name in full: no resource pack of this repository provides the mark glyph U+E000 yet.
+        # Only once a resource pack provides U+E000 may the glyph replace the V, written as
+        # "<white>\uE000<#00E5FF><bold>ECTOLYN</bold>..."; never write U+E000 followed by "VECTOLYN".
+        - "<#00E5FF><bold>VECTOLYN</bold><#FFD23F><bold>.NET</bold>"
+        - ""
+        - "<dark_gray><bold>» </bold><gray>%animation:VectolynWelcome% <#00E5FF><bold>%player%</bold><gray>!<dark_gray><bold> «</bold>"
+        - "<gray>Online players: <white>%online%"
+        - "<gray>Online staff: <#FFD23F>%staffonline%"
         - ""
       footer:
-        - "%animation:time%"
-        - "&2Ping: %ping%"
-        - "&7&l Used memory: %memory-used% MB / %memory-max% MB"
+        - "%animation:VectolynTime%"
+        - "<gray>Ping: <green>%ping% ms"
+        - "<gray>Used memory: <white>%memory-used% MB<dark_gray> / <white>%memory-max% MB"
         - ""
-        - "&r&7Visit our webpage %animation:web%"
-        - "<#FFFFFF>&m                                                </#FFFF00>"
+        # Placeholder examples, not real addresses: replace the Discord invite, the TeamSpeak address
+        # and the website below with your own (or remove the lines).
+        - "<gray>Discord: <white>discord.gg/vectolyn"
+        - "<gray>TeamSpeak: <white>ts.vectolyn.net"
+        - "<gray>Website: <#FFD23F>vectolyn.net"
+        - "<gradient:#00E5FF:#FFD23F><st>                                                </st></gradient>"
+        # Filled in by VectolynCloud: the dark gray line "Powered by VectolynCloud" while
+        # branding.powered-by in cloud.yml is true (the default), nothing when it is false.
+        {{VECTOLYN_TAB_POWERED_BY}}
 
 # https://github.com/NEZNAMY/TAB/wiki/Feature-guide:-Tablist-name-formatting
 tablist-name-formatting:
@@ -180,8 +186,8 @@ global-playerlist:
       - server2
 
 placeholders:
-  date-format: "dd.MM.yyyy"
-  time-format: "[HH:mm:ss / h:mm a]"
+  date-format: "yyyy-MM-dd"
+  time-format: "HH:mm"
   time-offset: 0
   register-tab-expansion: false
   locale: en-US

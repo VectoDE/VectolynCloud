@@ -6,10 +6,11 @@ bind = "{{VECTOLYN_PROXY_BIND}}:{{VECTOLYN_PROXY_PORT}}"
 
 # What should be the MOTD? This gets displayed when the player adds your server to
 # their server list. Only MiniMessage format is accepted.
-# Layout: two lines, each centered with leading spaces (about 270 px wide, 4 px per space).
+# Layout: two lines, each centered with leading spaces (about 270 px wide, 4 px per space,
+# bold 1 px more per glyph).
 # Line 1: network name and version range, line 2: current highlight. Bedrock gets its own
 # text from Geyser (see plugins/Geyser-Velocity/config.yml). Change vectolyn.net to your domain.
-motd = "            <dark_gray>» <gradient:#00E5FF:#7C4DFF><bold>VECTOLYN</bold></gradient><#FFD23F><bold>.NET</bold> <dark_gray>« <gray>[1.8 - 26.3]\n            <#FF5555><bold>NEW LOBBY</bold> <dark_gray>• <#55FF55><bold>JAVA & BEDROCK</bold>"
+motd = "              <#00E5FF><bold>VECTOLYN</bold><#FFD23F><bold>.NET</bold><#FFD23F> ■ <dark_gray><bold>[</bold><white><bold>1.8 - 26.3</bold><dark_gray><bold>]</bold>\n             <white><bold>NEW LOBBY</bold><dark_gray> • <#FFD23F><bold>JAVA & BEDROCK</bold>"
 
 # What should we display for the maximum number of players? (Velocity does not support a cap
 # on the number of players online.)

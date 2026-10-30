@@ -62,6 +62,12 @@ The [legacy proxy](Legacy-Proxy/README.md) uses the proxy values above (`VECTOLY
 
 Its `forwarding.secret` holds `VECTOLYN_LEGACY_FORWARDING_SECRET`, never `VECTOLYN_FORWARDING_SECRET`: in `bungeeguard` mode Velocity sends it to the backends in plain text.
 
+## Branding values
+
+| Placeholder | Meaning | Current local value |
+|---|---|---|
+| `VECTOLYN_TAB_POWERED_BY` | Last line of the TAB footer in every backend with TAB (`plugins/TAB/config.yml`). It stands alone on its line, indented like the footer items. While `branding.powered-by` in `cloud.yml` is true (the default) the value is the whole list item `- "<dark_gray>Powered by VectolynCloud"`; while it is false the value is empty, the line stays blank and YAML ignores it. The value is fixed by the cloud, never taken from user input. | `- "<dark_gray>Powered by VectolynCloud"` |
+
 ## Templates
 
 | Folder | Software | `ServerPlatform` |
@@ -73,6 +79,8 @@ Its `forwarding.secret` holds `VECTOLYN_LEGACY_FORWARDING_SECRET`, never `VECTOL
 | `Database` | MariaDB (manual start; the managed mode writes its own config) | `NONE` |
 | `Legacy-Proxy` | Velocity, `bungeeguard` forwarding, in front of the 1.8.8 groups | `VELOCITY_LEGACY` (own forwarding secret, no Floodgate key) |
 | `Legacy-Server` | PandaSpigot 1.8.8, behind the legacy proxy | `PANDASPIGOT` (EULA only, no Floodgate key) |
+
+`Proxy` and `Legacy-Proxy` carry `server-icon.png` (64 x 64, the Vectolyn mark), which is copied byte for byte and shown by Velocity in the server list; the backends sit behind the proxy and need none.
 
 The new templates (`Minigame-Server`, `Legacy-Proxy`, `Legacy-Server`) have a `README.md` in English and a `README.de.md` in German. Markdown files are never copied into a service folder. Service folders live in the cloud home, never in the repository.
 

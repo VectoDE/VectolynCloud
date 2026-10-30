@@ -414,6 +414,17 @@ class ApiServerTest {
             HttpResponse<String> setup = api.get("/api/v1/setup", api.admin);
             assertTrue(setup.body().contains("\"ready\":true"), setup.body());
 
+            // branding: an empty section keeps powered-by on, as a missing section does.
+            String brandingOn = "\"branding\":{\"powered-by\":true}";
+            assertTrue(complete.contains(brandingOn), complete);
+            assertEquals(200, api.send("PUT", "/api/v1/config", api.admin,
+                    complete.replace(brandingOn, "\"branding\":{\"powered-by\":false}")).statusCode());
+            assertFalse(api.config.snapshot().cloud().brandingOrDefault().poweredBy());
+            HttpResponse<String> emptyBranding = api.send("PUT", "/api/v1/config", api.admin,
+                    complete.replace(brandingOn, "\"branding\":{}"));
+            assertEquals(200, emptyBranding.statusCode(), emptyBranding.body());
+            assertTrue(api.config.snapshot().cloud().brandingOrDefault().poweredBy(), "branding: {} means on");
+
             // A public bind address without TLS is refused by cloud-config as well.
             String open = complete.replace("\"enabled\":false,\"bind\":\"127.0.0.1\"", "\"enabled\":true,\"bind\":\"0.0.0.0\"");
             HttpResponse<String> tls = api.send("PUT", "/api/v1/config", api.admin, open);

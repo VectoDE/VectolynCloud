@@ -402,7 +402,9 @@ class ConfigValidatorTest {
 
     @Test
     void missingSectionsAreRequired() {
-        CloudConfig empty = new CloudConfig(1, null, null, false, false, null, null, null, null, null, null, null);
+        // branding may be missing: a file from before the section counts as powered-by on.
+        CloudConfig empty = new CloudConfig(1, null, null, false, false, null, null, null, null, null, null, null,
+                null);
         assertEquals(Set.of(
                 "cloud.yml network-name REQUIRED", "cloud.yml language REQUIRED", "cloud.yml node-id REQUIRED",
                 "cloud.yml servers REQUIRED", "cloud.yml proxy REQUIRED", "cloud.yml legacy-proxy REQUIRED",

@@ -62,8 +62,8 @@ jobs:
         run: bash ./gradlew build --no-daemon --no-build-cache -Pversion="${TAG#v}"
 
       # The release files: VectolynCloud.jar plus one archive per operating system with the
-      # start scripts, nothing else. The same script runs as a dry run in operations.yml on
-      # every pull request.
+      # start scripts; the banner images of the next step are the only other files. The same
+      # script runs as a dry run in operations.yml on every pull request.
       - name: Package VectolynCloud
         env:
           TAG: ${{ github.ref_name }}
@@ -73,7 +73,26 @@ jobs:
             cloud/launcher/build/cloud/VectolynCloud.jar dist
           ls -l dist
 
-      # SHA256SUMS lists exactly the three release files; the provenance covers every file in it,
+      # The image at the top of the release notes, 1280 x 320 and 2560 x 640: the committed
+      # background (branding/png/) with version, badge, title and date drawn by
+      # tools/release-banner. Title = first line of the tag message, date = tagger date (UTC).
+      # actions/checkout fetches only the commit and leaves an annotated tag as a lightweight
+      # one, so the tag object itself is fetched first. If the tag was moved since the run
+      # started, it no longer points at the built commit and the release stops. A banner that
+      # cannot be drawn (invalid tag, a character the font lacks, ...) fails the release; there
+      # is no fallback.
+      # operations.yml runs the same script on a local tag on every pull request.
+      - name: Release banner
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 --force origin "+refs/tags/${TAG}:refs/tags/${TAG}"
+          test "$(git rev-parse "refs/tags/${TAG}^{commit}")" = "$GITHUB_SHA" || { echo "::error::tag ${TAG} no longer points at ${GITHUB_SHA}"; exit 1; }
+          bash tools/release-banner/banner-from-tag.sh "$TAG" dist --no-daemon --no-build-cache
+          ls -l dist
+
+      # SHA256SUMS lists exactly the five release files; the provenance covers every file in it,
       # so nothing may be missing and nothing else may slip in.
       - name: Checksums
         id: hash
@@ -83,7 +102,8 @@ jobs:
         run: |
           set -euo pipefail
           version="${TAG#v}"
-          files=(VectolynCloud.jar "VectolynCloud-${version}-windows.zip" "VectolynCloud-${version}-linux-macos.tar.gz")
+          files=(VectolynCloud.jar "VectolynCloud-${version}-windows.zip" "VectolynCloud-${version}-linux-macos.tar.gz"
+            "VectolynCloud-${version}-banner.png" "VectolynCloud-${version}-banner-2x.png")
           found=$(find . -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort)
           want=$(printf '%s\n' "${files[@]}" | LC_ALL=C sort)
           if [ "$found" != "$want" ]; then
@@ -101,7 +121,7 @@ jobs:
         # Retries: v0.1.0 failed once with a Rekor 409 (cosign retried an upload that had
         # already landed). A fresh attempt signs again with a new certificate and succeeds.
         run: |
-          for f in *.jar *.zip *.tar.gz SHA256SUMS; do
+          for f in *.jar *.zip *.tar.gz *.png SHA256SUMS; do
             for attempt in 1 2 3; do
               if cosign sign-blob --yes --bundle "$f.sigstore.json" "$f"; then
                 break
@@ -127,7 +147,7 @@ jobs:
           subject-checksums: dist/SHA256SUMS
 
       # Written after the checksums and the signatures on purpose: the provenance describes the
-      # three release files, it is not one of them.
+      # five release files, it is not one of them.
       - name: Provenance file for the release
         env:
           BUNDLE: ${{ steps.attest.outputs.bundle-path }}
@@ -307,7 +327,12 @@ jobs:
           prerelease=""
           # 0.x versions and tags with a suffix (v1.0.0-rc.1) are pre-releases.
           case "$TAG" in v0.*|*-*) prerelease="--prerelease" ;; esac
+          # The banner on top, from this release's own assets (the 2x file, shown at 1280 px).
+          # TAG passed the strict version check of the banner step, so it is safe inside HTML.
+          banner="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/VectolynCloud-${TAG#v}-banner-2x.png"
           notes=$(printf '%s\n' \
+            "<img src=\"${banner}\" alt=\"VectolynCloud ${TAG}\" width=\"1280\">" \
+            "" \
             "Container image: \`${IMAGE}:${TAG#v}\` (\`${IMAGE}@${DIGEST}\`)" \
             "" \
             "How to check signatures and provenance: [docs/cloud/operations.md](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/docs/cloud/operations.md#verifying-a-release)")

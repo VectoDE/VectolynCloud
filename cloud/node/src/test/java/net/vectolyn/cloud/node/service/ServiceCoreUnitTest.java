@@ -235,9 +235,11 @@ class ServiceCoreUnitTest {
         NodeConfig node = NodeConfig.defaults();
         Secret legacy = Secret.of("legacy-secret-0123456789abcdef");
         Map<String, String> env = ServiceManager.environment(spec(group("Lobby-Server", ServerSoftware.PAPER), 30007),
-                ServerPlatform.PAPER, Optional.of(legacy), token, node.host(), node.port(), "hub");
+                ServerPlatform.PAPER, Optional.of(legacy), token, node.host(), node.port(), "hub", true, "1.2.3");
         assertEquals("lobby-1", env.get("VECTOLYN_SERVICE_ID"));
         assertFalse(env.containsKey(ServiceEnvironment.FALLBACK_GROUP), "only the proxies get the fallback group");
+        assertFalse(env.containsKey(ServiceEnvironment.POWERED_BY), "only the proxies answer /version");
+        assertFalse(env.containsKey(ServiceEnvironment.CLOUD_VERSION), "only the proxies answer /version");
         assertEquals("lobby", env.get("VECTOLYN_SERVICE_GROUP"));
         assertEquals("30007", env.get("VECTOLYN_SERVICE_PORT"));
         assertEquals("PAPER", env.get(ServiceEnvironment.SERVICE_PLATFORM));
@@ -257,20 +259,27 @@ class ServiceCoreUnitTest {
 
         // Counter-check: the PandaSpigot server gets it, under the protocol's constant.
         Map<String, String> panda = ServiceManager.environment(spec(group("Legacy-Server", ServerSoftware.PANDASPIGOT),
-                30008), ServerPlatform.PANDASPIGOT, Optional.of(legacy), token, node.host(), node.port(), "hub");
+                30008), ServerPlatform.PANDASPIGOT, Optional.of(legacy), token, node.host(), node.port(), "hub", true,
+                "1.2.3");
         assertFalse(panda.containsKey(ServiceEnvironment.FALLBACK_GROUP));
         assertEquals("PANDASPIGOT", panda.get(ServiceEnvironment.SERVICE_PLATFORM));
         assertEquals(legacy.reveal(), panda.get(ServiceEnvironment.LEGACY_FORWARDING_SECRET));
         assertEquals("VECTOLYN_SERVICE_PLATFORM", ServiceEnvironment.SERVICE_PLATFORM);
         assertEquals("VECTOLYN_LEGACY_FORWARDING_SECRET", ServiceEnvironment.LEGACY_FORWARDING_SECRET);
         assertEquals("VECTOLYN_FALLBACK_GROUP", ServiceEnvironment.FALLBACK_GROUP);
+        assertEquals("VECTOLYN_POWERED_BY", ServiceEnvironment.POWERED_BY);
+        assertEquals("VECTOLYN_CLOUD_VERSION", ServiceEnvironment.CLOUD_VERSION);
         for (ServerPlatform platform : List.of(ServerPlatform.VELOCITY, ServerPlatform.VELOCITY_LEGACY,
                 ServerPlatform.FABRIC)) {
             Map<String, String> other = ServiceManager.environment(spec(group("Proxy", ServerSoftware.VELOCITY), 25565),
-                    platform, Optional.of(legacy), token, node.host(), node.port(), "hub");
+                    platform, Optional.of(legacy), token, node.host(), node.port(), "hub", false, "1.2.3");
             assertEquals(platform.name(), other.get(ServiceEnvironment.SERVICE_PLATFORM));
             // Counter-check: both proxies get the fallback group, the Fabric server does not.
             assertEquals(platform == ServerPlatform.FABRIC ? null : "hub", other.get(ServiceEnvironment.FALLBACK_GROUP),
+                    platform.name());
+            assertEquals(platform == ServerPlatform.FABRIC ? null : "false", other.get(ServiceEnvironment.POWERED_BY),
+                    platform.name());
+            assertEquals(platform == ServerPlatform.FABRIC ? null : "1.2.3", other.get(ServiceEnvironment.CLOUD_VERSION),
                     platform.name());
             assertFalse(other.containsKey(ServiceEnvironment.LEGACY_FORWARDING_SECRET), platform.name());
             assertFalse(other.containsValue(legacy.reveal()), platform.name());

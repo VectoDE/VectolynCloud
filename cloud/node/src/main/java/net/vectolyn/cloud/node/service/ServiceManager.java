@@ -95,6 +95,9 @@ public final class ServiceManager implements AutoCloseable {
 
     private static final System.Logger LOG = System.getLogger(ServiceManager.class.getName());
 
+    /** Cloud version passed to the proxies when the builder is given none, as outside a release jar. */
+    public static final String DEFAULT_CLOUD_VERSION = "dev";
+
     /** Text a Paper, Fabric or Velocity server prints once it is ready. */
     static final String READY_MARKER = "Done (";
 
@@ -174,6 +177,7 @@ public final class ServiceManager implements AutoCloseable {
     private int channelPort;
     private final StartGate startGate;
     private final TemplateSource templates;
+    private final String cloudVersion;
     private final String nodeId;
 
     private final Object lock = new Object();
@@ -202,6 +206,7 @@ public final class ServiceManager implements AutoCloseable {
         this.clock = b.clock;
         this.startGate = b.startGate;
         this.templates = b.templates;
+        this.cloudVersion = b.cloudVersion;
         ConfigSnapshot snapshot = config.get();
         this.nodeId = snapshot.cloud().nodeId();
         NodeConfig node = thisNode(snapshot);
@@ -812,7 +817,8 @@ public final class ServiceManager implements AutoCloseable {
             Map<String, String> environment;
             synchronized (lock) {
                 environment = environment(spec, platform, legacySecret, token, channelHost, channelPort,
-                        snapshot.cloud().fallbackGroupOrDefault());
+                        snapshot.cloud().fallbackGroupOrDefault(), snapshot.cloud().brandingOrDefault().poweredBy(),
+                        cloudVersion);
             }
             log = ServiceOutput.openLog(home.resolve(ServiceOutput.LOG_DIR), spec.id().value());
 
@@ -1720,11 +1726,12 @@ public final class ServiceManager implements AutoCloseable {
      * token and where the cloud channel listens. A PandaSpigot server also gets the forwarding
      * secret of the legacy proxy, for the {@code bungeeguard} check of its bridge; no other
      * service gets a secret of {@code vectolyn.env} in its environment. The two proxies also get
-     * the fallback group for kicked players ({@code fallback-group} of {@code cloud.yml}).
+     * the fallback group for kicked players ({@code fallback-group} of {@code cloud.yml}),
+     * {@code branding.powered-by} and the cloud's version, for {@code /version}.
      */
     static Map<String, String> environment(ServiceSpec spec, ServerPlatform platform, Optional<Secret> legacySecret,
                                            AuthToken token, String channelHost, int channelPort,
-                                           String fallbackGroup) {
+                                           String fallbackGroup, boolean poweredBy, String cloudVersion) {
         Map<String, String> env = new HashMap<>();
         System.getenv().forEach((key, value) -> {
             if (!key.toUpperCase(java.util.Locale.ROOT).startsWith(ServiceEnvironment.PREFIX)) {
@@ -1741,6 +1748,8 @@ public final class ServiceManager implements AutoCloseable {
         }
         if (platform == ServerPlatform.VELOCITY || platform == ServerPlatform.VELOCITY_LEGACY) {
             env.put(ServiceEnvironment.FALLBACK_GROUP, fallbackGroup);
+            env.put(ServiceEnvironment.POWERED_BY, Boolean.toString(poweredBy));
+            env.put(ServiceEnvironment.CLOUD_VERSION, cloudVersion);
         }
         env.put(ServiceEnvironment.SERVICE_TOKEN, token.value());
         env.put(ServiceEnvironment.CLOUD_HOST, channelHost(channelHost));
@@ -1872,6 +1881,7 @@ public final class ServiceManager implements AutoCloseable {
         private Clock clock = Clock.systemUTC();
         private StartGate startGate = () -> { };
         private TemplateSource templates = template -> { };
+        private String cloudVersion = DEFAULT_CLOUD_VERSION;
 
         private Builder(Path home, Supplier<ConfigSnapshot> config, SecretSource secrets) {
             this.home = Objects.requireNonNull(home, "home").toAbsolutePath().normalize();
@@ -1967,6 +1977,18 @@ public final class ServiceManager implements AutoCloseable {
          */
         public Builder templates(TemplateSource value) {
             this.templates = Objects.requireNonNull(value, "value");
+            return this;
+        }
+
+        /**
+         * Sets the version of the cloud the proxies show in {@code /version} (default
+         * {@value #DEFAULT_CLOUD_VERSION}).
+         *
+         * @param value version of {@code VectolynCloud.jar}
+         * @return this builder
+         */
+        public Builder cloudVersion(String value) {
+            this.cloudVersion = Objects.requireNonNull(value, "value");
             return this;
         }
 

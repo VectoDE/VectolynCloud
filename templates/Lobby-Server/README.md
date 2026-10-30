@@ -12,6 +12,7 @@ Software: Paper 26.3. Plugins today: Floodgate, LuckPerms, TAB, PlaceholderAPI, 
 - `{{VECTOLYN_DB_HOST}}`, `{{VECTOLYN_DB_PORT}}`, `{{VECTOLYN_DB_NAME}}`, `{{VECTOLYN_DB_USER}}`, `{{VECTOLYN_DB_PASSWORD}}` in `plugins/LuckPerms/config.yml`
 - `{{VECTOLYN_DB_STORAGE_METHOD}}` (`mariadb`, `mysql` or `h2`) and `{{VECTOLYN_DB_POOL_SIZE}}` (pool size set centrally by the cloud, normally 4) in `plugins/LuckPerms/config.yml`
 - `{{VECTOLYN_XMS}}`, `{{VECTOLYN_XMX}}` in `start.bat`
+- `{{VECTOLYN_TAB_POWERED_BY}}` in `plugins/TAB/config.yml`: the last footer line "Powered by VectolynCloud" while `branding.powered-by` in `cloud.yml` is true (the default), nothing otherwise
 - Generated file: `plugins/floodgate/key.pem` from `VECTOLYN_FLOODGATE_KEY_B64`
 
 ## Wanted or not

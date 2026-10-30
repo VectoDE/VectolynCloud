@@ -49,6 +49,19 @@ public final class ServiceEnvironment {
     public static final String FALLBACK_GROUP = "VECTOLYN_FALLBACK_GROUP";
 
     /**
+     * {@code true} or {@code false}: {@code branding.powered-by} of {@code cloud.yml} (default
+     * {@code true}). Only the two proxies get it; while it is {@code true} the Velocity bridge
+     * answers {@code /version} with {@link #CLOUD_VERSION}.
+     */
+    public static final String POWERED_BY = "VECTOLYN_POWERED_BY";
+
+    /**
+     * Version of the cloud that started the service, as {@code VectolynCloud.jar} reports it
+     * ({@code dev} outside a release jar). Only the two proxies get it, for {@code /version}.
+     */
+    public static final String CLOUD_VERSION = "VECTOLYN_CLOUD_VERSION";
+
+    /**
      * Prefix of every variable the cloud owns. The node removes all variables with this prefix
      * from its own environment before it starts a service, so nothing of the cloud's environment
      * leaks into a server.

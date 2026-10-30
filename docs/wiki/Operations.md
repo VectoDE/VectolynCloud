@@ -11,6 +11,7 @@ Each [release](https://github.com/VectoDE/VectolynCloud/releases) contains:
 - `VectolynCloud.jar`
 - `VectolynCloud-<version>-windows.zip` with `start.bat` and `start.ps1`
 - `VectolynCloud-<version>-linux-macos.tar.gz` with `start.sh`
+- `VectolynCloud-<version>-banner.png` and `VectolynCloud-<version>-banner-2x.png`, the banner at the top of the release notes (1280 x 320 and 2560 x 640)
 - `SHA256SUMS`, a cosign signature for every file and SLSA provenance
 
 Nothing else: the plugin jars are not part of a release.
