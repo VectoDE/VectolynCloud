@@ -18,7 +18,8 @@ name: vectolyn
 
 services:
   cloud:
-    image: ghcr.io/vectode/vectolyn-cloud:${VECTOLYN_VERSION:-latest}
+    # Default "dev" (newest -dev release) until the first stable release; then it switches to "latest".
+    image: ghcr.io/vectode/vectolyn-cloud:${VECTOLYN_VERSION:-dev}
     build:
       context: ../../..
       dockerfile: cloud/dist/docker/Dockerfile

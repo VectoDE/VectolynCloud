@@ -33,7 +33,7 @@ Before a tag is pushed, and at the end of every stage, the cleanup check in [doc
 
 The start scripts come in one archive per operating system rather than as loose files: a downloaded `start.sh` loses its executable bit, while the tar keeps it; the zip keeps the CRLF line ends the Windows scripts need; and each archive is a single download with the matching jar. The jar is attached on its own as well. The archives are reproducible (fixed file order, owner and time stamps), so building the same tag twice gives the same SHA-256.
 
-The container image goes to `ghcr.io/vectode/vectolyn-cloud`, tagged with the version (`1.0.0`, without `v`). `latest` moves only with releases that are not pre-releases, that is stable and `-lts` tags; `-dev`, `-alpha`, `-beta` and `-rc` leave it alone (see [Versions and tags](#versions-and-tags)). The image contains the very `VectolynCloud.jar` of the release: the workflow passes the signed jar into the image build instead of compiling it again, and checks its SHA-256 against `SHA256SUMS` first.
+The container image goes to `ghcr.io/vectode/vectolyn-cloud`, tagged with the version (`1.0.0`, without `v`). `latest` moves only with releases that are not pre-releases, that is stable and `-lts` tags; `-dev`, `-alpha`, `-beta` and `-rc` leave it alone. Every `-dev` release additionally moves the tag `dev` (always the newest `-dev` release; it is the default of `compose.yml` until the first stable release, then it switches to `latest`) (see [Versions and tags](#versions-and-tags)). The image contains the very `VectolynCloud.jar` of the release: the workflow passes the signed jar into the image build instead of compiling it again, and checks its SHA-256 against `SHA256SUMS` first.
 
 ## Versions and tags
 
@@ -51,7 +51,7 @@ A release starts with a pushed tag. The first step of `release.yml` checks it, b
 - `MAJOR`, `MINOR`, `PATCH` and the counter `.N` are numbers without leading zeros. The counter is optional.
 - `-lts` takes no counter. An LTS line counts its releases with the patch version: `v1.4.0-lts`, `v1.4.1-lts`.
 - Everything else stops the release: a 0.x version without `-dev` or with another suffix (`v0.2.0`, `v0.2.0-alpha.1`), an unknown suffix (`-nightly`, `-RC.1`), build metadata (`+build.7`; GitHub may rewrite the `+` in file names) and malformed tags (`v1.0`, `v01.0.0`).
-- The image tag `latest` follows the same flag: stable and `-lts` releases move it, pre-releases do not.
+- The image tag `latest` follows the same flag: stable and `-lts` releases move it, pre-releases do not. The tag `dev` is separate: only `-dev` releases move it, to the newest one. It points to the same digest as the version tag, so the signature and provenance of that digest cover it.
 
 The rules live in one place, `ReleaseVersion` in [`tools/release-banner`](../../tools/release-banner); the banner reads the tag with the same code. Check a tag before you push it:
 
