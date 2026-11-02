@@ -1,6 +1,6 @@
 [versions]
 # Keep in step with the Paper build that runs on the backends (<home>/<Server>/runtime/paper.jar).
-paper-api = "26.3.build.226-stable"
+paper-api = "26.3.build.231-stable"
 # API of the Velocity 4.3.x proxy (templates/Proxy). compileOnly in plugins/bridge/velocity.
 velocity-api = "4.3.1"
 # API of PandaSpigot 1.8.8 (templates/Legacy-Server). Only a snapshot is published, so the build
