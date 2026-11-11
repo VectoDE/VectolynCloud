@@ -58,7 +58,7 @@ Ports of all servers: [Server Network](Server-Network).
 
 ## Planned: VectolynCloud (stage 2 and later)
 
-VectolynCloud is set up and configured like CloudNet:
+VectolynCloud is set up and configured as follows:
 
 1. Run `java -jar VectolynCloud.jar` on Windows, Linux, macOS, in Docker or on Pterodactyl.
 2. On first start a setup wizard runs in the console. It asks, among other things, how the database should run (managed MariaDB, Docker or external) and which of the seven servers and minigame groups you want.

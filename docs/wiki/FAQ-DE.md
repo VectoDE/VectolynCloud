@@ -15,7 +15,7 @@ Das ist eine Projektregel: Kein Spielmodus erscheint, den Bedrock-Spieler nicht 
 Sobald es VectolynCloud gibt (geplant, Etappe 2), nicht mehr. Im Einrichtungsassistenten oder in der Konfiguration wählst du die Server und Minigame-Gruppen, die du willst; nur die legt die Cloud an. Bis dahin startet der Übergangsaufbau die vorhandenen Server.
 
 **Wie wird VectolynCloud konfiguriert?**
-Wie CloudNet: Assistent in der Konsole beim ersten Start, danach Konfigurationsdateien und Konsolenbefehle (Etappe 2). Später soll das Web-Dashboard das auch können (Etappe 8).
+Ein Assistent in der Konsole beim ersten Start, danach Konfigurationsdateien und Konsolenbefehle (Etappe 2). Später soll das Web-Dashboard das auch können (Etappe 8).
 
 **Welche Java-Version brauche ich?**
 Für den Betrieb der Server Java 25, weil Paper 26.3 es verlangt. Zum Bauen startet Gradle ab Java 17 und kompiliert mit einer Java-25-Toolchain, die es bei Bedarf herunterlädt. Der Bytecode der Plugins zielt auf Java 21, und alles, was Java 25 braucht, behält einen Java-21-Weg.
