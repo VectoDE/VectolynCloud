@@ -89,7 +89,7 @@ jobs:
               echo "::error file=$f::needs CRLF line ends (.gitattributes)"; exit 1
             fi
           done
-          for f in cloud/dist/start.sh cloud/dist/package.sh .github/scripts/smoke-start-unix.sh gradle/update-verification-metadata.sh \
+          for f in cloud/dist/start.sh cloud/dist/package.sh .github/scripts/smoke-start-unix.sh .github/scripts/smoke-jar-runtime.sh gradle/update-verification-metadata.sh \
             tools/release-banner/banner-from-tag.sh tools/release-banner/check-tag.sh; do
             if grep -q $'\r' "$f"; then
               echo "::error file=$f::needs LF line ends (.gitattributes)"; exit 1
@@ -288,6 +288,57 @@ jobs:
           path: ops-dist/
           if-no-files-found: error
           retention-days: 3
+
+  # "java -jar VectolynCloud.jar" is the one entry point, so the jar itself runs on every platform
+  # and Java version that is supported: Windows x64, Linux x64 and arm64, macOS arm64 and x64, and
+  # Java 21 (the minimum) up to the newest release. 25 is the LTS the project builds with.
+  runtime:
+    name: Jar on Java ${{ matrix.java }} (${{ matrix.label }})
+    needs: jar
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, label: Linux x64, java: '21' }
+          - { os: ubuntu-latest, label: Linux x64, java: '25' }
+          - { os: ubuntu-latest, label: Linux x64, java: '27' }
+          - { os: ubuntu-24.04-arm, label: Linux arm64, java: '21' }
+          - { os: ubuntu-24.04-arm, label: Linux arm64, java: '25' }
+          - { os: ubuntu-24.04-arm, label: Linux arm64, java: '27' }
+          - { os: macos-latest, label: macOS arm64, java: '21' }
+          - { os: macos-latest, label: macOS arm64, java: '25' }
+          - { os: macos-latest, label: macOS arm64, java: '27' }
+          - { os: macos-15-intel, label: macOS x64, java: '21' }
+          - { os: macos-15-intel, label: macOS x64, java: '25' }
+          # Temurin 27 has no macOS x64 build (Adoptium API); 26 is the newest Java there.
+          - { os: macos-15-intel, label: macOS x64, java: '26' }
+          - { os: windows-latest, label: Windows x64, java: '21' }
+          - { os: windows-latest, label: Windows x64, java: '25' }
+          - { os: windows-latest, label: Windows x64, java: '27' }
+    steps:
+      # The jobs above run with egress blocking; the harden-runner agent only exists for Linux
+      # x64 runners, so these jobs go without it. They have no secrets and read-only permissions.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ops-dist
+          path: ops-dist
+
+      - name: Set up JDK ${{ matrix.java }}
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+
+      - name: java -jar VectolynCloud.jar
+        shell: bash
+        run: bash .github/scripts/smoke-jar-runtime.sh ops-dist/VectolynCloud.jar
 
   start-scripts:
     name: Start scripts (${{ matrix.os }})
