@@ -35,6 +35,7 @@ Transitive Abhängigkeiten sind nicht einzeln aufgeführt. Die Verifikation der 
 | org.reactivestreams:reactive-streams | 1.0.3 | runtime (via graphql-java) | MIT-0 | yes |
 | org.jspecify:jspecify | 1.0.0 | runtime (via graphql-java) | Apache-2.0 | yes |
 | org.mariadb.jdbc:mariadb-java-client | 4.0.0 | implementation | LGPL-2.1-or-later | yes (the "or later" clause allows combination under GPL-3.0) |
+| org.postgresql:postgresql | 42.7.14 | implementation | BSD-2-Clause (transitiv: org.checkerframework:checker-qual, MIT) | yes |
 | com.code-intelligence:jazzer-junit | 0.30.0 | test (fuzz) | Apache-2.0 | yes |
 
 ## Web panel frontend (npm, `cloud/panel/web`)
@@ -51,7 +52,7 @@ Exakte Versionen in `cloud/panel/web/package-lock.json`. Installiert wird nur mi
 | postcss | 8.5.32 | build only | MIT | yes |
 | typescript | 5.9.3 | build only | Apache-2.0 | yes |
 | @types/node, @types/react, @types/react-dom | 24.x, 19.3.0 | build only | MIT | yes |
-| @img/sharp-* (optional, transitiv über next) | 0.34.x | nur Bauzeit, wird nicht aufgerufen | LGPL-3.0-or-later, teils mit Apache-2.0/MIT | yes |
+| @img/sharp-* (optional, transitiv über next) | 0.34.x / 1.3.x | nur Bauzeit, wird nicht aufgerufen | LGPL-3.0-or-later, teils mit Apache-2.0/MIT | yes |
 
 `sharp` ist eine optionale Abhängigkeit von Next.js für `next/image`. Der Export läuft mit `images.unoptimized`, sharp wird also nie aufgerufen; npm installiert nur das Paket der Bau-Plattform, und nichts davon kommt ins Jar. Die Trivy-Lizenzprüfung nimmt genau diese Lizenzen für `cloud/panel/web/package-lock.json` aus (`.trivyignore.yaml`).
 
@@ -78,6 +79,6 @@ Geyser, Floodgate, ViaVersion, ViaBackwards und ViaRewind bleiben extern und sin
 
 ## Summary
 
-- Direct Gradle dependencies: 21 (davon 3 BOMs), plus 2 Build-Werkzeuge und 5 externe Ausnahmen.
+- Direct Gradle dependencies: 22 (davon 3 BOMs), plus 2 Build-Werkzeuge und 5 externe Ausnahmen.
 - Unknown licenses: 0.
-- Conflicts with GPL-3.0: none found. Hinweise: JUnit (EPL-2.0) ist nur Testabhängigkeit und wird nicht ausgeliefert. MariaDB Connector/J (LGPL-2.1-or-later) ist mit GPL-3.0 kombinierbar.
+- Conflicts with GPL-3.0: none found. Hinweise: JUnit (EPL-2.0) ist nur Testabhängigkeit und wird nicht ausgeliefert. MariaDB Connector/J (LGPL-2.1-or-later) ist mit GPL-3.0 kombinierbar. Der PostgreSQL-JDBC-Treiber (BSD-2-Clause) ebenso.

@@ -28,6 +28,7 @@ import net.vectolyn.cloud.api.backend.BackupServiceAccess;
 import net.vectolyn.cloud.api.console.ApiCommands;
 import net.vectolyn.cloud.backup.BackupException;
 import net.vectolyn.cloud.backup.BackupService;
+import net.vectolyn.cloud.backup.config.BackupConfigFile;
 import net.vectolyn.cloud.backup.command.BackupCommands;
 import net.vectolyn.cloud.backup.schedule.BackupScheduler;
 import net.vectolyn.cloud.cluster.ClusterCommands;
@@ -36,9 +37,13 @@ import net.vectolyn.cloud.cluster.ClusterService;
 import net.vectolyn.cloud.cluster.VersionPolicy;
 import net.vectolyn.cloud.config.CloudHome;
 import net.vectolyn.cloud.config.model.ApiConfig;
+import net.vectolyn.cloud.config.transfer.ConfigArchive;
 import net.vectolyn.cloud.monitor.MonitorRuntime;
+import net.vectolyn.cloud.monitor.config.MonitorConfigLoader;
 import net.vectolyn.cloud.privacy.IpBanStore;
+import net.vectolyn.cloud.privacy.PrivacyConfigLoader;
 import net.vectolyn.cloud.privacy.PrivacyRuntime;
+import net.vectolyn.cloud.privacy.StatisticsCollector;
 import net.vectolyn.cloud.node.ops.NodeApi;
 import net.vectolyn.cloud.node.ops.NodeBackups;
 import net.vectolyn.cloud.node.ops.NodeMonitoring;
@@ -436,9 +441,9 @@ public final class CloudNode implements AutoCloseable {
         directory.attach(monitoring.monitor());
         PrivacyRuntime privacy;
         try {
-            privacy = PrivacyRuntime.open(home.root(), Clock.systemUTC());
-        } catch (IpBanStore.FormatException e) {
-            throw new IOException("state/ip-bans.json is not a valid ban list", e);
+            privacy = PrivacyRuntime.open(home.root(), Clock.systemUTC(), settings.launcherVersion());
+        } catch (IpBanStore.FormatException | StatisticsCollector.FormatException e) {
+            throw new IOException("state/ip-bans.json or state/statistics.json is damaged", e);
         }
         services.addListener(directory);
         channel.statusListener(monitoring.monitor()::statusReported);
@@ -454,7 +459,16 @@ public final class CloudNode implements AutoCloseable {
         NodeApi api = new NodeApi(services, channel, nodeId, settings.launcherVersion(), Instant.now(),
                 redactor::redact, Optional.of(new BackupServiceAccess(backups)));
         services.addListener(api);
-        channel.playerListener(api);
+        // The API hears every player event; the statistics count playtime, logins and players per
+        // game mode (the group of the server the player is on), without keeping who the player is.
+        channel.playerListener((kind, player) -> {
+            api.changed(kind, player);
+            if ("leave".equals(kind)) {
+                privacy.playerLeft(player.uuid());
+            } else {
+                services.find(player.service()).ifPresent(info -> privacy.playerArrived(player.uuid(), info.group()));
+            }
+        });
 
         // Player counts of the bridges and proxies, memory of the node from the monitor
         // (docs/cloud/scaling.md); the configuration is the same one the console and the API change.
@@ -985,7 +999,10 @@ public final class CloudNode implements AutoCloseable {
             }
             root.addHandler(logHandler);
         }
-        BuiltinCommands.register(console, config, this::close);
+        BuiltinCommands.register(console, config, this::close, List.of(
+                new ConfigArchive.ExtraFile(CloudHome.MONITOR_FILE, MonitorConfigLoader::parse),
+                new ConfigArchive.ExtraFile(CloudHome.PRIVACY_FILE, PrivacyConfigLoader::parse),
+                new ConfigArchive.ExtraFile(CloudHome.BACKUP_FILE, BackupConfigFile::parse)));
         serviceCommands = new ServiceCommands(services, config, channel::status, console.output());
         services.addListener(serviceCommands);
         console.commands().register(serviceCommands.command());

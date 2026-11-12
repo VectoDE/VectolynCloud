@@ -69,7 +69,7 @@ class ConfigServiceMirrorTest {
             assertTrue(change.files().contains("groups/stray.yml"));
             assertFalse(Files.exists(root.resolve("config/tasks/lobby.yml")));
             assertFalse(Files.exists(root.resolve("config/groups/stray.yml")));
-            assertArrayEquals(ConfigYaml.write(Samples.lobbyGroup()), Files.readAllBytes(root.resolve("config/groups/lobby.yml")));
+            assertArrayEquals(ConfigYaml.write("groups/lobby.yml", Samples.lobbyGroup()), Files.readAllBytes(root.resolve("config/groups/lobby.yml")));
             assertEquals(1, events.size());
         }
     }

@@ -1,0 +1,84 @@
+{
+  "$schema" : "https://json-schema.org/draft/2020-12/schema",
+  "$id" : "https://github.com/VectoDE/VectolynCloud/raw/main/cloud/dist/schema/nodes.schema.json",
+  "title" : "VectolynCloud nodes.yml",
+  "description" : "Generated from the configuration model of VectolynCloud. Reference: https://github.com/VectoDE/VectolynCloud/blob/main/docs/cloud/config.md",
+  "type" : "object",
+  "properties" : {
+    "schema-version" : {
+      "type" : "integer",
+      "minimum" : 1,
+      "maximum" : 1,
+      "description" : "Version of the file format; 1 is current."
+    },
+    "nodes" : {
+      "type" : "array",
+      "items" : {
+        "$ref" : "#/$defs/NodeConfig"
+      }
+    }
+  },
+  "required" : [ "schema-version" ],
+  "additionalProperties" : false,
+  "$defs" : {
+    "MemoryReserve" : {
+      "type" : "object",
+      "properties" : {
+        "system" : {
+          "type" : "string",
+          "pattern" : "^[1-9][0-9]{0,6}[MmGg]$",
+          "description" : "<number>M or <number>G, for example 512M"
+        },
+        "node-overhead" : {
+          "type" : "string",
+          "pattern" : "^[1-9][0-9]{0,6}[MmGg]$",
+          "description" : "<number>M or <number>G, for example 512M"
+        },
+        "database" : {
+          "type" : "string",
+          "pattern" : "^[1-9][0-9]{0,6}[MmGg]$",
+          "description" : "<number>M or <number>G, for example 512M"
+        }
+      },
+      "additionalProperties" : false
+    },
+    "NodeConfig" : {
+      "type" : "object",
+      "properties" : {
+        "id" : {
+          "type" : "string"
+        },
+        "host" : {
+          "type" : "string"
+        },
+        "port" : {
+          "type" : "integer"
+        },
+        "service-ports" : {
+          "$ref" : "#/$defs/PortRange"
+        },
+        "max-memory" : {
+          "type" : "string",
+          "pattern" : "^[1-9][0-9]{0,6}[MmGg]$",
+          "description" : "<number>M or <number>G, for example 512M"
+        },
+        "memory-reserve" : {
+          "$ref" : "#/$defs/MemoryReserve"
+        }
+      },
+      "additionalProperties" : false
+    },
+    "PortRange" : {
+      "type" : "object",
+      "properties" : {
+        "first" : {
+          "type" : "integer"
+        },
+        "last" : {
+          "type" : "integer"
+        }
+      },
+      "additionalProperties" : false
+    }
+  }
+}

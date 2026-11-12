@@ -29,9 +29,43 @@ Without the file the default of 90 days applies. An entry is deleted `retention-
 
 **Automatic deletion.** The list is cleaned when the node starts and every hour after that. Entries that are due are removed from memory and from the file (the file is rewritten atomically). Between two runs an entry that is due already counts as gone: `IpBanStore.isBanned` never reports it.
 
-**Code.** Module `cloud/privacy`: `PrivacyConfig` and `PrivacyConfigLoader` (strict YAML like the other configuration files), `IpBanStore` (list, purge, atomic writes), `PrivacyRuntime` (hourly purge, started and closed by the node). The ban file is read strictly and has a Jazzer fuzz test.
+**Code.** Module `cloud/privacy`: `StatisticsCollector` and `Telemetry` (see below), `PrivacyConfig` and `PrivacyConfigLoader` (strict YAML like the other configuration files), `IpBanStore` (list, purge, atomic writes), `PrivacyRuntime` (hourly purge, started and closed by the node). The ban file is read strictly and has a Jazzer fuzz test.
 
 **Not part of this module yet.** The proxy bridge that refuses a connection from a banned address, console commands and the panel view are separate steps; this module is the store and the deletion they will use.
+
+## Statistics per game mode
+
+**What is counted.** For each game mode (the group of the server the player is on) three sums: logins (a player joins the network there or switches to it), playtime in seconds (summed over all players) and the peak number of players online at the same time. Stored in `state/statistics.json`, saved every five minutes and when the node stops.
+
+**What is not stored.** No name, UUID, address or time of an individual player. To compute playtime the collector keeps, in memory only, the mode and start time of each player who is online; the entry is dropped when the player leaves and never written to disk. With only sums on disk, the file does not identify anyone. Whether such totals are anonymous data in the legal sense is a question for a lawyer (see below).
+
+**Switch.** `statistics.enabled` in `config/privacy.yml`, default `true`. The numbers stay on the machine of the operator.
+
+## Telemetry
+
+Telemetry is **off** and sends nothing unless the operator switches it on with a record of consent. `privacy.yml`:
+
+```yaml
+schema-version: 1
+telemetry:
+  enabled: true
+  endpoint: https://telemetry.example.org/v1   # no default; HTTPS only
+  consent:
+    given-by: Jane Admin          # who agreed
+    given-at: 2026-11-01T10:00:00Z
+    text-version: 1               # version of this description
+```
+
+The cloud refuses to start with `telemetry.enabled: true` if the consent record, a past `given-at`, the current `text-version` or an HTTPS endpoint is missing. There is no built-in endpoint: without one nothing can be sent. Removing `enabled` (or setting it to `false`) stops it at once; the consent block may stay as a record.
+
+**Text version 1: what is sent.** Once a day, one JSON document by HTTPS POST, without redirects, cookies or credentials:
+
+```json
+{"report-version":1,"cloud-version":"0.1.0","os":"Linux",
+ "modes":[{"mode":"lobby","logins":3,"playtime-seconds":120,"peak-players":2}]}
+```
+
+That is the whole report: report format, cloud version, name of the operating system, and the three sums per game mode (empty if `statistics.enabled` is false). No IP address of the sender is added by the cloud, but the receiving server sees the address of the connection; the operator who chooses the endpoint is responsible for what it logs. `Telemetry.report()` returns the exact bytes before anything is sent.
 
 ## Questions for a lawyer
 
@@ -39,3 +73,6 @@ Without the file the default of 90 days applies. An entry is deleted `retention-
 2. Is a default of 90 days appropriate for the ban list, or should the default be shorter?
 3. What must the privacy notice say about the ban list (purpose, legal basis, retention, right to object)?
 4. Is a record of processing activities (Art. 30 GDPR) required for this processing, and what must it contain?
+5. Are the per-mode sums anonymous data, or does the short-lived in-memory session map make the statistics personal data processing?
+6. Is the consent record in `privacy.yml` (name, time, text version) sufficient as a proof of consent of the operator, and is the operator the right person to consent, or does the data protection law apply at all to a report without personal data?
+7. Which duties come with a telemetry endpoint run by someone else (processor agreement, transfer to third countries, notice in the privacy policy)?

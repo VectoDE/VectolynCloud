@@ -101,7 +101,13 @@ public enum ErrorCode {
      * files and mirrors them to its members (docs/cloud/cluster.md).
      */
     MANAGED_BY_HEAD("This file is managed by the cluster head; change it on the head.",
-            "Diese Datei verwaltet der Cluster-Head; auf dem Head ändern.");
+            "Diese Datei verwaltet der Cluster-Head; auf dem Head ändern."),
+    /** An entry of a configuration archive that is no configuration file (docs/cloud/config.md). */
+    NOT_IN_ARCHIVE("Does not belong in a configuration archive. Allowed: %1$s.",
+            "Gehört nicht in ein Konfigurationsarchiv. Erlaubt: %1$s."),
+    /** A configuration archive with too many entries or too much content. */
+    ARCHIVE_TOO_LARGE("The archive is too large: at most %1$s entries and %2$s bytes unpacked.",
+            "Das Archiv ist zu groß: höchstens %1$s Einträge und %2$s Bytes entpackt.");
 
     private final String english;
     private final String german;

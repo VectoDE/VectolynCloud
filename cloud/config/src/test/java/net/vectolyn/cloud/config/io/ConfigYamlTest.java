@@ -181,7 +181,7 @@ class ConfigYamlTest {
         ConfigError mode = single(CLOUD.replace("mode: docker", "mode: postgres"), ConfigFormat.CLOUD);
         assertEquals(ErrorCode.INVALID_VALUE, mode.code());
         assertEquals("database.mode", mode.path());
-        assertEquals(List.of("one of managed, docker, external, h2"), mode.args());
+        assertEquals(List.of("one of managed, docker, external, h2, postgresql"), mode.args());
     }
 
     @Test

@@ -53,7 +53,7 @@ import net.vectolyn.cloud.console.terminal.ConsoleTerminal;
  *       suggestion of {@link NetworkServer#defaultCounts()};</li>
  *   <li>advanced settings, only on "yes" (default no): {@code drain-timeout} of every wanted group,
  *       {@code max-memory} and {@code memory-reserve} of this node;</li>
- *   <li>database mode ({@code docker} hidden on Pterodactyl); for {@code external} host, port, name,
+ *   <li>database mode ({@code docker} hidden on Pterodactyl); for {@code external} and {@code postgresql} host, port, name,
  *       user and password;</li>
  *   <li>summary with the files that change, then save, change or cancel.</li>
  * </ol>
@@ -550,6 +550,7 @@ final class InteractiveSetup {
             options.add(Question.option("docker", SetupMessages.MODE_DOCKER, DatabaseMode.DOCKER));
         }
         options.add(Question.option("external", SetupMessages.MODE_EXTERNAL, DatabaseMode.EXTERNAL));
+        options.add(Question.option("postgresql", SetupMessages.MODE_POSTGRESQL, DatabaseMode.POSTGRESQL));
         options.add(Question.option("h2", SetupMessages.MODE_H2, DatabaseMode.H2));
         if (env.pterodactyl()) {
             out.println(SetupMessages.DOCKER_HIDDEN);
@@ -564,16 +565,16 @@ final class InteractiveSetup {
             out.println(SetupMessages.MANAGED_DATABASE_SWITCH);
         }
         DatabaseConfig chosen = mode == db.mode() ? db : SetupPlan.switchMode(db, mode);
-        if (mode != DatabaseMode.EXTERNAL) {
+        if (!mode.operatorServer()) {
             return answers.withDatabase(chosen, Optional.empty());
         }
         String host = ask.ask(Question.text(SetupMessages.DB_HOST).defaultValue(chosen.host()).validate(SetupChecks::host));
         int port = ask.ask(Question.number(SetupMessages.DB_PORT, 1, 65535).defaultValue(chosen.port()));
         String name = ask.ask(Question.text(SetupMessages.DB_NAME).defaultValue(chosen.name()).validate(SetupChecks::identifier));
         String user = ask.ask(Question.text(SetupMessages.DB_USER).defaultValue(chosen.user()).validate(SetupChecks::identifier));
-        boolean wasExternal = current.cloud().database() != null && current.cloud().database().mode() == DatabaseMode.EXTERNAL;
+        boolean wasExternal = current.cloud().database() != null && current.cloud().database().mode().operatorServer();
         Optional<Secret> password = password(wasExternal, answers.databasePassword());
-        return answers.withDatabase(new DatabaseConfig(DatabaseMode.EXTERNAL, host, port, name, user, null), password);
+        return answers.withDatabase(new DatabaseConfig(mode, host, port, name, user, null), password);
     }
 
     /**
@@ -697,6 +698,7 @@ final class InteractiveSetup {
             case MANAGED -> SetupMessages.S_DB_MANAGED.format(lang, endpoint);
             case DOCKER -> SetupMessages.S_DB_DOCKER.format(lang, db.dockerImage(), endpoint);
             case EXTERNAL -> SetupMessages.S_DB_EXTERNAL.format(lang, endpoint, db.name(), db.user());
+            case POSTGRESQL -> SetupMessages.S_DB_POSTGRESQL.format(lang, endpoint, db.name(), db.user());
             case H2 -> SetupMessages.S_DB_H2.get(lang);
         };
         String secretsLine = SetupMessages.S_SECRETS_VALUE.get(lang)

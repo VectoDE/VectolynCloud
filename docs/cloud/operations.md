@@ -11,8 +11,10 @@ The files are in [`cloud/dist/`](../../cloud/dist):
 | `start.sh` | start script for Linux and macOS (bash 3.2 or later) |
 | `start.bat`, `start.ps1` | start scripts for Windows (Command Prompt, Windows PowerShell 5.1 or PowerShell 7) |
 | `systemd/vectolyn-cloud.service` | systemd unit with a dedicated user and hardening |
+| `systemd/install.sh` | installs, updates and removes the unit and the program files (`install`, `update`, `uninstall`) |
 | `docker/Dockerfile`, `docker/compose.yml`, `docker/setup.example.yml` | container image and a compose file with MariaDB |
-| `pterodactyl/egg-vectolyn-cloud.json` | Pterodactyl egg |
+| `pterodactyl/egg-vectolyn-cloud.json` | Pterodactyl egg (PTDL_v2) |
+| `pelican/egg-vectolyn-cloud.json` | Pelican egg (PLCN_v3) |
 | `package.sh` | builds the release archives (used by the release workflow) |
 
 ## What a release contains
@@ -23,9 +25,11 @@ The release workflow ([`release.yml`](../../.github/workflows/release.yml)) runs
 |---|---|
 | `VectolynCloud.jar` | the cloud, for `java -jar`, Docker and Pterodactyl |
 | `VectolynCloud-<version>-windows.zip` | `VectolynCloud.jar`, `start.bat`, `start.ps1` |
-| `VectolynCloud-<version>-linux-macos.tar.gz` | `VectolynCloud.jar`, `start.sh` (executable) |
+| `VectolynCloud-<version>-linux-macos.tar.gz` | `VectolynCloud.jar`, `start.sh` (executable), `vectolyn-cloud.service` and `install.sh` for systemd |
+| `VectolynCloud-<version>-templates.tar.gz` | the server templates of the repository (`templates/`: proxy, lobby, survival, creative, mod, end, minigame, legacy), to read, copy and change. The cloud also carries them inside the jar ([node.md](node.md#built-in-templates)) |
+| `setup.example.yml` | an annotated setup file for `--setup-file` ([setup.md](setup.md#setup-file---setup-file)); a unit test keeps it valid |
 | `VectolynCloud-<version>-banner.png`, `VectolynCloud-<version>-banner-2x.png` | the [release banner](#release-banner) at the top of the release notes, 1280 x 320 and 2560 x 640 |
-| `SHA256SUMS` | SHA-256 of the five files above |
+| `SHA256SUMS` | SHA-256 of the seven files above |
 | `<file>.sigstore.json` | cosign signature bundle for each file and for `SHA256SUMS` |
 | `vectolyn.intoto.jsonl` | SLSA build provenance for every file in `SHA256SUMS`, as the Sigstore bundle of the GitHub attestation |
 
@@ -167,6 +171,21 @@ To run it permanently, use a dedicated local account without administrator right
 
 ## Linux and VPS with systemd
 
+The installer in the Linux archive does everything below for you: it creates the user, downloads the release (or takes the archive you give it), checks it against `SHA256SUMS` (and against the cosign signature when `cosign` is installed), puts the files in place, enables the service and keeps your data on updates.
+
+```sh
+tar -xzf VectolynCloud-<version>-linux-macos.tar.gz
+cd VectolynCloud-<version>-linux-macos
+sudo ./install.sh install --archive ../VectolynCloud-<version>-linux-macos.tar.gz   # or without --archive: downloads the newest release
+sudo ./install.sh update                    # later: a newer release; stops the service, keeps the home and the old jar as VectolynCloud.jar.previous
+sudo ./install.sh uninstall                 # removes the service and the program files, keeps /opt/vectolyn with your data
+sudo ./install.sh uninstall --purge         # removes the home and the user as well
+```
+
+Options: `--version <x.y.z[-dev]>` (a fixed release instead of the newest), `--prefix <dir>` (default `/opt/vectolyn`), `--user <name>` (default `vectolyn`), `--java-home <dir>` (a Java 21+ outside the `PATH`, written to a drop-in) and `--no-start`. After the installation, `/opt/vectolyn/install.sh` is the same script, so `sudo /opt/vectolyn/install.sh update` works without the archive. A first start needs a setup (the questions once by hand, or a setup file, see below); without one the installer enables the service but leaves it stopped and tells you what to write.
+
+The same steps by hand:
+
 ```sh
 # as root, once
 useradd --system --user-group --home-dir /opt/vectolyn --create-home --shell /usr/sbin/nologin vectolyn
@@ -204,7 +223,7 @@ What the unit does and why:
 
 Under systemd the cloud has no console: stdin is empty and the cloud keeps running. Commands without a console come with the API ([architecture.md](architecture.md)). Until then, run it in `tmux` or `screen` as the `vectolyn` user when you need the console.
 
-The CI installs this unit on a real systemd exactly as above, starts it, waits for the cloud channel, checks the user and stops it again with a clean result.
+The CI runs `install.sh` on a real systemd (install, a second install is refused, start, update with a running and with a stopped service, uninstall, purge) and checks the user, the cloud channel and a clean stop. It also installs afresh with a setup file for `database.mode: managed` and starts the proxy, so the cloud downloads and starts MariaDB under the unit's real hardening; the job waits for `Database ready`, checks that `mariadbd` runs in the unit's cgroup as `vectolyn`, and that no `mariadbd` is left after `systemctl stop`. The hardening needed no change for this.
 
 ## macOS
 
@@ -268,6 +287,16 @@ docker compose logs -f cloud
 - `stop_grace_period: 5m`, `pids_limit: 8192`, `no-new-privileges`, and all capabilities dropped for the cloud.
 - `secrets/` and `setup.yml` in that folder are in `.gitignore`.
 
+## Pelican
+
+Pelican is the actively developed successor of the Pterodactyl panel. It has its own egg, [`pelican/egg-vectolyn-cloud.json`](../../cloud/dist/pelican/egg-vectolyn-cloud.json) (format PLCN_v3, with `startup_commands`, `server.allocations.default.port` and the images and installer of the `pelican-eggs` project). It does exactly what the Pterodactyl egg does; CI checks that both say the same (startup, variables, setup file, installer).
+
+1. In the admin area, under Eggs, choose Import and select the file (or give the raw URL; the egg has an `update_url`).
+2. Create a server with the egg. Give it one allocation per port, as described under Pterodactyl below.
+3. Set "Accept the Minecraft EULA" to `true` if you accept it, then start the server.
+
+Everything below under Pterodactyl (variables, database, memory, PID limit) applies to Pelican as well.
+
 ## Pterodactyl
 
 1. In the admin area, under Nests, import [`egg-vectolyn-cloud.json`](../../cloud/dist/pterodactyl/egg-vectolyn-cloud.json) (PTDL_v2).
@@ -305,7 +334,7 @@ A cluster is one head and its members; the details, the trust model and the comm
 
 ## Verifying a release
 
-Every file of a release is signed with cosign keyless (Sigstore, the GitHub Actions identity of `release.yml`). The five files in `SHA256SUMS` (the banner images included) also have a GitHub build provenance attestation (SLSA provenance, signed with Sigstore). `vectolyn.intoto.jsonl` is the same attestation as a file, so it can be checked without asking GitHub; `SHA256SUMS` itself is covered by its signature. Replace `v0.2.0-dev` with the tag you downloaded.
+Every file of a release is signed with cosign keyless (Sigstore, the GitHub Actions identity of `release.yml`). The seven files in `SHA256SUMS` (the banner images included) also have a GitHub build provenance attestation (SLSA provenance, signed with Sigstore). `vectolyn.intoto.jsonl` is the same attestation as a file, so it can be checked without asking GitHub; `SHA256SUMS` itself is covered by its signature. Replace `v0.2.0-dev` with the tag you downloaded.
 
 Every release is signed as `VectoDE/VectolynCloud`, as in the commands below. The provenance comes from `actions/attest-build-provenance` in the build job; the release workflow pins every action to a commit SHA. The provenance file is a Sigstore bundle, which `gh attestation verify --bundle` reads.
 
@@ -356,6 +385,27 @@ docker buildx imagetools inspect ghcr.io/vectode/vectolyn-cloud:0.2.0-dev --form
 
 To check that the image carries the released jar: `docker run --rm --entrypoint sha256sum ghcr.io/vectode/vectolyn-cloud:0.2.0-dev /opt/vectolyn/VectolynCloud.jar` must print the line from `SHA256SUMS`.
 
+## Release process
+
+Every release follows the same steps. Nothing in them is manual except pushing the tag.
+
+1. **Plan in the milestones.** The work of a stage lives in its `Stage N` milestone; the pre-release stages `Alpha`, `Beta` and `RC` collect what must be done before that quality level. An issue belongs to exactly one milestone.
+2. **Check the tag** (`bash tools/release-banner/check-tag.sh v1.0.0-rc.1`, see [Versions and tags](#versions-and-tags)) and the cleanup check of [openssf.md](../openssf.md#the-cleanup-check).
+3. **Push the tag.** `release.yml` starts with the tag check and then the **milestone gate**:
+
+   | Channel | Milestones that must have no open issue |
+   |---|---|
+   | `-dev` | none: a snapshot of the work in progress |
+   | `-alpha` | `Alpha` |
+   | `-beta` | `Alpha`, `Beta` |
+   | `-rc` | `Alpha`, `Beta`, `RC` |
+   | `-lts`, stable | `Alpha`, `Beta`, `RC` and every `Stage ...` milestone |
+
+   A milestone that does not exist stops the release too, so the gate cannot pass because somebody renamed it. If the gate is closed, the workflow lists the milestones; close or move the open issues, delete the tag (`git push --delete origin <tag>`) and push it again.
+4. **Build, package, sign, attest.** The full build runs all tests, then `package.sh` writes the release files, `SHA256SUMS` lists them, cosign signs each file keyless, and the provenance is attested. The image follows from the signed jar.
+5. **Changelog.** The release notes start with the banner, the image and the link to the verification steps, followed by the changelog: the commit subjects since the previous release tag, grouped by Conventional Commit type (breaking changes, features, fixes, performance, security, documentation, build and maintenance, other), each with its pull request number, and a link to the full comparison. Write commit titles and pull request titles as Conventional Commits; the `PR title` check enforces it.
+6. **Verify.** `release-verify.yml` runs weekly and checks the newest release as an operator would (see [Verifying a release](#verifying-a-release)). Run it by hand after a release: *Actions → Verify release → Run workflow*.
+
 ## Release banner
 
 Every release starts with a banner: the VectolynCloud wordmark, the tag (`v1.0.0-beta.2`), a badge for the suffix (`-dev` PRE-RELEASE, `-alpha` ALPHA, `-beta` BETA, `-rc` RC, `-lts` LTS, none for a stable version; see [Versions and tags](#versions-and-tags)), the first line of the tag message as title and the tag's date. The build job of `release.yml` renders it with [`tools/release-banner`](../../tools/release-banner) (plain Java, no dependencies) on the pre-rendered background in [`branding/png/`](../../branding/png), using Pixelify Sans Bold from [`branding/fonts/`](../../branding/fonts). Both sizes are release files: they are in `SHA256SUMS`, signed and covered by the provenance like the others, and the release notes show the 2x file.
@@ -381,10 +431,13 @@ To render exactly what the release will show for a tag that already exists local
 |---|---|---|
 | Start scripts | Linux, macOS, Windows (PowerShell 5.1), all cases above | |
 | Release archives | built with `package.sh`, built twice and compared, unpacked and started | the upload to the release |
-| systemd unit | `systemd-analyze verify`, real start and stop on Ubuntu | long-running servers and the managed MariaDB under the hardening |
+| systemd unit and installer | `systemd-analyze verify`, `install.sh` install, update, uninstall and purge, real start and stop on Ubuntu, managed MariaDB up and down under the hardening | long-running servers, the download path of the installer (it needs a published release with the installer in its archive) |
 | Image | from source and through the release path, amd64 and arm64, start as UID 1000, root refused, health check, clean `docker stop` | push to GHCR, cosign signature, attestations, the `latest` rule |
 | compose.yml | `docker compose config`; a full `up --wait` with MariaDB (both health checks), the volume owner, `down` | the pull from GHCR (CI uses the locally built image) |
-| Egg | structure, variables, rules against their defaults, the setup file Wings would write, ShellCheck of the installer | import into a panel, the installer's download, a run under Wings |
+| Eggs (Pterodactyl and Pelican) | structure, variables, rules against their defaults, the setup file Wings would write, both eggs say the same, ShellCheck of the installer; the installer runs in the panel's installer image against the newest release (checks SHA-256, refuses a version that does not exist), and the startup command runs in the panel's Java image until the cloud channel is up and stops cleanly | the import into a panel, the panel's variables form, a run under a real Wings |
 | Release tag | unit tests of every rule; `check-tag.sh` on every allowed form (channel and pre-release flag) and on every rejected form (the reason) | the check on a pushed tag, the pre-release flag and `latest` on GitHub and GHCR |
 | Release banner | unit tests (badge per suffix, title shortening, sizes, byte-identical output); the release script on local tags (every badge, with title, empty message, signature only, lightweight, tags that break the rules), rendered twice and compared | the tag fetch from GitHub and the image in the published notes |
+| Release gate and changelog | the milestone gate for every channel (open, closed, missing and unknown milestones) and the changelog (sections, breaking changes, range, first release) on fixtures | the gate and the changelog on the real milestones and history of a tag |
+| Release files | `package.sh` builds the seven files, twice, byte-identical; every template of the repository is in the templates archive | the upload to the release |
+| Signed release | `release-verify.yml` weekly and on every change of the release workflow: `SHA256SUMS`, the cosign signature of every file, the GitHub provenance of the jar (from GitHub and from `vectolyn.intoto.jsonl`), the image signature, provenance, SBOM, the jar inside the image and the moving `dev` tag, all against the newest published release | the signing and attesting itself, which only runs on a tag |
 | Release workflow | actionlint | signing, provenance and publishing on a tag |

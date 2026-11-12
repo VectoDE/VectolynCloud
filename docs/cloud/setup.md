@@ -46,7 +46,7 @@ The assistant asks in this order. Every question shows its default in brackets; 
 
    Static services keep their worlds and always run; above them the cloud adds dynamic ones by player count, fresh from the template, up to max (see [scaling](scaling.md#static-and-dynamic-in-one-task)). `static ≤ min ≤ max` and max from 1 to 1000 are checked where you type them. The proxies always get 1/1/1. New tasks get `scale-up-at` 75 and `scale-down-below` 50; for an existing task only the three numbers are written, and only if they changed.
 9. **Advanced settings** (optional). One yes/no question, default no; with no, nothing of this is asked. With yes: the `drain-timeout` of every wanted group (5s to 10m, shown as 30s while unset), then for this node `max-memory` (at least 512M, `auto` lets the node work it out) and `memory-reserve.system`, `.node-overhead`, `.database` (1M to 64G each; defaults 1G, 256M, 512M). Enter keeps the value in brackets, `default` removes a set value so the default applies again. Each answer is checked where you type it, with the same limits as the [validator](config.md#validation-rules). See [scaling](scaling.md#node-settings-for-the-scaler).
-10. **Database.** `managed` (the cloud runs its own MariaDB), `docker`, `external` or `h2`. On Pterodactyl `docker` is left out, since the server already runs inside a container without access to Docker. Where MariaDB has no server build (anything except Windows x64 and Linux x86_64 with glibc), `managed` is marked as falling back to H2, and H2 is the default. After `managed` the assistant explains the switch behind it: `servers.database: true` in `cloud.yml` runs MariaDB, `false` uses H2 files per server. For `external` it asks for host, port (3306), database name, user and password.
+10. **Database.** `managed` (the cloud runs its own MariaDB), `docker`, `external` (MariaDB or MySQL), `postgresql` or `h2`. On Pterodactyl `docker` is left out, since the server already runs inside a container without access to Docker. Where MariaDB has no server build (anything except Windows x64 and Linux x86_64 with glibc), `managed` is marked as falling back to H2, and H2 is the default. After `managed` the assistant explains the switch behind it: `servers.database: true` in `cloud.yml` runs MariaDB, `false` uses H2 files per server. For `external` it asks for host, port (3306), database name, user and password; for `postgresql` the same with port 5432. The rights a PostgreSQL user needs are in [database.md](database.md#postgresql).
 11. **First administrator**, only on the first run: a name (`[a-z0-9][a-z0-9_-]{0,31}`, default `admin`). See [first administrator](#first-administrator).
 
 Then it prints a summary: every answer, the generated secrets (as "hidden"), and the files it would write. You choose `save`, `change` (all questions again, your answers are the new defaults) or `cancel`. Only `save` writes. If the checks find a problem, `save` is not offered until you change the answer.
@@ -135,7 +135,7 @@ node:                         # optional, memory of this node in config/nodes.ym
     node-overhead: 256M       # default 256M
     database: 512M            # default 512M, counted only for a managed or docker database
 database:
-  mode: external              # managed, docker, external or h2
+  mode: external              # managed, docker, external, postgresql or h2
   host: db.example.org
   port: 3306
   name: luckperms
