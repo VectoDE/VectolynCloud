@@ -28,6 +28,20 @@ dependencies {
     compileOnly(libs.velocity.api)
 
     testImplementation(libs.velocity.api)
+
+    // velocity-api pulls in the moving snapshot velocity-brigadier:1.0.0-SNAPSHOT (every released
+    // velocity-api does). Without a pin each new PaperMC build breaks dependency verification, so
+    // the constraint fixes one unique snapshot build. Reason and version: gradle/libs.versions.toml.
+    constraints {
+        compileOnly(libs.velocity.brigadier) {
+            version { strictly(libs.versions.velocity.brigadier.get()) }
+            because("velocity-brigadier is only published as a moving snapshot; pin one build")
+        }
+        testImplementation(libs.velocity.brigadier) {
+            version { strictly(libs.versions.velocity.brigadier.get()) }
+            because("velocity-brigadier is only published as a moving snapshot; pin one build")
+        }
+    }
 }
 
 tasks.processResources {
