@@ -11,7 +11,7 @@ import net.vectolyn.cloud.config.validation.ConfigNames;
  *
  * <pre>
  * &lt;home&gt;/
- *   config/            cloud.yml, nodes.yml, monitor.yml, backup.yml, software.lock.yml
+ *   config/            cloud.yml, nodes.yml, monitor.yml, privacy.yml, backup.yml, software.lock.yml
  *     groups/          &lt;group&gt;.yml
  *     tasks/           &lt;task&gt;.yml
  *   local/
@@ -44,6 +44,9 @@ public record CloudHome(Path root) {
     public static final String NODES_FILE = "nodes.yml";
     /** {@code monitor.yml}, relative to {@link #CONFIG_DIR}. */
     public static final String MONITOR_FILE = "monitor.yml";
+
+    /** {@code privacy.yml}, relative to {@link #CONFIG_DIR}. */
+    public static final String PRIVACY_FILE = "privacy.yml";
     /** {@code backup.yml}, relative to {@link #CONFIG_DIR}. */
     public static final String BACKUP_FILE = "backup.yml";
     /** {@code software.lock.yml}, relative to {@link #CONFIG_DIR}. */
@@ -107,6 +110,11 @@ public record CloudHome(Path root) {
     /** {@code <home>/config/monitor.yml}. */
     public Path monitorFile() {
         return configDir().resolve(MONITOR_FILE);
+    }
+
+    /** {@code <home>/config/privacy.yml}. */
+    public Path privacyFile() {
+        return configDir().resolve(PRIVACY_FILE);
     }
 
     /** {@code <home>/config/backup.yml}. */
