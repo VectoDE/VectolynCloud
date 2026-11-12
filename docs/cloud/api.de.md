@@ -69,6 +69,8 @@ curl -X POST -H "Authorization: Bearer vcs_..." https://cloud.example.org:8443/a
 | `backups:read` | Backups auflisten |
 | `backups:write` | Backup erstellen |
 | `node:read` | Node-Status; Metrik-Events |
+| `templates:read` | Templates und ihre Dateien auflisten, eine Datei lesen (nie Secrets) |
+| `templates:write` | Template-Dateien anlegen und ersetzen |
 | `admin` | alles oben und die Token-Verwaltung unter `/admin/tokens` |
 
 Ein Schreib-Scope schließt den Lese-Scope nicht ein. Fehlt der Scope, kommt `403 missing-scope`. Für Änderungen an `api` oder `database` in `cloud.yml` braucht es `admin`. Diese Abschnitte bestimmen, wer den Node erreicht und welches Image `docker compose` mit dem Root-Passwort der Datenbank startet.
@@ -88,6 +90,7 @@ Alle Pfade beginnen mit `/api/v1`. Bodys sind `application/json` in UTF-8, mit d
 - **Konfiguration:** `GET|PUT /config` (`cloud.yml`), `POST /config/reload`, `GET /config/warnings`.
 - **Node und Setup:** `GET /node`, `GET /setup`.
 - **Backups:** `GET /backups`, `POST /backups` mit `{"services": [...], "database": true, "note": "..."}`.
+- **Templates:** `GET /templates`, `GET /templates/{template}/files`, `GET|PUT /templates/{template}/files/{path}` (siehe unten).
 - **Events:** `GET /events` als WebSocket.
 
 Jeder Schreibzugriff läuft über `ConfigService.apply`. Geprüft wird die ganze Konfiguration: Ports, EULA vor `setup-complete`, TLS für eine öffentliche API und die Allowlist der JVM-Flags. Danach wird atomar geschrieben, und die Listener des Nodes sehen die Änderung so, als wäre sie an der Konsole eingegeben worden. Bei einem Fehler wird nichts geschrieben, die Antwort ist `422 invalid-config` mit der Fehlerliste.
@@ -107,6 +110,13 @@ Jeder Schreibzugriff läuft über `ConfigService.apply`. Geprüft wird die ganze
 **Powered-by-Zeile.** `branding.powered-by` in `PUT /config` (zum Beispiel `"branding": {"powered-by": false}`) schaltet die TAB-Fußzeile „Powered by VectolynCloud“ und `/version` auf den Proxys ein oder aus. Fehlt der Abschnitt oder der Schlüssel (`"branding": {}`), gilt `true`. Dienste übernehmen den Wert bei ihrem nächsten Start (siehe [config.md](config.md#cloudyml)).
 
 **Gruppen.** `drain-timeout` ist optional (5s bis 10m, Default 30s), zum Beispiel `"drain-timeout": "45s"`; außerhalb der Grenzen antwortet die API mit `422 out-of-range`.
+
+**Templates.** Die Endpunkte unter `/templates` braucht der Datei-Editor des Web-Panels: Sie listen die Template-Ordner in `local/templates/`, zeigen eine Datei und speichern sie zurück. `{path}` ist der Rest der URL nach `/files/`, die Segmente mit `/` getrennt und nicht prozentkodiert, etwa `/api/v1/templates/Lobby-Server/files/default/plugins/LuckPerms/config.yml`. Der Router lässt Segmente aus Buchstaben, Ziffern, `_` und `-` durch, bis zu acht Teile mit je einem Punkt dazwischen. Eine Datei mit anderem Namen (Leerzeichen, Umlaut) steht in der Liste, lässt sich aber nicht ansprechen. Danach gelten dieselben Regeln wie beim Cluster-Spiegel (`TemplatePaths` in `cloud/config`): kein `..`, `.`, leeres Segment, Backslash, Doppelpunkt oder Windows-Gerätename, höchstens 240 Bytes und 16 Segmente, und nichts, was nach Secret aussieht (`forwarding.secret`, `*.pem`, `*.key`, `.env`, `secrets/`, `.git/` und so weiter). So ein Pfad bekommt `400 invalid-path`, bevor die Platte berührt wird; in Listen fehlen diese Dateien. Links, Junctions und Sonderdateien werden nie verfolgt; liegt eine im Weg, kommt `409 not-a-regular-file`.
+
+- **Lesen** liefert UTF-8-Text unverändert und alles andere (auch Text mit NUL-Byte) als Base64, bis 1 MiB (darüber `413 file-too-large`). Das `ETag` gehört zu den Bytes der Datei.
+- **Schreiben** prüft das `ETag`: Ohne `If-Match` entsteht nur eine neue Datei, eine vorhandene bekommt `428 precondition-required`. Mit dem `ETag` aus dem `GET` (oder `*`) wird die Datei ersetzt; hat sie sich inzwischen geändert, kommt `412 precondition-failed`. Prüfen und Schreiben laufen unter einer Sperre, von zwei Editoren mit demselben `ETag` kommt also genau einer durch. Eine Datei darf höchstens 48 KiB groß sein (die API liest Strings bis 64 KiB, das sind 48 KiB in Base64). Fehlende Ordner werden angelegt, die Datei wird atomar ersetzt.
+- **Cluster.** Auf einem Mitglied kommen die Templates vom Head (siehe [cluster.md](cluster.md)), dort antwortet `PUT` mit `409 managed-by-head`. Lesen geht.
+- Dienste übernehmen ein geändertes Template, wenn sie das nächste Mal daraus vorbereitet werden ([template.md](template.md)); ein laufender Dienst bleibt unberührt.
 
 **Herunterfahren.** Während der Node herunterfährt, beantworten Start, Neustart, Reload und das Erstellen eines Backups die Anfrage mit `503 shutting-down`. Lesen und Stoppen gehen weiter.
 
