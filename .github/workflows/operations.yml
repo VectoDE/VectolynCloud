@@ -311,7 +311,8 @@ jobs:
           - { os: macos-latest, label: macOS arm64, java: '27' }
           - { os: macos-15-intel, label: macOS x64, java: '21' }
           - { os: macos-15-intel, label: macOS x64, java: '25' }
-          - { os: macos-15-intel, label: macOS x64, java: '27' }
+          # Temurin 27 has no macOS x64 build (Adoptium API); 26 is the newest Java there.
+          - { os: macos-15-intel, label: macOS x64, java: '26' }
           - { os: windows-latest, label: Windows x64, java: '21' }
           - { os: windows-latest, label: Windows x64, java: '25' }
           - { os: windows-latest, label: Windows x64, java: '27' }
