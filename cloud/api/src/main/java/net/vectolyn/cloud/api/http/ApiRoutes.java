@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
@@ -31,6 +32,7 @@ import net.vectolyn.cloud.api.backend.ApiBackend;
 import net.vectolyn.cloud.api.backend.BackupAccess;
 import net.vectolyn.cloud.api.backend.BackupOrder;
 import net.vectolyn.cloud.api.backend.BackupView;
+import net.vectolyn.cloud.api.backend.PrivacyAccess;
 import net.vectolyn.cloud.api.backend.ServiceView;
 import net.vectolyn.cloud.config.CloudHome;
 import net.vectolyn.cloud.config.ConfigChanged;
@@ -249,6 +251,19 @@ public final class ApiRoutes {
             BackupAccess access = backups();
             return ApiResponse.of(201, access.create(new BackupOrder(body.services(),
                     body.database() == null || body.database(), body.note())));
+        });
+
+        r.add("GET", PREFIX + "/admin/privacy/players/{uuid}", Scope.ADMIN, q -> {
+            UUID player = playerUuid(q.param("uuid"));
+            return ApiResponse.ok(privacy().find(player).orElseThrow(
+                    () -> ApiException.notFound("Tracking data of player \"" + player + "\"")));
+        });
+        r.add("DELETE", PREFIX + "/admin/privacy/players/{uuid}", Scope.ADMIN, q -> {
+            UUID player = playerUuid(q.param("uuid"));
+            if (!privacy().delete(player)) {
+                throw ApiException.notFound("Tracking data of player \"" + player + "\"");
+            }
+            return ApiResponse.noContent();
         });
 
         r.add("GET", PREFIX + "/templates", Scope.TEMPLATES_READ, q -> {
@@ -673,6 +688,22 @@ public final class ApiRoutes {
             throw ApiException.notFound("Task \"" + name + "\"");
         }
         return task;
+    }
+
+    private PrivacyAccess privacy() throws ApiException {
+        return backend.privacy().orElseThrow(() -> new ApiException(501, "not-available",
+                "The tracking is not available on this node."));
+    }
+
+    private static UUID playerUuid(String text) throws ApiException {
+        if (text == null || text.length() != 36) {
+            throw ApiException.badRequest("invalid-value", "The player must be given as a UUID.");
+        }
+        try {
+            return UUID.fromString(text);
+        } catch (IllegalArgumentException e) {
+            throw ApiException.badRequest("invalid-value", "The player must be given as a UUID.");
+        }
     }
 
     private BackupAccess backups() throws ApiException {

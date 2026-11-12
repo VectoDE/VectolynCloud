@@ -128,7 +128,7 @@ class TelemetryTest {
         try (PrivacyRuntime runtime = PrivacyRuntime.open(home, Clock.systemUTC(), "0.1.0")) {
             assertFalse(runtime.telemetry().active());
             java.util.UUID player = java.util.UUID.randomUUID();
-            runtime.playerArrived(player, "lobby");
+            runtime.playerArrived(player, "Steve", "lobby");
             runtime.playerLeft(player);
             assertEquals(1, runtime.statistics().snapshot().get(0).logins());
         }
@@ -140,7 +140,7 @@ class TelemetryTest {
         Files.createDirectories(home.resolve("config"));
         Files.writeString(home.resolve("config/privacy.yml"), "schema-version: 1\nstatistics:\n  enabled: false\n");
         try (PrivacyRuntime runtime = PrivacyRuntime.open(home, Clock.systemUTC(), "0.1.0")) {
-            runtime.playerArrived(java.util.UUID.randomUUID(), "lobby");
+            runtime.playerArrived(java.util.UUID.randomUUID(), "Steve", "lobby");
             assertTrue(runtime.statistics().snapshot().isEmpty());
         }
         assertFalse(Files.exists(home.resolve("state/statistics.json")));

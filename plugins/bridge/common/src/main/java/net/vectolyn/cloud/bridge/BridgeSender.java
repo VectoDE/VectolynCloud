@@ -87,6 +87,31 @@ public final class BridgeSender implements AutoCloseable {
         return submit(CloudLink::markReady);
     }
 
+    /**
+     * Queues a request to the cloud. Never blocks; the future completes with the answer, or fails if
+     * the request could not be queued, the cloud is not connected or it does not answer in time.
+     *
+     * @param channel channel name
+     * @param payload request payload
+     * @return the answer's payload
+     */
+    public java.util.concurrent.CompletableFuture<byte[]> request(String channel, byte[] payload) {
+        Objects.requireNonNull(channel, "channel");
+        Objects.requireNonNull(payload, "payload");
+        java.util.concurrent.CompletableFuture<byte[]> result = new java.util.concurrent.CompletableFuture<>();
+        boolean queued = submit(target -> target.request(channel, payload).whenComplete((answer, error) -> {
+            if (error != null) {
+                result.completeExceptionally(error);
+            } else {
+                result.complete(answer);
+            }
+        }));
+        if (!queued) {
+            result.completeExceptionally(new IllegalStateException("the bridge cannot send right now"));
+        }
+        return result;
+    }
+
     /** Queues a player event. */
     public boolean send(Message playerEvent) {
         Objects.requireNonNull(playerEvent, "playerEvent");

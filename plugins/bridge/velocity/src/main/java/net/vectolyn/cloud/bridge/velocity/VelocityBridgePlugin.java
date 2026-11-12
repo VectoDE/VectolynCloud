@@ -267,6 +267,7 @@ public final class VelocityBridgePlugin {
         statusTask = proxy.getScheduler().buildTask(this, this::reportStatus).delay(STATUS_PERIOD)
                 .repeat(STATUS_PERIOD).schedule();
         registerVersionCommand();
+        registerPrivacyCommand();
         // Explicit registration: the handler needs nothing from the event.
         proxy.getEventManager().register(this, ProxyShutdownEvent.class, shutdown -> disconnect());
         return bridge;
@@ -286,6 +287,12 @@ public final class VelocityBridgePlugin {
         CommandManager commands = proxy.getCommandManager();
         commands.register(commands.metaBuilder(PoweredBy.COMMAND).plugin(this).build(),
                 new VersionCommand(PoweredBy.version(System::getenv)));
+    }
+
+    /** Registers {@code /privacy}, the in-game opt-in of the per-player tracking. */
+    private void registerPrivacyCommand() {
+        CommandManager commands = proxy.getCommandManager();
+        commands.register(commands.metaBuilder("privacy").plugin(this).build(), new PrivacyCommand(() -> sender));
     }
 
     /** Says goodbye to the cloud. */

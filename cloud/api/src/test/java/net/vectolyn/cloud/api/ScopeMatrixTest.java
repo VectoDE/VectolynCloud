@@ -45,7 +45,8 @@ class ScopeMatrixTest {
                     continue; // a WebSocket; EventStreamTest checks its scope on the handshake
                 }
                 String path = route.path().replace("{id}", "lobby-1").replace("{name}", "lobby")
-                        .replace("{kind}", "lobby").replace("{template}", "Lobby").replace("{path}", "a.yml");
+                        .replace("{kind}", "lobby").replace("{template}", "Lobby").replace("{path}", "a.yml")
+                        .replace("{uuid}", "00000000-0000-0000-0000-000000000001");
                 for (Scope scope : Scope.values()) {
                     // Every request in its own minute, so the address limit never answers first.
                     api.nanos.addAndGet(60_000_000_000L);

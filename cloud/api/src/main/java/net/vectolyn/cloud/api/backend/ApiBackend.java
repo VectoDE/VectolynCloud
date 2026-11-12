@@ -38,6 +38,16 @@ public interface ApiBackend {
     }
 
     /**
+     * Access and deletion of the per-player tracking, once cloud-privacy is wired in. Empty means
+     * the privacy endpoints answer 501.
+     *
+     * @return privacy access, or empty
+     */
+    default Optional<PrivacyAccess> privacy() {
+        return Optional.empty();
+    }
+
+    /**
      * Removes secrets from a text before it leaves the API: output lines, messages of
      * {@link ApiBackendException}. The node passes {@code RedactingFilter::redact} with every value
      * of {@code secrets/vectolyn.env} and the service tokens. Output lines are already redacted by
