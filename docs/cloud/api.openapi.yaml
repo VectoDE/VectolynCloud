@@ -750,6 +750,38 @@ paths:
         "204": {description: Revoked}
         default: {$ref: "#/components/responses/Error"}
 
+  /admin/privacy/players/{uuid}:
+    parameters:
+      - name: uuid
+        in: path
+        required: true
+        description: UUID of the player.
+        schema: {type: string, format: uuid}
+    get:
+      tags: [admin]
+      summary: Access to the tracking data of a player
+      description: |
+        Scope: admin. Everything stored about a player who agreed to the tracking in game
+        (`/privacy on confirm`): name, consent time, first and last visit, logins and playtime in
+        total and per game mode. 404 if the player did not agree or the record has expired, 501 if
+        the node has no tracking.
+      operationId: getPlayerTracking
+      responses:
+        "200":
+          description: The record
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PlayerTracking"}
+        default: {$ref: "#/components/responses/Error"}
+    delete:
+      tags: [admin]
+      summary: Delete the tracking data of a player
+      description: "Scope: admin. Deletes the record and the consent at once, like `/privacy off` in game. 404 if there is none."
+      operationId: deletePlayerTracking
+      responses:
+        "204": {description: Deleted}
+        default: {$ref: "#/components/responses/Error"}
+
   /graphql:
     post:
       tags: [graphql]
@@ -959,6 +991,28 @@ components:
           schema:
             type: object
             additionalProperties: {type: boolean}
+    PlayerTracking:
+      type: object
+      required: [uuid, name, consent-at, notice-version, first-seen, last-seen, logins, playtime-seconds, modes]
+      properties:
+        uuid: {type: string, format: uuid}
+        name: {type: string}
+        consent-at: {type: string, format: date-time}
+        notice-version: {type: integer}
+        first-seen: {type: string, format: date-time}
+        last-seen: {type: string, format: date-time}
+        logins: {type: integer}
+        playtime-seconds: {type: integer}
+        modes:
+          type: array
+          items:
+            type: object
+            required: [mode, logins, playtime-seconds]
+            properties:
+              mode: {type: string}
+              logins: {type: integer}
+              playtime-seconds: {type: integer}
+
     Error:
       description: |
         400 invalid-json, unknown-field, body-required, invalid-value, invalid-target, invalid-path,

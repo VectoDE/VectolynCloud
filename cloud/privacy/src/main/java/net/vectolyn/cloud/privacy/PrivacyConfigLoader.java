@@ -90,6 +90,7 @@ public final class PrivacyConfigLoader {
                     PrivacyConfig.IpBans.MAX_RETENTION_DAYS));
         }
         checkTelemetry(config.telemetry(), errors);
+        checkTracking(config.tracking(), errors);
         if (!errors.isEmpty()) {
             throw new ConfigException(errors);
         }
@@ -122,6 +123,21 @@ public final class PrivacyConfigLoader {
         if (!isHttps(telemetry.endpoint())) {
             errors.add(ConfigError.of(FILE, "telemetry.endpoint", ErrorCode.INVALID_VALUE,
                     "an https:// URL without user name or password"));
+        }
+    }
+
+    /** Tracking needs a retention period in range and, when on, a named controller. */
+    private static void checkTracking(PrivacyConfig.Tracking tracking, List<ConfigError> errors) {
+        int days = tracking.retentionDays();
+        if (days < 1 || days > PrivacyConfig.IpBans.MAX_RETENTION_DAYS) {
+            errors.add(ConfigError.of(FILE, "tracking.retention-days", ErrorCode.OUT_OF_RANGE, 1,
+                    PrivacyConfig.IpBans.MAX_RETENTION_DAYS));
+        }
+        String controller = tracking.controller();
+        boolean valid = controller.length() <= 200 && controller.chars().noneMatch(Character::isISOControl);
+        if (!valid || (tracking.enabled() && controller.isBlank())) {
+            errors.add(ConfigError.of(FILE, "tracking.controller", ErrorCode.INVALID_VALUE,
+                    "who is responsible (name and contact), at most 200 characters, required when tracking is enabled"));
         }
     }
 

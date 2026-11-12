@@ -120,6 +120,8 @@ All paths start with `/api/v1`. Bodies are `application/json` in UTF-8, with the
 | `GET /admin/tokens` | admin | every token (never the token or its hash), paged |
 | `POST /admin/tokens` `{"name": "ci", "scopes": ["services:read"], "expires-in": "90d"}` | admin | `201` the token, shown in this answer only |
 | `DELETE /admin/tokens/{id}` | admin | `204`; id or name |
+| `GET /admin/privacy/players/{uuid}` | admin | access: everything the [tracking](privacy.md#per-player-tracking) stores about the player; `404` if the player did not agree, `501` without tracking |
+| `DELETE /admin/privacy/players/{uuid}` | admin | deletes the record and the consent, `204`; `404` if there is none |
 | `POST /setup/claim` | the setup token only | `201` a new `admin` token with its value, see [first administrator](#first-administrator) |
 | `GET /events` (WebSocket) | per event type, see below | live events |
 

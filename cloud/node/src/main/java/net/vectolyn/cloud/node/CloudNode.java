@@ -44,9 +44,12 @@ import net.vectolyn.cloud.privacy.IpBanStore;
 import net.vectolyn.cloud.privacy.PrivacyConfigLoader;
 import net.vectolyn.cloud.privacy.PrivacyRuntime;
 import net.vectolyn.cloud.privacy.StatisticsCollector;
+import net.vectolyn.cloud.privacy.TrackingStore;
 import net.vectolyn.cloud.node.ops.NodeApi;
 import net.vectolyn.cloud.node.ops.NodeBackups;
 import net.vectolyn.cloud.node.ops.NodeMonitoring;
+import net.vectolyn.cloud.node.ops.NodePrivacy;
+import net.vectolyn.cloud.node.ops.TrackingAccess;
 import net.vectolyn.cloud.config.ConfigChanged;
 import net.vectolyn.cloud.config.ConfigListener;
 import net.vectolyn.cloud.config.ConfigService;
@@ -374,6 +377,10 @@ public final class CloudNode implements AutoCloseable {
                     .build();
             channel.attach(network);
             Ops ops = buildOps(settings, home, configService, secrets, services, channel, databaseHome);
+            // /privacy on the proxies: consent, access and deletion of the per-player tracking.
+            network.handleRequests(NodePrivacy.CHANNEL, new NodePrivacy(ops.privacy().requests(),
+                    id -> services.proxyKind(id).orElse(false), channel.players()::find,
+                    id -> services.find(id).map(ServiceInfo::group)));
             Console console = options.noConsole ? null : options.console != null ? options.console
                     : Console.builder()
                             .home(home)
@@ -438,8 +445,8 @@ public final class CloudNode implements AutoCloseable {
         PrivacyRuntime privacy;
         try {
             privacy = PrivacyRuntime.open(home.root(), Clock.systemUTC(), settings.launcherVersion());
-        } catch (IpBanStore.FormatException | StatisticsCollector.FormatException e) {
-            throw new IOException("state/ip-bans.json or state/statistics.json is damaged", e);
+        } catch (IpBanStore.FormatException | StatisticsCollector.FormatException | TrackingStore.FormatException e) {
+            throw new IOException("state/ip-bans.json, state/statistics.json or state/tracking.json is damaged", e);
         }
         services.addListener(directory);
         channel.statusListener(monitoring.monitor()::statusReported);
@@ -455,6 +462,7 @@ public final class CloudNode implements AutoCloseable {
         NodeApi api = new NodeApi(services, channel, nodeId, settings.launcherVersion(), Instant.now(),
                 redactor::redact, Optional.of(new BackupServiceAccess(backups)));
         services.addListener(api);
+        api.privacy(new TrackingAccess(privacy.tracking()));
         // The API hears every player event; the statistics count playtime, logins and players per
         // game mode (the group of the server the player is on), without keeping who the player is.
         channel.playerListener((kind, player) -> {
@@ -462,7 +470,7 @@ public final class CloudNode implements AutoCloseable {
             if ("leave".equals(kind)) {
                 privacy.playerLeft(player.uuid());
             } else {
-                services.find(player.service()).ifPresent(info -> privacy.playerArrived(player.uuid(), info.group()));
+                services.find(player.service()).ifPresent(info -> privacy.playerArrived(player.uuid(), player.name(), info.group()));
             }
         });
 

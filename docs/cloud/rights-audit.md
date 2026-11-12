@@ -49,6 +49,8 @@ Only services the cloud started talk on the channel, each with a token of its ow
 | `POST /backups` | tokens with `backups:write` | the API server | `ApiServerTest`, `RouteScopesTest` |
 | `PUT /templates/{template}/files/{path}` | tokens with `templates:write`; never on a cluster member, never a path that looks like a secret or leaves the template | the API server and `TemplateFiles` | `TemplateApiTest`, `TemplateFilesTest`, `RouteScopesTest` |
 | `GET`/`POST /admin/tokens`, `DELETE /admin/tokens/{id}` (token management) | tokens with `admin` | the API server | `AdminTokensTest.onlyAdminReachesTheAdminArea`, `RouteScopesTest`, `ScopeMatrixTest` |
+| `GET`/`DELETE /admin/privacy/players/{uuid}` (access and deletion of tracking data) | tokens with `admin` | the API server | `PrivacyApiTest`, `RouteScopesTest`, `ScopeMatrixTest` |
+| `/privacy` requests of a proxy (consent, access, deletion for the player who typed it) | only a proxy, only for a player who is online through that proxy | `NodePrivacy` | `NodePrivacyTest` |
 | Every `GET` | tokens with the read scope of its area; `GET /tokens/self` any valid token | the API server | `RouteScopesTest`, `ScopeMatrixTest` |
 
 Details of the scopes: [api.md](api.md).
