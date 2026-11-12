@@ -1,6 +1,7 @@
 name: Pages
 
-# Publishes the project start page (site/) and the brand guide (branding/, at /brand/) to
+# Publishes the project start page (site/), the brand guide (branding/, at /brand/) and the
+# OpenAPI file of the REST API (docs/cloud/api.openapi.yaml, at /api/openapi.yaml) to
 # https://vectode.github.io/VectolynCloud/. site/build.sh assembles the files; nothing is generated here.
 
 on:
@@ -9,6 +10,7 @@ on:
     paths:
       - 'site/**'
       - 'branding/**'
+      - 'docs/cloud/api.openapi.yaml'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
