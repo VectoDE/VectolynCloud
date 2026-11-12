@@ -50,7 +50,6 @@ import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import net.vectolyn.cloud.api.auth.ApiToken;
-import net.vectolyn.cloud.api.auth.Scope;
 import net.vectolyn.cloud.api.http.ApiException;
 import net.vectolyn.cloud.api.http.ApiJson;
 import net.vectolyn.cloud.api.http.ApiRequest;
@@ -96,7 +95,6 @@ final class GraphQlApi {
     /** Most REST calls one document may make. */
     static final int MAX_CALLS = 20;
 
-    private static final Pattern ARGUMENT = Pattern.compile("[a-z0-9][a-z0-9_.-]{0,127}");
     private static final Pattern NEXT = Pattern.compile("[?&]after=([^&>]+)");
     private static final ParserOptions PARSER = ParserOptions.getDefaultOperationParserOptions().transform(b -> b
             .maxCharacters(MAX_CHARACTERS)
@@ -109,8 +107,7 @@ final class GraphQlApi {
             .captureLineComments(false)
             .redactTokenParserErrorMessages(true));
 
-    private final Router<ApiRoutes.Handler> router;
-    private final Function<Exception, ApiException> errors;
+    private final RouteCaller routes;
     private final TokenCharge charge;
     private final boolean introspection;
     private final GraphQL graphQl;
@@ -131,8 +128,7 @@ final class GraphQlApi {
      */
     GraphQlApi(Router<ApiRoutes.Handler> router, Function<Exception, ApiException> errors, TokenCharge charge,
                boolean introspection) {
-        this.router = Objects.requireNonNull(router, "router");
-        this.errors = Objects.requireNonNull(errors, "errors");
+        this.routes = new RouteCaller(router, errors);
         this.charge = Objects.requireNonNull(charge, "charge");
         this.introspection = introspection;
         this.graphQl = GraphQL.newGraphQL(schema())
@@ -483,28 +479,11 @@ final class GraphQlApi {
                 throw ApiException.tooManyRequests(wait);
             }
         }
-        Router.Resolution<ApiRoutes.Handler> resolution = router.resolve(method, ApiRoutes.PREFIX + target);
-        if (!(resolution instanceof Router.Resolution.Found<ApiRoutes.Handler> found)) {
-            throw bad("invalid-value", "An argument breaks a rule of the API.");
-        }
-        Scope scope = found.route().scope();
-        if (scope != null && !token.allows(scope)) {
-            throw new ApiException(403, "missing-scope", "This token lacks the scope " + scope.id() + ".");
-        }
-        byte[] json = body == null ? new byte[0] : ApiJson.write(body);
-        ApiRequest request = new ApiRequest(method, found.params(), found.query(), json, token, ifMatch);
-        try {
-            return found.route().handler().handle(request);
-        } catch (Exception e) {
-            throw errors.apply(e);
-        }
+        return routes.call(token, method, target, body, ifMatch);
     }
 
     private static Object answer(ApiResponse response) {
-        if (response.body() == null) {
-            return Map.of();
-        }
-        return ApiJson.mapper().readValue(response.body(), Object.class);
+        return RouteCaller.json(response);
     }
 
     private static Map<String, Object> versioned(ApiResponse response) {
@@ -573,11 +552,7 @@ final class GraphQlApi {
     }
 
     private static String ifMatch(DataFetchingEnvironment env) throws ApiException {
-        String value = env.getArgument("ifMatch");
-        if (value != null && (value.length() > 128 || value.chars().anyMatch(c -> c < 0x20 || c > 0x7e))) {
-            throw bad("invalid-value", "\"ifMatch\" must be an ETag.");
-        }
-        return value;
+        return RouteCaller.ifMatch(env.getArgument("ifMatch"));
     }
 
     /** An argument that becomes part of a path or query: only the characters of names and ids. */
@@ -586,11 +561,7 @@ final class GraphQlApi {
     }
 
     private static String checked(Object value, String name) throws ApiException {
-        if (!(value instanceof String text) || !ARGUMENT.matcher(text).matches()) {
-            throw bad("invalid-value", "\"" + name + "\" must be a name or id "
-                    + "(lower-case letters, digits, '.', '_', '-').");
-        }
-        return text;
+        return RouteCaller.segment(value, name);
     }
 
     private static List<String> strings(DataFetchingEnvironment env, String name) {

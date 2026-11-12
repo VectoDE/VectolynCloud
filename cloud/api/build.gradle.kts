@@ -26,6 +26,8 @@ dependencies {
     implementation(libs.netty.transport)
     implementation(libs.netty.handler)
     implementation(libs.netty.codec.http)
+    // gRPC (GrpcServer): HTTP/2 from the same Netty, no second stack.
+    implementation(libs.netty.codec.http2)
     // POST /api/v1/graphql and the graphql-transport-ws subscriptions (GraphQlEndpoint).
     implementation(libs.graphql.java)
 }

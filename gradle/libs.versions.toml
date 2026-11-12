@@ -41,6 +41,7 @@ netty-bom = { module = "io.netty:netty-bom", version.ref = "netty" }
 netty-transport = { module = "io.netty:netty-transport" }
 netty-handler = { module = "io.netty:netty-handler" }
 netty-codec-http = { module = "io.netty:netty-codec-http" }
+netty-codec-http2 = { module = "io.netty:netty-codec-http2" }
 
 jline-terminal = { module = "org.jline:jline-terminal", version.ref = "jline" }
 jline-reader = { module = "org.jline:jline-reader", version.ref = "jline" }

@@ -19,11 +19,14 @@ import java.util.List;
  * @param graphqlIntrospection whether {@code POST /api/v1/graphql} answers introspection
  *                    ({@code __schema}, {@code __type}); off by default, switch it on for
  *                    development. Not written to the file while off.
+ * @param grpcPort    port of the gRPC listener (same bind address and TLS as the API); 0 switches
+ *                    gRPC off, which is the default. Not written to the file while 0.
  */
-@JsonPropertyOrder({"enabled", "bind", "port", "tls", "cors-origins", "graphql-introspection"})
+@JsonPropertyOrder({"enabled", "bind", "port", "tls", "cors-origins", "graphql-introspection", "grpc-port"})
 public record ApiConfig(boolean enabled, String bind, int port, TlsConfig tls,
                         @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> corsOrigins,
-                        @JsonInclude(JsonInclude.Include.NON_DEFAULT) boolean graphqlIntrospection) {
+                        @JsonInclude(JsonInclude.Include.NON_DEFAULT) boolean graphqlIntrospection,
+                        @JsonInclude(JsonInclude.Include.NON_DEFAULT) int grpcPort) {
 
     /** Largest number of entries in {@code cors-origins}. */
     public static final int MAX_CORS_ORIGINS = 16;
@@ -31,6 +34,12 @@ public record ApiConfig(boolean enabled, String bind, int port, TlsConfig tls,
     /** Copies the origin list; a missing list becomes empty. */
     public ApiConfig {
         corsOrigins = corsOrigins == null ? List.of() : List.copyOf(corsOrigins);
+    }
+
+    /** Settings without gRPC. */
+    public ApiConfig(boolean enabled, String bind, int port, TlsConfig tls, List<String> corsOrigins,
+                     boolean graphqlIntrospection) {
+        this(enabled, bind, port, tls, corsOrigins, graphqlIntrospection, 0);
     }
 
     /** Settings without GraphQL introspection. */
@@ -50,31 +59,36 @@ public record ApiConfig(boolean enabled, String bind, int port, TlsConfig tls,
 
     /** A copy with the switch set. */
     public ApiConfig withEnabled(boolean value) {
-        return new ApiConfig(value, bind, port, tls, corsOrigins, graphqlIntrospection);
+        return new ApiConfig(value, bind, port, tls, corsOrigins, graphqlIntrospection, grpcPort);
     }
 
     /** A copy with another bind address. */
     public ApiConfig withBind(String value) {
-        return new ApiConfig(enabled, value, port, tls, corsOrigins, graphqlIntrospection);
+        return new ApiConfig(enabled, value, port, tls, corsOrigins, graphqlIntrospection, grpcPort);
     }
 
     /** A copy with another port. */
     public ApiConfig withPort(int value) {
-        return new ApiConfig(enabled, bind, value, tls, corsOrigins, graphqlIntrospection);
+        return new ApiConfig(enabled, bind, value, tls, corsOrigins, graphqlIntrospection, grpcPort);
     }
 
     /** A copy with other TLS settings. */
     public ApiConfig withTls(TlsConfig value) {
-        return new ApiConfig(enabled, bind, port, value, corsOrigins, graphqlIntrospection);
+        return new ApiConfig(enabled, bind, port, value, corsOrigins, graphqlIntrospection, grpcPort);
     }
 
     /** A copy with other CORS origins. */
     public ApiConfig withCorsOrigins(List<String> value) {
-        return new ApiConfig(enabled, bind, port, tls, value, graphqlIntrospection);
+        return new ApiConfig(enabled, bind, port, tls, value, graphqlIntrospection, grpcPort);
     }
 
     /** A copy with GraphQL introspection switched. */
     public ApiConfig withGraphqlIntrospection(boolean value) {
-        return new ApiConfig(enabled, bind, port, tls, corsOrigins, value);
+        return new ApiConfig(enabled, bind, port, tls, corsOrigins, value, grpcPort);
+    }
+
+    /** A copy with another gRPC port (0: off). */
+    public ApiConfig withGrpcPort(int value) {
+        return new ApiConfig(enabled, bind, port, tls, corsOrigins, graphqlIntrospection, value);
     }
 }

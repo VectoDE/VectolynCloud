@@ -242,6 +242,35 @@ curl -s -H "Authorization: Bearer $VECTOLYN_TOKEN" -H "Content-Type: application
 - **Introspection** (`__schema`, `__type`) is off unless `api.graphql-introspection: true` is set in `cloud.yml` (console: `config set api.graphql-introspection true`). Switch it on for development, leave it off in production; the schema file is public anyway.
 - **Subscriptions** run over the WebSocket `GET /api/v1/graphql` with the subprotocol `graphql-transport-ws` (the protocol of the `graphql-ws` client library). The token is checked on the handshake as for `/events` (header, or subprotocol `vectolyn.bearer.<token>` from a browser). Send `connection_init` within 10 s, then `subscribe` with for example `subscription { events(types: ["service-state"]) { type time data } }`. Every event type needs its scope, as on `/events`. Queries and mutations work on the socket too. At most 16 operations per socket, each `subscribe` takes one request from the rate limit. The socket counts against the 32 WebSockets and closes with `1008` when its token is revoked or expires. Protocol errors close with the codes of the protocol (`4400`, `4401`, `4408`, `4409`, `4429`).
 
+## gRPC: `api.grpc-port`
+
+The same endpoints for clients that prefer generated stubs. The service is `vectolyn.api.v1.CloudService` in [`cloud.proto`](../../cloud/api/src/main/resources/vectolyn/api/v1/cloud.proto), also published at `https://vectode.github.io/VectolynCloud/api/vectolyn/api/v1/cloud.proto`. gRPC has its own port, because HTTP/2 on the REST port would change what browsers and `curl` negotiate there. It is off until `api.grpc-port` is set in `cloud.yml` (console: `config set api.grpc-port 8086`); it uses `api.bind` and the TLS setting of the API. With TLS the listener negotiates `h2` through ALPN; on loopback without TLS it speaks HTTP/2 with prior knowledge (`grpcurl -plaintext`, `grpc.insecure_channel`).
+
+```sh
+grpcurl -plaintext -import-path cloud/api/src/main/resources -proto vectolyn/api/v1/cloud.proto \
+  -H "authorization: Bearer $VECTOLYN_TOKEN" -d '{}' 127.0.0.1:8086 vectolyn.api.v1.CloudService/ListServices
+```
+
+```python
+# python -m grpc_tools.protoc -I cloud/api/src/main/resources --python_out=. --grpc_python_out=. vectolyn/api/v1/cloud.proto
+import grpc
+from vectolyn.api.v1 import cloud_pb2, cloud_pb2_grpc
+
+with grpc.insecure_channel("127.0.0.1:8086") as channel:
+    stub = cloud_pb2_grpc.CloudServiceStub(channel)
+    auth = [("authorization", f"Bearer {token}")]
+    print(stub.ListServices(cloud_pb2.ListRequest(limit=50), metadata=auth))
+    for event in stub.Events(cloud_pb2.EventsRequest(types=["service-state"]), metadata=auth):
+        print(event.type, event.json)
+```
+
+- **Same rules as REST.** Every method runs the REST endpoint named in its comment in the proto file with the caller's token (`authorization: Bearer vct_...` metadata): its scope, its validation, `If-Match` (`if_match`) and its errors. Configuration documents travel as JSON text in their REST shape, together with their `etag`; lists take `limit` and `after` and answer `total_count`, `next` and `items`.
+- **Errors** are a gRPC status in the trailers, with `grpc-message` and the REST code in the trailer `vectolyn-code`: `400`, `415`, `422` become `INVALID_ARGUMENT`, `401` `UNAUTHENTICATED`, `403` `PERMISSION_DENIED`, `404` `NOT_FOUND`, `408` `DEADLINE_EXCEEDED`, `409` and `412` `FAILED_PRECONDITION`, `413` and `429` `RESOURCE_EXHAUSTED`, `503` `UNAVAILABLE`, `500` `INTERNAL`. An unknown method is `UNIMPLEMENTED`, so is a compressed message (only `identity` is supported); a broken frame or message is `INTERNAL` with `vectolyn-code: invalid-message`. A request that is not `POST` gets HTTP `405`, one whose content type is not `application/grpc` or `application/grpc+proto` HTTP `415` (gRPC-Web is not supported). A refused stream is reset, so it cannot be kept open.
+- **Checks before anything runs**, in this order: rate limit of the client address, method, content type, known method, too many wrong tokens, the token, the rate limit of the token. One call takes one request from the token's rate limit. The request is exactly one message of at most the body limit (`maxBodyBytes`), must arrive completely within the idle timeout (else `DEADLINE_EXCEEDED`, `request-timeout`), and the unfinished requests of one connection share one body limit (else `UNAVAILABLE`, `busy`), so a gRPC connection holds no more request memory than a REST connection.
+- **`Events`** streams the events of `/events`: `types` (every type needs its scope; empty means every type the token may see) and `services`. Each `Event` has `type`, `time` and the event data as JSON in `json`. A slow client loses events and gets one event of type `dropped` with the count. A stream counts against the 32 event streams and ends with `UNAUTHENTICATED` when its token is revoked or expires, and with `UNAVAILABLE` when the node stops.
+- **Connections** count against the same limits as HTTP connections. At most 16 calls run at once on one connection and headers are limited to 8 KiB. Only authenticated calls count as activity: a connection without one for the idle timeout is closed, whatever frames the client sends (PING, SETTINGS, refused streams). A connection with an open `Events` stream is pinged instead. Netty's limits against reset, control-frame and empty-frame floods are set explicitly.
+- **Why not grpc-java.** The listener is Netty's HTTP/2 codec plus a small proto3 codec ([`Proto`](../../cloud/api/src/main/java/net/vectolyn/cloud/api/grpc/Proto.java)) driven by the proto file itself. grpc-java would bring a second, shaded Netty and classes generated by `protoc` into the build, while the API only needs unary calls and one server stream. The server reads `cloud.proto` at start and refuses to start if its method table differs from the file. The official Python client (`grpcio`) was run against the listener for unary calls, errors with trailers and `Events`.
+
 ## Transport security
 
 ### Bind and TLS
@@ -323,8 +352,13 @@ Groups can be written through the API, so `process.jvm-flags` has an allowlist: 
 - `ApiJsonFuzzTest.readFailsOnlyWithBadRequest`: any body becomes a value or fails with a `400` whose message has no control characters.
 - `GraphQlFuzzTest.anyDocumentEndsInAResult`: any GraphQL document runs to a result (data, errors or both) without an exception, against the real routes with a read-only token.
 - `GraphQlFuzzTest.anyBodyIsARequestOrABadRequest`: any body of `POST /graphql` is a GraphQL request or a `400`.
+- `GrpcFuzzTest.anyBodyIsOneMessageOrAFramingError`: any gRPC request body is exactly one uncompressed message or a framing error with `INTERNAL` or `UNIMPLEMENTED`.
+- `GrpcFuzzTest.anyMessageDecodesOrIsRefused`: any bytes decode against every request message of `cloud.proto` or fail with `ProtoException`; a decoded message encodes again and then stays stable.
+- `GrpcFuzzTest.anyProtoFileIsReadOrRefused`: any text is a schema or an `IllegalArgumentException`.
 
 `GraphQlTest` covers the endpoint against a real server: several areas in one document, the scope of every field, arguments that try to leave their path segment, the `ETag` round trip, the limits, introspection on and off, the rate limit per field, and subscriptions over `graphql-transport-ws` with their scopes, protocol errors and revocation.
+
+`GrpcTest` covers the gRPC listener with a Netty HTTP/2 client: unary calls against the REST routes, REST errors as gRPC status codes with `vectolyn-code`, missing and wrong tokens, unknown methods, compressed, truncated and oversized messages, wrong method and content type, the idle close of a connection without authenticated calls, the request timeout and the body budget per connection, `Events` with its scopes, its keep-alive and its end on revocation, and TLS with ALPN `h2`. `ProtoTest` checks the codec against hand-encoded proto3 bytes and the limits of the `.proto` reader.
 
 ```sh
 ./gradlew :cloud:api:test --tests 'net.vectolyn.cloud.api.http.RouterFuzzTest.resolveNeverThrowsAndOnlyPassesCleanValues' -Pfuzz -PfuzzMaxDuration=5m

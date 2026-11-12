@@ -76,6 +76,15 @@ curl -s -H "Authorization: Bearer $VECTOLYN_TOKEN" -H "Content-Type: application
   -d '{"query":"{ services { items { id state } } }"}' http://127.0.0.1:8085/api/v1/graphql
 ```
 
+## gRPC
+
+Set `api.grpc-port` (for example `config set api.grpc-port 8086`) to open a gRPC listener with the same bind and TLS setting. The service `vectolyn.api.v1.CloudService` is described in [`cloud.proto`](https://github.com/VectoDE/VectolynCloud/blob/main/cloud/api/src/main/resources/vectolyn/api/v1/cloud.proto); every method runs the REST endpoint named in its comment, with the same scope. Send the token as `authorization: Bearer vct_...` metadata. Errors are gRPC status codes with the REST code in the trailer `vectolyn-code`. Details: [API reference, gRPC](https://github.com/VectoDE/VectolynCloud/blob/main/docs/cloud/api.md#grpc-apigrpc-port).
+
+```sh
+grpcurl -plaintext -import-path cloud/api/src/main/resources -proto vectolyn/api/v1/cloud.proto \
+  -H "authorization: Bearer $VECTOLYN_TOKEN" -d '{}' 127.0.0.1:8086 vectolyn.api.v1.CloudService/ListServices
+```
+
 ## Not available yet
 
-gRPC and the web panel are planned ([#154](https://github.com/VectoDE/VectolynCloud/issues/154), [#151](https://github.com/VectoDE/VectolynCloud/issues/151)).
+The web panel is planned ([#151](https://github.com/VectoDE/VectolynCloud/issues/151)).

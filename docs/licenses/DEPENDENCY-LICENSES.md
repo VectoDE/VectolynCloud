@@ -18,10 +18,11 @@ Transitive Abhängigkeiten sind nicht einzeln aufgeführt. Die Verifikation der 
 | org.junit.jupiter:junit-jupiter | 6.1.3 | test | EPL-2.0 | n/a, test only, not distributed |
 | org.junit.platform:junit-platform-launcher | 6.1.3 | test runtime | EPL-2.0 | n/a, test only, not distributed |
 | org.yaml:snakeyaml | 2.7 | implementation, test | Apache-2.0 | yes |
-| io.netty:netty-bom | 4.2.19.Final | platform | Apache-2.0 | yes |
-| io.netty:netty-transport | 4.2.19.Final | implementation, api | Apache-2.0 | yes |
-| io.netty:netty-handler | 4.2.19.Final | implementation | Apache-2.0 | yes |
-| io.netty:netty-codec-http | 4.2.19.Final | implementation | Apache-2.0 | yes |
+| io.netty:netty-bom | 4.2.20.Final | platform | Apache-2.0 | yes |
+| io.netty:netty-transport | 4.2.20.Final | implementation, api | Apache-2.0 | yes |
+| io.netty:netty-handler | 4.2.20.Final | implementation | Apache-2.0 | yes |
+| io.netty:netty-codec-http | 4.2.20.Final | implementation | Apache-2.0 | yes |
+| io.netty:netty-codec-http2 | 4.2.20.Final | implementation | Apache-2.0 | yes |
 | org.jline:jline-terminal | 3.30.17 | implementation | BSD-3-Clause | yes |
 | org.jline:jline-reader | 3.30.17 | implementation | BSD-3-Clause | yes |
 | org.jline:jline-terminal-jni | 3.30.17 | runtimeOnly | BSD-3-Clause | yes |

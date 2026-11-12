@@ -175,6 +175,35 @@ curl -s -H "Authorization: Bearer $VECTOLYN_TOKEN" -H "Content-Type: application
 - **Introspection** (`__schema`, `__type`) ist aus, solange in `cloud.yml` nicht `api.graphql-introspection: true` steht (Konsole: `config set api.graphql-introspection true`). Für die Entwicklung einschalten, im Betrieb aus lassen; die Schema-Datei ist ohnehin öffentlich.
 - **Subscriptions** laufen über den WebSocket `GET /api/v1/graphql` mit dem Subprotokoll `graphql-transport-ws` (das Protokoll der Client-Bibliothek `graphql-ws`). Der Token wird beim Handshake geprüft wie bei `/events` (Header, oder aus dem Browser als Subprotokoll `vectolyn.bearer.<token>`). Innerhalb von 10 s `connection_init` senden, dann `subscribe` mit zum Beispiel `subscription { events(types: ["service-state"]) { type time data } }`. Jeder Ereignistyp braucht seinen Scope wie bei `/events`. Queries und Mutations gehen auf dem Socket auch. Höchstens 16 Operationen je Socket, jedes `subscribe` kostet eine Anfrage aus dem Ratenlimit. Der Socket zählt zu den 32 WebSockets und schließt mit `1008`, wenn sein Token widerrufen wird oder abläuft. Protokollfehler schließen mit den Codes des Protokolls (`4400`, `4401`, `4408`, `4409`, `4429`).
 
+## gRPC: `api.grpc-port`
+
+Dieselben Endpunkte für Clients, die lieber mit generierten Stubs arbeiten. Der Dienst ist `vectolyn.api.v1.CloudService` in [`cloud.proto`](../../cloud/api/src/main/resources/vectolyn/api/v1/cloud.proto), auch veröffentlicht unter `https://vectode.github.io/VectolynCloud/api/vectolyn/api/v1/cloud.proto`. gRPC hat einen eigenen Port, weil HTTP/2 auf dem REST-Port ändern würde, was Browser und `curl` dort aushandeln. Er ist aus, bis `api.grpc-port` in `cloud.yml` gesetzt ist (Konsole: `config set api.grpc-port 8086`), und nutzt `api.bind` und die TLS-Einstellung der API. Mit TLS handelt der Listener `h2` über ALPN aus; auf Loopback ohne TLS spricht er HTTP/2 mit Prior Knowledge (`grpcurl -plaintext`, `grpc.insecure_channel`).
+
+```sh
+grpcurl -plaintext -import-path cloud/api/src/main/resources -proto vectolyn/api/v1/cloud.proto \
+  -H "authorization: Bearer $VECTOLYN_TOKEN" -d '{}' 127.0.0.1:8086 vectolyn.api.v1.CloudService/ListServices
+```
+
+```python
+# python -m grpc_tools.protoc -I cloud/api/src/main/resources --python_out=. --grpc_python_out=. vectolyn/api/v1/cloud.proto
+import grpc
+from vectolyn.api.v1 import cloud_pb2, cloud_pb2_grpc
+
+with grpc.insecure_channel("127.0.0.1:8086") as channel:
+    stub = cloud_pb2_grpc.CloudServiceStub(channel)
+    auth = [("authorization", f"Bearer {token}")]
+    print(stub.ListServices(cloud_pb2.ListRequest(limit=50), metadata=auth))
+    for event in stub.Events(cloud_pb2.EventsRequest(types=["service-state"]), metadata=auth):
+        print(event.type, event.json)
+```
+
+- **Dieselben Regeln wie REST.** Jede Methode führt den REST-Endpunkt aus, der in ihrem Kommentar in der Proto-Datei steht, mit dem Token des Aufrufers (Metadaten `authorization: Bearer vct_...`): mit seinem Scope, seiner Prüfung, `If-Match` (`if_match`) und seinen Fehlern. Konfigurationsdokumente gehen als JSON-Text in ihrer REST-Form zusammen mit ihrem `etag`; Listen nehmen `limit` und `after` und antworten mit `total_count`, `next` und `items`.
+- **Fehler** sind ein gRPC-Status in den Trailern, mit `grpc-message` und dem REST-Code im Trailer `vectolyn-code`: `400`, `415` und `422` werden `INVALID_ARGUMENT`, `401` `UNAUTHENTICATED`, `403` `PERMISSION_DENIED`, `404` `NOT_FOUND`, `408` `DEADLINE_EXCEEDED`, `409` und `412` `FAILED_PRECONDITION`, `413` und `429` `RESOURCE_EXHAUSTED`, `503` `UNAVAILABLE`, `500` `INTERNAL`. Eine unbekannte Methode ist `UNIMPLEMENTED`, eine komprimierte Nachricht ebenso (nur `identity` wird unterstützt); ein kaputter Rahmen oder eine kaputte Nachricht ist `INTERNAL` mit `vectolyn-code: invalid-message`. Eine Anfrage, die nicht `POST` ist, bekommt HTTP `405`, eine mit anderem Content-Type als `application/grpc` oder `application/grpc+proto` HTTP `415` (gRPC-Web wird nicht unterstützt). Ein abgelehnter Stream wird zurückgesetzt und lässt sich nicht offen halten.
+- **Prüfungen, bevor etwas läuft**, in dieser Reihenfolge: Ratenlimit der Client-Adresse, Methode, Content-Type, bekannte Methode, zu viele falsche Tokens, der Token, das Ratenlimit des Tokens. Ein Aufruf kostet eine Anfrage aus dem Ratenlimit des Tokens. Die Anfrage ist genau eine Nachricht von höchstens der Body-Grenze (`maxBodyBytes`) und muss innerhalb des Idle-Timeouts vollständig ankommen (sonst `DEADLINE_EXCEEDED`, `request-timeout`). Die unfertigen Anfragen einer Verbindung teilen sich eine Body-Grenze (sonst `UNAVAILABLE`, `busy`), so hält eine gRPC-Verbindung nicht mehr Anfragespeicher als eine REST-Verbindung.
+- **`Events`** streamt die Ereignisse von `/events`: `types` (jeder Typ braucht seinen Scope; leer heißt jeder Typ, den der Token sehen darf) und `services`. Jedes `Event` hat `type`, `time` und die Ereignisdaten als JSON in `json`. Ein langsamer Client verliert Ereignisse und bekommt ein Ereignis vom Typ `dropped` mit der Anzahl. Ein Stream zählt zu den 32 Event-Streams und endet mit `UNAUTHENTICATED`, wenn sein Token widerrufen wird oder abläuft, und mit `UNAVAILABLE`, wenn der Node stoppt.
+- **Verbindungen** zählen zu denselben Grenzen wie HTTP-Verbindungen. Höchstens 16 Aufrufe laufen gleichzeitig auf einer Verbindung, Header sind auf 8 KiB begrenzt. Nur authentifizierte Aufrufe zählen als Aktivität: Eine Verbindung ohne einen solchen wird nach dem Idle-Timeout geschlossen, egal welche Frames der Client sendet (PING, SETTINGS, abgelehnte Streams). Eine Verbindung mit offenem `Events`-Stream wird stattdessen angepingt. Nettys Grenzen gegen Reset-, Steuerframe- und Leerframe-Fluten sind ausdrücklich gesetzt.
+- **Warum nicht grpc-java.** Der Listener besteht aus Nettys HTTP/2-Codec und einem kleinen proto3-Codec ([`Proto`](../../cloud/api/src/main/java/net/vectolyn/cloud/api/grpc/Proto.java)), den die Proto-Datei selbst steuert. grpc-java brächte ein zweites, geshadetes Netty und von `protoc` generierte Klassen in den Build, die API braucht aber nur unäre Aufrufe und einen Server-Stream. Der Server liest `cloud.proto` beim Start und startet nicht, wenn seine Methodentabelle von der Datei abweicht. Der offizielle Python-Client (`grpcio`) wurde gegen den Listener getestet: unäre Aufrufe, Fehler mit Trailern und `Events`.
+
 ## Transportsicherheit
 
 ### Bind und TLS
