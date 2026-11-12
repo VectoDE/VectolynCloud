@@ -149,7 +149,7 @@ public final class BridgePlugins {
             return false;
         }
         try (var files = Files.list(pluginDirectory)) {
-            return files.anyMatch(file -> bridge.matches(file.getFileName().toString())
+            return files.anyMatch(file -> bridge.matches(Objects.requireNonNull(file.getFileName(), "file name").toString())
                     && Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS));
         }
     }
@@ -216,7 +216,7 @@ public final class BridgePlugins {
     private static void removeOtherVersions(Bridge bridge, Path pluginDirectory, String keep) throws IOException {
         try (var files = Files.list(pluginDirectory)) {
             for (Path file : files.toList()) {
-                String name = file.getFileName().toString();
+                String name = Objects.requireNonNull(file.getFileName(), "file name").toString();
                 if (!name.equals(keep) && bridge.matches(name) && !Files.isDirectory(file, LinkOption.NOFOLLOW_LINKS)) {
                     Files.deleteIfExists(file);
                 }

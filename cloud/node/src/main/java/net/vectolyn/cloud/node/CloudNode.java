@@ -661,9 +661,10 @@ public final class CloudNode implements AutoCloseable {
             backupScheduler = new BackupScheduler(ops.backups());
             backupScheduler.start();
         }
-        if (ops.apiServer() != null) {
+        var apiServer = ops.apiServer();
+        if (apiServer != null) {
             try {
-                InetSocketAddress api = ops.apiServer().start();
+                InetSocketAddress api = apiServer.start();
                 LOG.log(System.Logger.Level.INFO, "API listens on {0}:{1,number,#}", api.getHostString(), api.getPort());
             } catch (IOException e) {
                 LOG.log(System.Logger.Level.ERROR, "The API cannot start ({0}); the node runs without it.", e.getMessage());
@@ -1088,8 +1089,9 @@ public final class CloudNode implements AutoCloseable {
         // First: the API refuses starts, reloads and backups from now on; reads and stops still work.
         step(errors, "marking the API as shutting down", () -> {
             ops.api().beginShutdown();
-            if (ops.apiServer() != null) {
-                ops.apiServer().beginShutdown();
+            var apiServer = ops.apiServer();
+            if (apiServer != null) {
+                apiServer.beginShutdown();
             }
         });
         step(errors, "stopping the console", () -> {
@@ -1119,9 +1121,10 @@ public final class CloudNode implements AutoCloseable {
         step(errors, "closing the console", this::closeConsole);
         // Last: event streams get 1001, then the sockets close.
         step(errors, "closing the API", () -> {
-            if (ops.apiServer() != null) {
-                Logger.getLogger("").removeHandler(ops.apiServer().logHandler());
-                ops.apiServer().close();
+            var apiServer = ops.apiServer();
+            if (apiServer != null) {
+                Logger.getLogger("").removeHandler(apiServer.logHandler());
+                apiServer.close();
             }
         });
         step(errors, "closing logs/cloud.log", () -> {

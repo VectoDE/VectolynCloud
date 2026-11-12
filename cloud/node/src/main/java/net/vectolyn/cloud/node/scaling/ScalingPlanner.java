@@ -545,7 +545,7 @@ public final class ScalingPlanner {
     public static long budget(ConfigSnapshot snapshot, String node, Memory memory) {
         Optional<NodeConfig> config = snapshot.nodes().find(node);
         if (config.isPresent() && config.get().maxMemory() != null) {
-            return Math.min(config.get().maxMemory().megabytes() * 1024L * 1024L, memory.total());
+            return Math.min(Objects.requireNonNull(config.get().maxMemory(), "maxMemory").megabytes() * 1024L * 1024L, memory.total());
         }
         return Math.max(0, memory.total() - reserve(snapshot, node, memory.nodeHeap()));
     }

@@ -222,9 +222,12 @@ public final class NodeApi implements ApiBackend, ServiceAccess, NodeAccess, Ser
     }
 
     private static Optional<ServiceId> id(String value) {
+        if (value == null) {
+            return Optional.empty();
+        }
         try {
             return Optional.of(new ServiceId(value));
-        } catch (IllegalArgumentException | NullPointerException e) {
+        } catch (IllegalArgumentException e) {
             return Optional.empty();
         }
     }
