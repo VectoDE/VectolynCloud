@@ -7,14 +7,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import com.code_intelligence.jazzer.mutation.annotation.NotNull;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Map;
 import java.util.regex.Pattern;
-import net.vectolyn.cloud.api.auth.Scope;
+import net.vectolyn.cloud.api.backend.ApiBackend;
+import net.vectolyn.cloud.api.backend.NodeAccess;
+import net.vectolyn.cloud.api.backend.ServiceAccess;
+import net.vectolyn.cloud.config.CloudHome;
+import net.vectolyn.cloud.config.ConfigService;
+import net.vectolyn.cloud.config.error.ConfigException;
 
 /**
- * Fuzz target for {@link Router}: any request target resolves without an exception, and a found
- * route only ever carries parameters and query values from the strict alphabets, so no path
+ * Fuzz target for the real routing table of {@link ApiRoutes#router()}: any request target
+ * resolves without an exception, and a found route only ever carries parameters and query values from the strict alphabets, so no path
  * separator, dot segment, percent sign or control character reaches a handler. Regression mode in
  * every test run; the nightly workflow fuzzes it on Linux.
  */
@@ -25,26 +33,39 @@ class RouterFuzzTest {
     private static final Pattern QUERY_VALUE = Pattern.compile("[A-Za-z0-9._,-]{0,512}");
     private static final String[] METHODS = {"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "get", ""};
 
-    /** The shapes of the real table: fixed paths, every parameter kind, nested and trailing ones. */
-    private static final Router<String> ROUTER = new Router<String>()
-            .add("GET", ApiRoutes.PREFIX + "/services", Scope.SERVICES_READ, "list")
-            .add("GET", ApiRoutes.PREFIX + "/services/{id}", Scope.SERVICES_READ, "info")
-            .add("POST", ApiRoutes.PREFIX + "/services/{id}/command", Scope.SERVICES_WRITE, "command")
-            .add("PUT", ApiRoutes.PREFIX + "/groups/{name}", Scope.CONFIG_WRITE, "put")
-            .add("DELETE", ApiRoutes.PREFIX + "/groups/{name}", Scope.CONFIG_WRITE, "delete")
-            .add("PUT", ApiRoutes.PREFIX + "/groups/{name}/wanted", Scope.CONFIG_WRITE, "wanted")
-            .add("PUT", ApiRoutes.PREFIX + "/servers/{kind}", Scope.CONFIG_WRITE, "kind")
-            .add("GET", ApiRoutes.PREFIX + "/tokens/self", null, "self")
-            .add("GET", ApiRoutes.PREFIX + "/events", Scope.SERVICES_READ, "events");
+    /** The real routing table of the server, built once over an empty home. */
+    private static final Router<ApiRoutes.Handler> ROUTER = realRouter();
+
+    private static Router<ApiRoutes.Handler> realRouter() {
+        try {
+            Path home = Files.createTempDirectory("vectolyn-router-fuzz");
+            ConfigService config = ConfigService.open(CloudHome.of(home));
+            // Resolving never calls a handler, so the backend is never asked for anything.
+            ApiBackend backend = new ApiBackend() {
+                @Override
+                public ServiceAccess services() {
+                    throw new UnsupportedOperationException();
+                }
+
+                @Override
+                public NodeAccess node() {
+                    throw new UnsupportedOperationException();
+                }
+            };
+            return new ApiRoutes(config, backend, () -> false).router();
+        } catch (IOException | ConfigException e) {
+            throw new IllegalStateException(e);
+        }
+    }
 
     @FuzzTest
     void resolveNeverThrowsAndOnlyPassesCleanValues(byte @NotNull [] input) {
         String method = input.length == 0 ? "GET" : METHODS[Math.floorMod(input[0], METHODS.length)];
         String target = new String(input, Math.min(1, input.length), Math.max(0, input.length - 1),
                 StandardCharsets.UTF_8);
-        Router.Resolution<String> resolution = ROUTER.resolve(method, target);
+        Router.Resolution<ApiRoutes.Handler> resolution = ROUTER.resolve(method, target);
         assertNotNull(resolution);
-        if (resolution instanceof Router.Resolution.Found<String> found) {
+        if (resolution instanceof Router.Resolution.Found<ApiRoutes.Handler> found) {
             assertTrue(target.startsWith(ApiRoutes.PREFIX), target);
             for (String value : found.params().values()) {
                 assertTrue(PARAM.matcher(value).matches(), value);

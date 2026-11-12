@@ -47,7 +47,8 @@ Only services the cloud started talk on the channel, each with a token of its ow
 | `POST /services`, `.../stop`, `.../restart`, `.../command` | API tokens with `services:write` (or `admin`) | the API server for every request | `ApiServerTest.aTokenWithoutTheScopeGets403`, `RouteScopesTest` |
 | `PUT`/`DELETE` of groups, tasks, nodes, wanted switches, `PUT /config`, `POST /config/reload` | tokens with `config:write` | the API server | `ApiServerTest`, `RouteScopesTest` |
 | `POST /backups` | tokens with `backups:write` | the API server | `ApiServerTest`, `RouteScopesTest` |
-| Every `GET` | tokens with the read scope of its area; `GET /tokens/self` any valid token | the API server | `RouteScopesTest` |
+| `GET`/`POST /admin/tokens`, `DELETE /admin/tokens/{id}` (token management) | tokens with `admin` | the API server | `AdminTokensTest.onlyAdminReachesTheAdminArea`, `RouteScopesTest`, `ScopeMatrixTest` |
+| Every `GET` | tokens with the read scope of its area; `GET /tokens/self` any valid token | the API server | `RouteScopesTest`, `ScopeMatrixTest` |
 
 Details of the scopes: [api.md](api.md).
 

@@ -25,6 +25,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import net.vectolyn.cloud.config.CloudHome;
 import net.vectolyn.cloud.config.io.AtomicFileWriter;
@@ -43,7 +44,9 @@ import tools.jackson.databind.json.JsonMapper;
  * The API tokens of the node, in {@code <home>/secrets/api-tokens.json}.
  *
  * <p>A token is {@code vct_} followed by 43 characters (32 random bytes, Base64url). The cloud shows
- * it once, when it is created, and keeps only its SHA-256 with id, name, scopes and creation time.
+ * it once, when it is created, and keeps only its SHA-256 with id, name, scopes, creation time and,
+ * if it was given a lifetime, its expiry. From the expiry on it fails like a revoked token; it stays
+ * in the list (marked expired) until it is revoked, so its name is not taken over silently.
  * The file is owner-only like {@code vectolyn.env}, never a symbolic link, and replaced atomically.
  *
  * <p>{@link #authenticate} hashes the presented token and compares it with every stored hash in
@@ -71,6 +74,14 @@ public final class ApiTokens {
     public static final int MAX_TOKENS = 100;
     /** Current version of the file format. */
     public static final int SCHEMA_VERSION = 1;
+    /** Shortest lifetime of a token. */
+    public static final Duration MIN_LIFETIME = Duration.ofHours(1);
+    /** Longest lifetime of a token, about ten years. */
+    public static final Duration MAX_LIFETIME = Duration.ofDays(3650);
+    /** Text form of a lifetime. */
+    public static final String LIFETIME_FORMAT = "<number>h or <number>d, for example 90d";
+
+    private static final Pattern LIFETIME = Pattern.compile("([1-9][0-9]{0,5})([hd])");
 
     /** Prefix of the one-time setup token. */
     public static final String SETUP_PREFIX = "vcs_";
@@ -227,6 +238,10 @@ public final class ApiTokens {
             if (!isInstant(entry.createdAt())) {
                 throw new IOException(where + ".created-at must be an ISO-8601 instant");
             }
+            if (entry.expiresAt() != null && (!isInstant(entry.expiresAt())
+                    || !Instant.parse(entry.expiresAt()).isAfter(Instant.parse(entry.createdAt())))) {
+                throw new IOException(where + ".expires-at must be an ISO-8601 instant after created-at");
+            }
             if (!ids.add(entry.id()) || !names.add(entry.name())) {
                 throw new IOException(where + " repeats an id or a name");
             }
@@ -244,7 +259,27 @@ public final class ApiTokens {
      * @throws IllegalArgumentException if the name is invalid or taken, there are no scopes, or the limit is reached
      * @throws IOException              if the file cannot be written; then no token exists
      */
-    public synchronized Created create(String name, Set<Scope> scopes) throws IOException {
+    public Created create(String name, Set<Scope> scopes) throws IOException {
+        return create(name, scopes, null);
+    }
+
+    /**
+     * Creates a token that stops working after {@code lifetime}. The returned
+     * {@link Created#token()} is the only copy; it is not stored.
+     *
+     * @param name     label, {@code [a-z0-9][a-z0-9_-]{0,31}}, unique
+     * @param scopes   at least one scope
+     * @param lifetime from {@link #MIN_LIFETIME} to {@link #MAX_LIFETIME}, or null for a token that
+     *                 works until it is revoked
+     * @return the token and its description
+     * @throws IllegalArgumentException if the name is invalid or taken, there are no scopes, the
+     *                                  lifetime is out of range, or the limit is reached
+     * @throws IOException              if the file cannot be written; then no token exists
+     */
+    public synchronized Created create(String name, Set<Scope> scopes, Duration lifetime) throws IOException {
+        if (lifetime != null && (lifetime.compareTo(MIN_LIFETIME) < 0 || lifetime.compareTo(MAX_LIFETIME) > 0)) {
+            throw new IllegalArgumentException("the lifetime must be from 1h to 3650d");
+        }
         if (name == null || !ConfigNames.isValidName(name)) {
             throw new IllegalArgumentException("name must match " + ConfigNames.NAME);
         }
@@ -269,7 +304,8 @@ public final class ApiTokens {
         } while (find(current, id).isPresent());
         Instant now = clock.instant();
         List<String> scopeIds = EnumSet.copyOf(scopes).stream().map(Scope::id).toList();
-        Entry entry = new Entry(id, name, scopeIds, now.toString(), HexFormat.of().formatHex(sha256(token)));
+        String expiresAt = lifetime == null ? null : now.plus(lifetime).toString();
+        Entry entry = new Entry(id, name, scopeIds, now.toString(), expiresAt, HexFormat.of().formatHex(sha256(token)));
         List<Entry> next = new ArrayList<>(current);
         next.add(entry);
         save(next);
@@ -426,7 +462,7 @@ public final class ApiTokens {
      * Checks a token presented by a client.
      *
      * @param presented the text after {@code Bearer }, may be anything
-     * @return the token's description if it is valid and not revoked
+     * @return the token's description if it is valid, not revoked and not expired
      */
     public Optional<ApiToken> authenticate(String presented) {
         if (presented == null || !TOKEN.matcher(presented).matches()) {
@@ -441,17 +477,52 @@ public final class ApiTokens {
                 match = entry;
             }
         }
-        return match == null ? Optional.empty() : Optional.of(match.toToken());
+        if (match == null) {
+            return Optional.empty();
+        }
+        ApiToken token = match.toToken();
+        return token.isExpired(clock.instant()) ? Optional.empty() : Optional.of(token);
     }
 
     /**
      * Whether a token id is still valid, for connections that were opened before a revoke.
      *
      * @param id the token id
-     * @return whether a token with this id exists
+     * @return whether a token with this id exists and has not expired
      */
     public boolean isValid(String id) {
-        return find(entries, id).isPresent();
+        Instant now = clock.instant();
+        return find(entries, id).map(e -> !e.toToken().isExpired(now)).orElse(false);
+    }
+
+    /**
+     * Parses a lifetime such as {@code 12h} or {@code 90d}.
+     *
+     * @param text the text
+     * @return the lifetime
+     * @throws IllegalArgumentException if it does not have the form {@value #LIFETIME_FORMAT} or is
+     *                                  outside 1h to 3650d
+     */
+    public static Duration parseLifetime(String text) {
+        Matcher m = LIFETIME.matcher(text == null ? "" : text);
+        if (!m.matches()) {
+            throw new IllegalArgumentException("the lifetime must look like " + LIFETIME_FORMAT);
+        }
+        long value = Long.parseLong(m.group(1));
+        Duration lifetime = m.group(2).equals("h") ? Duration.ofHours(value) : Duration.ofDays(value);
+        if (lifetime.compareTo(MIN_LIFETIME) < 0 || lifetime.compareTo(MAX_LIFETIME) > 0) {
+            throw new IllegalArgumentException("the lifetime must be from 1h to 3650d");
+        }
+        return lifetime;
+    }
+
+    /**
+     * The clock of this store.
+     *
+     * @return the clock
+     */
+    public Clock clock() {
+        return clock;
     }
 
     /**
@@ -539,8 +610,8 @@ public final class ApiTokens {
     }
 
     /** One stored token. */
-    @JsonPropertyOrder({"id", "name", "scopes", "created-at", "sha256"})
-    record Entry(String id, String name, List<String> scopes, String createdAt, String sha256) {
+    @JsonPropertyOrder({"id", "name", "scopes", "created-at", "expires-at", "sha256"})
+    record Entry(String id, String name, List<String> scopes, String createdAt, String expiresAt, String sha256) {
 
         byte[] hashBytes() {
             return HexFormat.of().parseHex(sha256);
@@ -549,7 +620,8 @@ public final class ApiTokens {
         ApiToken toToken() {
             Set<Scope> parsed = EnumSet.noneOf(Scope.class);
             scopes.forEach(s -> Scope.of(s).ifPresent(parsed::add));
-            return new ApiToken(id, name, parsed, Instant.parse(createdAt));
+            return new ApiToken(id, name, parsed, Instant.parse(createdAt),
+                    expiresAt == null ? null : Instant.parse(expiresAt));
         }
     }
 }

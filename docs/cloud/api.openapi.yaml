@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: VectolynCloud API
-  version: 1.0.0
+  version: 1.2.0
   summary: REST API and live events of a VectolynCloud node.
   description: |
     JSON over HTTP/1.1. Every request needs a bearer token (`vct_...`) created at the node console
@@ -33,6 +33,7 @@ tags:
   - name: nodes
   - name: backups
   - name: tokens
+  - name: admin
   - name: events
 
 paths:
@@ -42,9 +43,13 @@ paths:
       summary: List the services of this node
       description: "Scope: services:read"
       operationId: listServices
+      parameters: [{$ref: "#/components/parameters/Limit"}, {$ref: "#/components/parameters/After"}]
       responses:
         "200":
           description: Every service
+          headers:
+            X-Total-Count: {$ref: "#/components/headers/X-Total-Count"}
+            Link: {$ref: "#/components/headers/Link"}
           content:
             application/json:
               schema:
@@ -154,9 +159,13 @@ paths:
       summary: Every group
       description: "Scope: config:read"
       operationId: listGroups
+      parameters: [{$ref: "#/components/parameters/Limit"}, {$ref: "#/components/parameters/After"}]
       responses:
         "200":
           description: Groups by name
+          headers:
+            X-Total-Count: {$ref: "#/components/headers/X-Total-Count"}
+            Link: {$ref: "#/components/headers/Link"}
           content:
             application/json:
               schema:
@@ -236,9 +245,13 @@ paths:
       summary: Every task
       description: "Scope: config:read"
       operationId: listTasks
+      parameters: [{$ref: "#/components/parameters/Limit"}, {$ref: "#/components/parameters/After"}]
       responses:
         "200":
           description: Tasks by name
+          headers:
+            X-Total-Count: {$ref: "#/components/headers/X-Total-Count"}
+            Link: {$ref: "#/components/headers/Link"}
           content:
             application/json:
               schema:
@@ -314,9 +327,13 @@ paths:
       summary: Every node of nodes.yml
       description: "Scope: config:read"
       operationId: listNodes
+      parameters: [{$ref: "#/components/parameters/Limit"}, {$ref: "#/components/parameters/After"}]
       responses:
         "200":
-          description: The nodes in file order
+          description: The nodes, ordered by id
+          headers:
+            X-Total-Count: {$ref: "#/components/headers/X-Total-Count"}
+            Link: {$ref: "#/components/headers/Link"}
           content:
             application/json:
               schema:
@@ -500,9 +517,13 @@ paths:
       summary: Every backup
       description: "Scope: backups:read. 501 not-available until the node provides backups."
       operationId: listBackups
+      parameters: [{$ref: "#/components/parameters/Limit"}, {$ref: "#/components/parameters/After"}]
       responses:
         "200":
           description: Backups
+          headers:
+            X-Total-Count: {$ref: "#/components/headers/X-Total-Count"}
+            Link: {$ref: "#/components/headers/Link"}
           content:
             application/json:
               schema:
@@ -552,6 +573,74 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Token"}
+        default: {$ref: "#/components/responses/Error"}
+
+  /admin/tokens:
+    get:
+      tags: [admin]
+      summary: Every token of the node
+      description: "Scope: admin. Ordered by id. Never shows a token or its hash; expired tokens are listed with expired: true until they are revoked."
+      operationId: listTokens
+      parameters: [{$ref: "#/components/parameters/Limit"}, {$ref: "#/components/parameters/After"}]
+      responses:
+        "200":
+          description: The tokens
+          headers:
+            X-Total-Count: {$ref: "#/components/headers/X-Total-Count"}
+            Link: {$ref: "#/components/headers/Link"}
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/Token"}
+        default: {$ref: "#/components/responses/Error"}
+    post:
+      tags: [admin]
+      summary: Create a token
+      description: |
+        Scope: admin. The answer is the only place the token is ever shown (`Cache-Control: no-store`).
+        `expires-in` is 1h to 3650d (`12h`, `90d`); without it the token works until it is revoked.
+        A taken name or more than 100 tokens answer 409 conflict.
+      operationId: createToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name, scopes]
+              properties:
+                name: {$ref: "#/components/schemas/Name"}
+                scopes:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: string
+                    enum: [services:read, services:write, config:read, config:write, backups:read,
+                           backups:write, node:read, admin]
+                expires-in: {type: string, pattern: "^[1-9][0-9]{0,5}[hd]$", example: 90d}
+      responses:
+        "201":
+          description: The new token
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/CreatedToken"}
+        default: {$ref: "#/components/responses/Error"}
+  /admin/tokens/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id (8 hex characters) or name of the token.
+        schema: {$ref: "#/components/schemas/ServiceId"}
+    delete:
+      tags: [admin]
+      summary: Revoke a token
+      description: "Scope: admin. Works at once: the next request with it is 401, its event streams close with 1008."
+      operationId: revokeToken
+      responses:
+        "204": {description: Revoked}
         default: {$ref: "#/components/responses/Error"}
 
   /setup/claim:
@@ -636,6 +725,20 @@ components:
       required: true
       description: The name again.
       schema: {$ref: "#/components/schemas/Name"}
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: |
+        Page size, 1 to 500. Without it the answer holds the whole list. Lists are ordered by their
+        key (id or name).
+      schema: {type: integer, minimum: 1, maximum: 500}
+    After:
+      name: after
+      in: query
+      required: false
+      description: Starts after this key (the last key of the previous page, see the `Link` header).
+      schema: {type: string, pattern: "^[a-z0-9][a-z0-9_.-]{0,127}$"}
     IfMatch:
       name: If-Match
       in: header
@@ -646,6 +749,20 @@ components:
     ETag:
       description: Version of the document, for If-Match.
       schema: {type: string}
+    X-Total-Count:
+      description: Number of entries in the whole list, on every page.
+      schema: {type: integer, minimum: 0}
+    Link:
+      description: |
+        `<...?limit=n&after=key>; rel="next"` (RFC 8288) while more entries follow; missing on the
+        last page and without `limit`.
+      schema: {type: string}
+    X-RateLimit-Limit:
+      description: Size of the request bucket of the token (requests at once).
+      schema: {type: integer}
+    X-RateLimit-Remaining:
+      description: Requests the bucket of the token holds after this one; 0 means the next may get 429.
+      schema: {type: integer}
   requestBodies:
     Wanted:
       required: true
@@ -866,6 +983,21 @@ components:
             enum: [services:read, services:write, config:read, config:write, backups:read,
                    backups:write, node:read, admin]
         created-at: {type: string, format: date-time}
+        expires-at:
+          type: string
+          format: date-time
+          description: When the token stops working; missing for a token without a lifetime.
+        expired: {type: boolean}
+    CreatedToken:
+      allOf:
+        - {$ref: "#/components/schemas/Token"}
+        - type: object
+          required: [token]
+          properties:
+            token:
+              type: string
+              pattern: "^vct_[A-Za-z0-9_-]{43}$"
+              description: The token itself. Shown in this one answer only; the node keeps its SHA-256.
     ConfigError:
       type: object
       properties:

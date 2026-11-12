@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
 import net.vectolyn.cloud.api.event.ApiEvent;
 import net.vectolyn.cloud.api.http.ApiJson;
@@ -93,6 +94,15 @@ final class EventHub {
         streams.forEach((channel, stream) -> {
             if (stream.tokenId.equals(tokenId)) {
                 close(channel, WebSocketCloseStatus.POLICY_VIOLATION, "token revoked");
+            }
+        });
+    }
+
+    /** Closes every stream whose token matches (WebSocket close code 1008), for expired tokens. */
+    void closeTokensIf(Predicate<String> tokenIdMatches) {
+        streams.forEach((channel, stream) -> {
+            if (tokenIdMatches.test(stream.tokenId)) {
+                close(channel, WebSocketCloseStatus.POLICY_VIOLATION, "token expired");
             }
         });
     }

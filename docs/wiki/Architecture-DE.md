@@ -45,7 +45,7 @@ Das Cloud-Home ist der Ordner, in dem VectolynCloud läuft. Im Produktivbetrieb 
 
 Bis Etappe 2 laufen die vorhandenen Server lokal aus einem `runtime/`-Ordner über die Windows-Startskripte. VectolynCloud nutzt diesen Ordnernamen nicht; der Aufbau steht unter [Cloud home](https://github.com/VectoDE/VectolynCloud/blob/main/docs/cloud/architecture.md#cloud-home) (Englisch).
 
-## VectolynCloud (geplant, Etappe 2)
+## VectolynCloud (Etappe 2, weitgehend gebaut)
 
 Ein Java-Node mit Konsole (JLine) und Einrichtungsassistent.
 

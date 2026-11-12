@@ -89,6 +89,29 @@ class ApiTlsTest {
     }
 
     @Test
+    void theKeystoreIsMovedIntoPlaceAndNoDraftIsLeft() throws Exception {
+        Path dir = home.resolve("certs");
+        Path keystore = dir.resolve("api.p12");
+        ApiTls.generate(keystore, Secret.of("draft-test-password-123456"), List.of("localhost"));
+        try (var listing = Files.list(dir)) {
+            assertEquals(List.of(keystore), listing.toList(), "only the finished keystore, no work folder");
+        }
+        assertTrue(OwnerOnlyPermissions.isOwnerOnly(keystore));
+    }
+
+    @Test
+    void aFailedKeytoolLeavesNoFileBehind() throws Exception {
+        Path dir = home.resolve("certs");
+        Path keystore = dir.resolve("api.p12");
+        // keytool refuses a SAN entry that is no valid DNS name.
+        assertThrows(IOException.class,
+                () -> ApiTls.generate(keystore, Secret.of("draft-test-password-123456"), List.of("bad..name")));
+        try (var listing = Files.list(dir)) {
+            assertEquals(List.of(), listing.toList(), "neither a keystore nor a draft");
+        }
+    }
+
+    @Test
     void anExistingKeystoreNeedsItsPassword() throws Exception {
         CloudHome cloudHome = CloudHome.of(home);
         Path keystore = home.resolve("certs/own.p12");

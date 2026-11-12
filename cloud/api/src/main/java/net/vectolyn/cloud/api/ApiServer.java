@@ -65,6 +65,9 @@ import net.vectolyn.cloud.config.ConfigService;
  */
 public final class ApiServer implements AutoCloseable {
 
+    /** How often open event streams are checked for an expired token. */
+    static final int EXPIRY_CHECK_SECONDS = 15;
+
     /** Name of the idle handler in the pipeline. */
     static final String IDLE = "vectolyn-api-idle";
 
@@ -86,6 +89,7 @@ public final class ApiServer implements AutoCloseable {
     private final ExecutorService executor = Executors.newThreadPerTaskExecutor(
             Thread.ofVirtual().name("vectolyn-api-", 0).factory());
 
+    private final long expiryCheckMillis;
     private volatile boolean shuttingDown;
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
@@ -99,13 +103,14 @@ public final class ApiServer implements AutoCloseable {
         this.tokens = builder.tokens;
         this.backend = builder.backend;
         ApiLimits limits = settings.limits();
-        this.router = new ApiRoutes(builder.config, backend, () -> shuttingDown).router();
+        this.router = new ApiRoutes(builder.config, backend, () -> shuttingDown, tokens).router();
         this.addressLimiter = new RateLimiter<>(limits.burstPerIp(), limits.requestsPerMinutePerIp(), builder.nanoTime);
         this.tokenLimiter = new RateLimiter<>(limits.burstPerToken(), limits.requestsPerMinutePerToken(), builder.nanoTime);
         this.authFailureLimiter = new RateLimiter<>(limits.authFailuresPerMinute(), limits.authFailuresPerMinute(),
                 builder.nanoTime);
         this.requestSlots = new Semaphore(limits.maxConcurrentRequests());
         this.events = new EventHub(this::redact, limits.maxWebSockets());
+        this.expiryCheckMillis = builder.expiryCheckMillis;
         tokens.onRevoke(token -> events.closeToken(token.id()));
     }
 
@@ -181,6 +186,10 @@ public final class ApiServer implements AutoCloseable {
             throw new IOException("The API cannot listen on port " + settings.port() + ": " + reason, cause);
         }
         serverChannel = binding.channel();
+        // A token that expires while its event stream is open: the stream closes with 1008 within
+        // EXPIRY_CHECK_SECONDS, as if the token had been revoked.
+        workerGroup.scheduleAtFixedRate(() -> events.closeTokensIf(id -> !tokens.isValid(id)),
+                expiryCheckMillis, expiryCheckMillis, TimeUnit.MILLISECONDS);
         InetSocketAddress bound = (InetSocketAddress) serverChannel.localAddress();
         LOG.log(System.Logger.Level.INFO, "API listening on {0}://{1}:{2,number,#}",
                 sslContext == null ? "http" : "https", bound.getAddress().getHostAddress(), bound.getPort());
@@ -384,6 +393,7 @@ public final class ApiServer implements AutoCloseable {
         private final ApiTokens tokens;
         private ApiSettings settings;
         private LongSupplier nanoTime = System::nanoTime;
+        private long expiryCheckMillis = EXPIRY_CHECK_SECONDS * 1000L;
 
         private Builder(ConfigService config, ApiBackend backend, ApiTokens tokens) {
             this.config = Objects.requireNonNull(config, "config");
@@ -410,6 +420,20 @@ public final class ApiServer implements AutoCloseable {
          */
         public Builder nanoTime(LongSupplier value) {
             this.nanoTime = Objects.requireNonNull(value, "nanoTime");
+            return this;
+        }
+
+        /**
+         * How often open event streams are checked for an expired token (tests).
+         *
+         * @param millis the interval in milliseconds, at least 1
+         * @return this builder
+         */
+        Builder expiryCheckMillis(long millis) {
+            if (millis < 1) {
+                throw new IllegalArgumentException("millis must be at least 1");
+            }
+            this.expiryCheckMillis = millis;
             return this;
         }
 

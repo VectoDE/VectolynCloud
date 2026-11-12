@@ -3,6 +3,8 @@
 package net.vectolyn.cloud.api.console;
 
 import java.io.IOException;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
@@ -24,8 +26,9 @@ import net.vectolyn.cloud.console.command.CommandException;
  *
  * <table>
  *   <caption>Subcommands</caption>
- *   <tr><td>{@code api token create <name> <scopes>}</td><td>creates a token and shows it once</td></tr>
- *   <tr><td>{@code api token list}</td><td>id, name, scopes and creation time of every token</td></tr>
+ *   <tr><td>{@code api token create <name> <scopes> [lifetime]}</td><td>creates a token and shows it
+ *       once; with a lifetime ({@code 12h}, {@code 90d}) it stops working after that time</td></tr>
+ *   <tr><td>{@code api token list}</td><td>id, name, scopes, creation time and expiry of every token</td></tr>
  *   <tr><td>{@code api token revoke <id|name>}</td><td>revokes a token at once</td></tr>
  *   <tr><td>{@code api token setup [admin]}</td><td>makes a new one-time setup token for the first
  *       administrator ({@code admin} by default) and shows it once</td></tr>
@@ -142,8 +145,14 @@ public final class ApiCommands {
                                         "Scopes, comma separated, for example services:read,services:write",
                                         "Scopes, durch Komma getrennt, zum Beispiel services:read,services:write"))
                                         .suggest(scopeIds))
+                                .argument(Argument.optional("lifetime", Text.of(
+                                        "Optional lifetime, 1h to 3650d, for example 90d; without it the token works"
+                                                + " until it is revoked",
+                                        "Optionale Laufzeit, 1h bis 3650d, zum Beispiel 90d; ohne sie gilt das Token,"
+                                                + " bis es widerrufen wird"))
+                                        .suggest(List.of("24h", "30d", "90d", "365d")))
                                 .executes(context -> create(context.out(), context.argument("name"),
-                                        context.argument("scopes"))))
+                                        context.argument("scopes"), context.optional("lifetime").orElse(null))))
                         .subcommand(Command.builder("list")
                                 .description(Text.of("Shows every token without its value.",
                                         "Zeigt alle Tokens ohne ihren Wert."))
@@ -169,7 +178,16 @@ public final class ApiCommands {
                 .build();
     }
 
-    private void create(ConsoleOutput out, String name, String scopeList) throws Exception {
+    private void create(ConsoleOutput out, String name, String scopeList, String lifetimeText) throws Exception {
+        Duration lifetime = null;
+        if (lifetimeText != null) {
+            try {
+                lifetime = ApiTokens.parseLifetime(lifetimeText);
+            } catch (IllegalArgumentException e) {
+                throw new CommandException(Text.of("The lifetime must be 1h to 3650d, for example 90d.",
+                        "Die Laufzeit muss 1h bis 3650d sein, zum Beispiel 90d."));
+            }
+        }
         if (!ConfigNames.isValidName(name)) {
             throw new CommandException(Text.of("The name must match %1$s.", "Der Name muss %1$s entsprechen."),
                     ConfigNames.NAME);
@@ -192,9 +210,12 @@ public final class ApiCommands {
             throw new CommandException(Text.of("At most %1$s tokens are possible.", "Höchstens %1$s Tokens sind möglich."),
                     ApiTokens.MAX_TOKENS);
         }
-        ApiTokens.Created created = store.create(name, scopes);
+        ApiTokens.Created created = store.create(name, scopes, lifetime);
         out.success(Text.of("Token %1$s (%2$s) created with %3$s.", "Token %1$s (%2$s) erstellt mit %3$s."),
                 created.info().name(), created.info().id(), scopeNames(created.info()));
+        if (created.info().expiresAt() != null) {
+            out.println(Text.of("  Expires at %1$s.", "  Läuft ab am %1$s."), created.info().expiresAt());
+        }
         // The one place the token is shown. Text built here from a fixed alphabet, so println is safe.
         out.println("  " + created.token().reveal());
         out.warning(Text.of("Copy it now: it is shown only this once and is not stored. Lost tokens are revoked "
@@ -234,9 +255,14 @@ public final class ApiCommands {
         }
         out.heading(Text.of("API tokens", "API-Tokens").get(out.language()));
         int width = all.stream().mapToInt(t -> t.name().length()).max().orElse(0);
+        Instant now = tokens().clock().instant();
+        String expired = Text.of("expired", "abgelaufen").get(out.language());
+        String until = Text.of("until", "bis").get(out.language());
         for (ApiToken token : all) {
+            String expiry = token.expiresAt() == null ? ""
+                    : "  " + (token.isExpired(now) ? expired : until) + " " + token.expiresAt();
             out.println("  " + token.id() + "  " + token.name() + " ".repeat(width - token.name().length())
-                    + "  " + token.createdAt() + "  " + scopeNames(token));
+                    + "  " + token.createdAt() + "  " + scopeNames(token) + expiry);
         }
     }
 

@@ -1,0 +1,25 @@
+title: "[FAQ] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This category collects frequently asked questions and their answers. Check the [wiki FAQ](https://github.com/VectoDE/VectolynCloud/wiki/FAQ) and existing posts first. A question that only you have belongs in Q&A. Security problems do not belong here, see SECURITY.md.
+
+        _DE: Diese Kategorie sammelt häufige Fragen und ihre Antworten. Schau zuerst in die [FAQ im Wiki](https://github.com/VectoDE/VectolynCloud/wiki/FAQ-DE) und in bestehende Beiträge. Eine Frage, die nur dich betrifft, gehört in Q&A. Sicherheitslücken bitte nicht hier melden, siehe SECURITY.md._
+  - type: textarea
+    id: question
+    attributes:
+      label: Question / Frage
+      description: Which question comes up again and again? / Welche Frage taucht immer wieder auf?
+    validations:
+      required: true
+  - type: textarea
+    id: answer
+    attributes:
+      label: Answer / Antwort
+      description: The answer you know, with a link to the docs if there is one. Leave empty if you do not know it. / Die Antwort, die du kennst, mit Link zur Doku, falls vorhanden. Leer lassen, wenn du sie nicht kennst.
+  - type: input
+    id: version
+    attributes:
+      label: VectolynCloud version / Version
+      description: Release tag the answer applies to. / Release-Tag, für den die Antwort gilt.
