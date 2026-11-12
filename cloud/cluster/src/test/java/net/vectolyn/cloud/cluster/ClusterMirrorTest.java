@@ -29,6 +29,7 @@ import net.vectolyn.cloud.config.model.JavaSelection;
 import net.vectolyn.cloud.config.model.Language;
 import net.vectolyn.cloud.config.model.MemorySize;
 import net.vectolyn.cloud.config.model.NodeConfig;
+import net.vectolyn.cloud.config.model.ProcessConfig;
 import net.vectolyn.cloud.config.model.ScalingConfig;
 import net.vectolyn.cloud.config.model.ServerSoftware;
 import net.vectolyn.cloud.config.model.TaskConfig;
@@ -171,6 +172,39 @@ class ClusterMirrorTest {
         member.config.reload();
         assertArrayEquals(mirrored, Files.readAllBytes(file));
         assertEquals(group("768M"), member.config.snapshot().groups().get("lobby"));
+    }
+
+    @Test
+    void aJvmFlagTheAllowlistRefusesIsRefusedByTheMember() throws Exception {
+        join();
+        await(this::memberIsCurrent);
+        byte[] mirrored = Files.readAllBytes(member.home.resolve("config/groups/lobby.yml"));
+        long taken = revision(member);
+
+        // The console on the head may set it (the operator's own); the member does not take it over.
+        GroupConfig agent = group("768M").withProcess(new ProcessConfig(List.of("-javaagent:/tmp/agent.jar"), null,
+                null, null));
+        head.config.apply(new PutGroup("lobby", agent));
+        await(() -> revision(head) > taken);
+        ExecutionException e = assertThrows(ExecutionException.class,
+                () -> member.cluster.sync().get(30, TimeUnit.SECONDS));
+        assertTrue(e.getCause().getMessage().contains("loads code"), e.getCause().getMessage());
+        assertTrue(member.cluster.status().mirror().orElseThrow().problem().orElseThrow().contains("jvm-flags"),
+                member.cluster.status().mirror().orElseThrow().problem().orElseThrow());
+        assertEquals(group("768M"), member.config.snapshot().groups().get("lobby"));
+        assertArrayEquals(mirrored, Files.readAllBytes(member.home.resolve("config/groups/lobby.yml")));
+        assertEquals(taken, revision(member), "the revision was not taken over");
+
+        // An unlisted flag is refused the same way.
+        head.config.apply(new PutGroup("lobby", group("768M").withProcess(new ProcessConfig(
+                List.of("-Dmyplugin.debug=true"), null, null, null))));
+        assertThrows(ExecutionException.class, () -> member.cluster.sync().get(30, TimeUnit.SECONDS));
+        assertEquals(group("768M"), member.config.snapshot().groups().get("lobby"));
+
+        // Once the head drops the flag, the member follows again.
+        GroupConfig tuned = group("768M").withProcess(new ProcessConfig(List.of("-XX:+UseG1GC"), null, null, null));
+        head.config.apply(new PutGroup("lobby", tuned));
+        await(() -> tuned.equals(member.config.snapshot().groups().get("lobby")) && memberIsCurrent());
     }
 
     @Test

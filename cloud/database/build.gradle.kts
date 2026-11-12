@@ -16,6 +16,8 @@ dependencies {
     // Managed mode downloads the MariaDB server through the shared downloader.
     api(project(":cloud:download"))
     implementation(libs.mariadb.java.client)
+    // Mode postgresql: an operator's PostgreSQL server (BSD-2-Clause).
+    implementation(libs.postgresql)
 
     // Only to check that the generated compose file is valid YAML.
     testImplementation(platform(libs.jackson.bom))
@@ -27,7 +29,7 @@ dependencies {
 // (the weekly workflow .github/workflows/managed-mariadb.yml does that on Linux and Windows).
 tasks.test {
     useJUnitPlatform {
-        excludeTags("mariadb")
+        excludeTags("mariadb", "postgres")
     }
 }
 
@@ -42,6 +44,28 @@ val mariadbTest by tasks.registering(Test::class) {
     // Keeps the downloaded archive between local runs; CI starts empty.
     systemProperty("vectolyn.mariadb.cache", layout.buildDirectory.dir("mariadb-cache").get().asFile.absolutePath)
     providers.gradleProperty("mariadbVersion").orNull?.let { systemProperty("vectolyn.mariadb.version", it) }
+    outputs.upToDateWhen { false }
+    outputs.cacheIf { false }
+}
+
+// Tests tagged "postgres" run PostgresProvisioner against a real PostgreSQL server named by the
+// environment variable VECTOLYN_TEST_POSTGRES_URL (postgresql://user:password@host:port/database,
+// a throwaway server with a superuser). Without it they skip. The workflow
+// .github/workflows/postgres-real-server.yml starts such a server as a service container.
+val postgresTest by tasks.registering(Test::class) {
+    description = "Runs the PostgreSQL adapter against the server in VECTOLYN_TEST_POSTGRES_URL."
+    group = LifecycleBasePlugin.VERIFICATION_GROUP
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    useJUnitPlatform {
+        includeTags("postgres")
+    }
+    // Show every result in the log, so a skipped run (no server) cannot pass for a real one.
+    testLogging {
+        events("passed", "skipped", "failed")
+        showStandardStreams = false
+    }
+    // The environment is not a task input, so never reuse an earlier result.
     outputs.upToDateWhen { false }
     outputs.cacheIf { false }
 }

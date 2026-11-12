@@ -1,10 +1,13 @@
 # SPDX-FileCopyrightText: 2026 VectoDE
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Checks cloud/dist/pterodactyl/egg-vectolyn-cloud.json (operations.yml).
+"""Checks the Pterodactyl and the Pelican egg (operations.yml).
 
-    python3 -I .github/scripts/check-egg.py cloud/dist/pterodactyl/egg-vectolyn-cloud.json
+    python3 -I .github/scripts/check-egg.py <egg.json> [<other egg.json> ...]
 
-Checks the PTDL_v2 structure the panel imports, that every {{...}} in the startup command and in
+Each file is checked on its own, by its meta.version: PTDL_v2 (Pterodactyl,
+cloud/dist/pterodactyl) or PLCN_v3 (Pelican, cloud/dist/pelican). With two or more files, the eggs
+must also say the same: startup command, variables, setup file and installer. Checks the structure
+the panel imports, that every {{...}} in the startup command and in
 config.files names an egg variable, that every default value passes its own rules, that the
 setup file Wings writes only uses keys the setup file format knows (docs/cloud/setup.md), and that
 the database mode "docker" cannot be chosen. Prints the setup.yml Wings would write with the
@@ -70,37 +73,79 @@ def wings_value(value):
     return value
 
 
+PANELS = {
+    "PTDL_v2": {
+        "name": "Pterodactyl",
+        "images": "ghcr.io/pterodactyl/yolks:java_",
+        "installer": "ghcr.io/pterodactyl/installers:",
+        "env": "server.build.env.",
+        "port": "server.build.default.port",
+        "required": ("name", "author", "description", "startup", "docker_images", "config", "scripts", "variables"),
+    },
+    "PLCN_v3": {
+        "name": "Pelican",
+        "images": "ghcr.io/pelican-eggs/yolks:java_",
+        "installer": "ghcr.io/pelican-eggs/installers:",
+        "env": "server.environment.",
+        "port": "server.allocations.default.port",
+        "required": ("name", "author", "uuid", "description", "startup_commands", "docker_images", "config", "scripts",
+                     "variables"),
+    },
+}
+
+
+def normalize(egg, version):
+    """The parts both formats share, in one shape: startup string and config as parsed JSON."""
+    config = egg.get("config", {})
+    if version == "PLCN_v3":
+        commands = egg.get("startup_commands", {})
+        check(list(commands) == ["Default"], "startup_commands must have exactly one entry, Default")
+        return commands.get("Default", ""), config.get("files", {}), config.get("startup", {})
+    return egg.get("startup", ""), json.loads(config["files"]), json.loads(config["startup"])
+
+
 def main(path):
     with open(path, encoding="utf-8") as f:
         egg = json.load(f)
+    version = egg.get("meta", {}).get("version")
+    panel = PANELS.get(version)
+    if panel is None:
+        print(f"::error::egg: {path}: meta.version must be PTDL_v2 or PLCN_v3, not {version!r}")
+        return None
+    print(f"{panel['name']} egg {path} ({version})")
 
-    check(egg.get("meta", {}).get("version") == "PTDL_v2", "meta.version must be PTDL_v2")
-    for key in ("name", "author", "description", "startup", "docker_images", "config", "scripts", "variables"):
+    for key in panel["required"]:
         check(key in egg, f"missing {key}")
     check(isinstance(egg.get("docker_images"), dict) and egg["docker_images"], "docker_images is empty")
     for label, image in egg.get("docker_images", {}).items():
-        check(image.startswith("ghcr.io/pterodactyl/yolks:java_"), f"docker image {label}: {image}")
+        check(image.startswith(panel["images"]), f"docker image {label}: {image}")
+    if version == "PLCN_v3":
+        check(re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", egg.get("uuid", "")) is not None,
+              "uuid is not a UUID")
+        check(isinstance(egg.get("tags"), list), "tags must be a list")
+        check("startup" not in egg, "PLCN_v3 uses startup_commands, not startup")
 
     variables = {v["env_variable"]: v for v in egg["variables"]}
     check(len(variables) == len(egg["variables"]), "duplicate env_variable")
     for env, v in variables.items():
-        for key in ("name", "description", "default_value", "user_viewable", "user_editable", "rules", "field_type"):
+        keys = ["name", "description", "default_value", "user_viewable", "user_editable", "rules"]
+        if version == "PTDL_v2":
+            keys.append("field_type")
+        for key in keys:
             check(key in v, f"variable {env}: missing {key}")
         check(isinstance(v.get("default_value"), str), f"variable {env}: default_value must be a string")
         check(re.fullmatch(r"[A-Z][A-Z0-9_]*", env) is not None, f"variable {env}: invalid name")
         for p in rule_problems(v["default_value"], v["rules"]):
             problems.append(f"variable {env}: default {v['default_value']!r} fails {p}")
 
-    for ref in re.findall(r"\{\{([^}]+)\}\}", egg["startup"]):
-        check(ref in variables, f"startup uses unknown variable {ref}")
-    check("--non-interactive" in egg["startup"] and "--setup-file setup.yml" in egg["startup"],
-          "startup must pass --non-interactive --setup-file setup.yml")
-    check("--allow-root" not in egg["startup"], "startup must not pass --allow-root")
-
+    startup_command, files, startup = normalize(egg, version)
     config = egg["config"]
-    files = json.loads(config["files"])
-    startup = json.loads(config["startup"])
-    json.loads(config["logs"])
+    for ref in re.findall(r"\{\{([^}]+)\}\}", startup_command):
+        check(ref in variables, f"startup uses unknown variable {ref}")
+    check("--non-interactive" in startup_command and "--setup-file setup.yml" in startup_command,
+          "startup must pass --non-interactive --setup-file setup.yml")
+    check("--allow-root" not in startup_command, "startup must not pass --allow-root")
+
     check(isinstance(startup.get("done"), str) and startup["done"], "config.startup.done is empty")
     check(isinstance(config.get("stop"), str) and config["stop"], "config.stop is empty")
     check(set(files) == {"setup.yml"}, "config.files must only write setup.yml")
@@ -112,12 +157,13 @@ def main(path):
         check(key in SETUP_KEYS, f"setup.yml key {key} is not part of the setup file format")
         value = template
         for ref in re.findall(r"\{\{([^}]+)\}\}", template):
-            if ref.startswith("server.build.env."):
-                env = ref[len("server.build.env."):]
+            if ref.startswith(panel["env"]):
+                env = ref[len(panel["env"]):]
                 check(env in variables, f"setup.yml {key} uses unknown variable {env}")
                 value = value.replace("{{" + ref + "}}", variables.get(env, {}).get("default_value", ""))
             else:
-                check(ref in WINGS_VALUES, f"setup.yml {key} uses unknown Wings value {ref}")
+                check(ref in {panel["port"], "server.build.default.ip", "server.build.memory"},
+                      f"setup.yml {key} uses unknown Wings value {ref}")
                 value = value.replace("{{" + ref + "}}", "25565")
         rendered[key] = wings_value(value)
 
@@ -127,23 +173,47 @@ def main(path):
         check(isinstance(rendered.get(key), int), f"{key} must become an integer")
     check(isinstance(rendered.get("servers.legacy-proxy"), bool), "servers.legacy-proxy must become a boolean")
     db_rules = variables.get("DB_MODE", {}).get("rules", "")
-    check("docker" not in db_rules, "DB_MODE must not offer docker on Pterodactyl")
+    check("docker" not in db_rules, "DB_MODE must not offer docker")
 
     install = egg["scripts"]["installation"]
-    check(install.get("container", "").startswith("ghcr.io/pterodactyl/installers:"), "installer container")
+    check(install.get("container", "").startswith(panel["installer"]), "installer container")
     check("sha256sum" in install.get("script", ""), "installer must check the SHA-256")
 
     print("setup.yml with the default values (as Wings writes it):")
     for key in sorted(rendered):
         print(f"  {key}: {json.dumps(rendered[key])}")
 
-    if problems:
+    # What must be the same in every egg, with the panel specific names mapped to one form.
+    def common(text):
+        for other in PANELS.values():
+            text = text.replace(other["env"], "<env>.").replace(other["port"], "<port>")
+        return text
+
+    return {
+        "startup": startup_command,
+        "variables": json.dumps([{k: v for k, v in var.items() if k != "field_type"} for var in egg["variables"]],
+                                sort_keys=True),
+        "setup.yml": common(json.dumps(files, sort_keys=True)),
+        "done": json.dumps(startup, sort_keys=True),
+        "stop": config.get("stop"),
+        "installer script": re.sub(r"for (Pterodactyl|Pelican) \(runs in [^)]*\)", "for <panel>", install.get("script", "")),
+    }
+
+
+def run(paths):
+    summaries = [main(path) for path in paths]
+    if problems or any(summary is None for summary in summaries):
         for p in problems:
             print(f"::error::egg: {p}")
         return 1
-    print("Egg OK.")
+    for other in summaries[1:]:
+        for key, value in summaries[0].items():
+            if other[key] != value:
+                print(f"::error::egg: {paths[0]} and {paths[1]} differ in: {key}")
+                return 1
+    print("Egg OK." if len(paths) == 1 else f"Eggs OK, and the same ({len(paths)} files).")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1]))
+    sys.exit(run(sys.argv[1:]))

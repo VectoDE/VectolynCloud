@@ -37,6 +37,8 @@ jobs:
             repo.papermc.io:443
             repo.hpfxd.com:443
             api.foojay.io:443
+            registry.npmjs.org:443
+            nodejs.org:443
             *.sigstore.dev:443
 
       - name: Checkout
@@ -55,6 +57,14 @@ jobs:
         uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
           cache-disabled: true
+
+      # The web panel's frontend (cloud/panel/web) is built with npm and goes into the jar.
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          # No dependency cache: a poisoned cache must not reach a build (zizmor cache-poisoning).
+          package-manager-cache: false
 
       # The version rules, checked before anything is built or signed (docs/cloud/operations.md#versions-and-tags):
       # v<MAJOR>.<MINOR>.<PATCH> with -dev[.N] (the only choice below 1.0.0), -alpha[.N], -beta[.N],
@@ -91,7 +101,7 @@ jobs:
       - name: Build
         env:
           TAG: ${{ github.ref_name }}
-        run: bash ./gradlew build --no-daemon --no-build-cache -Pversion="${TAG#v}"
+        run: bash ./gradlew build --no-daemon --no-build-cache -Pversion="${TAG#v}" -Pvectolyn.panel.web=true
 
       # The release files: VectolynCloud.jar, one archive per operating system with the start
       # scripts, the server templates as an archive and the example setup file; the banner

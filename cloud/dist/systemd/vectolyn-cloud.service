@@ -1,6 +1,10 @@
 # systemd unit for VectolynCloud on Linux (VPS, dedicated server).
 #
-# Install (as root, once):
+# The easy way is install.sh next to this file (in this folder and in the release archive):
+#   sudo ./install.sh install        also: update, uninstall (--help lists the options)
+# It does what the manual steps below do, after checking the download against SHA256SUMS.
+#
+# Install by hand (as root, once):
 #   useradd --system --user-group --home-dir /opt/vectolyn --create-home --shell /usr/sbin/nologin vectolyn
 #   install -o vectolyn -g vectolyn -m 0644 VectolynCloud.jar /opt/vectolyn/VectolynCloud.jar
 #   install -o vectolyn -g vectolyn -m 0755 start.sh /opt/vectolyn/start.sh

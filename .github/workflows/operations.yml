@@ -89,7 +89,7 @@ jobs:
               echo "::error file=$f::needs CRLF line ends (.gitattributes)"; exit 1
             fi
           done
-          for f in cloud/dist/start.sh cloud/dist/package.sh .github/scripts/smoke-start-unix.sh .github/scripts/smoke-jar-runtime.sh .github/scripts/release-gate.sh .github/scripts/release-changelog.sh gradle/update-verification-metadata.sh \
+          for f in cloud/dist/start.sh cloud/dist/package.sh cloud/dist/systemd/install.sh .github/scripts/smoke-start-unix.sh .github/scripts/smoke-jar-runtime.sh .github/scripts/release-gate.sh .github/scripts/release-changelog.sh gradle/update-verification-metadata.sh \
             tools/release-banner/banner-from-tag.sh tools/release-banner/check-tag.sh; do
             if grep -q $'\r' "$f"; then
               echo "::error file=$f::needs LF line ends (.gitattributes)"; exit 1
@@ -101,16 +101,21 @@ jobs:
         run: |
           set -euo pipefail
           shellcheck --version
-          shellcheck cloud/dist/start.sh cloud/dist/package.sh .github/scripts/smoke-start-unix.sh .github/scripts/smoke-jar-runtime.sh \
+          shellcheck cloud/dist/start.sh cloud/dist/package.sh cloud/dist/systemd/install.sh .github/scripts/smoke-start-unix.sh .github/scripts/smoke-jar-runtime.sh \
             .github/scripts/release-gate.sh .github/scripts/release-changelog.sh \
             gradle/update-verification-metadata.sh tools/release-banner/banner-from-tag.sh tools/release-banner/check-tag.sh
           # The installer script inside the egg (runs with ash in ghcr.io/pterodactyl/installers:alpine).
-          jq -r '.scripts.installation.script' cloud/dist/pterodactyl/egg-vectolyn-cloud.json \
-            | shellcheck --shell=sh -
+          for egg in cloud/dist/pterodactyl/egg-vectolyn-cloud.json cloud/dist/pelican/egg-vectolyn-cloud.json; do
+            jq -r '.scripts.installation.script' "$egg" | shellcheck --shell=sh -
+          done
           echo "ShellCheck OK."
 
-      - name: Pterodactyl egg
-        run: python3 -I .github/scripts/check-egg.py cloud/dist/pterodactyl/egg-vectolyn-cloud.json
+      # Both eggs on their own (structure, variables against their rules, the setup file the
+      # daemon would write) and against each other: same startup, variables, setup file, installer.
+      - name: Pterodactyl and Pelican egg
+        run: |
+          python3 -I .github/scripts/check-egg.py \
+            cloud/dist/pterodactyl/egg-vectolyn-cloud.json cloud/dist/pelican/egg-vectolyn-cloud.json
 
       # The official image pinned by digest (it brings ShellCheck for the run: blocks), instead of
       # an unpinned "go install" or a downloaded binary.
@@ -351,6 +356,116 @@ jobs:
         shell: bash
         run: bash .github/scripts/smoke-jar-runtime.sh ops-dist/VectolynCloud.jar
 
+  # The eggs as a panel runs them, against the newest published release: the installer script in
+  # the panel's own installer image (entrypoint ash, files in /mnt/server), then the startup command
+  # in the panel's Java image with the setup file the daemon writes. No panel is needed for this;
+  # what only a panel shows is listed in docs/cloud/operations.md.
+  eggs:
+    name: Egg installation (${{ matrix.panel }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - panel: Pterodactyl
+            egg: cloud/dist/pterodactyl/egg-vectolyn-cloud.json
+            java-image: ghcr.io/pterodactyl/yolks:java_25
+          - panel: Pelican
+            egg: cloud/dist/pelican/egg-vectolyn-cloud.json
+            java-image: ghcr.io/pelican-eggs/yolks:java_25
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            ghcr.io:443
+            pkg-containers.githubusercontent.com:443
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Installer (latest release)
+        env:
+          EGG: ${{ matrix.egg }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/install" "$RUNNER_TEMP/server"
+          jq -r '.scripts.installation.script' "$EGG" > "$RUNNER_TEMP/install/install.sh"
+          image=$(jq -r '.scripts.installation.container' "$EGG")
+          entry=$(jq -r '.scripts.installation.entrypoint' "$EGG")
+          docker run --rm \
+            --volume "$RUNNER_TEMP/server:/mnt/server" \
+            --volume "$RUNNER_TEMP/install:/mnt/install:ro" \
+            "$image" "$entry" /mnt/install/install.sh
+          ls -l "$RUNNER_TEMP/server"
+          test -f "$RUNNER_TEMP/server/VectolynCloud.jar"
+          test -f "$RUNNER_TEMP/server/SHA256SUMS"
+          test -f "$RUNNER_TEMP/server/setup.yml"
+          cat "$RUNNER_TEMP/server/.vectolyn-version"
+          (cd "$RUNNER_TEMP/server" && grep -E '^[0-9a-f]{64}  VectolynCloud\.jar$' SHA256SUMS | sha256sum --check --strict -)
+
+      # A version that does not exist must stop the installer and leave no jar behind.
+      - name: Installer (unknown version stops)
+        env:
+          EGG: ${{ matrix.egg }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/empty"
+          image=$(jq -r '.scripts.installation.container' "$EGG")
+          if docker run --rm -e VECTOLYN_VERSION=0.0.1-nonexistent \
+              --volume "$RUNNER_TEMP/empty:/mnt/server" \
+              --volume "$RUNNER_TEMP/install:/mnt/install:ro" \
+              "$image" ash /mnt/install/install.sh; then
+            echo "::error::the installer accepted a version that does not exist"; exit 1
+          fi
+          test ! -e "$RUNNER_TEMP/empty/VectolynCloud.jar"
+          echo "Unknown version stopped, no jar left."
+
+      # The startup command of the egg with its default variables, in the panel's Java image as
+      # the unprivileged panel user (the root check passes), with the setup file the daemon writes
+      # (eula true here, the database embedded: the test needs no MariaDB download).
+      - name: Startup in the panel image
+        env:
+          EGG: ${{ matrix.egg }}
+          JAVA_IMAGE: ${{ matrix.java-image }}
+        run: |
+          set -euo pipefail
+          server="$RUNNER_TEMP/server"
+          # The installer ran as root in its container; the panel user must be able to write.
+          sudo chmod -R a+rwX "$server"
+          printf 'schema-version: 1\neula: true\nlanguage: en\nnetwork-name: Vectolyn\nnetwork:\n  bind: 0.0.0.0\n  java-port: 25565\n  bedrock-port: 19132\ndatabase:\n  mode: h2\n' > "$server/setup.yml"
+          startup=$(jq -r '.startup // .startup_commands.Default' "$EGG")
+          while read -r name value; do
+            startup=${startup//"{{${name}}}"/${value}}
+          done < <(jq -r '.variables[] | "\(.env_variable) \(.default_value)"' "$EGG")
+          case "$startup" in *"{{"*) echo "::error::unresolved variable in: $startup"; exit 1 ;; esac
+          echo "Startup: $startup"
+          done_text=$(jq -r '.config.startup | if type == "string" then fromjson else . end | .done' "$EGG")
+          docker run -d --name egg-ci --volume "$server:/home/container" --workdir /home/container \
+            "$JAVA_IMAGE" bash -c "$startup"
+          up=false
+          for _ in $(seq 1 60); do
+            if docker logs egg-ci 2>&1 | grep -qF "$done_text"; then
+              up=true; break
+            fi
+            [ "$(docker inspect -f '{{.State.Running}}' egg-ci)" = true ] || break
+            sleep 2
+          done
+          docker logs egg-ci
+          test "$up" = true
+          docker stop -t 120 egg-ci
+          code=$(docker inspect -f '{{.State.ExitCode}}' egg-ci)
+          echo "Exit code after stop: $code"
+          # 130: the Pelican image stops with SIGINT (the egg's stop command is ^C), a clean shutdown.
+          case "$code" in 0|130|143) ;; *) echo "::error::unexpected exit code $code"; exit 1 ;; esac
+
   # The release process around the files: the milestone gate for every channel and the changelog of
   # a release, both on fixtures (a throwaway repository), so the checks do not depend on the state
   # of this repository's milestones. release.yml runs the same scripts on a real tag.
@@ -525,9 +640,10 @@ jobs:
         run: .github/scripts/smoke-start-windows.ps1 -Dist ops-dist -Java25 $env:JAVA25 -Java17 $env:JAVA17
 
   systemd:
-    name: systemd unit
+    name: systemd unit and installer
     needs: jar
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
@@ -539,6 +655,22 @@ jobs:
             api.adoptium.net:443
             objects.githubusercontent.com:443
             release-assets.githubusercontent.com:443
+            azure.archive.ubuntu.com:80
+            azure.archive.ubuntu.com:443
+            archive.ubuntu.com:80
+            security.ubuntu.com:80
+            esm.ubuntu.com:443
+            motd.ubuntu.com:443
+            packages.microsoft.com:443
+            ppa.launchpadcontent.net:443
+            downloads.mariadb.org:443
+            archive.mariadb.org:443
+            fill.papermc.io:443
+            fill-data.papermc.io:443
+            repo.papermc.io:443
+            libraries.luckperms.net:443
+            repo1.maven.org:443
+            repo.maven.apache.org:443
 
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -558,23 +690,36 @@ jobs:
           distribution: temurin
           java-version: '25'
 
-      # Exactly the steps from the unit's header and docs/cloud/operations.md, plus a drop-in
-      # that points JAVA_HOME at the runner's JDK.
-      - name: Install
+      # The MariaDB Linux archive links against libaio and libncurses (see docs/cloud/database.md).
+      - name: MariaDB runtime libraries
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libaio1t64 libncurses6
+          if [ ! -e /usr/lib/x86_64-linux-gnu/libaio.so.1 ]; then
+            sudo ln -s /usr/lib/x86_64-linux-gnu/libaio.so.1t64 /usr/lib/x86_64-linux-gnu/libaio.so.1
+          fi
+
+      # The installer from the release archive, as an operator runs it (with the archive from the
+      # package step instead of the download, which only a published release can offer).
+      - name: Install (install.sh)
         env:
           JAVA_DIR: ${{ steps.java.outputs.path }}
         run: |
           set -euo pipefail
-          sudo useradd --system --user-group --home-dir /opt/vectolyn --create-home --shell /usr/sbin/nologin vectolyn
-          sudo install -o vectolyn -g vectolyn -m 0644 ops-dist/VectolynCloud.jar /opt/vectolyn/VectolynCloud.jar
-          sudo install -o vectolyn -g vectolyn -m 0755 cloud/dist/start.sh /opt/vectolyn/start.sh
-          sudo install -o root -g root -m 0644 cloud/dist/systemd/vectolyn-cloud.service /etc/systemd/system/vectolyn-cloud.service
-          sudo mkdir -p /etc/systemd/system/vectolyn-cloud.service.d
-          printf '[Service]\nEnvironment=JAVA_HOME=%s\n' "$JAVA_DIR" \
-            | sudo tee /etc/systemd/system/vectolyn-cloud.service.d/java.conf
-          sudo systemctl daemon-reload
+          mkdir -p "$RUNNER_TEMP/unpacked"
+          tar -xzf ops-dist/VectolynCloud-0.0.0-ci-linux-macos.tar.gz -C "$RUNNER_TEMP/unpacked"
+          ls -l "$RUNNER_TEMP"/unpacked/*/
+          sudo "$RUNNER_TEMP"/unpacked/VectolynCloud-0.0.0-ci-linux-macos/install.sh install \
+            --archive ops-dist/VectolynCloud-0.0.0-ci-linux-macos.tar.gz --java-home "$JAVA_DIR" --no-start
           systemd-analyze --version | head -n 1
           sudo systemd-analyze verify /etc/systemd/system/vectolyn-cloud.service
+          ls -l /opt/vectolyn
+          if systemctl is-enabled --quiet vectolyn-cloud; then echo "::error::--no-start must not enable"; exit 1; fi
+          # a second install must refuse
+          if sudo /opt/vectolyn/install.sh install --archive ops-dist/VectolynCloud-0.0.0-ci-linux-macos.tar.gz --no-start; then
+            echo "::error::install over an installation must fail"; exit 1
+          fi
 
       # Without a setup the node starts, opens its channel and starts no server: enough to prove
       # that the hardening (read-only system, private /tmp, syscall filter) lets the JVM run.
@@ -601,6 +746,86 @@ jobs:
           status=$(systemctl show -p ExecMainStatus --value vectolyn-cloud)
           echo "Result=$result ExecMainStatus=$status"
           sudo journalctl -u vectolyn-cloud --no-pager | tail -n 20
+          test "$result" = success
+
+      # update keeps the home, replaces the jar, keeps the previous one and starts the service again
+      # when it ran before; a service that was stopped stays stopped.
+      - name: Update (install.sh)
+        run: |
+          set -euo pipefail
+          before=$(sudo sha256sum /opt/vectolyn/config/cloud.yml | cut -d' ' -f1)
+          sudo systemctl start vectolyn-cloud
+          sudo /opt/vectolyn/install.sh update --archive ops-dist/VectolynCloud-0.0.0-ci-linux-macos.tar.gz
+          sudo test -f /opt/vectolyn/VectolynCloud.jar.previous
+          systemctl is-active vectolyn-cloud
+          test "$(sudo sha256sum /opt/vectolyn/config/cloud.yml | cut -d' ' -f1)" = "$before"
+          test "$(sudo sha256sum /opt/vectolyn/VectolynCloud.jar | cut -d' ' -f1)" = "$(sha256sum ops-dist/VectolynCloud.jar | cut -d' ' -f1)"
+          grep -q 'JAVA_HOME' /etc/systemd/system/vectolyn-cloud.service.d/java.conf
+          sudo systemctl stop vectolyn-cloud
+          sudo /opt/vectolyn/install.sh update --archive ops-dist/VectolynCloud-0.0.0-ci-linux-macos.tar.gz
+          if systemctl is-active --quiet vectolyn-cloud; then echo "::error::a stopped service must stay stopped"; exit 1; fi
+
+      # uninstall keeps the data; --purge removes the home and the user.
+      - name: Uninstall (install.sh)
+        run: |
+          set -euo pipefail
+          sudo /opt/vectolyn/install.sh uninstall
+          test ! -e /etc/systemd/system/vectolyn-cloud.service
+          test ! -e /etc/systemd/system/vectolyn-cloud.service.d
+          sudo test ! -e /opt/vectolyn/VectolynCloud.jar
+          sudo test -f /opt/vectolyn/config/cloud.yml
+          id -u vectolyn
+          sudo "$RUNNER_TEMP"/unpacked/VectolynCloud-0.0.0-ci-linux-macos/install.sh uninstall --purge
+          sudo test ! -e /opt/vectolyn
+          if id -u vectolyn 2>/dev/null; then echo "::error::--purge must remove the user"; exit 1; fi
+          echo "Uninstall and purge OK."
+
+      # The managed MariaDB under the unit's real hardening (ProtectSystem=strict, NoNewPrivileges,
+      # SystemCallFilter, private /tmp): a fresh installation with a setup file that starts the
+      # proxy only, so the node downloads and initialises MariaDB before the first server. The
+      # log line "Database ready" proves MariaDB came up; after "systemctl stop" no mariadbd may
+      # be left behind and the unit must end with success. (docs/cloud/operations.md)
+      - name: Managed MariaDB under the hardening
+        env:
+          JAVA_DIR: ${{ steps.java.outputs.path }}
+        run: |
+          set -euo pipefail
+          sudo "$RUNNER_TEMP"/unpacked/VectolynCloud-0.0.0-ci-linux-macos/install.sh install \
+            --archive ops-dist/VectolynCloud-0.0.0-ci-linux-macos.tar.gz --java-home "$JAVA_DIR" --no-start
+          printf '%s\n' 'schema-version: 1' 'eula: true' 'language: en' 'network-name: Vectolyn' \
+            'servers:' '  proxy: true' '  lobby: false' '  survival: false' '  creative: false' '  end: false' '  minigame: false' \
+            'database:' '  mode: managed' | sudo -u vectolyn tee /opt/vectolyn/setup.yml > /dev/null
+          sudo mkdir -p /etc/systemd/system/vectolyn-cloud.service.d
+          printf '[Service]\nExecStart=\nExecStart=/opt/vectolyn/start.sh --non-interactive --setup-file /opt/vectolyn/setup.yml\n' \
+            | sudo tee /etc/systemd/system/vectolyn-cloud.service.d/setup.conf
+          sudo systemctl daemon-reload
+          sudo systemctl start vectolyn-cloud
+          ready=false
+          for _ in $(seq 1 450); do
+            if sudo journalctl -u vectolyn-cloud --no-pager | grep -q 'Database ready'; then
+              ready=true
+              break
+            fi
+            systemctl is-active --quiet vectolyn-cloud || break
+            sleep 2
+          done
+          sudo journalctl -u vectolyn-cloud --no-pager | tail -n 60
+          if [ "$ready" != true ]; then
+            sudo ls -ln /opt/vectolyn/database || true
+            sudo cat /opt/vectolyn/database/vectolyn-mariadb.ini || true
+            sudo head -n 25 /opt/vectolyn/database/mariadb.log || true
+            sudo ps -u vectolyn -o pid,args || true
+          fi
+          test "$ready" = true
+          mariadb_pid=$(pgrep -u vectolyn -f mariadbd | head -n 1)
+          echo "mariadbd pid $mariadb_pid, cgroup:"
+          cat "/proc/$mariadb_pid/cgroup"
+          grep -q 'vectolyn-cloud.service' "/proc/$mariadb_pid/cgroup"
+          sudo systemctl stop vectolyn-cloud
+          result=$(systemctl show -p Result --value vectolyn-cloud)
+          echo "Result=$result"
+          sudo journalctl -u vectolyn-cloud --no-pager | tail -n 30
+          if pgrep -u vectolyn -f mariadbd; then echo "::error::mariadbd outlived the unit"; exit 1; fi
           test "$result" = success
 
       - name: Exposure score

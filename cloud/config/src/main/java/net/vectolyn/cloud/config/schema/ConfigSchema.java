@@ -29,6 +29,7 @@ import net.vectolyn.cloud.config.io.ConfigFormat;
 import net.vectolyn.cloud.config.io.RegularPaths;
 import net.vectolyn.cloud.config.model.JavaSelection;
 import net.vectolyn.cloud.config.model.MemorySize;
+import net.vectolyn.cloud.config.model.TimeOfDay;
 import net.vectolyn.cloud.config.model.TimeSpan;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ArrayNode;
@@ -262,6 +263,10 @@ public final class ConfigSchema {
                 node.put("type", "string");
                 node.put("pattern", "^(0|[1-9][0-9]{0,5})[smh]$");
                 node.put("description", TimeSpan.FORMAT);
+            } else if (raw == TimeOfDay.class) {
+                node.put("type", "string");
+                node.put("pattern", "^" + TimeOfDay.PATTERN + "$");
+                node.put("description", TimeOfDay.FORMAT);
             } else if (raw == JavaSelection.class) {
                 ArrayNode any = node.putArray("anyOf");
                 any.addObject().put("const", "auto");

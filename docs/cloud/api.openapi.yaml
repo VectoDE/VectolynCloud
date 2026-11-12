@@ -640,7 +640,12 @@ paths:
         428 precondition-required); with the ETag of a GET, or `*`, an existing file is replaced
         (412 precondition-failed if it changed). At most 48 KiB (413 file-too-large). Folders on the
         way are created. Written atomically. On a cluster member 409 managed-by-head: the templates
-        come from the head.
+        come from the head. Only UTF-8 text configuration is written: 422 file-not-editable unless
+        the name ends in .yml, .yaml, .toml, .json, .properties, .txt or .conf (case ignored) and no
+        folder on the way is plugins, mods, libraries, versions, bundler or cache (case ignored);
+        422 binary-content for Base64 or text with NUL; 422 secret-placeholder if the content
+        holds a secret placeholder ({{VECTOLYN_FORWARDING_SECRET}}, any name with SECRET, PASSWORD,
+        PASS, KEY or TOKEN) more often than the file does now.
       operationId: putTemplateFile
       parameters: [{$ref: "#/components/parameters/IfMatch"}]
       requestBody:
@@ -653,7 +658,7 @@ paths:
               additionalProperties: false
               properties:
                 content: {type: string, maxLength: 65536}
-                encoding: {type: string, enum: [utf-8, base64], default: utf-8}
+                encoding: {type: string, enum: [utf-8], default: utf-8, description: "base64 is refused (422 binary-content)"}
       responses:
         "200":
           description: Replaced
@@ -853,7 +858,7 @@ paths:
       tags: [events]
       summary: Live events (WebSocket)
       description: |
-        Every event type needs its scope: service-state, service-output and player services:read,
+        Every event type needs its scope: service-state, service-output, player and scaling services:read,
         metrics node:read, node-log admin. `types` asking for a type without its scope answers 403
         missing-scope; without `types` the stream gets every type the token may see (403 if none).
         Upgrade to a WebSocket; a plain GET answers 426. Browsers pass the
@@ -867,7 +872,7 @@ paths:
           in: query
           schema:
             type: string
-            example: service-state,service-output,player,metrics,node-log
+            example: service-state,service-output,player,scaling,metrics,node-log
         - name: services
           in: query
           schema:
@@ -1019,7 +1024,7 @@ components:
         invalid-query, confirmation-required, subprotocol-required; 401 unauthorized; 403 missing-scope,
         origin-not-allowed; 404 not-found; 405 method-not-allowed; 409 conflict;
         412 precondition-failed; 413 body-too-large; 415 unsupported-media-type; 422 invalid-config,
-        invalid; 426 upgrade-required; 429 rate-limited (Retry-After); 500 io-error,
+        invalid, file-not-editable, binary-content, secret-placeholder; 426 upgrade-required; 429 rate-limited (Retry-After); 500 io-error,
         internal-error; 501 not-available; 503 shutting-down, busy, unavailable.
       content:
         application/json:
@@ -1147,6 +1152,32 @@ components:
           description: "Percent, below scale-up-at. A dynamic service is removed once the rest of the group would stay below it."
         scale-down-after: {type: string, example: "5m"}
         cooldown: {type: string, example: "60s"}
+        scale-up-on:
+          type: object
+          additionalProperties: false
+          description: "Optional. One more dynamic service when an average over the task's running services crosses a limit."
+          properties:
+            cpu-above: {type: integer, minimum: 1, maximum: 100, description: "CPU in percent of the machine."}
+            tps-below: {type: integer, minimum: 1, maximum: 20}
+            ram-above: {type: integer, minimum: 1, maximum: 100, description: "Used heap in percent of heap.max."}
+        schedules:
+          type: array
+          maxItems: 32
+          description: "Optional. Time windows (zone of the node) with a higher minimum, at most max-services."
+          items:
+            type: object
+            additionalProperties: false
+            required: [days, from, to, min-services]
+            properties:
+              days:
+                type: array
+                minItems: 1
+                uniqueItems: true
+                items: {type: string, enum: [mon, tue, wed, thu, fri, sat, sun]}
+              from: {type: string, pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$", example: "18:00"}
+              to: {type: string, pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$", example: "23:30",
+                   description: "Before from: ends on the next day; equal to from: a whole day."}
+              min-services: {type: integer, minimum: 0, maximum: 1000}
     Node:
       type: object
       description: "One entry of config/nodes.yml, see docs/cloud/config.md. Unknown fields are refused."
@@ -1287,7 +1318,7 @@ components:
       properties:
         type:
           type: string
-          enum: [service-state, service-output, player, metrics, node-log, dropped]
+          enum: [service-state, service-output, player, scaling, metrics, node-log, dropped]
         time: {type: string, format: date-time}
         data:
           oneOf:
@@ -1308,6 +1339,18 @@ components:
                 player-id: {type: string}
                 player-name: {type: string}
                 service: {type: string}
+            - title: scaling
+              type: object
+              description: A decision of the autoscaler, see docs/cloud/scaling.md.
+              properties:
+                task: {type: string}
+                group: {type: string}
+                action: {type: string, enum: [start, drain, stop, keep, hold]}
+                reason:
+                  type: string
+                  enum: [min-services, schedule, load, cpu, tps, ram, low-load, above-max, memory-unknown,
+                         memory-budget, memory-free, paused, no-target, timeout, interrupted]
+                service: {type: string, description: Missing for hold.}
             - title: metrics
               type: object
               description: Every 10 s while a stream wants it.

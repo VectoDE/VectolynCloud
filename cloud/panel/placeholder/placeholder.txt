@@ -1,0 +1,1 @@
+This jar was built without the panel frontend (build with -Pvectolyn.panel.web=true).

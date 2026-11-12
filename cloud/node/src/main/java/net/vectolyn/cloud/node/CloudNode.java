@@ -48,6 +48,7 @@ import net.vectolyn.cloud.privacy.TrackingStore;
 import net.vectolyn.cloud.node.ops.NodeApi;
 import net.vectolyn.cloud.node.ops.NodeBackups;
 import net.vectolyn.cloud.node.ops.NodeMonitoring;
+import net.vectolyn.cloud.node.ops.NodePanel;
 import net.vectolyn.cloud.node.ops.NodePrivacy;
 import net.vectolyn.cloud.node.ops.TrackingAccess;
 import net.vectolyn.cloud.config.ConfigChanged;
@@ -88,6 +89,7 @@ import net.vectolyn.cloud.node.database.NodeDatabase;
 import net.vectolyn.cloud.node.database.NodeDatabaseProcesses;
 import net.vectolyn.cloud.node.jre.ManagedJavaRuntimes;
 import net.vectolyn.cloud.node.scaling.Autoscaler;
+import net.vectolyn.cloud.node.scaling.ScalingEvent;
 import net.vectolyn.cloud.node.scaling.ScalingSignals;
 import net.vectolyn.cloud.node.scaling.ScalingTarget;
 import net.vectolyn.cloud.node.service.ServiceException;
@@ -98,6 +100,7 @@ import net.vectolyn.cloud.node.software.ArtifactSource;
 import net.vectolyn.cloud.node.software.BridgePlugins;
 import net.vectolyn.cloud.node.software.LockedDownloads;
 import net.vectolyn.cloud.node.software.SoftwareInstaller;
+import net.vectolyn.cloud.panel.PanelServer;
 import net.vectolyn.cloud.setup.MinecraftVersions;
 import net.vectolyn.cloud.setup.NetworkServer;
 import net.vectolyn.cloud.setup.SetupEnvironment;
@@ -168,6 +171,8 @@ public final class CloudNode implements AutoCloseable {
     private final Object closeLock = new Object();
     private final List<Handler> removedHandlers = new ArrayList<>();
     private ConsoleLogHandler logHandler;
+    /** The web panel, when panel.yml switches it on and the API runs (docs/cloud/panel.md). */
+    private volatile PanelServer panelServer;
     private ServiceCommands serviceCommands;
     private ConfigListener reconcile;
     private boolean closing;
@@ -476,15 +481,26 @@ public final class CloudNode implements AutoCloseable {
 
         // Player counts of the bridges and proxies, memory of the node from the monitor
         // (docs/cloud/scaling.md); the configuration is the same one the console and the API change.
-        Autoscaler scaler = Autoscaler.create(ScalingTarget.of(services, channel), config::snapshot,
-                ScalingSignals.of(monitoring.monitor(), channel.players(), channel::proxyWatches, Clock.systemUTC()));
+        ScalingSignals signals = ScalingSignals.of(monitoring.monitor(), channel.players(), channel::proxyWatches,
+                Clock.systemUTC());
+        Autoscaler scaler = Autoscaler.create(ScalingTarget.of(services, channel), config::snapshot, signals);
         services.addListener(scaler);
+        // Decisions as data: scaling events for the API, scale-ups and scale-downs for Prometheus.
+        scaler.addListener(api);
+        scaler.addListener(event -> {
+            if (event.action() == ScalingEvent.Action.START || event.action() == ScalingEvent.Action.STOP) {
+                monitoring.monitor().scaled(event.task(), event.group(), event.action() == ScalingEvent.Action.START);
+            }
+        });
         ApiCommands.TokenFile tokenFile = tokens.isPresent() ? tokens::get : () -> ApiTokens.open(home);
         // One version per cluster: the update system (#74) hooks in at ClusterService.Events. On a
         // member the service switches the config to the mirror mode: nodes.yml, groups and tasks
         // come from the head, and console, setup and API cannot change them here.
         ClusterService cluster = ClusterService.openOrStandalone(new ClusterPaths(home), new NodeId(nodeId),
                 settings.launcherVersion(), config, VersionPolicy.sameVersion(), Clock.systemUTC());
+        // What the head places services by: memory budget and services of this node (cluster.md#placement).
+        cluster.statusSource(() -> ClusterStatusReport.of(config.snapshot(), nodeId, services.services(),
+                signals.read().memory()));
         return new Ops(tokenFile, monitoring, privacy, backups, api, apiServer(home, config, secrets, api, tokens), scaler, cluster);
     }
 
@@ -699,6 +715,7 @@ public final class CloudNode implements AutoCloseable {
             } catch (IOException e) {
                 LOG.log(System.Logger.Level.ERROR, "The API cannot start ({0}); the node runs without it.", e.getMessage());
             }
+            panelServer = NodePanel.start(settings.home(), ops.apiServer(), settings.launcherVersion(), secrets).orElse(null);
         }
         // The questions read the terminal on this thread, so the console's own read loop starts
         // only afterwards.
@@ -1153,6 +1170,11 @@ public final class CloudNode implements AutoCloseable {
         step(errors, "closing the configuration", config::close);
         step(errors, "closing the console", this::closeConsole);
         // Last: event streams get 1001, then the sockets close.
+        step(errors, "closing the panel", () -> {
+            if (panelServer != null) {
+                panelServer.close();
+            }
+        });
         step(errors, "closing the API", () -> {
             if (ops.apiServer() != null) {
                 Logger.getLogger("").removeHandler(ops.apiServer().logHandler());

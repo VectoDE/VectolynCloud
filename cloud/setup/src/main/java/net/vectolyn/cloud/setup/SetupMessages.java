@@ -188,6 +188,8 @@ public final class SetupMessages {
             "MariaDB in Docker (den Container startest du)");
     /** External option. */
     public static final Text MODE_EXTERNAL = Text.of("Your own MariaDB or MySQL server", "Eigener MariaDB- oder MySQL-Server");
+    /** Mode postgresql. */
+    public static final Text MODE_POSTGRESQL = Text.of("Your own PostgreSQL server", "Eigener PostgreSQL-Server");
     /** H2 option. */
     public static final Text MODE_H2 = Text.of("H2 files per server (tests, nothing is shared)",
             "H2-Dateien pro Server (für Tests, nichts wird geteilt)");
@@ -276,6 +278,9 @@ public final class SetupMessages {
     public static final Text S_DB_DOCKER = Text.of("MariaDB in Docker (%1$s) on %2$s", "MariaDB in Docker (%1$s) auf %2$s");
     /** External; %1$s host:port, %2$s database, %3$s user. */
     public static final Text S_DB_EXTERNAL = Text.of("%1$s, database %2$s, user %3$s", "%1$s, Datenbank %2$s, Benutzer %3$s");
+    /** Summary for postgresql; %1$s host:port, %2$s database, %3$s user. */
+    public static final Text S_DB_POSTGRESQL = Text.of("PostgreSQL %1$s, database %2$s, user %3$s",
+            "PostgreSQL %1$s, Datenbank %2$s, Benutzer %3$s");
     /** H2. */
     public static final Text S_DB_H2 = Text.of("H2 files per server", "H2-Dateien pro Server");
     /** Label. */
@@ -463,8 +468,8 @@ public final class SetupMessages {
             "minigames: %1$s is no existing group.", "minigames: %1$s ist keine vorhandene Gruppe.");
     /** Docker on Pterodactyl. */
     public static final Text CHECK_DOCKER_ON_PTERODACTYL = Text.of(
-            "Docker is unavailable on Pterodactyl. Pick managed, external or h2.",
-            "Docker gibt es auf Pterodactyl nicht. Wähle managed, external oder h2.");
+            "Docker is unavailable on Pterodactyl. Pick managed, external, postgresql or h2.",
+            "Docker gibt es auf Pterodactyl nicht. Wähle managed, external, postgresql oder h2.");
     /** Password missing. */
     public static final Text CHECK_PASSWORD_MISSING = Text.of(
             "An external database needs the password of its user: VECTOLYN_DB_PASSWORD in secrets/vectolyn.env,"

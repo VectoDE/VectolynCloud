@@ -62,7 +62,7 @@ curl -X POST -H "Authorization: Bearer vcs_..." https://cloud.example.org:8443/a
 
 | Scope | Erlaubt |
 |---|---|
-| `services:read` | Dienste auflisten und lesen; Dienst- und Spieler-Events |
+| `services:read` | Dienste auflisten und lesen; Dienst-, Spieler- und Skalierungs-Events |
 | `services:write` | starten, stoppen, neu starten, Konsolenbefehl senden |
 | `config:read` | `cloud.yml`, Gruppen, Tasks, Server-Schalter, Warnungen und Setup-Status lesen |
 | `config:write` | Gruppen und Tasks schreiben und löschen, `wanted` setzen, `cloud.yml` außer `api` und `database` schreiben, neu laden |
@@ -70,7 +70,7 @@ curl -X POST -H "Authorization: Bearer vcs_..." https://cloud.example.org:8443/a
 | `backups:write` | Backup erstellen |
 | `node:read` | Node-Status; Metrik-Events |
 | `templates:read` | Templates und ihre Dateien auflisten, eine Datei lesen (nie Secrets) |
-| `templates:write` | Template-Dateien anlegen und ersetzen |
+| `templates:write` | Text-Konfigurationsdateien von Templates anlegen und ersetzen (kein Code, keine neuen Secret-Platzhalter) |
 | `admin` | alles oben und die Token-Verwaltung unter `/admin/tokens` |
 
 Ein Schreib-Scope schließt den Lese-Scope nicht ein. Fehlt der Scope, kommt `403 missing-scope`. Für Änderungen an `api` oder `database` in `cloud.yml` braucht es `admin`. Diese Abschnitte bestimmen, wer den Node erreicht und welches Image `docker compose` mit dem Root-Passwort der Datenbank startet.
@@ -115,6 +115,10 @@ Jeder Schreibzugriff läuft über `ConfigService.apply`. Geprüft wird die ganze
 
 - **Lesen** liefert UTF-8-Text unverändert und alles andere (auch Text mit NUL-Byte) als Base64, bis 1 MiB (darüber `413 file-too-large`). Das `ETag` gehört zu den Bytes der Datei.
 - **Schreiben** prüft das `ETag`: Ohne `If-Match` entsteht nur eine neue Datei, eine vorhandene bekommt `428 precondition-required`. Mit dem `ETag` aus dem `GET` (oder `*`) wird die Datei ersetzt; hat sie sich inzwischen geändert, kommt `412 precondition-failed`. Prüfen und Schreiben laufen unter einer Sperre, von zwei Editoren mit demselben `ETag` kommt also genau einer durch. Eine Datei darf höchstens 48 KiB groß sein (die API liest Strings bis 64 KiB, das sind 48 KiB in Base64). Fehlende Ordner werden angelegt, die Datei wird atomar ersetzt.
+- **Was geschrieben werden darf.** `templates:write` deckt nur Text-Konfiguration ab. Ein Token kann also keinen Code ablegen, den ein Server lädt, und kein Secret in eine Datei holen. Die Regeln stecken in `TemplatePaths.isEditablePath` und `TemplateFiles.write` in `cloud/config` und gelten damit für jeden Aufrufer. Jede Ablehnung antwortet mit `422`, geschrieben wird nichts:
+  - `422 file-not-editable`: Der Dateiname muss auf `.yml`, `.yaml`, `.toml`, `.json`, `.properties`, `.txt` oder `.conf` enden (Groß- und Kleinschreibung egal), und kein Ordner auf dem Weg darf `plugins`, `mods`, `libraries`, `versions`, `bundler` oder `cache` heißen (auch `Plugins/`, auch kein Windows-Kurzname wie `LIBRAR~1`). Jars, Klassen, Archive, Skripte (`.sh`, `.bat`, `.cmd`, `.ps1`), native Bibliotheken, `.ini` und `.sql` fallen damit heraus. Plugin-Konfigurationen unter `plugins/` lassen sich weiter lesen, geändert werden sie auf der Platte, nicht über die API.
+  - `422 binary-content`: Der Inhalt muss UTF-8-Text ohne NUL sein. `"encoding": "base64"` wird grundsätzlich abgelehnt; beim Lesen kommen Binärdateien weiter als Base64.
+  - `422 secret-placeholder`: Ein Secret-Platzhalter darf im neuen Inhalt nicht öfter vorkommen als in der Datei, wie sie jetzt ist. Secret-Platzhalter sind `{{VECTOLYN_...}}` mit einem Schlüssel aus `secrets/vectolyn.env`, den der Renderer einsetzt (`VECTOLYN_FORWARDING_SECRET`, `VECTOLYN_LEGACY_FORWARDING_SECRET`, `VECTOLYN_MANAGEMENT_SECRET`, `VECTOLYN_DB_PASSWORD`, `VECTOLYN_DB_ROOT_PASSWORD`, `VECTOLYN_FLOODGATE_KEY_B64`), oder mit einem Namen, der `SECRET`, `PASSWORD`, `PASS`, `KEY` oder `TOKEN` enthält; maskierte (`{{{{VECTOLYN_...}}`) zählen mit. Eine neue Datei enthält also keinen, und eine Änderung darf die Platzhalter einer mitgelieferten Datei behalten oder entfernen, aber keinen hinzufügen. Verschiebt jemand einen vorhandenen Platzhalter innerhalb derselben Datei, fällt das nicht auf; solche Dateien vor der Vergabe von `templates:write` prüfen.
 - **Cluster.** Auf einem Mitglied kommen die Templates vom Head (siehe [cluster.md](cluster.md)), dort antwortet `PUT` mit `409 managed-by-head`. Lesen geht.
 - Dienste übernehmen ein geändertes Template, wenn sie das nächste Mal daraus vorbereitet werden ([template.md](template.md)); ein laufender Dienst bleibt unberührt.
 
@@ -152,10 +156,11 @@ Ein WebSocket mit Textframes. Filter sind optional: `?types=service-state,metric
 | `service-state` | `services:read` | ein Dienst hat seinen Zustand gewechselt |
 | `service-output` | `services:read` | eine Zeile, die ein Dienst ausgegeben hat (sein Log) |
 | `player` | `services:read` | ein Spieler kam, wechselte oder ging |
+| `scaling` | `services:read` | eine Entscheidung des Autoscalers ([scaling.de.md](scaling.de.md#entscheidungen-als-daten)) |
 | `metrics` | `node:read` | der Node-Status (wie `GET /node`) alle 10 s |
 | `node-log` | `admin` | eine Zeile aus dem Log des Nodes, ab INFO |
 
-Der Scope wird beim Handshake je Typ geprüft. Fragt `types` einen Typ an, den das Token nicht sehen darf, kommt `403 missing-scope`. Ohne `types` bekommt der Stream alle Typen, die das Token sehen darf; darf es keinen, kommt `403`. Unbekannte Typen sollte ein Client überspringen, innerhalb von `vectolyn.v1` können neue hinzukommen. Der Filter `services` gilt für Dienst- und Spieler-Events; `metrics` und `node-log` gehören zum Node und kommen immer durch.
+Der Scope wird beim Handshake je Typ geprüft. Fragt `types` einen Typ an, den das Token nicht sehen darf, kommt `403 missing-scope`. Ohne `types` bekommt der Stream alle Typen, die das Token sehen darf; darf es keinen, kommt `403`. Unbekannte Typen sollte ein Client überspringen, innerhalb von `vectolyn.v1` können neue hinzukommen. Der Filter `services` gilt für Dienst-, Spieler- und Skalierungs-Events (ein `hold` nennt keinen Dienst und kommt nur bei einem Stream ohne Filter an); `metrics` und `node-log` gehören zum Node und kommen immer durch.
 
 ```json
 {"type": "service-output", "time": "2026-10-29T10:00:00Z", "data": {"service": "lobby-1", "line": "Done (3.2s)!"}}

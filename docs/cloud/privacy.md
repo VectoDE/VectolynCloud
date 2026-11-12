@@ -119,3 +119,5 @@ The text is in German or English by the player's language. It comes from the clo
 11. Is the notice text (version 1) complete under Art. 13 GDPR (responsible party, purpose, legal basis, retention, rights, right to withdraw, supervisory authority), and what is missing?
 12. Is 90 days after the last visit an acceptable default retention? Is "deleted at once on withdrawal" enough for Art. 17 GDPR?
 13. Is an administrator with the `admin` API scope a permitted recipient of the access and deletion data, and is access logging needed?
+
+Questions 14 to 20 (legal texts, payments, licences) and the German drafts of the privacy policy, imprint and terms are in [docs/legal](../legal/README.md). All of them are drafts and not checked by a lawyer.

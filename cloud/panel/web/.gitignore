@@ -1,0 +1,14 @@
+node_modules/
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+# Copied from branding/ by scripts/sync-brand.mjs before every build.
+app/brand-tokens.css
+public/fonts/
+public/mark-on-dark.svg
+public/mark-on-light.svg
+# Playwright and Lighthouse output.
+test-results/
+playwright-report/
+.lighthouseci/

@@ -410,7 +410,8 @@ public final class ApiRoutes {
     /**
      * {@code PUT /templates/{template}/files/{path}}: creates a file (without {@code If-Match}) or
      * replaces one ({@code If-Match} with its ETag or {@code *}). Refused on a cluster member, whose
-     * templates come from the head.
+     * templates come from the head. Only UTF-8 text configuration outside code folders, without a
+     * new secret placeholder ({@link TemplateFiles#write}); {@code 422} otherwise.
      */
     private ApiResponse putTemplateFile(ApiRequest q) throws ApiException, IOException {
         if (config.mirrorMode()) {
@@ -423,19 +424,15 @@ public final class ApiRoutes {
         if (body.content() == null) {
             throw ApiException.badRequest("invalid-value", "\"content\" is missing.");
         }
-        byte[] content;
+        // Only text is written: binary content (Base64) could be a library or archive a server loads.
         String encoding = body.encoding() == null ? "utf-8" : body.encoding();
-        if (encoding.equals("utf-8")) {
-            content = body.content().getBytes(StandardCharsets.UTF_8);
-        } else if (encoding.equals("base64")) {
-            try {
-                content = Base64.getDecoder().decode(body.content());
-            } catch (IllegalArgumentException e) {
-                throw ApiException.badRequest("invalid-value", "\"content\" is not valid Base64.");
-            }
-        } else {
-            throw ApiException.badRequest("invalid-value", "\"encoding\" must be utf-8 or base64.");
+        if (encoding.equals("base64")) {
+            throw new ApiException(422, "binary-content",
+                    "Only UTF-8 text can be written; Base64 (binary) content is refused.");
+        } else if (!encoding.equals("utf-8")) {
+            throw ApiException.badRequest("invalid-value", "\"encoding\" must be utf-8.");
         }
+        byte[] content = body.content().getBytes(StandardCharsets.UTF_8);
         TemplateFiles.Outcome outcome = templateCall(template, path,
                 () -> templates().write(template, path, content, q.ifMatch()));
         String etag = TemplateFiles.etag(content);
@@ -453,6 +450,15 @@ public final class ApiRoutes {
             throws ApiException, IOException {
         try {
             return call.run();
+        } catch (TemplateFiles.RefusedException e) {
+            throw switch (e.reason()) {
+                case NOT_EDITABLE -> new ApiException(422, "file-not-editable", "Only text configuration (.yml, .yaml,"
+                        + " .toml, .json, .properties, .txt, .conf) outside plugins/, mods/, libraries/, versions/,"
+                        + " bundler/ and cache/ can be written.");
+                case NOT_TEXT -> new ApiException(422, "binary-content", "Only UTF-8 text without NUL can be written.");
+                case SECRET_PLACEHOLDER -> new ApiException(422, "secret-placeholder",
+                        "The content adds a secret placeholder the file did not have.");
+            };
         } catch (IllegalArgumentException e) {
             throw ApiException.badRequest("invalid-path", path == null
                     ? "This is no template name."

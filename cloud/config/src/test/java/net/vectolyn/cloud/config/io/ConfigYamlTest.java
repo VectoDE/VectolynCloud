@@ -22,9 +22,13 @@ import net.vectolyn.cloud.config.model.Language;
 import net.vectolyn.cloud.config.model.NodesConfig;
 import net.vectolyn.cloud.config.model.ProcessConfig;
 import net.vectolyn.cloud.config.model.RestartConfig;
+import net.vectolyn.cloud.config.model.ScaleUpTriggers;
+import net.vectolyn.cloud.config.model.ScalingSchedule;
 import net.vectolyn.cloud.config.model.ServerKind;
 import net.vectolyn.cloud.config.model.TaskConfig;
+import net.vectolyn.cloud.config.model.TimeOfDay;
 import net.vectolyn.cloud.config.model.TimeSpan;
+import net.vectolyn.cloud.config.model.Weekday;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.node.ObjectNode;
 
@@ -136,6 +140,71 @@ class ConfigYamlTest {
     }
 
     @Test
+    void scalingTriggersAndSchedulesAreOptionalAndRoundTrip() throws ConfigException {
+        String plain = new String(ConfigYaml.write(Samples.lobbyTask()), StandardCharsets.UTF_8);
+        assertFalse(plain.contains("scale-up-on") || plain.contains("schedules"), "nothing set, nothing written: " + plain);
+
+        TaskConfig tuned = Samples.lobbyTask().withScaling(Samples.lobbyTask().scaling()
+                .withScaleUpOn(new ScaleUpTriggers(80, 18, null))
+                .withSchedules(List.of(new ScalingSchedule(List.of(Weekday.FRI, Weekday.SAT), TimeOfDay.of(18, 0),
+                        TimeOfDay.of(2, 30), 3))));
+        assertRoundTrip(tuned, ConfigFormat.TASK);
+        String written = new String(ConfigYaml.write(tuned), StandardCharsets.UTF_8);
+        assertTrue(written.contains("cpu-above: 80"), written);
+        assertFalse(written.contains("ram-above"), "an unset trigger is left out: " + written);
+
+        // Hand-written, with unquoted times and an empty section: read like a file without them.
+        TaskConfig hand = read(inScaling(plain, """
+                  scale-up-on: {}
+                  schedules:
+                    - days: [mon]
+                      from: 07:05
+                      to: 23:59
+                      min-services: 2
+                """), ConfigFormat.TASK);
+        assertNull(hand.scaling().scaleUpOn(), "an empty section counts as none");
+        assertEquals(TimeOfDay.of(7, 5), hand.scaling().schedulesOrEmpty().getFirst().from());
+        TaskConfig empty = read(inScaling(plain, "  schedules: []\n"), ConfigFormat.TASK);
+        assertEquals(Samples.lobbyTask(), empty, "an empty list counts as none");
+    }
+
+    @Test
+    void scheduleFieldsAreRequiredAndTimesChecked() {
+        String plain = new String(ConfigYaml.write(Samples.lobbyTask()), StandardCharsets.UTF_8);
+        ConfigError missing = single(inScaling(plain, """
+                  schedules:
+                    - days: [mon]
+                      from: "08:00"
+                      min-services: 2
+                """), ConfigFormat.TASK);
+        assertEquals(ErrorCode.REQUIRED, missing.code());
+        assertEquals("scaling.schedules[0].to", missing.path());
+        ConfigError late = single(inScaling(plain, """
+                  schedules:
+                    - days: [mon]
+                      from: "24:00"
+                      to: "08:00"
+                      min-services: 2
+                """), ConfigFormat.TASK);
+        assertEquals(ErrorCode.INVALID_VALUE, late.code());
+        assertEquals("scaling.schedules[0].from", late.path());
+        ConfigError day = single(inScaling(plain, """
+                  schedules:
+                    - days: [monday]
+                      from: "08:00"
+                      to: "09:00"
+                      min-services: 2
+                """), ConfigFormat.TASK);
+        assertEquals(ErrorCode.INVALID_VALUE, day.code());
+        ConfigError fraction = single(inScaling(plain, """
+                  scale-up-on:
+                    tps-below: 17.5
+                """), ConfigFormat.TASK);
+        assertEquals(ErrorCode.INVALID_VALUE, fraction.code());
+        assertEquals("scaling.scale-up-on.tps-below", fraction.path());
+    }
+
+    @Test
     void unknownFieldIsAnErrorWithPathAndLine() {
         ConfigError error = single(CLOUD.replace("  host: 127.0.0.1", "  hostt: 127.0.0.1"), ConfigFormat.CLOUD);
         assertEquals(ErrorCode.UNKNOWN_FIELD, error.code());
@@ -181,7 +250,7 @@ class ConfigYamlTest {
         ConfigError mode = single(CLOUD.replace("mode: docker", "mode: postgres"), ConfigFormat.CLOUD);
         assertEquals(ErrorCode.INVALID_VALUE, mode.code());
         assertEquals("database.mode", mode.path());
-        assertEquals(List.of("one of managed, docker, external, h2"), mode.args());
+        assertEquals(List.of("one of managed, docker, external, h2, postgresql"), mode.args());
     }
 
     @Test
@@ -324,6 +393,12 @@ class ConfigYamlTest {
         ConfigYaml.Decoded<T> decoded = ConfigYaml.read("test.yml", yaml, format);
         assertEquals(value, decoded.value(), new String(yaml, StandardCharsets.UTF_8));
         assertEquals(format.currentVersion(), decoded.fileVersion());
+    }
+
+    /** Puts lines at the end of the scaling section of a written task file. */
+    private static String inScaling(String task, String lines) {
+        int nodes = task.indexOf("\nnodes:");
+        return task.substring(0, nodes + 1) + lines + task.substring(nodes + 1);
     }
 
     private static <T> T read(String yaml, ConfigFormat<T> format) throws ConfigException {
