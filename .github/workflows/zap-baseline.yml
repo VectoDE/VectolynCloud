@@ -1,0 +1,50 @@
+name: ZAP baseline
+
+# OWASP ZAP baseline scan (passive, no attack traffic) against the public project page, the only
+# web surface this project runs itself. It is the "staging" target: pushes to main publish it
+# (pages.yml), so this scan checks what visitors get. It runs weekly and on demand. The scan only runs against
+# https://vectode.github.io/VectolynCloud/, which belongs to the project owner.
+# Rules that cannot be met on GitHub Pages (the host sets the response headers) are listed with
+# a reason in .zap/rules.tsv.
+
+on:
+  schedule:
+    - cron: '17 6 * * 4'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zap-baseline
+  cancel-in-progress: true
+
+env:
+  TARGET: https://vectode.github.io/VectolynCloud/
+
+jobs:
+  baseline:
+    name: ZAP baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # Audit, not block: ZAP fetches its add-ons from several hosts at start-up, and the set
+      # changes with the image. The job has no secrets and no write permissions.
+      - name: Harden runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: ZAP baseline scan
+        uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25 # v0.15.0
+        with:
+          target: ${{ env.TARGET }}
+          rules_file_name: .zap/rules.tsv
+          allow_issue_writing: false
+          fail_action: true
+          artifact_name: zap-baseline-report

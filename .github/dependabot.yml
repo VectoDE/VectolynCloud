@@ -6,6 +6,10 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 10
+    # A new release waits a week before Dependabot proposes it (zizmor: dependabot-cooldown).
+    # Security updates are not delayed by this.
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: build(deps)
     labels: [type:chore, area:infra]
@@ -30,6 +34,10 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    # A new release waits a week before Dependabot proposes it (zizmor: dependabot-cooldown).
+    # Security updates are not delayed by this.
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: ci(deps)
     labels: [type:chore, area:infra]
@@ -43,6 +51,10 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    # A new release waits a week before Dependabot proposes it (zizmor: dependabot-cooldown).
+    # Security updates are not delayed by this.
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: build(deps)
     labels: [type:chore, area:infra]
@@ -58,6 +70,10 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    # A new release waits a week before Dependabot proposes it (zizmor: dependabot-cooldown).
+    # Security updates are not delayed by this.
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: build(deps)
     labels: [type:chore, area:infra]
@@ -67,6 +83,10 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    # A new release waits a week before Dependabot proposes it (zizmor: dependabot-cooldown).
+    # Security updates are not delayed by this.
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: build(deps)
     labels: [type:chore, area:infra]
