@@ -268,6 +268,58 @@ function roadmap(t) {
 
 const draftNote = (t) => `<p class="notice notice-warn"><strong>${t('Entwurf.', 'Draft.')}</strong> ${t('Dieser Text ist noch nicht anwaltlich geprüft. Er wird ersetzt, sobald die Prüfung abgeschlossen ist.', 'This text has not been reviewed by a lawyer yet. It will be replaced once the review is done.')}</p>`;
 
+// ---------- Download page: one-click download for the visitor's system, all files below ----------
+// Everything comes from config.release (src/release.mjs, read at build time). Links point at GitHub's
+// release download URLs; nothing is mirrored. A file missing from the release becomes a notice.
+const fmtSize = (lang, bytes) => `${(bytes / 1048576).toFixed(1).replace('.', lang === 'de' ? ',' : '.')} MB`;
+
+function downloadPicker(t, ctx, rel, lang) {
+  const verify = `#${t('pruefen', 'verify')}`;
+  const verifyGuide = `${BLOB}/docs/cloud/operations.md#verifying-a-release`;
+  const date = rel.date ? (lang === 'de' ? dateDe(rel.date) : dateEn(rel.date)) : '';
+  const systems = [
+    ['windows', 'Windows', rel.files.windows],
+    ['macos', 'macOS', rel.files.unix],
+    ['linux', 'Linux', rel.files.unix],
+  ];
+  const hash = (f) => f.sha256
+    ? `<div class="dl-hash"><span class="label">SHA-256</span><code>${ctx.esc(f.sha256)}</code><button class="btn btn-small" type="button" data-copy="${ctx.esc(f.sha256)}" data-copied="${t('Kopiert', 'Copied')}">${t('Prüfsumme kopieren', 'Copy checksum')}</button></div>`
+    : `<p class="notice notice-warn">${t('Für diese Datei steht keine Prüfsumme in SHA256SUMS. Prüfe sie über die Signatur, bevor du sie startest.', 'This file has no checksum in SHA256SUMS. Check its signature before you run it.')}</p>`;
+  const pick = ([os, label, f], i) => `<div class="dl-pick" data-os="${os}"${i ? ' hidden' : ''}>
+    <h2 id="dl-h-${os}">${t(`VectolynCloud für ${label}`, `VectolynCloud for ${label}`)}</h2>
+    <p class="dl-auto" hidden>${t('Passend zu deinem System ausgewählt.', 'Picked to match your system.')}</p>
+    ${f ? `<p class="actions"><a class="btn btn-primary btn-large" href="${ctx.esc(f.url)}" aria-describedby="dl-file-${os}">${icon('download', 'btn-icon')}${t('Herunterladen', 'Download')}</a></p>
+    <p class="dl-file" id="dl-file-${os}"><code>${ctx.esc(f.name)}</code>, ${fmtSize(lang, f.size)}</p>
+    ${hash(f)}
+    <p class="dl-verify">${icon('key', 'icon-inline')}<a href="${verify}">${t('Signatur prüfen', 'Verify the signature')}</a> ${t('mit cosign und SLSA', 'with cosign and SLSA')} (${ext(verifyGuide, t('Anleitung', 'guide'))})</p>`
+    : `<p class="notice notice-warn">${t(`Im Release ${ctx.esc(rel.tag)} fehlt die Datei für ${label}. Nimm eine Datei aus der Liste unten oder schau auf der`, `Release ${ctx.esc(rel.tag)} has no file for ${label}. Pick one from the list below or look at the`)} <a href="${ctx.esc(rel.url)}">${t('Release-Seite', 'release page')}</a>.</p>`}
+  </div>`;
+  const rows = [
+    ['windows', t('Windows: Programm, start.bat und start.ps1', 'Windows: program, start.bat and start.ps1')],
+    ['unix', t('Linux und macOS: Programm, start.sh, systemd-Unit und install.sh', 'Linux and macOS: program, start.sh, systemd unit and install.sh')],
+    ['jar', t('nur das Programm, für java -jar, Docker und Pterodactyl', 'the program alone, for java -jar, Docker and Pterodactyl')],
+    ['templates', t('Vorlagen für Server und Gruppen', 'templates for servers and groups')],
+    ['setup', t('Beispiel für die Setup-Datei (Start ohne Terminal)', 'example setup file (start without a terminal)')],
+  ];
+  return `<section class="band dl-band">
+  <div class="dl-card card" data-dl>
+    <p class="dl-version"><span class="kicker">${t('Version', 'Version')} <span class="dl-num">${ctx.esc(rel.version)}</span></span>${date ? ` <time datetime="${ctx.esc(rel.date)}">${date}</time>` : ''}${rel.prerelease ? ` <span class="badge">${t('Vorabversion', 'Pre-release')}</span>` : ''}</p>
+    ${systems.map(pick).join('\n    ')}
+    <p class="dl-other">${t('Anderes System oder nur das Programm? Alle Dateien stehen in der Liste darunter.', 'Another system or just the program? Every file is in the list below.')}</p>
+  </div>
+  <h2 id="dl-all">${t('Alle Dateien von', 'All files of')} <span class="dl-num">${ctx.esc(rel.tag)}</span></h2>
+  <div class="table-wrap dl-table"><table>
+    <thead><tr><th scope="col">${t('Datei', 'File')}</th><th scope="col">${t('Für', 'For')}</th><th scope="col">${t('Größe', 'Size')}</th><th scope="col">SHA-256</th></tr></thead>
+    <tbody>
+${rows.map(([k, what]) => { const f = rel.files[k]; return f
+    ? `      <tr><td><a href="${ctx.esc(f.url)}"><code>${ctx.esc(f.name)}</code></a></td><td>${what}</td><td>${fmtSize(lang, f.size)}</td><td><code class="hash">${f.sha256 ? ctx.esc(f.sha256) : t('nicht in SHA256SUMS', 'not in SHA256SUMS')}</code></td></tr>`
+    : `      <tr><td>${t('fehlt in diesem Release', 'missing from this release')}</td><td>${what}</td><td>–</td><td>–</td></tr>`; }).join('\n')}
+    </tbody>
+  </table></div>
+  <p>${rel.sumsUrl ? `${ext(ctx.esc(rel.sumsUrl), 'SHA256SUMS')}, ` : ''}${rel.provenanceUrl ? `${ext(ctx.esc(rel.provenanceUrl), t('SLSA-Herkunftsbescheinigung', 'SLSA provenance'))}, ` : ''}${t('Signaturen (<code>*.sigstore.json</code>) und Release-Notizen auf der', 'signatures (<code>*.sigstore.json</code>) and release notes on the')} ${ext(ctx.esc(rel.url), t('Release-Seite', 'release page'))}. ${t('Ältere Versionen:', 'Older versions:')} ${ext(REPO + '/releases', t('alle Releases', 'all releases'))}.</p>
+</section>`;
+}
+
 export const pages = {
   home(lang) {
     const t = L(lang);
@@ -395,8 +447,10 @@ export const pages = {
     };
   },
 
-  download(lang) {
+  download(lang, config) {
     const t = L(lang);
+    const rel = config.release;
+    const ops = `${BLOB}/docs/cloud/operations${lang === 'de' ? '.de' : ''}.md`;
     return {
       title: t('VectolynCloud herunterladen: Releases, Voraussetzungen, Signaturen', 'Download VectolynCloud: releases, requirements, signatures'),
       description: t('VectolynCloud für Windows, Linux, macOS, Docker, Pelican und Pterodactyl. Voraussetzungen, Schnellstart und wie du Prüfsummen und Signaturen prüfst.',
@@ -405,31 +459,24 @@ export const pages = {
       crumbs: [{ key: 'home', name: 'VectolynCloud' }, { key: 'download', name: 'Download' }],
       extraLd: (base) => [{
         '@type': 'SoftwareApplication', name: 'VectolynCloud', applicationCategory: 'GameApplication', applicationSubCategory: 'Minecraft server management',
-        operatingSystem: 'Windows, Linux, macOS', downloadUrl: REPO + '/releases', license: 'https://www.gnu.org/licenses/gpl-3.0.html',
+        operatingSystem: 'Windows, Linux, macOS', downloadUrl: rel ? rel.url : REPO + '/releases', license: 'https://www.gnu.org/licenses/gpl-3.0.html',
+        ...(rel ? { softwareVersion: rel.version } : {}),
         softwareRequirements: 'Java 21 or newer', author: { '@id': base + '#org' },
         offers: { '@type': 'Offer', price: '0', priceCurrency: 'EUR' },
       }],
       body: (ctx) => `${pageHead(t('Für Betreiber', 'For operators'), t('VectolynCloud herunterladen', 'Download VectolynCloud'),
-        t('Alle Dateien liegen in den Releases auf GitHub. Bisher gibt es nur Vorabversionen: zum Ausprobieren gedacht, noch nicht für ein Netzwerk mit echten Spielern.', 'All files are in the releases on GitHub. So far there are only pre-releases: meant for trying out, not yet for a network with real players.'))}
+        t('Die Dateien kommen direkt aus den Releases auf GitHub. Bisher gibt es nur Vorabversionen: zum Ausprobieren gedacht, noch nicht für ein Netzwerk mit echten Spielern.', 'The files come straight from the releases on GitHub. So far there are only pre-releases: meant for trying out, not yet for a network with real players.'))}
+${rel ? downloadPicker(t, ctx, rel, lang) : `<section class="band">
+  <p class="notice notice-warn">${t('Die Release-Daten konnten beim Bauen dieser Seite nicht geladen werden. Alle Dateien findest du auf der Release-Seite.', 'The release data could not be loaded when this page was built. All files are on the releases page.')}</p>
+  <p class="actions"><a class="btn btn-primary btn-large" href="${REPO}/releases">${icon('download', 'btn-icon')}${t('Zu den Releases', 'Go to the releases')}</a></p>
+</section>`}
 <section class="band">
-  <p class="actions"><a class="btn btn-primary" href="${REPO}/releases">${t('Zu den Releases', 'Go to the releases')}</a> <a class="btn" href="${BLOB}/docs/cloud/operations${lang === 'de' ? '.de' : ''}.md">${t('Betriebsanleitung', 'Operations guide')}</a></p>
   <h2>${t('Das brauchst du', 'What you need')}</h2>
   <ul class="ticks">
     <li>${t('Java 21 oder neuer', 'Java 21 or newer')}</li>
     <li>${t('ein normales Benutzerkonto: als root oder Administrator startet die Cloud nicht', 'a normal user account: the cloud refuses to start as root or administrator')}</li>
     <li>${t('Internet beim ersten Start, damit die Serversoftware geladen werden kann', 'internet access on the first start, to download the server software')}</li>
   </ul>
-  <h2>${t('Welche Datei?', 'Which file?')}</h2>
-  <div class="table-wrap"><table>
-    <thead><tr><th scope="col">${t('Datei', 'File')}</th><th scope="col">${t('Für', 'For')}</th></tr></thead>
-    <tbody>
-      <tr><td><code>VectolynCloud-&lt;version&gt;-windows.zip</code></td><td>${t('Windows: Programm, start.bat und start.ps1', 'Windows: program, start.bat and start.ps1')}</td></tr>
-      <tr><td><code>VectolynCloud-&lt;version&gt;-linux-macos.tar.gz</code></td><td>${t('Linux und macOS: Programm, start.sh, systemd-Unit und install.sh', 'Linux and macOS: program, start.sh, systemd unit and install.sh')}</td></tr>
-      <tr><td><code>VectolynCloud.jar</code></td><td>${t('nur das Programm, für java -jar, Docker und Pterodactyl', 'the program alone, for java -jar, Docker and Pterodactyl')}</td></tr>
-      <tr><td><code>ghcr.io/vectode/vectolyn-cloud</code></td><td>${t('Docker-Image, getaggt mit der Version', 'Docker image, tagged with the version')}</td></tr>
-      <tr><td><code>SHA256SUMS</code>, <code>*.sigstore.json</code></td><td>${t('Prüfsummen und Signaturen', 'checksums and signatures')}</td></tr>
-    </tbody>
-  </table></div>
   <h2>${t('Schnellstart', 'Quick start')}</h2>
   <ol class="steps">
     <li>${t('Archiv für dein System herunterladen und in einen leeren Ordner entpacken. Der Ordner wird das Zuhause der Cloud.', 'Download the archive for your system and unpack it into an empty folder. That folder is the cloud’s home.')}</li>
@@ -437,7 +484,7 @@ export const pages = {
     <li>${t('Die Fragen des Setup-Assistenten beantworten. Er zeigt am Ende eine Zusammenfassung und schreibt erst, wenn du speicherst.', 'Answer the setup assistant. It shows a summary at the end and writes nothing until you save.')}</li>
     <li>${t('Die Cloud lädt die Serversoftware, prüft sie und startet das Netzwerk. <code>help</code> zeigt die Befehle, <code>shutdown</code> beendet alles.', 'The cloud downloads and checks the server software and starts the network. <code>help</code> lists the commands, <code>shutdown</code> stops everything.')}</li>
   </ol>
-  <p>${t('Docker, Compose, systemd, Pelican und Pterodactyl beschreibt die', 'Docker, Compose, systemd, Pelican and Pterodactyl are covered in the')} ${ext(`${BLOB}/docs/cloud/operations${lang === 'de' ? '.de' : ''}.md`, t('Betriebsanleitung', 'operations guide'))}.</p>
+  <p>${t('Docker, Compose, systemd, Pelican und Pterodactyl beschreibt die', 'Docker, Compose, systemd, Pelican and Pterodactyl are covered in the')} ${ext(ops, t('Betriebsanleitung', 'operations guide'))}. ${t('Das Docker-Image heißt', 'The Docker image is')} <code>ghcr.io/vectode/vectolyn-cloud</code>${t(' und ist mit der Version getaggt.', ', tagged with the version.')}</p>
   <h2>${t('Standard-Ports', 'Default ports')}</h2>
   <div class="table-wrap"><table>
     <thead><tr><th scope="col">${t('Dienst', 'Service')}</th><th scope="col">Port</th></tr></thead>
@@ -448,8 +495,8 @@ export const pages = {
     </tbody>
   </table></div>
   <p>${t('Nur die Proxy-Ports gehören nach außen. Datenbank und API hören standardmäßig nur auf 127.0.0.1.', 'Only the proxy ports should be reachable from outside. By default the database and the API listen on 127.0.0.1 only.')}</p>
-  <h2>${t('Download prüfen', 'Verify the download')}</h2>
-  <p>${t('Jede Datei ist mit cosign signiert (keyless über Sigstore, ausgestellt für den Release-Workflow dieses Repositorys) und hat eine SLSA-Herkunftsbescheinigung. Ersetze den Tag durch deine Version:', 'Every file is signed with cosign (keyless through Sigstore, issued to the release workflow of this repository) and has SLSA build provenance. Replace the tag with your version:')}</p>
+  <h2 id="${t('pruefen', 'verify')}">${t('Download prüfen', 'Verify the download')}</h2>
+  <p>${t('Jede Datei ist mit cosign signiert (keyless über Sigstore, ausgestellt für den Release-Workflow dieses Repositorys) und hat eine SLSA-Herkunftsbescheinigung. Im Ordner mit den heruntergeladenen Dateien:', 'Every file is signed with cosign (keyless through Sigstore, issued to the release workflow of this repository) and has SLSA build provenance. In the folder with the downloaded files:')}</p>
   <pre class="code" tabindex="0"><code>sha256sum --check --ignore-missing SHA256SUMS
 gh attestation verify VectolynCloud.jar --repo VectoDE/VectolynCloud</code></pre>
   <p>${t('Die vollständigen cosign-Befehle stehen in der', 'The full cosign commands are in the')} ${ext(`${BLOB}/docs/cloud/operations.md#verifying-a-release`, t('Anleitung zur Release-Prüfung', 'release verification guide'))}.</p>

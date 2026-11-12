@@ -189,6 +189,21 @@
     document.querySelectorAll('[data-count],.bar').forEach(function (el) { countIO.observe(el); });
   }
 
+  // ---------- Download: pick the file for the visitor's system (the page works without this) ----------
+  var dl = document.querySelector('[data-dl]');
+  if (dl) {
+    var ua = navigator.userAgent || '';
+    var plat = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '';
+    var phone = /Android|iPhone|iPad|iPod/i.test(ua) || (/Mac/i.test(plat) && navigator.maxTouchPoints > 1);
+    var os = phone ? null : /Win/i.test(plat) ? 'windows' : /Mac/i.test(plat) ? 'macos' : /Linux|X11|CrOS/i.test(plat + ' ' + ua) ? 'linux' : null;
+    var chosen = os && dl.querySelector('.dl-pick[data-os="' + os + '"]');
+    if (chosen) {
+      dl.querySelectorAll('.dl-pick').forEach(function (p) { p.hidden = p !== chosen; });
+      var auto = chosen.querySelector('.dl-auto');
+      if (auto) auto.hidden = false;
+    }
+  }
+
   // ---------- Copy the server address ----------
   document.querySelectorAll('[data-copy]').forEach(function (btn) {
     btn.addEventListener('click', function () {

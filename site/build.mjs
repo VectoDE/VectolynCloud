@@ -19,6 +19,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pages, extraPages, routes, nav, footerLinks, strings, posts, team, icon } from './src/pages.mjs';
 import { resolveHeads } from './src/heads.mjs';
+import { resolveRelease } from './src/release.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -26,20 +27,14 @@ const out = join(root, 'build', 'pages');
 const config = JSON.parse(readFileSync(join(here, 'site.config.json'), 'utf8'));
 const base = config.baseUrl.endsWith('/') ? config.baseUrl : config.baseUrl + '/';
 
-// Newest release (pre-releases included) from the GitHub API, so the status box shows a real version.
-// Offline or rate-limited builds simply leave it out.
-config.latestRelease = null;
-if (process.env.SITE_OFFLINE !== '1') {
-  try {
-    const repoPath = new URL(config.repo).pathname.replace(/^\/|\/$/g, '');
-    const res = await fetch(`https://api.github.com/repos/${repoPath}/releases?per_page=1`, {
-      headers: { accept: 'application/vnd.github+json', 'user-agent': 'vectolyn-site-build' }, signal: AbortSignal.timeout(5000),
-    });
-    const [r] = res.ok ? await res.json() : [];
-    if (r && /^v[0-9A-Za-z.-]{1,40}$/.test(r.tag_name) && r.html_url.startsWith(config.repo + '/releases/')) {
-      config.latestRelease = { tag: r.tag_name, date: r.published_at.slice(0, 10), url: r.html_url };
-    }
-  } catch { /* leave it out */ }
+// Newest release (pre-releases included) with its files and SHA-256 sums, read from GitHub at build time
+// for the download page and the status box. Without GitHub the cached release.json is used (see src/release.mjs).
+config.release = await resolveRelease(config.repo, { siteDir: here, offline: process.env.SITE_OFFLINE === '1' });
+config.latestRelease = config.release && { tag: config.release.tag, date: config.release.date, url: config.release.url };
+if (config.release) {
+  const missing = Object.entries(config.release.files).filter(([, f]) => !f).map(([k]) => k);
+  const unsummed = Object.values(config.release.files).filter((f) => f && !f.sha256).map((f) => f.name);
+  console.log(`release: ${config.release.tag}` + (missing.length ? `, missing: ${missing.join(', ')}` : '') + (unsummed.length ? `, not in SHA256SUMS: ${unsummed.join(', ')}` : ''));
 }
 // Minecraft heads of the team, cropped from the active skins at build time (never loaded from a third party).
 config.heads = await resolveHeads(team.filter((m) => m.mcName).map((m) => m.mcName), { siteDir: here, offline: process.env.SITE_OFFLINE === '1' });
