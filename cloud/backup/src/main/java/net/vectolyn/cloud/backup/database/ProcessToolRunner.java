@@ -28,6 +28,7 @@ public final class ProcessToolRunner implements ToolRunner {
     @Override
     public Result run(List<String> command, Path workingDirectory, Duration timeout)
             throws IOException, InterruptedException {
+        // nosemgrep: java.lang.security.audit.command-injection-process-builder.command-injection-process-builder -- the backup tools are started with an argument list and no shell; the command comes from the operator's configuration
         ProcessBuilder builder = new ProcessBuilder(command)
                 .directory(workingDirectory.toFile())
                 .redirectErrorStream(true);

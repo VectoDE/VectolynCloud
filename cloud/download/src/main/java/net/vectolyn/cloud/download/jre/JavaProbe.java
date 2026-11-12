@@ -47,6 +47,7 @@ public interface JavaProbe {
         return executable -> {
             Process process;
             try {
+                // nosemgrep: java.lang.security.audit.command-injection-process-builder.command-injection-process-builder -- runs the java executable of a managed runtime with fixed options, no shell
                 process = new ProcessBuilder(List.of(executable.toString(), "-XshowSettings:properties", "-version"))
                         .redirectErrorStream(true)
                         .start();

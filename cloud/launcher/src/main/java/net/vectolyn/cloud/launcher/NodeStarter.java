@@ -157,6 +157,7 @@ public final class NodeStarter {
             throws NodeStartException {
         Class<?> entry;
         try {
+            // nosemgrep: java.lang.security.audit.unsafe-reflection.unsafe-reflection -- className is the fixed NODE_MAIN_CLASS of the cloud jar, never user input
             entry = Class.forName(className, true, loader);
         } catch (ClassNotFoundException e) {
             throw new NodeStartException(NodeStartException.Kind.MISSING, className + " not found", e);
