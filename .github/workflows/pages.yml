@@ -36,6 +36,7 @@ jobs:
           allowed-endpoints: >
             github.com:443
             api.github.com:443
+            release-assets.githubusercontent.com:443
             api.mojang.com:443
             sessionserver.mojang.com:443
             textures.minecraft.net:443
@@ -45,8 +46,14 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Test the generator
+        run: node --test site/test/*.test.mjs
+
       - name: Assemble site
         run: sh site/build.sh
+        env:
+          # read-only token for the release lookup (version, files, SHA256SUMS), avoids the anonymous rate limit
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Configure Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0

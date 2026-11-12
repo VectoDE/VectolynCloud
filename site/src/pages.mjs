@@ -32,18 +32,18 @@ export const nav = {
     { id: 'product', de: 'VectolynCloud', en: 'VectolynCloud',
       intro: { de: 'Die Software für dein eigenes Netzwerk', en: 'The software for your own network' },
       items: [
-        { key: 'home', de: 'Überblick', en: 'Overview', desc: { de: 'Was die Cloud macht und wo das Projekt steht', en: 'What the cloud does and where the project stands' } },
-        { key: 'download', de: 'Download', en: 'Download', desc: { de: 'Releases, Voraussetzungen, Signaturen', en: 'Releases, requirements, signatures' } },
-        { key: 'docs', de: 'Dokumentation', en: 'Documentation', desc: { de: 'Betrieb, Setup, Konsole, API', en: 'Operations, setup, console, API' } },
-        { key: 'websites', de: 'Website für dein Netzwerk', en: 'A website for your network', desc: { de: 'Drei geplante Wege', en: 'Three planned ways' } },
+        { key: 'home', art: 'window', de: 'Überblick', en: 'Overview', desc: { de: 'Was die Cloud macht und wo das Projekt steht', en: 'What the cloud does and where the project stands' } },
+        { key: 'download', art: 'download', de: 'Download', en: 'Download', desc: { de: 'Releases, Voraussetzungen, Signaturen', en: 'Releases, requirements, signatures' } },
+        { key: 'docs', art: 'book', de: 'Dokumentation', en: 'Documentation', desc: { de: 'Betrieb, Setup, Konsole, API', en: 'Operations, setup, console, API' } },
+        { key: 'websites', art: 'setup', de: 'Website für dein Netzwerk', en: 'A website for your network', desc: { de: 'Drei geplante Wege', en: 'Three planned ways' } },
       ] },
     { id: 'network', de: 'Testnetzwerk', en: 'Test network',
       intro: { de: 'Vectolyn Network: VectolynCloud zum Anfassen', en: 'Vectolyn Network: try VectolynCloud in game' },
       items: [
-        { key: 'network', de: 'So spielst du mit', en: 'How to join', desc: { de: 'Status, Adresse, Java und Bedrock', en: 'Status, address, Java and Bedrock' } },
-        { key: 'rules', de: 'Regeln', en: 'Rules', desc: { de: 'Was gilt und was bei Verstößen passiert', en: 'What applies and what happens on a breach' } },
-        { key: 'shop', de: 'Shop', en: 'Shop', desc: { de: 'Kosmetisch, im Testmodus', en: 'Cosmetic, in test mode' } },
-        { key: 'team', de: 'Team', en: 'Team', desc: { de: 'Wer dahintersteht', en: 'Who is behind it' } },
+        { key: 'network', art: 'crossplay', de: 'So spielst du mit', en: 'How to join', desc: { de: 'Status, Adresse, Java und Bedrock', en: 'Status, address, Java and Bedrock' } },
+        { key: 'rules', art: 'rules', de: 'Regeln', en: 'Rules', desc: { de: 'Was gilt und was bei Verstößen passiert', en: 'What applies and what happens on a breach' } },
+        { key: 'shop', art: 'crown', de: 'Shop', en: 'Shop', desc: { de: 'Kosmetisch, im Testmodus', en: 'Cosmetic, in test mode' } },
+        { key: 'team', art: 'head', de: 'Team', en: 'Team', desc: { de: 'Wer dahintersteht', en: 'Who is behind it' } },
       ] },
   ],
   flat: [
@@ -82,7 +82,7 @@ export const footerLinks = [
 
 export const strings = {
   de: {
-    skip: 'Zum Inhalt springen', menu: 'Menü', switchHint: 'Sprache wechseln:', switchShort: 'EN', toLight: 'Helles Design', toDark: 'Dunkles Design', navCta: 'Herunterladen', mainNav: 'Hauptnavigation', crumbs: 'Brotkrumen', switchLabel: 'English',
+    skip: 'Zum Inhalt springen', newsLabel: 'Neuigkeiten', footClaim: 'Freie Software für dein eigenes Minecraft-Netzwerk. Gebaut in Itzehoe, offen auf GitHub.', allNews: 'Alle Neuigkeiten', fmtDate: (d) => dateDe(d), menu: 'Menü', switchHint: 'Sprache wechseln:', switchShort: 'EN', toLight: 'Helles Design', toDark: 'Dunkles Design', navCta: 'Herunterladen', mainNav: 'Hauptnavigation', crumbs: 'Brotkrumen', switchLabel: 'English',
     ogAlt: 'Wortmarke VectolynCloud mit dem Pixel-Zeichen',
     trustHeading: 'Bewertungen und Prüfungen', socialHeading: 'Folgen', feedTitle: 'VectolynCloud: Neuigkeiten', trustpilot: 'Bewertungen auf Trustpilot', gridinsoft: 'Website-Prüfung bei Gridinsoft',
     footMeta: (d, repo) => `Herausgegeben von Tim Hauke (VectoDE). Stand: ${dateDe(d)}. Diese Website ist Teil des <a href="${repo}/tree/main/site">Quelltexts</a> und steht wie alles im Projekt unter GPL-3.0.`,
@@ -91,7 +91,7 @@ export const strings = {
     consentMore: 'Mehr dazu', motionPause: 'Animationen anhalten', motionPlay: 'Animationen abspielen', consentYes: 'Zustimmen', consentNo: 'Ablehnen', consentSettings: 'Statistik-Einstellungen',
   },
   en: {
-    skip: 'Skip to content', menu: 'Menu', switchHint: 'Switch language:', switchShort: 'DE', toLight: 'Light mode', toDark: 'Dark mode', navCta: 'Download', mainNav: 'Main navigation', crumbs: 'Breadcrumb', switchLabel: 'Deutsch',
+    skip: 'Skip to content', newsLabel: 'News', footClaim: 'Free software for your own Minecraft network. Built in Itzehoe, open on GitHub.', allNews: 'All news', fmtDate: (d) => dateEn(d), menu: 'Menu', switchHint: 'Switch language:', switchShort: 'DE', toLight: 'Light mode', toDark: 'Dark mode', navCta: 'Download', mainNav: 'Main navigation', crumbs: 'Breadcrumb', switchLabel: 'Deutsch',
     ogAlt: 'The VectolynCloud wordmark with the pixel mark',
     trustHeading: 'Reviews and checks', socialHeading: 'Follow', feedTitle: 'VectolynCloud news', trustpilot: 'Reviews on Trustpilot', gridinsoft: 'Website check by Gridinsoft',
     footMeta: (d, repo) => `Published by Tim Hauke (VectoDE). Last updated ${dateEn(d)}. This website is part of the <a href="${repo}/tree/main/site">source code</a> and, like the rest of the project, licensed under GPL-3.0.`,
@@ -138,11 +138,18 @@ const ext = (href, text) => `<a href="${href}">${text}</a>`;
 
 const ICONS = {
   crossplay: 'M1 2h6v6H1zM9 8h6v6H9zM7 4h3v2H7zM10 4h2v4h-2zM4 8h2v4H4zM6 10h3v2H6z',
-  check: 'M1 8h2v2h2v2h2v-2h2V8h2V6h2V4h2v2h-2v2h-2v2h-2v2H9v2H7v-2H5v-2H3V8H1z',
+  check: 'M1 7h3v3h3v3H4v-3H1zM7 10h3V7h3V4h3v3h-3v3h-3v3H7z',
   setup: 'M1 2h4v4H1zM7 3h8v2H7zM1 7h4v4H1zM7 8h8v2H7zM1 12h4v3H1zM7 12h6v2H7z',
   scale: 'M1 11h4v4H1zM6 7h4v8H6zM11 2h4v13h-4z',
   window: 'M1 2h14v12H1zM3 6v6h10V6z',
   key: 'M1 4h7v7H1zM3 6v3h3V6zM8 6h7v3H8zM11 9h2v3h-2zM14 9h1v3h-1z',
+  download: 'M7 1h2v7h2V6h2v2h-2v2H9v2H7v-2H5V8H3V6h2v2h2zM1 13h14v2H1z',
+  book: 'M1 2h6v1h2V2h6v12H9v1H7v-1H1zM3 4v8h4V4zM9 4v8h4V4z',
+  rules: 'M3 1h10v14H3zM5 4h6v1H5zM5 7h6v1H5zM5 10h4v1H5z',
+  head: 'M3 1h10v10H3zM5 5h2v2H5zM9 5h2v2H9zM6 8h4v1H6zM4 12h8v3H4z',
+  crown: 'M1 4h2v3h2V4h2v3h2V4h2v3h2V4h2v9H1zM3 10v1h10v-1z',
+  news: 'M1 2h12v12H1zM13 5h2v9h-2zM3 4h8v3H3zM3 9h8v1H3zM3 11h5v1H3z',
+  status: 'M1 11h3v4H1zM5 8h3v7H5zM9 5h3v10H9zM13 1h2v14h-2z',
 };
 const SHOP_ART = {
   crown: 'M1 4h2v3h2V4h2v3h2V4h2v3h2V4h2v9H1zM3 10v1h10v-1z',
@@ -150,7 +157,7 @@ const SHOP_ART = {
   hourglass: 'M3 1h10v2h-1v3h-1v1h-1v2h1v1h1v3h1v2H3v-2h1v-3h1V9h1V7H5V6H4V3H3zM6 12v1h4v-1z',
   picture: 'M1 2h14v12H1zM3 4v8h10V4zM10 5h2v2h-2zM4 11V9h2V7h2v2h1v1h2v1z',
 };
-const icon = (name) => `<svg class="icon" viewBox="0 0 16 16" width="32" height="32" aria-hidden="true" focusable="false"><path fill-rule="evenodd" d="${ICONS[name]}"/></svg>`;
+export const icon = (name, cls = 'icon') => `<svg class="${cls}" viewBox="0 0 16 16" width="32" height="32" aria-hidden="true" focusable="false" shape-rendering="crispEdges"><path fill-rule="evenodd" d="${ICONS[name]}"/></svg>`;
 
 
 /** Hero picture: a voxel island. Static AVIF/WebP for everyone; scene.js swaps in the live 3D view on capable devices. */
@@ -191,8 +198,8 @@ function netVisual(t) {
 
 /** A pixel head as a CSS cube. Purely decorative; open roles get an empty wireframe. */
 // Team head: the real Minecraft head (cropped at build time, see heads.mjs) or the open placeholder cube.
-const head3d = (head, label) => head
-  ? `<div class="head3d head-skin skin-${head}" role="img" aria-label="${label}"><div class="cube" aria-hidden="true"><span class="f f-front"></span><span class="f f-back"></span><span class="f f-right"></span><span class="f f-left"></span><span class="f f-top"></span><span class="f f-bottom"></span></div></div>`
+const head3d = (head, label, size = '') => head
+  ? `<div class="head3d head-skin skin-${head} ${size}" role="img" aria-label="${label}"><div class="cube" aria-hidden="true"><span class="f f-front"></span><span class="f f-back"></span><span class="f f-right"></span><span class="f f-left"></span><span class="f f-top"></span><span class="f f-bottom"></span></div></div>`
   : `<div class="head3d head-open" role="img" aria-label="${label}"><div class="cube" aria-hidden="true"><span class="f f-front"></span><span class="f f-back"></span><span class="f f-right"></span><span class="f f-left"></span><span class="f f-top"></span><span class="f f-bottom"></span></div></div>`;
 
 /** Team roster. mcName is the Java Edition name whose active skin the build fetches; leave it out for open roles. */
@@ -261,6 +268,58 @@ function roadmap(t) {
 
 const draftNote = (t) => `<p class="notice notice-warn"><strong>${t('Entwurf.', 'Draft.')}</strong> ${t('Dieser Text ist noch nicht anwaltlich geprüft. Er wird ersetzt, sobald die Prüfung abgeschlossen ist.', 'This text has not been reviewed by a lawyer yet. It will be replaced once the review is done.')}</p>`;
 
+// ---------- Download page: one-click download for the visitor's system, all files below ----------
+// Everything comes from config.release (src/release.mjs, read at build time). Links point at GitHub's
+// release download URLs; nothing is mirrored. A file missing from the release becomes a notice.
+const fmtSize = (lang, bytes) => `${(bytes / 1048576).toFixed(1).replace('.', lang === 'de' ? ',' : '.')} MB`;
+
+function downloadPicker(t, ctx, rel, lang) {
+  const verify = `#${t('pruefen', 'verify')}`;
+  const verifyGuide = `${BLOB}/docs/cloud/operations.md#verifying-a-release`;
+  const date = rel.date ? (lang === 'de' ? dateDe(rel.date) : dateEn(rel.date)) : '';
+  const systems = [
+    ['windows', 'Windows', rel.files.windows],
+    ['macos', 'macOS', rel.files.unix],
+    ['linux', 'Linux', rel.files.unix],
+  ];
+  const hash = (f) => f.sha256
+    ? `<div class="dl-hash"><span class="label">SHA-256</span><code>${ctx.esc(f.sha256)}</code><button class="btn btn-small" type="button" data-copy="${ctx.esc(f.sha256)}" data-copied="${t('Kopiert', 'Copied')}">${t('Prüfsumme kopieren', 'Copy checksum')}</button></div>`
+    : `<p class="notice notice-warn">${t('Für diese Datei steht keine Prüfsumme in SHA256SUMS. Prüfe sie über die Signatur, bevor du sie startest.', 'This file has no checksum in SHA256SUMS. Check its signature before you run it.')}</p>`;
+  const pick = ([os, label, f], i) => `<div class="dl-pick" data-os="${os}"${i ? ' hidden' : ''}>
+    <h2 id="dl-h-${os}">${t(`VectolynCloud für ${label}`, `VectolynCloud for ${label}`)}</h2>
+    <p class="dl-auto" hidden>${t('Passend zu deinem System ausgewählt.', 'Picked to match your system.')}</p>
+    ${f ? `<p class="actions"><a class="btn btn-primary btn-large" href="${ctx.esc(f.url)}" aria-describedby="dl-file-${os}">${icon('download', 'btn-icon')}${t('Herunterladen', 'Download')}</a></p>
+    <p class="dl-file" id="dl-file-${os}"><code>${ctx.esc(f.name)}</code>, ${fmtSize(lang, f.size)}</p>
+    ${hash(f)}
+    <p class="dl-verify">${icon('key', 'icon-inline')}<a href="${verify}">${t('Signatur prüfen', 'Verify the signature')}</a> ${t('mit cosign und SLSA', 'with cosign and SLSA')} (${ext(verifyGuide, t('Anleitung', 'guide'))})</p>`
+    : `<p class="notice notice-warn">${t(`Im Release ${ctx.esc(rel.tag)} fehlt die Datei für ${label}. Nimm eine Datei aus der Liste unten oder schau auf der`, `Release ${ctx.esc(rel.tag)} has no file for ${label}. Pick one from the list below or look at the`)} <a href="${ctx.esc(rel.url)}">${t('Release-Seite', 'release page')}</a>.</p>`}
+  </div>`;
+  const rows = [
+    ['windows', t('Windows: Programm, start.bat und start.ps1', 'Windows: program, start.bat and start.ps1')],
+    ['unix', t('Linux und macOS: Programm, start.sh, systemd-Unit und install.sh', 'Linux and macOS: program, start.sh, systemd unit and install.sh')],
+    ['jar', t('nur das Programm, für java -jar, Docker und Pterodactyl', 'the program alone, for java -jar, Docker and Pterodactyl')],
+    ['templates', t('Vorlagen für Server und Gruppen', 'templates for servers and groups')],
+    ['setup', t('Beispiel für die Setup-Datei (Start ohne Terminal)', 'example setup file (start without a terminal)')],
+  ];
+  return `<section class="band dl-band">
+  <div class="dl-card card" data-dl>
+    <p class="dl-version"><span class="kicker">${t('Version', 'Version')} <span class="dl-num">${ctx.esc(rel.version)}</span></span>${date ? ` <time datetime="${ctx.esc(rel.date)}">${date}</time>` : ''}${rel.prerelease ? ` <span class="badge">${t('Vorabversion', 'Pre-release')}</span>` : ''}</p>
+    ${systems.map(pick).join('\n    ')}
+    <p class="dl-other">${t('Anderes System oder nur das Programm? Alle Dateien stehen in der Liste darunter.', 'Another system or just the program? Every file is in the list below.')}</p>
+  </div>
+  <h2 id="dl-all">${t('Alle Dateien von', 'All files of')} <span class="dl-num">${ctx.esc(rel.tag)}</span></h2>
+  <div class="table-wrap dl-table"><table>
+    <thead><tr><th scope="col">${t('Datei', 'File')}</th><th scope="col">${t('Für', 'For')}</th><th scope="col">${t('Größe', 'Size')}</th><th scope="col">SHA-256</th></tr></thead>
+    <tbody>
+${rows.map(([k, what]) => { const f = rel.files[k]; return f
+    ? `      <tr><td><a href="${ctx.esc(f.url)}"><code>${ctx.esc(f.name)}</code></a></td><td>${what}</td><td>${fmtSize(lang, f.size)}</td><td><code class="hash">${f.sha256 ? ctx.esc(f.sha256) : t('nicht in SHA256SUMS', 'not in SHA256SUMS')}</code></td></tr>`
+    : `      <tr><td>${t('fehlt in diesem Release', 'missing from this release')}</td><td>${what}</td><td>–</td><td>–</td></tr>`; }).join('\n')}
+    </tbody>
+  </table></div>
+  <p>${rel.sumsUrl ? `${ext(ctx.esc(rel.sumsUrl), 'SHA256SUMS')}, ` : ''}${rel.provenanceUrl ? `${ext(ctx.esc(rel.provenanceUrl), t('SLSA-Herkunftsbescheinigung', 'SLSA provenance'))}, ` : ''}${t('Signaturen (<code>*.sigstore.json</code>) und Release-Notizen auf der', 'signatures (<code>*.sigstore.json</code>) and release notes on the')} ${ext(ctx.esc(rel.url), t('Release-Seite', 'release page'))}. ${t('Ältere Versionen:', 'Older versions:')} ${ext(REPO + '/releases', t('alle Releases', 'all releases'))}.</p>
+</section>`;
+}
+
 export const pages = {
   home(lang) {
     const t = L(lang);
@@ -269,29 +328,37 @@ export const pages = {
       description: t('VectolynCloud ist freie Software (GPL-3.0), die dein Minecraft-Netzwerk aufsetzt und betreibt: Proxy, Lobby, Spielserver und Minispiele, für Java- und Bedrock-Spieler.',
         'VectolynCloud is free software (GPL-3.0) that sets up and runs your Minecraft network: proxy, lobby, game servers and minigames, for Java and Bedrock players.'),
       crumbs: null,
-      body: (ctx) => `<section class="hero">
+      body: (ctx) => {
+        const lead = team.find((m) => m.mcName && ctx.config.heads?.[m.mcName]);
+        const leadHead = lead && ctx.config.heads[lead.mcName];
+        const openRoles = team.filter((m) => !m.who).length;
+        const nowStage = stages(t).findIndex(([, s]) => s === 'now') + 1;
+        return `<section class="hero">
   <div class="hero-text">
     <h1>${t('Dein Minecraft-Netzwerk, betrieben von einem Programm.', 'Your Minecraft network, run by one program.')}</h1>
-    <p class="lede">${t('VectolynCloud lädt die Serversoftware, prüft jede Datei, richtet die Datenbank ein und startet Proxy, Lobby und Spielserver. Java- und Bedrock-Spieler landen auf denselben Servern. Du hostest alles selbst.',
-      'VectolynCloud downloads the server software, checks every file, sets up the database and starts proxy, lobby and game servers. Java and Bedrock players end up on the same servers. You host all of it yourself.')}</p>
+    <p class="lede">${t('VectolynCloud lädt die Serversoftware, prüft jede Datei, richtet die Datenbank ein und startet Proxy, Lobby und Spielserver. Java- und Bedrock-Spieler landen auf denselben Servern, und du hostest alles selbst.',
+      'VectolynCloud downloads the server software, checks every file, sets up the database and starts proxy, lobby and game servers. Java and Bedrock players end up on the same servers, and you host all of it yourself.')}</p>
     <p class="actions">
-      <a class="btn btn-primary" href="${ctx.link('download')}">${t('Herunterladen', 'Download')}</a>
-      <a class="btn" href="${ctx.link('docs')}">${t('Dokumentation lesen', 'Read the docs')}</a>
+      <a class="btn btn-primary btn-large" href="${ctx.link('download')}">${icon('download', 'btn-icon')}${t('Herunterladen', 'Download')}</a>
+      <a class="btn btn-large" href="${ctx.link('network')}">${icon('crossplay', 'btn-icon')}${t('Zum Testnetzwerk', 'Test network')}</a>
     </p>
-    <p class="fineprint">${t('Stufe 2 von 8. Die Releases sind signierte Vorabversionen zum Ausprobieren, noch nicht für den Echtbetrieb.', 'Stage 2 of 8. Releases so far are signed pre-releases for trying out, not for production yet.')}</p>
   </div>
-  ${worldVisual(t, ctx)}
+  <div class="hero-art">
+    ${worldVisual(t, ctx)}
+    <div class="hero-deco" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+  </div>
 </section>
 
 <section class="band" aria-labelledby="h-why">
+  <p class="kicker">${t('Produkt', 'Product')}</p>
   <h2 id="h-why">${t('Was VectolynCloud dir abnimmt', 'What VectolynCloud takes off your hands')}</h2>
   <ul class="features">
-    <li class="feature feature-lead">${icon('crossplay')}<h3>${t('Java und Bedrock auf denselben Servern', 'Java and Bedrock on the same servers')}</h3><p>${t('Velocity ist der einzige Eingang. Geyser und Floodgate lassen Bedrock-Spieler herein, ViaVersion, ViaBackwards und ViaRewind übersetzen ältere Java-Versionen bis 1.8. Von Hand richtest du nichts davon ein.', 'Velocity is the single entry point. Geyser and Floodgate let Bedrock players in, ViaVersion, ViaBackwards and ViaRewind translate older Java versions back to 1.8. You set none of it up by hand.')}</p></li>
+    <li class="feature">${icon('crossplay')}<h3>${t('Java und Bedrock auf denselben Servern', 'Java and Bedrock on the same servers')}</h3><p>${t('Velocity ist der einzige Eingang. Geyser und Floodgate lassen Bedrock-Spieler herein, ViaVersion, ViaBackwards und ViaRewind übersetzen ältere Java-Versionen bis 1.8.', 'Velocity is the single entry point. Geyser and Floodgate let Bedrock players in, ViaVersion, ViaBackwards and ViaRewind translate older Java versions back to 1.8.')}</p></li>
     <li class="feature">${icon('check')}<h3>${t('Geprüfte Downloads', 'Verified downloads')}</h3><p>${t('Paper, Velocity, Fabric und die Plugins kommen von den offiziellen Quellen und werden gegen ihre Prüfsumme geprüft, bevor ein Server sie startet.', 'Paper, Velocity, Fabric and the plugins come from their official sources and are checked against their checksum before a server starts them.')}</p></li>
     <li class="feature">${icon('setup')}<h3>${t('Setup ohne Handarbeit', 'Setup without busywork')}</h3><p>${t('Ein Assistent fragt beim ersten Start alles Nötige ab und schreibt erst, wenn du speicherst. Ohne Terminal liest er eine Setup-Datei.', 'An assistant asks what it needs on the first start and writes nothing until you save. Without a terminal it reads a setup file instead.')}</p></li>
     <li class="feature">${icon('scale')}<h3>${t('Minispiele nach Bedarf', 'Minigames on demand')}</h3><p>${t('Statische Server laufen dauerhaft, Minispiel-Server startet und beendet die Cloud, wenn Spieler sie brauchen.', 'Static servers keep running; the cloud starts and stops minigame servers as players need them.')}</p></li>
     <li class="feature">${icon('window')}<h3>${t('Läuft, wo du willst', 'Runs where you want')}</h3><p>${t('Windows, Linux mit systemd, macOS, Docker, Pelican und Pterodactyl. Nötig ist Java 21 oder neuer.', 'Windows, Linux with systemd, macOS, Docker, Pelican and Pterodactyl. You need Java 21 or newer.')}</p></li>
-    <li class="feature">${icon('key')}<h3>${t('Offen und signiert', 'Open and signed')}</h3><p>${t('Der Quelltext ist unter GPL-3.0 lizenziert. Jede Release-Datei ist mit cosign signiert und hat eine SLSA-Herkunftsbescheinigung.', 'The source code is licensed under GPL-3.0. Every release file is signed with cosign and carries SLSA build provenance.')}</p></li>
+    <li class="feature">${icon('key')}<h3>${t('Offen und signiert', 'Open and signed')}</h3><p>${t('Der Quelltext steht unter GPL-3.0. Jede Release-Datei ist mit cosign signiert und hat eine SLSA-Herkunftsbescheinigung.', 'The source code is under GPL-3.0. Every release file is signed with cosign and carries SLSA build provenance.')}</p></li>
   </ul>
 </section>
 
@@ -326,32 +393,64 @@ export const pages = {
   </figure>
 </section>
 
-<section class="band band-split band-network" aria-labelledby="h-test">
+<section class="band band-network" aria-labelledby="h-test">
+  <div class="network-inner">
+    <div>
+      <p class="kicker">${t('Netzwerk', 'Network')}</p>
+      <h2 id="h-test">${t('Erst ausprobieren: Vectolyn Network', 'Try it first: Vectolyn Network')}</h2>
+      <p>${t('Auf unserem öffentlichen Testnetzwerk siehst du, wie sich ein Netzwerk mit VectolynCloud anfühlt, bevor du dein eigenes aufsetzt. Es ist noch nicht online; die Adresse steht hier, sobald es läuft.', 'On our public test network you can see what a network run by VectolynCloud feels like before you set up your own. It is not online yet; the address will appear here once it runs.')}</p>
+      <p class="actions"><a class="btn btn-primary" href="${ctx.link('network')}">${t('So spielst du mit', 'How to join')}</a> <a class="btn" href="${ctx.link('rules')}">${t('Regeln', 'Rules')}</a> <a class="text-link" href="${ctx.link('shop')}">${t('Shop im Testmodus', 'Shop in test mode')}</a></p>
+    </div>
+    <ul class="editions">
+      <li>${icon('window', 'ed-icon')}<span class="ed-name">Java Edition</span><span class="ed-sub">${t('aktuelle Version, ältere bis 1.8', 'current version, older back to 1.8')}</span></li>
+      <li>${icon('crossplay', 'ed-icon')}<span class="ed-name">Bedrock Edition</span><span class="ed-sub">${t('über Geyser und Floodgate', 'through Geyser and Floodgate')}</span></li>
+    </ul>
+  </div>
+</section>
+
+<section class="band band-split band-status" aria-labelledby="h-status">
   <div>
-    <p class="audience">${t('Für Spieler', 'For players')}</p>
-    <h2 id="h-test">${t('Erst ausprobieren: Vectolyn Network', 'Try it first: Vectolyn Network')}</h2>
-    <p>${t('Auf unserem öffentlichen Testnetzwerk siehst du, wie sich ein Netzwerk mit VectolynCloud anfühlt, bevor du dein eigenes aufsetzt. Es ist noch nicht online; die Adresse steht hier, sobald es läuft.', 'On our public test network you can see what a network run by VectolynCloud feels like before you set up your own. It is not online yet; the address will appear here once it runs.')}</p>
-    <p class="actions"><a class="btn" href="${ctx.link('network')}">${t('Zum Testnetzwerk', 'About the test network')}</a> <a class="text-link" href="${ctx.link('rules')}">${t('Regeln lesen', 'Read the rules')}</a></p>
+    <p class="kicker">Status</p>
+    <h2 id="h-status">${t('Wo das Projekt steht', 'Where the project stands')}</h2>
+    <dl class="bignums">
+      <div><dt>${t('Projektstufe', 'Project stage')}</dt><dd><span class="num" data-count="${nowStage}">${nowStage}</span><span class="of">/ 8</span></dd><dd class="bar bar-${nowStage}" aria-hidden="true"><span></span></dd></div>
+      <div><dt>${t('Java-Versionen', 'Java versions')}</dt><dd><span class="num">1.8</span><span class="of">${t('bis aktuell', 'to current')}</span></dd></div>
+      <div><dt>${t('Plattformen', 'Platforms')}</dt><dd><span class="num" data-count="6">6</span><span class="of">${t('Systeme', 'systems')}</span></dd></div>
+    </dl>
+    ${roadmap(t)}
+    <p>${t('Den Fortschritt je Aufgabe zeigt das', 'Progress per task is on the')} ${ext('https://github.com/users/VectoDE/projects/11', t('Roadmap-Board auf GitHub', 'roadmap board on GitHub'))}.</p>
   </div>
   ${statusCard(t, ctx)}
 </section>
 
-<section class="band" aria-labelledby="h-road">
-  <h2 id="h-road">${t('Wo das Projekt steht', 'Where the project stands')}</h2>
-  ${roadmap(t)}
-  <p>${t('Den Fortschritt je Aufgabe zeigt das', 'Progress per task is on the')} ${ext('https://github.com/users/VectoDE/projects/11', t('Roadmap-Board auf GitHub', 'roadmap board on GitHub'))}.</p>
+<section class="band" aria-labelledby="h-docs">
+  <p class="kicker">${t('Doku', 'Docs')}</p>
+  <h2 id="h-docs">${t('Alles zum Betrieb an einem Ort', 'Everything about running it in one place')}</h2>
+  <ul class="doc-cards">
+    <li><a class="card-link" href="${ctx.link('download')}">${icon('download')}<span class="cl-title">Download</span><span class="cl-desc">${t('Releases, Voraussetzungen, Signaturen prüfen', 'Releases, requirements, checking signatures')}</span></a></li>
+    <li><a class="card-link" href="${ctx.link('docs')}">${icon('book')}<span class="cl-title">${t('Dokumentation', 'Documentation')}</span><span class="cl-desc">${t('Betrieb, Setup, Konsole und API', 'Operations, setup, console and API')}</span></a></li>
+    <li><a class="card-link" href="${ctx.link('websites')}">${icon('setup')}<span class="cl-title">${t('Website für dein Netzwerk', 'A website for your network')}</span><span class="cl-desc">${t('Drei geplante Wege, mit Shop', 'Three planned ways, with a shop')}</span></a></li>
+    <li><a class="card-link" href="${ctx.link('faq')}">${icon('news')}<span class="cl-title">${t('Häufige Fragen', 'FAQ')}</span><span class="cl-desc">${t('Kurze Antworten zu Lizenz, Betrieb und Testnetzwerk', 'Short answers on licence, operation and the test network')}</span></a></li>
+  </ul>
 </section>
 
-<section class="band band-cta" aria-labelledby="h-site">
-  <h2 id="h-site">${t('Website und Shop für dein Netzwerk', 'A website and shop for your network')}</h2>
-  <p>${t('Zu einem Netzwerk gehört eine Website. Geplant sind drei Wege dahin: eine Vorlage, ein Baukasten im Panel und ein reines Code-Projekt. Geplant ist außerdem ein Shop für kosmetische Inhalte mit Stripe oder Mollie.', 'A network needs a website. Three ways to get one are planned: a template, a block builder in the panel, and a plain code project. A shop for cosmetic items, paid through Stripe or Mollie, is planned as well.')}</p>
-  <p class="actions"><a class="btn" href="${ctx.link('websites')}">${t('Die drei Wege', 'The three ways')}</a></p>
-</section>`,
+<section class="band band-team" aria-labelledby="h-team">
+  ${leadHead ? head3d(leadHead.key, ctx.esc(t(`Kopf von ${leadHead.name}`, `Head of ${leadHead.name}`) + (lead.person ? ` (${lead.person})` : '')), 'head-xl') : ''}
+  <div>
+    <p class="kicker">Team</p>
+    <h2 id="h-team">${t('Wer dahintersteht', 'Who is behind it')}</h2>
+    <p>${t(`Heute entwickelt Tim Hauke das Projekt allein. Für das Testnetzwerk sind ${openRoles} Rollen offen: Administration, Moderation, Support und Bau.`, `Today Tim Hauke develops the project alone. For the test network ${openRoles} roles are open: administration, moderation, support and building.`)}</p>
+    <p class="actions"><a class="btn" href="${ctx.link('team')}">${t('Zum Team', 'Meet the team')}</a></p>
+  </div>
+</section>`;
+      },
     };
   },
 
-  download(lang) {
+  download(lang, config) {
     const t = L(lang);
+    const rel = config.release;
+    const ops = `${BLOB}/docs/cloud/operations${lang === 'de' ? '.de' : ''}.md`;
     return {
       title: t('VectolynCloud herunterladen: Releases, Voraussetzungen, Signaturen', 'Download VectolynCloud: releases, requirements, signatures'),
       description: t('VectolynCloud für Windows, Linux, macOS, Docker, Pelican und Pterodactyl. Voraussetzungen, Schnellstart und wie du Prüfsummen und Signaturen prüfst.',
@@ -360,31 +459,24 @@ export const pages = {
       crumbs: [{ key: 'home', name: 'VectolynCloud' }, { key: 'download', name: 'Download' }],
       extraLd: (base) => [{
         '@type': 'SoftwareApplication', name: 'VectolynCloud', applicationCategory: 'GameApplication', applicationSubCategory: 'Minecraft server management',
-        operatingSystem: 'Windows, Linux, macOS', downloadUrl: REPO + '/releases', license: 'https://www.gnu.org/licenses/gpl-3.0.html',
+        operatingSystem: 'Windows, Linux, macOS', downloadUrl: rel ? rel.url : REPO + '/releases', license: 'https://www.gnu.org/licenses/gpl-3.0.html',
+        ...(rel ? { softwareVersion: rel.version } : {}),
         softwareRequirements: 'Java 21 or newer', author: { '@id': base + '#org' },
         offers: { '@type': 'Offer', price: '0', priceCurrency: 'EUR' },
       }],
       body: (ctx) => `${pageHead(t('Für Betreiber', 'For operators'), t('VectolynCloud herunterladen', 'Download VectolynCloud'),
-        t('Alle Dateien liegen in den Releases auf GitHub. Bisher gibt es nur Vorabversionen: zum Ausprobieren gedacht, noch nicht für ein Netzwerk mit echten Spielern.', 'All files are in the releases on GitHub. So far there are only pre-releases: meant for trying out, not yet for a network with real players.'))}
+        t('Die Dateien kommen direkt aus den Releases auf GitHub. Bisher gibt es nur Vorabversionen: zum Ausprobieren gedacht, noch nicht für ein Netzwerk mit echten Spielern.', 'The files come straight from the releases on GitHub. So far there are only pre-releases: meant for trying out, not yet for a network with real players.'))}
+${rel ? downloadPicker(t, ctx, rel, lang) : `<section class="band">
+  <p class="notice notice-warn">${t('Die Release-Daten konnten beim Bauen dieser Seite nicht geladen werden. Alle Dateien findest du auf der Release-Seite.', 'The release data could not be loaded when this page was built. All files are on the releases page.')}</p>
+  <p class="actions"><a class="btn btn-primary btn-large" href="${REPO}/releases">${icon('download', 'btn-icon')}${t('Zu den Releases', 'Go to the releases')}</a></p>
+</section>`}
 <section class="band">
-  <p class="actions"><a class="btn btn-primary" href="${REPO}/releases">${t('Zu den Releases', 'Go to the releases')}</a> <a class="btn" href="${BLOB}/docs/cloud/operations${lang === 'de' ? '.de' : ''}.md">${t('Betriebsanleitung', 'Operations guide')}</a></p>
   <h2>${t('Das brauchst du', 'What you need')}</h2>
   <ul class="ticks">
     <li>${t('Java 21 oder neuer', 'Java 21 or newer')}</li>
     <li>${t('ein normales Benutzerkonto: als root oder Administrator startet die Cloud nicht', 'a normal user account: the cloud refuses to start as root or administrator')}</li>
     <li>${t('Internet beim ersten Start, damit die Serversoftware geladen werden kann', 'internet access on the first start, to download the server software')}</li>
   </ul>
-  <h2>${t('Welche Datei?', 'Which file?')}</h2>
-  <div class="table-wrap"><table>
-    <thead><tr><th scope="col">${t('Datei', 'File')}</th><th scope="col">${t('Für', 'For')}</th></tr></thead>
-    <tbody>
-      <tr><td><code>VectolynCloud-&lt;version&gt;-windows.zip</code></td><td>${t('Windows: Programm, start.bat und start.ps1', 'Windows: program, start.bat and start.ps1')}</td></tr>
-      <tr><td><code>VectolynCloud-&lt;version&gt;-linux-macos.tar.gz</code></td><td>${t('Linux und macOS: Programm, start.sh, systemd-Unit und install.sh', 'Linux and macOS: program, start.sh, systemd unit and install.sh')}</td></tr>
-      <tr><td><code>VectolynCloud.jar</code></td><td>${t('nur das Programm, für java -jar, Docker und Pterodactyl', 'the program alone, for java -jar, Docker and Pterodactyl')}</td></tr>
-      <tr><td><code>ghcr.io/vectode/vectolyn-cloud</code></td><td>${t('Docker-Image, getaggt mit der Version', 'Docker image, tagged with the version')}</td></tr>
-      <tr><td><code>SHA256SUMS</code>, <code>*.sigstore.json</code></td><td>${t('Prüfsummen und Signaturen', 'checksums and signatures')}</td></tr>
-    </tbody>
-  </table></div>
   <h2>${t('Schnellstart', 'Quick start')}</h2>
   <ol class="steps">
     <li>${t('Archiv für dein System herunterladen und in einen leeren Ordner entpacken. Der Ordner wird das Zuhause der Cloud.', 'Download the archive for your system and unpack it into an empty folder. That folder is the cloud’s home.')}</li>
@@ -392,7 +484,7 @@ export const pages = {
     <li>${t('Die Fragen des Setup-Assistenten beantworten. Er zeigt am Ende eine Zusammenfassung und schreibt erst, wenn du speicherst.', 'Answer the setup assistant. It shows a summary at the end and writes nothing until you save.')}</li>
     <li>${t('Die Cloud lädt die Serversoftware, prüft sie und startet das Netzwerk. <code>help</code> zeigt die Befehle, <code>shutdown</code> beendet alles.', 'The cloud downloads and checks the server software and starts the network. <code>help</code> lists the commands, <code>shutdown</code> stops everything.')}</li>
   </ol>
-  <p>${t('Docker, Compose, systemd, Pelican und Pterodactyl beschreibt die', 'Docker, Compose, systemd, Pelican and Pterodactyl are covered in the')} ${ext(`${BLOB}/docs/cloud/operations${lang === 'de' ? '.de' : ''}.md`, t('Betriebsanleitung', 'operations guide'))}.</p>
+  <p>${t('Docker, Compose, systemd, Pelican und Pterodactyl beschreibt die', 'Docker, Compose, systemd, Pelican and Pterodactyl are covered in the')} ${ext(ops, t('Betriebsanleitung', 'operations guide'))}. ${t('Das Docker-Image heißt', 'The Docker image is')} <code>ghcr.io/vectode/vectolyn-cloud</code>${t(' und ist mit der Version getaggt.', ', tagged with the version.')}</p>
   <h2>${t('Standard-Ports', 'Default ports')}</h2>
   <div class="table-wrap"><table>
     <thead><tr><th scope="col">${t('Dienst', 'Service')}</th><th scope="col">Port</th></tr></thead>
@@ -403,8 +495,8 @@ export const pages = {
     </tbody>
   </table></div>
   <p>${t('Nur die Proxy-Ports gehören nach außen. Datenbank und API hören standardmäßig nur auf 127.0.0.1.', 'Only the proxy ports should be reachable from outside. By default the database and the API listen on 127.0.0.1 only.')}</p>
-  <h2>${t('Download prüfen', 'Verify the download')}</h2>
-  <p>${t('Jede Datei ist mit cosign signiert (keyless über Sigstore, ausgestellt für den Release-Workflow dieses Repositorys) und hat eine SLSA-Herkunftsbescheinigung. Ersetze den Tag durch deine Version:', 'Every file is signed with cosign (keyless through Sigstore, issued to the release workflow of this repository) and has SLSA build provenance. Replace the tag with your version:')}</p>
+  <h2 id="${t('pruefen', 'verify')}">${t('Download prüfen', 'Verify the download')}</h2>
+  <p>${t('Jede Datei ist mit cosign signiert (keyless über Sigstore, ausgestellt für den Release-Workflow dieses Repositorys) und hat eine SLSA-Herkunftsbescheinigung. Im Ordner mit den heruntergeladenen Dateien:', 'Every file is signed with cosign (keyless through Sigstore, issued to the release workflow of this repository) and has SLSA build provenance. In the folder with the downloaded files:')}</p>
   <pre class="code" tabindex="0"><code>sha256sum --check --ignore-missing SHA256SUMS
 gh attestation verify VectolynCloud.jar --repo VectoDE/VectolynCloud</code></pre>
   <p>${t('Die vollständigen cosign-Befehle stehen in der', 'The full cosign commands are in the')} ${ext(`${BLOB}/docs/cloud/operations.md#verifying-a-release`, t('Anleitung zur Release-Prüfung', 'release verification guide'))}.</p>
@@ -642,7 +734,7 @@ ${rules.map((r, i) => `  <section id="${id(r)}" aria-labelledby="${id(r)}-h"><h2
   <ul class="team">${team.map((m) => {
     const head = m.mcName && ctx.config.heads?.[m.mcName];
     const label = head ? t(`Kopf von ${head.name}`, `Head of ${head.name}`) + (m.person ? ` (${m.person})` : '') : t('Offene Stelle, noch ohne Kopf', 'Open position, no head yet');
-    return `<li class="${m.who ? '' : 'open'}">${head3d(head && head.key, ctx.esc(label))}<h2>${m.role[lang]}</h2><p>${m.what[lang]}</p><p class="who">${m.who || t('noch offen', 'not filled yet')}</p></li>`;
+    return `<li class="${m.who ? '' : 'open'}">${head3d(head && head.key, ctx.esc(label), 'head-lg')}<h2>${m.role[lang]}</h2><p>${m.what[lang]}</p><p class="who">${m.who || t('noch offen', 'not filled yet')}</p></li>`;
   }).join('')}</ul>
   <p>${t('Du willst mitmachen? Code, Übersetzungen und Dokumentation kannst du jederzeit beitragen, siehe', 'Want to help? You can contribute code, translations and documentation at any time, see the')} ${ext(REPO + '/blob/main/CONTRIBUTING' + (lang === 'de' ? '.de' : '') + '.md', t('Anleitung zum Mitmachen', 'contributing guide'))}. ${t('Bewerbungen für Moderation und Support öffnen wir vor dem Start des Testnetzwerks.', 'Applications for moderation and support open before the test network launches.')}</p>
 </section>`,

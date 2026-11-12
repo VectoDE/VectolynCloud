@@ -81,9 +81,9 @@ precedence = "override"
 SPDX-FileCopyrightText = "The respective team members (Minecraft skins)"
 SPDX-License-Identifier = "LicenseRef-Minecraft-Skin"
 
-# Build cache of the team heads (name, UUID, skin id, last check)
+# Build caches (team heads, newest release) and the test fixtures of the release lookup
 [[annotations]]
-path = "site/src/heads.json"
+path = ["site/src/heads.json", "site/src/release.json", "site/test/fixtures/**"]
 precedence = "override"
 SPDX-FileCopyrightText = "2026 VectoDE"
 SPDX-License-Identifier = "GPL-3.0-or-later"

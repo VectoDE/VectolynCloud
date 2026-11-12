@@ -1,0 +1,170 @@
+[
+  {
+    "assets": [
+      {
+        "browser_download_url": "https://github.com/VectoDE/VectolynCloud/releases/download/v0.1.2-dev/setup.example.yml",
+        "name": "setup.example.yml",
+        "size": 1754
+      },
+      {
+        "browser_download_url": "https://github.com/VectoDE/VectolynCloud/releases/download/v0.1.2-dev/setup.example.yml.sigstore.json",
+        "name": "setup.example.yml.sigstore.json",
+        "size": 10471
+      },
+      {
+        "browser_download_url": "https://github.com/VectoDE/VectolynCloud/releases/download/v0.1.2-dev/SHA256SUMS",
+        "name": "SHA256SUMS",
+        "size": 691
+      },
+      {
+        "browser_download_url": "https://github.com/VectoDE/VectolynCloud/releases/download/v0.1.2-dev/SHA256SUMS.sigstore.json",
+        "name": "SHA256SUMS.sigstore.json",
+        "size": 10559
+      },
+      {
+        "browser_download_url": "https://github.com/VectoDE/VectolynCloud/releases/download/v0.1.2-dev/vectolyn.intoto.jsonl",
+        "name": "vectolyn.intoto.jsonl",
+        "size": 12002
+      },
+      {
+        "browser_download_url": "https://github.com/VectoDE/VectolynCloud/releases/download/v0.1.2-dev/VectolynCloud-0.1.2-dev-banner-2x.png",
+        "name": "VectolynCloud-0.1.2-dev-banner-2x.png",
+        "size": 330346
+      },
+      {
+        "browser_download_url": "https://github.com/VectoDE/VectolynCloud/releases/download/v0.1.2-dev/VectolynCloud-0.1.2-dev-banner-2x.png.sigstore.json",
+        "name": "VectolynCloud-0.1.2-dev-banner-2x.png.sigstore.json",
+        "size": 10355
+      },
+      {
+        "browser_download_url": "https://github.com/VectoDE/VectolynCloud/releases/download/v0.1.2-dev/VectolynCloud-0.1.2-dev-banner.png",
+        "name": "VectolynCloud-0.1.2-dev-banner.png",
+        "size": 101123
+      },
+      {
+        "browser_download_url": "https://github.com/VectoDE/VectolynCloud/releases/download/v0.1.2-dev/VectolynCloud-0.1.2-dev-banner.png.sigstore.json",
+        "name": "VectolynCloud-0.1.2-dev-banner.png.sigstore.json",
+        "size": 10419
+      },
+      {
+        "browser_download_url": "https://github.com/VectoDE/VectolynCloud/releases/download/v0.1.2-dev/VectolynCloud-0.1.2-dev-linux-macos.tar.gz",
+        "name": "VectolynCloud-0.1.2-dev-linux-macos.tar.gz",
+        "size": 16277372
+      },
+      {
+        "browser_download_url": "https://github.com/VectoDE/VectolynCloud/releases/download/v0.1.2-dev/VectolynCloud-0.1.2-dev-linux-macos.tar.gz.sigstore.json",
+        "name": "VectolynCloud-0.1.2-dev-linux-macos.tar.gz.sigstore.json",
+        "size": 10467
+      },
+      {
+        "browser_download_url": "https://github.com/VectoDE/VectolynCloud/releases/download/v0.1.2-dev/VectolynCloud-0.1.2-dev-templates.tar.gz",
+        "name": "VectolynCloud-0.1.2-dev-templates.tar.gz",
+        "size": 195431
+      },
+      {
+        "browser_download_url": "https://github.com/VectoDE/VectolynCloud/releases/download/v0.1.2-dev/VectolynCloud-0.1.2-dev-templates.tar.gz.sigstore.json",
+        "name": "VectolynCloud-0.1.2-dev-templates.tar.gz.sigstore.json",
+        "size": 10227
+      },
+      {
+        "browser_download_url": "https://github.com/VectoDE/VectolynCloud/releases/download/v0.1.2-dev/VectolynCloud-0.1.2-dev-windows.zip",
+        "name": "VectolynCloud-0.1.2-dev-windows.zip",
+        "size": 16274294
+      },
+      {
+        "browser_download_url": "https://github.com/VectoDE/VectolynCloud/releases/download/v0.1.2-dev/VectolynCloud-0.1.2-dev-windows.zip.sigstore.json",
+        "name": "VectolynCloud-0.1.2-dev-windows.zip.sigstore.json",
+        "size": 10359
+      },
+      {
+        "browser_download_url": "https://github.com/VectoDE/VectolynCloud/releases/download/v0.1.2-dev/VectolynCloud.jar",
+        "name": "VectolynCloud.jar",
+        "size": 16274687
+      },
+      {
+        "browser_download_url": "https://github.com/VectoDE/VectolynCloud/releases/download/v0.1.2-dev/VectolynCloud.jar.sigstore.json",
+        "name": "VectolynCloud.jar.sigstore.json",
+        "size": 10367
+      }
+    ],
+    "draft": false,
+    "html_url": "https://github.com/VectoDE/VectolynCloud/releases/tag/v0.1.2-dev",
+    "prerelease": true,
+    "published_at": "2026-11-12T12:15:20Z",
+    "tag_name": "v0.1.2-dev"
+  },
+  {
+    "assets": [
+      {
+        "browser_download_url": "https://github.com/VectoDE/VectolynCloud/releases/download/v0.1.1-dev/SHA256SUMS",
+        "name": "SHA256SUMS",
+        "size": 500
+      },
+      {
+        "browser_download_url": "https://github.com/VectoDE/VectolynCloud/releases/download/v0.1.1-dev/SHA256SUMS.sigstore.json",
+        "name": "SHA256SUMS.sigstore.json",
+        "size": 10655
+      },
+      {
+        "browser_download_url": "https://github.com/VectoDE/VectolynCloud/releases/download/v0.1.1-dev/vectolyn.intoto.jsonl",
+        "name": "vectolyn.intoto.jsonl",
+        "size": 11850
+      },
+      {
+        "browser_download_url": "https://github.com/VectoDE/VectolynCloud/releases/download/v0.1.1-dev/VectolynCloud-0.1.1-dev-banner-2x.png",
+        "name": "VectolynCloud-0.1.1-dev-banner-2x.png",
+        "size": 329734
+      },
+      {
+        "browser_download_url": "https://github.com/VectoDE/VectolynCloud/releases/download/v0.1.1-dev/VectolynCloud-0.1.1-dev-banner-2x.png.sigstore.json",
+        "name": "VectolynCloud-0.1.1-dev-banner-2x.png.sigstore.json",
+        "size": 10643
+      },
+      {
+        "browser_download_url": "https://github.com/VectoDE/VectolynCloud/releases/download/v0.1.1-dev/VectolynCloud-0.1.1-dev-banner.png",
+        "name": "VectolynCloud-0.1.1-dev-banner.png",
+        "size": 100581
+      },
+      {
+        "browser_download_url": "https://github.com/VectoDE/VectolynCloud/releases/download/v0.1.1-dev/VectolynCloud-0.1.1-dev-banner.png.sigstore.json",
+        "name": "VectolynCloud-0.1.1-dev-banner.png.sigstore.json",
+        "size": 10471
+      },
+      {
+        "browser_download_url": "https://github.com/VectoDE/VectolynCloud/releases/download/v0.1.1-dev/VectolynCloud-0.1.1-dev-linux-macos.tar.gz",
+        "name": "VectolynCloud-0.1.1-dev-linux-macos.tar.gz",
+        "size": 10070195
+      },
+      {
+        "browser_download_url": "https://github.com/VectoDE/VectolynCloud/releases/download/v0.1.1-dev/VectolynCloud-0.1.1-dev-linux-macos.tar.gz.sigstore.json",
+        "name": "VectolynCloud-0.1.1-dev-linux-macos.tar.gz.sigstore.json",
+        "size": 10611
+      },
+      {
+        "browser_download_url": "https://github.com/VectoDE/VectolynCloud/releases/download/v0.1.1-dev/VectolynCloud-0.1.1-dev-windows.zip",
+        "name": "VectolynCloud-0.1.1-dev-windows.zip",
+        "size": 10072843
+      },
+      {
+        "browser_download_url": "https://github.com/VectoDE/VectolynCloud/releases/download/v0.1.1-dev/VectolynCloud-0.1.1-dev-windows.zip.sigstore.json",
+        "name": "VectolynCloud-0.1.1-dev-windows.zip.sigstore.json",
+        "size": 10611
+      },
+      {
+        "browser_download_url": "https://github.com/VectoDE/VectolynCloud/releases/download/v0.1.1-dev/VectolynCloud.jar",
+        "name": "VectolynCloud.jar",
+        "size": 10073642
+      },
+      {
+        "browser_download_url": "https://github.com/VectoDE/VectolynCloud/releases/download/v0.1.1-dev/VectolynCloud.jar.sigstore.json",
+        "name": "VectolynCloud.jar.sigstore.json",
+        "size": 10519
+      }
+    ],
+    "draft": false,
+    "html_url": "https://github.com/VectoDE/VectolynCloud/releases/tag/v0.1.1-dev",
+    "prerelease": true,
+    "published_at": "2026-10-30T20:44:18Z",
+    "tag_name": "v0.1.1-dev"
+  }
+]

@@ -152,6 +152,58 @@
     });
   }
 
+  // ---------- Header: shrinks after the first scroll; thin scroll progress bar ----------
+  var bar = document.querySelector('.progress span');
+  var ticking = false;
+  function onScroll() {
+    ticking = false;
+    var y = window.scrollY || 0;
+    if (head) head.classList.toggle('scrolled', y > 24);
+    if (bar) {
+      var max = document.documentElement.scrollHeight - window.innerHeight;
+      bar.style.setProperty('--p', max > 0 ? Math.min(1, y / max).toFixed(4) : '0');
+    }
+  }
+  window.addEventListener('scroll', function () { if (!ticking) { ticking = true; requestAnimationFrame(onScroll); } }, { passive: true });
+  onScroll();
+
+  // ---------- Big numbers count up briefly once visible (only with motion); bars grow ----------
+  if ('IntersectionObserver' in window) {
+    var countIO = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        countIO.unobserve(e.target);
+        var el = e.target;
+        if (el.classList.contains('bar')) { el.classList.add('grown'); return; }
+        var end = parseInt(el.getAttribute('data-count'), 10);
+        if (!(end > 0) || reduce.matches || motion.paused()) return;
+        var t0 = performance.now(), dur = 700;
+        var step = function (now) {
+          var k = Math.min(1, (now - t0) / dur);
+          el.textContent = String(Math.max(1, Math.round(end * (1 - Math.pow(1 - k, 3)))));
+          if (k < 1) requestAnimationFrame(step); else el.textContent = String(end);
+        };
+        requestAnimationFrame(step);
+      });
+    }, { threshold: 0.6 });
+    document.querySelectorAll('[data-count],.bar').forEach(function (el) { countIO.observe(el); });
+  }
+
+  // ---------- Download: pick the file for the visitor's system (the page works without this) ----------
+  var dl = document.querySelector('[data-dl]');
+  if (dl) {
+    var ua = navigator.userAgent || '';
+    var plat = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '';
+    var phone = /Android|iPhone|iPad|iPod/i.test(ua) || (/Mac/i.test(plat) && navigator.maxTouchPoints > 1);
+    var os = phone ? null : /Win/i.test(plat) ? 'windows' : /Mac/i.test(plat) ? 'macos' : /Linux|X11|CrOS/i.test(plat + ' ' + ua) ? 'linux' : null;
+    var chosen = os && dl.querySelector('.dl-pick[data-os="' + os + '"]');
+    if (chosen) {
+      dl.querySelectorAll('.dl-pick').forEach(function (p) { p.hidden = p !== chosen; });
+      var auto = chosen.querySelector('.dl-auto');
+      if (auto) auto.hidden = false;
+    }
+  }
+
   // ---------- Copy the server address ----------
   document.querySelectorAll('[data-copy]').forEach(function (btn) {
     btn.addEventListener('click', function () {
