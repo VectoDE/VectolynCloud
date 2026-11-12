@@ -51,19 +51,32 @@ public final class ApiCompat {
         String next = null;
         Path report = null;
         List<Module> modules = new ArrayList<>();
-        for (int i = 0; i < args.length; i++) {
+        int i = 0;
+        while (i < args.length) {
             switch (args[i]) {
-                case "--japicmp" -> japicmp = Path.of(value(args, ++i));
-                case "--baseline" -> baseline = value(args, ++i);
-                case "--next" -> next = value(args, ++i);
-                case "--report" -> report = Path.of(value(args, ++i));
+                case "--japicmp" -> {
+                    japicmp = Path.of(value(args, i + 1));
+                    i += 2;
+                }
+                case "--baseline" -> {
+                    baseline = value(args, i + 1);
+                    i += 2;
+                }
+                case "--next" -> {
+                    next = value(args, i + 1);
+                    i += 2;
+                }
+                case "--report" -> {
+                    report = Path.of(value(args, i + 1));
+                    i += 2;
+                }
                 case "--module" -> {
                     if (i + 5 >= args.length) {
                         throw new IllegalArgumentException("--module needs <name> <old> <new> <old cp> <new cp>");
                     }
                     modules.add(new Module(args[i + 1], Path.of(args[i + 2]), Path.of(args[i + 3]),
                             classpath(args[i + 4]), classpath(args[i + 5])));
-                    i += 5;
+                    i += 6;
                 }
                 default -> throw new IllegalArgumentException("unknown argument " + args[i]);
             }
