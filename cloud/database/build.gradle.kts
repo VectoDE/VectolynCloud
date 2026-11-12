@@ -60,6 +60,11 @@ val postgresTest by tasks.registering(Test::class) {
     useJUnitPlatform {
         includeTags("postgres")
     }
+    // Show every result in the log, so a skipped run (no server) cannot pass for a real one.
+    testLogging {
+        events("passed", "skipped", "failed")
+        showStandardStreams = false
+    }
     // The environment is not a task input, so never reuse an earlier result.
     outputs.upToDateWhen { false }
     outputs.cacheIf { false }
