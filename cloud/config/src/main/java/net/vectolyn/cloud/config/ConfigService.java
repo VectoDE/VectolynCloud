@@ -19,12 +19,15 @@ import net.vectolyn.cloud.config.error.ConfigError;
 import net.vectolyn.cloud.config.error.ConfigException;
 import net.vectolyn.cloud.config.error.ErrorCode;
 import net.vectolyn.cloud.config.io.ConfigStore;
+import net.vectolyn.cloud.config.io.ConfigYaml;
+import net.vectolyn.cloud.config.io.UnifiedDiff;
 import net.vectolyn.cloud.config.model.CloudConfig;
 import net.vectolyn.cloud.config.model.ConfigSnapshot;
 import net.vectolyn.cloud.config.model.GroupConfig;
 import net.vectolyn.cloud.config.model.NodesConfig;
 import net.vectolyn.cloud.config.model.TaskConfig;
 import net.vectolyn.cloud.config.operation.ConfigOperation;
+import net.vectolyn.cloud.config.schema.ConfigSchema;
 import net.vectolyn.cloud.config.validation.ConfigValidator;
 import net.vectolyn.cloud.config.validation.JvmFlagPolicy;
 import org.jspecify.annotations.Nullable;
@@ -88,6 +91,12 @@ public final class ConfigService implements AutoCloseable {
         ConfigStore.Loaded loaded = store.load();
         requireValid(loaded.snapshot());
         persistLoaded(store, loaded, loaded.missingFiles());
+        try {
+            ConfigSchema.install(home);
+        } catch (IOException e) {
+            // Editors only lose their completion; the cloud itself does not need the schemas.
+            LOG.log(System.Logger.Level.WARNING, "JSON Schemas not written to config/" + ConfigSchema.DIR, e);
+        }
         logWarnings(loaded.snapshot());
         return new ConfigService(store, loaded.snapshot());
     }
@@ -155,6 +164,67 @@ public final class ConfigService implements AutoCloseable {
         } finally {
             lock.unlock();
         }
+    }
+
+    /** Previews one operation; see {@link #preview(List)}. */
+    public ConfigPreview preview(ConfigOperation operation) throws ConfigException {
+        return preview(List.of(operation));
+    }
+
+    /**
+     * Computes what {@link #apply(List)} would do, without writing anything and without telling the
+     * listeners: the operations run on the current snapshot, the result is validated (in mirror
+     * mode also checked for files of the head) and every file that would change is compared line by
+     * line with the file as the cloud writes the current snapshot.
+     *
+     * @return the change; {@link ConfigPreview#isEmpty()} if nothing would change
+     * @throws ConfigException if an operation cannot apply or the result is invalid, exactly as
+     *                         {@link #apply(List)} would
+     */
+    public ConfigPreview preview(List<ConfigOperation> operations) throws ConfigException {
+        Objects.requireNonNull(operations, "operations");
+        lock.lock();
+        try {
+            ensureOpen();
+            ConfigSnapshot before = current;
+            ConfigSnapshot after = before;
+            for (ConfigOperation operation : operations) {
+                after = Objects.requireNonNull(operation.apply(after), "operation returned null");
+            }
+            if (mirrored) {
+                requireOwnFilesOnly(before, after);
+            }
+            requireValid(after);
+            return new ConfigPreview(before, after, fileChanges(before, after));
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /** The line diff of every file that differs between two snapshots, in file name order. */
+    static List<ConfigPreview.FileChange> fileChanges(ConfigSnapshot before, ConfigSnapshot after) {
+        Map<String, Object> a = ConfigStore.files(before);
+        Map<String, Object> b = ConfigStore.files(after);
+        Set<String> names = new java.util.TreeSet<>(a.keySet());
+        names.addAll(b.keySet());
+        List<ConfigPreview.FileChange> changes = new ArrayList<>();
+        for (String file : names) {
+            Object old = a.get(file);
+            Object now = b.get(file);
+            if (old != null && old.equals(now)) {
+                continue;
+            }
+            String oldText = old == null ? "" : text(file, old);
+            String newText = now == null ? "" : text(file, now);
+            ConfigPreview.Kind kind = old == null ? ConfigPreview.Kind.ADDED
+                    : now == null ? ConfigPreview.Kind.REMOVED : ConfigPreview.Kind.CHANGED;
+            changes.add(new ConfigPreview.FileChange(file, kind, UnifiedDiff.diff(file, oldText, newText)));
+        }
+        return changes;
+    }
+
+    private static String text(String file, Object value) {
+        return new String(ConfigYaml.write(file, value), java.nio.charset.StandardCharsets.UTF_8);
     }
 
     /**

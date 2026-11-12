@@ -15,7 +15,7 @@ The cloud home is the folder the cloud runs in (`VECTOLYN_HOME`, by default the 
 <home>/secrets/vectolyn.env       secrets, KEY=VALUE, owner-only
 ```
 
-`config/monitor.yml`, `config/backup.yml`, `config/cluster.yml` ([cluster.md](cluster.md#files)) and `config/software.lock.yml` belong to other modules, as do `local/`, `temp/`, `database/`, `storage/`, `backups/`, `logs/` and `state/`; the whole layout is in [architecture](architecture.md#cloud-home).
+`config/monitor.yml`, `config/privacy.yml` ([privacy.md](privacy.md)), `config/backup.yml`, `config/cluster.yml` ([cluster.md](cluster.md#files)) and `config/software.lock.yml` belong to other modules, as do `local/`, `temp/`, `database/`, `storage/`, `backups/`, `logs/` and `state/`; the whole layout is in [architecture](architecture.md#cloud-home).
 
 File names in this document, in error messages, events, the API and the console are relative to `config/`: `cloud.yml`, `groups/lobby.yml`. A relative path inside a file (for example `api.tls.keystore`) is resolved against the home, not against `config/`. A home from before the `config/` folder is moved by the [home layout migration](node.md#home-layout-migration) at the first start.
 
@@ -61,10 +61,12 @@ api:
   enabled: false
   bind: 127.0.0.1            # anything except loopback needs TLS
   port: 8085
+  # grpc-port: 8086          optional gRPC listener (HTTP/2) on the same bind and TLS; 0 or missing = off
   tls:
     enabled: false
     # keystore: secrets/api.p12  required when enabled, relative to the home
   # cors-origins: [https://dashboard.example.org]   optional, up to 16 origins, off when empty
+  # graphql-introspection: true   optional, answers __schema/__type on /api/v1/graphql; off by default, for development
 branding:
   powered-by: true           # last TAB footer line "Powered by VectolynCloud" and /version on the proxies; false removes both
 ```
@@ -201,7 +203,7 @@ cloud.yml: proxy.port (line 13): Must be between 1 and 65535. [out-of-range]
 cloud.yml: proxy.port (Zeile 13): Muss zwischen 1 und 65535 liegen.
 ```
 
-Codes (`ErrorCode.code()`): `syntax`, `not-a-mapping`, `file-too-large`, `file-missing`, `file-access`, `invalid-file-name`, `schema-version-missing`, `schema-version-unsupported`, `unknown-field`, `duplicate-field`, `invalid-value`, `required`, `out-of-range`, `pattern-mismatch`, `min-greater-than-max`, `port-conflict`, `port-in-service-range`, `duplicate-entry`, `unknown-group`, `unknown-task`, `unknown-node`, `already-exists`, `not-allowed`, `catalog-kind-mismatch`, `software-version-mismatch`, `static-above-min`, `scale-down-not-below-up`, `api-tls-required`, `eula-required`, `empty`, `not-regular`, `jvm-flag-forbidden`, `jvm-flag-not-listed`, `invalid-origin`, `managed-by-head` (a member of a cluster: `nodes.yml`, groups and tasks come from the head, see [cluster.md](cluster.md#config-mirror)).
+Codes (`ErrorCode.code()`): `syntax`, `not-a-mapping`, `file-too-large`, `file-missing`, `file-access`, `invalid-file-name`, `schema-version-missing`, `schema-version-unsupported`, `unknown-field`, `duplicate-field`, `invalid-value`, `required`, `out-of-range`, `pattern-mismatch`, `min-greater-than-max`, `port-conflict`, `port-in-service-range`, `duplicate-entry`, `unknown-group`, `unknown-task`, `unknown-node`, `already-exists`, `not-allowed`, `catalog-kind-mismatch`, `software-version-mismatch`, `static-above-min`, `scale-down-not-below-up`, `api-tls-required`, `eula-required`, `empty`, `not-regular`, `jvm-flag-forbidden`, `jvm-flag-not-listed`, `invalid-origin`, `managed-by-head` (a member of a cluster: `nodes.yml`, groups and tasks come from the head, see [cluster.md](cluster.md#config-mirror)), `not-in-archive` and `archive-too-large` ([import and export](#import-and-export)).
 
 An error never contains the value that was wrong, only the limit, pattern or name involved. A secret pasted into the wrong field therefore cannot reach a log through its error message. Names taken from the input (an unknown field, group, task or node) are passed on unchanged only when they are valid names; otherwise control and non-ASCII characters become `?` and the text is cut to 64 characters, so it cannot break or forge a log line.
 
@@ -251,6 +253,63 @@ The service is thread-safe. `snapshot()` never blocks; changes and reloads run o
 - equal to the current snapshot (for example the cloud's own write): nothing happens.
 
 The watcher is native on Linux and Windows. On macOS Java polls, so a change can take a few seconds to show up. `reload()` does the same on demand, for example from a console command.
+
+## JSON Schemas for editors
+
+Every file the cloud writes starts with its header and a line for the [yaml-language-server](https://github.com/redhat-developer/yaml-language-server), which VS Code (YAML extension by Red Hat), IntelliJ IDEA and other editors use:
+
+```
+# yaml-language-server: $schema=../schema/group.schema.json
+```
+
+The schemas lie next to the files in `config/schema/` (`cloud.schema.json`, `nodes.schema.json`, `group.schema.json`, `task.schema.json`). The cloud writes them when it opens the configuration, so they always fit the running version; a schema file whose content is already right is not touched. The editor then completes field names and enum values and underlines an unknown field, a wrong type, a size like `256K` or a time like `30d` while you type. The same files ship in the repository under [`cloud/dist/schema/`](../../cloud/dist/schema); their `$id` points there, for files you write before the first start.
+
+`ConfigSchema` (package `net.vectolyn.cloud.config.schema`) generates them by reflection from the model records, with the naming rules of the strict reader, so there is no second description to keep in sync and no extra library. A schema checks what the strict reader checks: names, types, enum values, the formats of sizes, times and `java`, required fields, and that no other field is allowed. The rules across fields and files (port conflicts, a task's group, `heap.min` not above `heap.max`) stay with `ConfigValidator`; the cloud reports them when it reads the file. A file written before the schema line existed gets it the next time the cloud saves it; the line can also be added by hand.
+
+`ConfigSchemaTest` keeps the schemas honest: the copies in `cloud/dist/schema/` must equal the generated ones (`./gradlew :cloud:config:test -PupdateSchemas` rewrites them after a model change), the YAML examples on this page must pass both the schema and the reader, and for every field of those examples, removing it must fail the schema exactly when it fails the reader.
+
+## Preview of a change
+
+`ConfigService.preview(operations)` runs the operations like `apply`, validates the result the same way (on a cluster member also the rule for the head's files) and returns a `ConfigPreview`: every file that would change, `ADDED`, `CHANGED` or `REMOVED`, with a line diff in the unified format (`diff -u`, three lines of context). It writes nothing and calls no listener. The old side of the diff is the file as the cloud writes the current configuration, so comments of a hand-edited file do not show up as removed. In the console: `config set <key> <value> --dry-run` and `config import <file.zip> --dry-run`.
+
+### What needs a restart
+
+Almost every change takes effect while the cloud runs: a change through `apply` and a hand edit are picked up at once, and the node reacts to them (wanted switches, groups, tasks, scaling, memory of the nodes, language). These settings are read only at a certain moment:
+
+| Setting | Takes effect |
+|---|---|
+| `api` in `cloud.yml` (enabled, bind, port, TLS, CORS) | next start of the node ([api.md](api.md)) |
+| `database` in `cloud.yml` (mode, host, port, name, user, Docker image) | next start of the cloud ([node.md](node.md)) |
+| `node-id`, and `service-ports` of this node in `nodes.yml` | next start of the node ([node.md](node.md#limits-today)) |
+| `monitor.yml` | next start of the cloud ([monitor.md](monitor.md)) |
+| `privacy.yml` | next start of the node ([privacy.md](privacy.md)) |
+| `cluster.yml` | next start of the node ([cluster.md](cluster.md#files)) |
+| `proxy`, `legacy-proxy`, `fallback-group`, `branding` | next start of the proxy or service concerned, since the cloud renders its files and environment then ([bridges.md](bridges.md)) |
+
+`backup.yml` is read before every backup, so a change counts from the next backup on.
+
+## Import and export
+
+`ConfigArchive` (package `net.vectolyn.cloud.config.transfer`) moves the whole configuration in one zip file, for example to a new machine or to keep a known state:
+
+```
+config export backups/config-2026-11-12.zip
+config import backups/config-2026-11-12.zip --dry-run
+config import backups/config-2026-11-12.zip
+```
+
+**What is in it.** `cloud.yml`, `nodes.yml`, `groups/<name>.yml` and `tasks/<name>.yml` as the cloud writes them, plus `monitor.yml`, `privacy.yml` and `backup.yml` byte for byte if they exist. Never secrets: nothing from `secrets/`, no `cluster.yml` (keys and members belong to one machine) and no `software.lock.yml`. The entries have a fixed time stamp, so the same configuration gives the same archive. Export never overwrites an existing file; a relative path in the console starts at the cloud home.
+
+**What an import checks before it writes anything.**
+
+- Only the names above are accepted, exactly; the folders `groups/` and `tasks/` may appear as entries. Anything else (`../x.yml`, an absolute path, `secrets/vectolyn.env`, `cluster.yml`, `groups/a/b.yml`, an upper-case or device name) fails with `not-in-archive`. No other name is ever resolved, so an entry cannot write outside `config/` (no zip slip).
+- A name twice fails with `duplicate-entry`. At most 1024 entries and 32 MiB, for the archive file and for its unpacked content (`archive-too-large`); each file at most 1 MiB (`file-too-large`), counted on the bytes really unpacked, not on what the entry claims.
+- `cloud.yml` and `nodes.yml` must be there (`file-missing`). Every file is read as strictly as a hand-edited one, `monitor.yml`, `privacy.yml` and `backup.yml` with their own checks, and the result is validated as a whole like any change. All problems are reported together.
+- On a cluster member, an archive that would change `nodes.yml`, a group or a task is refused with `managed-by-head`; change those on the head.
+
+**What an import does.** It shows the diff of every file that changes, then replaces the configuration through `ConfigService.apply` (validated once more against the configuration of that moment) and writes `monitor.yml`, `privacy.yml` and `backup.yml` atomically. Groups and tasks that are not in the archive are deleted; a `monitor.yml`, `privacy.yml` or `backup.yml` missing from the archive stays as it is. The import takes the files as they are, `node-id`, `setup-complete` and `eula-accepted` included. Settings from the [restart table](#what-needs-a-restart) take effect as described there.
+
+`ConfigArchiveFuzzTest` feeds arbitrary bytes to the reader: it must either give a plan or fail with `ConfigException`, and never write a file.
 
 ## Atomic writes
 

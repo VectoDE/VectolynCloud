@@ -445,4 +445,42 @@ class BuiltinCommandsTest {
         assertTrue(ansi.output().contains("\u001b[31m"), "errors are red on an ANSI terminal");
         assertFalse(terminal.output().contains("\u001b["), "no escape codes without ANSI");
     }
+
+    @Test
+    void configSetDryRunShowsTheDiffAndWritesNothing() throws Exception {
+        String before = cloudFile();
+        assertEquals(Outcome.DONE, run("config set proxy.port 25570 --dry-run"));
+        assertTrue(terminal.output().contains("-  port: 25565"), terminal.output());
+        assertTrue(terminal.output().contains("+  port: 25570"), terminal.output());
+        assertEquals(before, cloudFile());
+        assertEquals(25565, config.snapshot().cloud().proxy().port());
+
+        assertEquals(Outcome.FAILED, run("config set proxy.port 70000 --dry-run"), "validated like a real change");
+        assertEquals(Outcome.FAILED, run("config set proxy.port 25570 --force"));
+        assertTrue(terminal.output().contains("only --dry-run"), terminal.output());
+        assertEquals(before, cloudFile());
+    }
+
+    @Test
+    void configExportAndImportRoundTrip() throws Exception {
+        assertEquals(Outcome.DONE, run("config export backup.zip"));
+        assertTrue(Files.isRegularFile(home.resolve("backup.zip")));
+        assertEquals(Outcome.FAILED, run("config export backup.zip"), "never overwrites");
+
+        assertEquals(Outcome.DONE, run("config set language de"));
+        String changed = cloudFile();
+        terminal.clearOutput();
+        assertEquals(Outcome.DONE, run("config import backup.zip --dry-run"));
+        assertTrue(terminal.output().contains("-language: de"), terminal.output());
+        assertTrue(terminal.output().contains("+language: en"), terminal.output());
+        assertEquals(changed, cloudFile(), "dry run writes nothing");
+
+        assertEquals(Outcome.DONE, run("config import backup.zip"));
+        assertEquals(Language.EN, config.snapshot().cloud().language());
+
+        terminal.clearOutput();
+        assertEquals(Outcome.DONE, run("config import backup.zip"));
+        assertTrue(terminal.output().contains("No changes."), terminal.output());
+        assertEquals(Outcome.FAILED, run("config import missing.zip"));
+    }
 }

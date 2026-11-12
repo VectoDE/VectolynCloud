@@ -11,7 +11,12 @@
 # "docker inspect" and in the environment of every server the cloud starts. The cloud reads its
 # database password through database.password-file in setup.yml.
 #
-# The image comes from GHCR. To build it from this checkout instead: docker compose build
+# The image comes from GHCR. Pin the version you want in .env next to this file or in the shell:
+#   VECTOLYN_VERSION=0.1.1-dev        a fixed release (the tag without the leading v); recommended
+#   VECTOLYN_VERSION=dev              the moving tag: always the newest -dev release (the default)
+#   VECTOLYN_VERSION=latest           the newest stable release; it exists from the first stable release on
+# Upgrade by changing the value and running: docker compose pull && docker compose up -d
+# To build the image from this checkout instead: docker compose build
 # Details: docs/cloud/operations.md
 
 name: vectolyn

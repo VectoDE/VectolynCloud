@@ -1,0 +1,66 @@
+{
+  "$schema" : "https://json-schema.org/draft/2020-12/schema",
+  "$id" : "https://github.com/VectoDE/VectolynCloud/raw/main/cloud/dist/schema/task.schema.json",
+  "title" : "VectolynCloud tasks/<name>.yml",
+  "description" : "Generated from the configuration model of VectolynCloud. Reference: https://github.com/VectoDE/VectolynCloud/blob/main/docs/cloud/config.md",
+  "type" : "object",
+  "properties" : {
+    "schema-version" : {
+      "type" : "integer",
+      "minimum" : 1,
+      "maximum" : 2,
+      "description" : "Version of the file format; 2 is current."
+    },
+    "group" : {
+      "type" : "string"
+    },
+    "scaling" : {
+      "$ref" : "#/$defs/ScalingConfig"
+    },
+    "nodes" : {
+      "type" : "array",
+      "items" : {
+        "type" : "string"
+      }
+    }
+  },
+  "required" : [ "schema-version" ],
+  "additionalProperties" : false,
+  "$defs" : {
+    "ScalingConfig" : {
+      "type" : "object",
+      "properties" : {
+        "static-services" : {
+          "type" : "integer"
+        },
+        "min-services" : {
+          "type" : "integer"
+        },
+        "max-services" : {
+          "type" : "integer"
+        },
+        "players-per-service" : {
+          "type" : "integer"
+        },
+        "scale-up-at" : {
+          "type" : "integer"
+        },
+        "scale-down-below" : {
+          "type" : "integer"
+        },
+        "scale-down-after" : {
+          "type" : "string",
+          "pattern" : "^(0|[1-9][0-9]{0,5})[smh]$",
+          "description" : "<number>s, <number>m or <number>h, for example 30s"
+        },
+        "cooldown" : {
+          "type" : "string",
+          "pattern" : "^(0|[1-9][0-9]{0,5})[smh]$",
+          "description" : "<number>s, <number>m or <number>h, for example 30s"
+        }
+      },
+      "required" : [ "static-services" ],
+      "additionalProperties" : false
+    }
+  }
+}

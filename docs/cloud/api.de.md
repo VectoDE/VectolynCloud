@@ -54,7 +54,7 @@ curl -X POST -H "Authorization: Bearer vcs_..." https://cloud.example.org:8443/a
 ```
 
 - Der Einrichtungs-Token gilt nur für diese eine Anfrage. An jedem anderen Endpunkt oder mit Query-String ist er ein falsches Token (`401`, zählt für die Sperre nach falschen Tokens). Ein API-Token bekommt an diesem Endpunkt `403 setup-token-required`.
-- Der Tausch entfernt den Einrichtungs-Token, bevor er das API-Token schreibt. Zweimal geht also nie, ein zweiter Versuch bekommt `401`. Das API-Token hat den Scope `admin` und den Namen des Administrators, mit `-2`, `-3`, … falls es diesen Namen schon gibt.
+- Der Tausch schreibt zuerst das API-Token. Scheitert das (`500 io-error`), bleibt der Einrichtungs-Token gültig und der Tausch lässt sich wiederholen. Sobald das API-Token existiert, ist der Einrichtungs-Token sofort ungültig. Zweimal geht also nie, ein zweiter Versuch bekommt `401`. Danach wird seine Datei gelöscht. Scheitert das Löschen, gelingt der Tausch trotzdem und der Node protokolliert einen Fehler, denn mit der Datei wäre der Einrichtungs-Token nach einem Neustart wieder gültig (Datei löschen oder den Token mit `api token setup` ersetzen). Das API-Token hat den Scope `admin` und den Namen des Administrators, mit `-2`, `-3`, … falls es diesen Namen schon gibt.
 - Nur diese Antwort enthält das API-Token (`Cache-Control: no-store`). Geht es verloren: an der Konsole widerrufen und einen neuen Einrichtungs-Token erstellen.
 - Das Web-Panel (Stufe 8) nutzt später dieselbe Anfrage für die erste Anmeldung.
 
@@ -69,6 +69,8 @@ curl -X POST -H "Authorization: Bearer vcs_..." https://cloud.example.org:8443/a
 | `backups:read` | Backups auflisten |
 | `backups:write` | Backup erstellen |
 | `node:read` | Node-Status; Metrik-Events |
+| `templates:read` | Templates und ihre Dateien auflisten, eine Datei lesen (nie Secrets) |
+| `templates:write` | Template-Dateien anlegen und ersetzen |
 | `admin` | alles oben und die Token-Verwaltung unter `/admin/tokens` |
 
 Ein Schreib-Scope schließt den Lese-Scope nicht ein. Fehlt der Scope, kommt `403 missing-scope`. Für Änderungen an `api` oder `database` in `cloud.yml` braucht es `admin`. Diese Abschnitte bestimmen, wer den Node erreicht und welches Image `docker compose` mit dem Root-Passwort der Datenbank startet.
@@ -88,6 +90,7 @@ Alle Pfade beginnen mit `/api/v1`. Bodys sind `application/json` in UTF-8, mit d
 - **Konfiguration:** `GET|PUT /config` (`cloud.yml`), `POST /config/reload`, `GET /config/warnings`.
 - **Node und Setup:** `GET /node`, `GET /setup`.
 - **Backups:** `GET /backups`, `POST /backups` mit `{"services": [...], "database": true, "note": "..."}`.
+- **Templates:** `GET /templates`, `GET /templates/{template}/files`, `GET|PUT /templates/{template}/files/{path}` (siehe unten).
 - **Events:** `GET /events` als WebSocket.
 
 Jeder Schreibzugriff läuft über `ConfigService.apply`. Geprüft wird die ganze Konfiguration: Ports, EULA vor `setup-complete`, TLS für eine öffentliche API und die Allowlist der JVM-Flags. Danach wird atomar geschrieben, und die Listener des Nodes sehen die Änderung so, als wäre sie an der Konsole eingegeben worden. Bei einem Fehler wird nichts geschrieben, die Antwort ist `422 invalid-config` mit der Fehlerliste.
@@ -107,6 +110,13 @@ Jeder Schreibzugriff läuft über `ConfigService.apply`. Geprüft wird die ganze
 **Powered-by-Zeile.** `branding.powered-by` in `PUT /config` (zum Beispiel `"branding": {"powered-by": false}`) schaltet die TAB-Fußzeile „Powered by VectolynCloud“ und `/version` auf den Proxys ein oder aus. Fehlt der Abschnitt oder der Schlüssel (`"branding": {}`), gilt `true`. Dienste übernehmen den Wert bei ihrem nächsten Start (siehe [config.md](config.md#cloudyml)).
 
 **Gruppen.** `drain-timeout` ist optional (5s bis 10m, Default 30s), zum Beispiel `"drain-timeout": "45s"`; außerhalb der Grenzen antwortet die API mit `422 out-of-range`.
+
+**Templates.** Die Endpunkte unter `/templates` braucht der Datei-Editor des Web-Panels: Sie listen die Template-Ordner in `local/templates/`, zeigen eine Datei und speichern sie zurück. `{path}` ist der Rest der URL nach `/files/`, die Segmente mit `/` getrennt und nicht prozentkodiert, etwa `/api/v1/templates/Lobby-Server/files/default/plugins/LuckPerms/config.yml`. Der Router lässt Segmente aus Buchstaben, Ziffern, `_` und `-` durch, bis zu acht Teile mit je einem Punkt dazwischen. Eine Datei mit anderem Namen (Leerzeichen, Umlaut) steht in der Liste, lässt sich aber nicht ansprechen. Danach gelten dieselben Regeln wie beim Cluster-Spiegel (`TemplatePaths` in `cloud/config`): kein `..`, `.`, leeres Segment, Backslash, Doppelpunkt oder Windows-Gerätename, höchstens 240 Bytes und 16 Segmente, und nichts, was nach Secret aussieht (`forwarding.secret`, `*.pem`, `*.key`, `.env`, `secrets/`, `.git/` und so weiter). So ein Pfad bekommt `400 invalid-path`, bevor die Platte berührt wird; in Listen fehlen diese Dateien. Links, Junctions und Sonderdateien werden nie verfolgt; liegt eine im Weg, kommt `409 not-a-regular-file`.
+
+- **Lesen** liefert UTF-8-Text unverändert und alles andere (auch Text mit NUL-Byte) als Base64, bis 1 MiB (darüber `413 file-too-large`). Das `ETag` gehört zu den Bytes der Datei.
+- **Schreiben** prüft das `ETag`: Ohne `If-Match` entsteht nur eine neue Datei, eine vorhandene bekommt `428 precondition-required`. Mit dem `ETag` aus dem `GET` (oder `*`) wird die Datei ersetzt; hat sie sich inzwischen geändert, kommt `412 precondition-failed`. Prüfen und Schreiben laufen unter einer Sperre, von zwei Editoren mit demselben `ETag` kommt also genau einer durch. Eine Datei darf höchstens 48 KiB groß sein (die API liest Strings bis 64 KiB, das sind 48 KiB in Base64). Fehlende Ordner werden angelegt, die Datei wird atomar ersetzt.
+- **Cluster.** Auf einem Mitglied kommen die Templates vom Head (siehe [cluster.md](cluster.md)), dort antwortet `PUT` mit `409 managed-by-head`. Lesen geht.
+- Dienste übernehmen ein geändertes Template, wenn sie das nächste Mal daraus vorbereitet werden ([template.md](template.md)); ein laufender Dienst bleibt unberührt.
 
 **Herunterfahren.** Während der Node herunterfährt, beantworten Start, Neustart, Reload und das Erstellen eines Backups die Anfrage mit `503 shutting-down`. Lesen und Stoppen gehen weiter.
 
@@ -158,6 +168,51 @@ Der Scope wird beim Handshake je Typ geprüft. Fragt `types` einen Typ an, den d
 - Ein Handshake aus dem Browser mit einem `Origin`, der nicht in `api.cors-origins` steht, wird mit `403` abgelehnt.
 - Höchstens 32 Streams gleichzeitig.
 - **Lasttest:** `EventStreamLoadTest` öffnet 260 Streams in Wellen zu je 40 gegen ein Limit von 200 und schickt dann von 4 Threads gleichzeitig 10.000 Events an alle. Geprüft wird, dass genau 200 aufgehen, die übrigen 60 `503` bekommen, die REST-API weiter antwortet, jeder Stream jedes Event verbucht (empfangen oder in `dropped` gezählt) und sich jeder Stream sauber schließt. Die Messwerte stehen im JUnit-XML jedes CI-Laufs und in `cloud/api/build/reports/api-load/event-streams.md`.
+
+## GraphQL: `POST /api/v1/graphql`
+
+Ein zweiter Weg zu denselben Endpunkten, für Clients, die mehrere Bereiche in einer Anfrage oder ein typisiertes Schema wollen. Das Schema steht in [`schema.graphqls`](../../cloud/api/src/main/resources/net/vectolyn/cloud/api/schema.graphqls): Queries für jeden Bereich (Dienste, Gruppen, Tasks, Nodes, Server, `cloud.yml`, Node-Status, Setup, Backups, Tokens), eine Mutation für jede Änderung und die Subscription `events`.
+
+```sh
+curl -s -H "Authorization: Bearer $VECTOLYN_TOKEN" -H "Content-Type: application/json" \
+  -d '{"query":"{ services { totalCount items { id state } } nodeStatus { servicesRunning } }"}' \
+  http://127.0.0.1:8085/api/v1/graphql
+```
+
+- **Dieselben Regeln wie REST.** Jedes Feld baut die REST-Anfrage, die in seiner Beschreibung steht, und führt diese Route mit dem Token des Aufrufers aus: mit ihrem Scope, ihrer Prüfung, `If-Match` (Argument `ifMatch`) und ihren Fehlern. Ein abgelehntes oder fehlgeschlagenes Feld ist `null` und hat einen Fehler mit `extensions.code` und `extensions.status` (zum Beispiel `missing-scope`, `403`); die übrigen Felder des Dokuments werden trotzdem beantwortet, deshalb sind die Wurzelfelder nullable. Argumente, die Teil eines Pfads werden (IDs, Namen, `after`), müssen kleingeschriebene Namen sein, sonst `invalid-value`.
+- **Formen.** Typisierte Objekte nutzen camelCase (`startedAt`, `heapUsedBytes`); Konfigurationsdokumente behalten ihre REST-Form als Skalar `JSON` (Schlüssel in kebab-case) zusammen mit ihrem `etag`. Listen nehmen `limit` und `after` und antworten mit `totalCount`, `next` und `items`.
+- **Grenzen**, alle geprüft, bevor ein Feld läuft: 16.384 Zeichen, 2.000 Parser-Tokens, Tiefe 8, Komplexität 200 (eins je Feld) und höchstens 20 Felder, die Daten lesen oder ändern. Die Anfrage selbst kostet eine Anfrage aus dem Ratenlimit des Tokens, jedes solche Feld nach dem ersten eine weitere (`extensions.retryAfter`, wenn es aufgebraucht ist).
+- **Introspection** (`__schema`, `__type`) ist aus, solange in `cloud.yml` nicht `api.graphql-introspection: true` steht (Konsole: `config set api.graphql-introspection true`). Für die Entwicklung einschalten, im Betrieb aus lassen; die Schema-Datei ist ohnehin öffentlich.
+- **Subscriptions** laufen über den WebSocket `GET /api/v1/graphql` mit dem Subprotokoll `graphql-transport-ws` (das Protokoll der Client-Bibliothek `graphql-ws`). Der Token wird beim Handshake geprüft wie bei `/events` (Header, oder aus dem Browser als Subprotokoll `vectolyn.bearer.<token>`). Innerhalb von 10 s `connection_init` senden, dann `subscribe` mit zum Beispiel `subscription { events(types: ["service-state"]) { type time data } }`. Jeder Ereignistyp braucht seinen Scope wie bei `/events`. Queries und Mutations gehen auf dem Socket auch. Höchstens 16 Operationen je Socket, jedes `subscribe` kostet eine Anfrage aus dem Ratenlimit. Der Socket zählt zu den 32 WebSockets und schließt mit `1008`, wenn sein Token widerrufen wird oder abläuft. Protokollfehler schließen mit den Codes des Protokolls (`4400`, `4401`, `4408`, `4409`, `4429`).
+
+## gRPC: `api.grpc-port`
+
+Dieselben Endpunkte für Clients, die lieber mit generierten Stubs arbeiten. Der Dienst ist `vectolyn.api.v1.CloudService` in [`cloud.proto`](../../cloud/api/src/main/resources/vectolyn/api/v1/cloud.proto), auch veröffentlicht unter `https://vectode.github.io/VectolynCloud/api/vectolyn/api/v1/cloud.proto`. gRPC hat einen eigenen Port, weil HTTP/2 auf dem REST-Port ändern würde, was Browser und `curl` dort aushandeln. Er ist aus, bis `api.grpc-port` in `cloud.yml` gesetzt ist (Konsole: `config set api.grpc-port 8086`), und nutzt `api.bind` und die TLS-Einstellung der API. Mit TLS handelt der Listener `h2` über ALPN aus; auf Loopback ohne TLS spricht er HTTP/2 mit Prior Knowledge (`grpcurl -plaintext`, `grpc.insecure_channel`).
+
+```sh
+grpcurl -plaintext -import-path cloud/api/src/main/resources -proto vectolyn/api/v1/cloud.proto \
+  -H "authorization: Bearer $VECTOLYN_TOKEN" -d '{}' 127.0.0.1:8086 vectolyn.api.v1.CloudService/ListServices
+```
+
+```python
+# python -m grpc_tools.protoc -I cloud/api/src/main/resources --python_out=. --grpc_python_out=. vectolyn/api/v1/cloud.proto
+import grpc
+from vectolyn.api.v1 import cloud_pb2, cloud_pb2_grpc
+
+with grpc.insecure_channel("127.0.0.1:8086") as channel:
+    stub = cloud_pb2_grpc.CloudServiceStub(channel)
+    auth = [("authorization", f"Bearer {token}")]
+    print(stub.ListServices(cloud_pb2.ListRequest(limit=50), metadata=auth))
+    for event in stub.Events(cloud_pb2.EventsRequest(types=["service-state"]), metadata=auth):
+        print(event.type, event.json)
+```
+
+- **Dieselben Regeln wie REST.** Jede Methode führt den REST-Endpunkt aus, der in ihrem Kommentar in der Proto-Datei steht, mit dem Token des Aufrufers (Metadaten `authorization: Bearer vct_...`): mit seinem Scope, seiner Prüfung, `If-Match` (`if_match`) und seinen Fehlern. Konfigurationsdokumente gehen als JSON-Text in ihrer REST-Form zusammen mit ihrem `etag`; Listen nehmen `limit` und `after` und antworten mit `total_count`, `next` und `items`.
+- **Fehler** sind ein gRPC-Status in den Trailern, mit `grpc-message` und dem REST-Code im Trailer `vectolyn-code`: `400`, `415` und `422` werden `INVALID_ARGUMENT`, `401` `UNAUTHENTICATED`, `403` `PERMISSION_DENIED`, `404` `NOT_FOUND`, `408` `DEADLINE_EXCEEDED`, `409` und `412` `FAILED_PRECONDITION`, `413` und `429` `RESOURCE_EXHAUSTED`, `503` `UNAVAILABLE`, `500` `INTERNAL`. Eine unbekannte Methode ist `UNIMPLEMENTED`, eine komprimierte Nachricht ebenso (nur `identity` wird unterstützt); ein kaputter Rahmen oder eine kaputte Nachricht ist `INTERNAL` mit `vectolyn-code: invalid-message`. Eine Anfrage, die nicht `POST` ist, bekommt HTTP `405`, eine mit anderem Content-Type als `application/grpc` oder `application/grpc+proto` HTTP `415` (gRPC-Web wird nicht unterstützt). Ein abgelehnter Stream wird zurückgesetzt und lässt sich nicht offen halten.
+- **Prüfungen, bevor etwas läuft**, in dieser Reihenfolge: Ratenlimit der Client-Adresse, Methode, Content-Type, bekannte Methode, zu viele falsche Tokens, der Token, das Ratenlimit des Tokens. Ein Aufruf kostet eine Anfrage aus dem Ratenlimit des Tokens. Die Anfrage ist genau eine Nachricht von höchstens der Body-Grenze (`maxBodyBytes`) und muss innerhalb des Idle-Timeouts vollständig ankommen (sonst `DEADLINE_EXCEEDED`, `request-timeout`). Die unfertigen Anfragen einer Verbindung teilen sich eine Body-Grenze (sonst `UNAVAILABLE`, `busy`), so hält eine gRPC-Verbindung nicht mehr Anfragespeicher als eine REST-Verbindung. Große Uploads parallel brauchen je eine eigene Verbindung oder einen neuen Versuch.
+- **`Events`** streamt die Ereignisse von `/events`: `types` (jeder Typ braucht seinen Scope; leer heißt jeder Typ, den der Token sehen darf) und `services`. Jedes `Event` hat `type`, `time` und die Ereignisdaten als JSON in `json`. Ein langsamer Client verliert Ereignisse und bekommt ein Ereignis vom Typ `dropped` mit der Anzahl. Ein Stream zählt zu den 32 Event-Streams und endet mit `UNAUTHENTICATED`, wenn sein Token widerrufen wird oder abläuft, und mit `UNAVAILABLE`, wenn der Node stoppt.
+- **Verbindungen** zählen zu denselben Grenzen wie HTTP-Verbindungen. Höchstens 16 Aufrufe laufen gleichzeitig auf einer Verbindung, Header sind auf 8 KiB begrenzt. Nur authentifizierte Aufrufe zählen als Aktivität: Eine Verbindung ohne einen solchen wird nach dem Idle-Timeout geschlossen, egal welche Frames der Client sendet (PING, SETTINGS, abgelehnte Streams). Eine Verbindung mit offenem `Events`-Stream wird stattdessen angepingt. Nettys Grenzen gegen Reset-, Steuerframe- und Leerframe-Fluten sind ausdrücklich gesetzt.
+- **Warum nicht grpc-java.** Der Listener besteht aus Nettys HTTP/2-Codec und einem kleinen proto3-Codec ([`Proto`](../../cloud/api/src/main/java/net/vectolyn/cloud/api/grpc/Proto.java)), den die Proto-Datei selbst steuert. grpc-java brächte ein zweites, geshadetes Netty und von `protoc` generierte Klassen in den Build, die API braucht aber nur unäre Aufrufe und einen Server-Stream. Der Server liest `cloud.proto` beim Start und startet nicht, wenn seine Methodentabelle von der Datei abweicht. Der offizielle Python-Client (`grpcio`) wurde gegen den Listener getestet: unäre Aufrufe, Fehler mit Trailern und `Events`.
 
 ## Transportsicherheit
 

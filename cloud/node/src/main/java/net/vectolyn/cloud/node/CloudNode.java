@@ -28,6 +28,7 @@ import net.vectolyn.cloud.api.backend.BackupServiceAccess;
 import net.vectolyn.cloud.api.console.ApiCommands;
 import net.vectolyn.cloud.backup.BackupException;
 import net.vectolyn.cloud.backup.BackupService;
+import net.vectolyn.cloud.backup.config.BackupConfigFile;
 import net.vectolyn.cloud.backup.command.BackupCommands;
 import net.vectolyn.cloud.backup.schedule.BackupScheduler;
 import net.vectolyn.cloud.cluster.ClusterCommands;
@@ -36,7 +37,13 @@ import net.vectolyn.cloud.cluster.ClusterService;
 import net.vectolyn.cloud.cluster.VersionPolicy;
 import net.vectolyn.cloud.config.CloudHome;
 import net.vectolyn.cloud.config.model.ApiConfig;
+import net.vectolyn.cloud.config.transfer.ConfigArchive;
 import net.vectolyn.cloud.monitor.MonitorRuntime;
+import net.vectolyn.cloud.monitor.config.MonitorConfigLoader;
+import net.vectolyn.cloud.privacy.IpBanStore;
+import net.vectolyn.cloud.privacy.PrivacyConfigLoader;
+import net.vectolyn.cloud.privacy.PrivacyRuntime;
+import net.vectolyn.cloud.privacy.StatisticsCollector;
 import net.vectolyn.cloud.node.ops.NodeApi;
 import net.vectolyn.cloud.node.ops.NodeBackups;
 import net.vectolyn.cloud.node.ops.NodeMonitoring;
@@ -406,6 +413,7 @@ public final class CloudNode implements AutoCloseable {
      *                   store the API server uses, or, if the file could not be read at the start,
      *                   another attempt to open it each time
      * @param monitoring the monitor
+     * @param privacy    data protection: the IP ban list and its deletion (docs/cloud/privacy.md)
      * @param backups    the backups
      * @param api        the node behind the API
      * @param apiServer  the API server, or null while {@code api.enabled} is off or it cannot be prepared
@@ -413,8 +421,9 @@ public final class CloudNode implements AutoCloseable {
      * @param cluster    the cluster of this node (docs/cloud/cluster.md); standalone without
      *                   {@code config/cluster.yml}
      */
-    private record Ops(ApiCommands.TokenFile tokens, MonitorRuntime monitoring, BackupService backups, NodeApi api,
-                       @Nullable ApiServer apiServer, Autoscaler scaler, ClusterService cluster) {
+    private record Ops(ApiCommands.TokenFile tokens, MonitorRuntime monitoring, PrivacyRuntime privacy,
+                       BackupService backups, NodeApi api, @Nullable ApiServer apiServer, Autoscaler scaler,
+                       ClusterService cluster) {
     }
 
     private static Ops buildOps(NodeSettings settings, CloudHome home, ConfigService config, SecretStore secrets,
@@ -428,6 +437,12 @@ public final class CloudNode implements AutoCloseable {
         // An invalid monitor.yml fails here with every error, like the other configuration files.
         MonitorRuntime monitoring = MonitorRuntime.open(home.root(), directory, secrets, redactor::redact, nodeId);
         directory.attach(monitoring.monitor());
+        PrivacyRuntime privacy;
+        try {
+            privacy = PrivacyRuntime.open(home.root(), Clock.systemUTC(), settings.launcherVersion());
+        } catch (IpBanStore.FormatException | StatisticsCollector.FormatException e) {
+            throw new IOException("state/ip-bans.json or state/statistics.json is damaged", e);
+        }
         services.addListener(directory);
         channel.statusListener(monitoring.monitor()::statusReported);
 
@@ -442,7 +457,16 @@ public final class CloudNode implements AutoCloseable {
         NodeApi api = new NodeApi(services, channel, nodeId, settings.launcherVersion(), Instant.now(),
                 redactor::redact, Optional.of(new BackupServiceAccess(backups)));
         services.addListener(api);
-        channel.playerListener(api);
+        // The API hears every player event; the statistics count playtime, logins and players per
+        // game mode (the group of the server the player is on), without keeping who the player is.
+        channel.playerListener((kind, player) -> {
+            api.changed(kind, player);
+            if ("leave".equals(kind)) {
+                privacy.playerLeft(player.uuid());
+            } else {
+                services.find(player.service()).ifPresent(info -> privacy.playerArrived(player.uuid(), info.group()));
+            }
+        });
 
         // Player counts of the bridges and proxies, memory of the node from the monitor
         // (docs/cloud/scaling.md); the configuration is the same one the console and the API change.
@@ -455,7 +479,7 @@ public final class CloudNode implements AutoCloseable {
         // come from the head, and console, setup and API cannot change them here.
         ClusterService cluster = ClusterService.openOrStandalone(new ClusterPaths(home), new NodeId(nodeId),
                 settings.launcherVersion(), config, VersionPolicy.sameVersion(), Clock.systemUTC());
-        return new Ops(tokenFile, monitoring, backups, api, apiServer(home, config, secrets, api, tokens), scaler, cluster);
+        return new Ops(tokenFile, monitoring, privacy, backups, api, apiServer(home, config, secrets, api, tokens), scaler, cluster);
     }
 
     /**
@@ -630,6 +654,7 @@ public final class CloudNode implements AutoCloseable {
         // After the channel, before the first service: the monitor sees every start, and a backup
         // or restore that a crash interrupted is put right before a start renders into its folder.
         ops.monitoring().start();
+        ops.privacy().start();
         // The cluster port of a head or the link of a member; a problem leaves the node running alone.
         try {
             ops.cluster().start();
@@ -972,7 +997,10 @@ public final class CloudNode implements AutoCloseable {
             }
             root.addHandler(logHandler);
         }
-        BuiltinCommands.register(console, config, this::close);
+        BuiltinCommands.register(console, config, this::close, List.of(
+                new ConfigArchive.ExtraFile(CloudHome.MONITOR_FILE, MonitorConfigLoader::parse),
+                new ConfigArchive.ExtraFile(CloudHome.PRIVACY_FILE, PrivacyConfigLoader::parse),
+                new ConfigArchive.ExtraFile(CloudHome.BACKUP_FILE, BackupConfigFile::parse)));
         serviceCommands = new ServiceCommands(services, config, channel::status, console.output());
         services.addListener(serviceCommands);
         console.commands().register(serviceCommands.command());
@@ -1114,6 +1142,7 @@ public final class CloudNode implements AutoCloseable {
         step(errors, "stopping the services", services::close);
         // After the last service: writes the history file and sends what is queued.
         step(errors, "closing the monitoring", ops.monitoring()::close);
+        step(errors, "closing data protection", ops.privacy()::close);
         step(errors, "stopping the database", database::shutdown);
         step(errors, "closing the cluster", ops.cluster()::close);
         step(errors, "closing the cloud channel", network::close);

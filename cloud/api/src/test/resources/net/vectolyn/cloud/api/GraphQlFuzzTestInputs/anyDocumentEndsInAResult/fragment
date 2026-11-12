@@ -1,0 +1,1 @@
+query($d: JSON!) { a: self { id } ...F } fragment F on Query { config { etag document } }

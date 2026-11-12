@@ -1,0 +1,277 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// gRPC interface of the VectolynCloud API (docs/cloud/api.md, section gRPC).
+//
+// Every call runs the REST endpoint named in its comment with the caller's token: same scope, same
+// validation, same errors (mapped to gRPC status codes, the REST code in the trailer
+// "vectolyn-code"). Authentication: metadata "authorization: Bearer vct_...". TLS whenever the API
+// binds to anything but loopback. Configuration documents travel as JSON text in their REST shape.
+//
+// The server reads this file at start (cloud/api: ProtoSchema, GrpcService) and refuses to start if
+// its method table differs, so the published file and the server cannot drift apart.
+
+syntax = "proto3";
+
+package vectolyn.api.v1;
+
+option java_multiple_files = true;
+option java_package = "net.vectolyn.cloud.api.grpc.v1";
+option go_package = "vectolyn.net/cloud/api/v1;apiv1";
+
+service CloudService {
+  // GET /services, scope services:read.
+  rpc ListServices(ListRequest) returns (ServiceList);
+  // GET /services/{id}, scope services:read.
+  rpc GetService(ServiceRef) returns (Service);
+  // POST /services, scope services:write.
+  rpc StartService(StartServiceRequest) returns (Service);
+  // POST /services/{id}/stop, scope services:write.
+  rpc StopService(ServiceRef) returns (Service);
+  // POST /services/{id}/restart, scope services:write.
+  rpc RestartService(ServiceRef) returns (Service);
+  // POST /services/{id}/command, scope services:write.
+  rpc SendCommand(CommandRequest) returns (JsonResult);
+
+  // GET /groups | /tasks | /nodes, scope config:read.
+  rpc ListDocuments(ListDocumentsRequest) returns (DocumentList);
+  // GET /groups/{name} | /tasks/{name} | /nodes/{name} | /config, scope config:read.
+  rpc GetDocument(DocumentRef) returns (Document);
+  // PUT /groups/{name} | /tasks/{name} | /nodes/{name} | /config, scope config:write.
+  rpc PutDocument(PutDocumentRequest) returns (Document);
+  // DELETE /groups/{name}?confirm={name} | /tasks/{name}?confirm={name}, scope config:write.
+  rpc DeleteDocument(DeleteDocumentRequest) returns (Empty);
+  // PUT /groups/{name}/wanted | /tasks/{name}/wanted | /servers/{kind}, scope config:write.
+  rpc SetWanted(SetWantedRequest) returns (JsonResult);
+  // GET /servers, scope config:read.
+  rpc GetServers(Empty) returns (JsonResult);
+  // GET /config/warnings, scope config:read.
+  rpc GetConfigWarnings(Empty) returns (JsonResult);
+  // POST /config/reload, scope config:write.
+  rpc ReloadConfig(Empty) returns (JsonResult);
+
+  // GET /node, scope node:read.
+  rpc GetNodeStatus(Empty) returns (NodeStatus);
+  // GET /setup, scope config:read.
+  rpc GetSetup(Empty) returns (SetupStatus);
+
+  // GET /backups, scope backups:read.
+  rpc ListBackups(ListRequest) returns (BackupList);
+  // POST /backups, scope backups:write.
+  rpc CreateBackup(CreateBackupRequest) returns (Backup);
+
+  // GET /tokens/self, any valid token.
+  rpc GetSelf(Empty) returns (Token);
+  // GET /admin/tokens, scope admin.
+  rpc ListTokens(ListRequest) returns (TokenList);
+  // POST /admin/tokens, scope admin. The secret is in the answer once.
+  rpc CreateToken(CreateTokenRequest) returns (CreatedToken);
+  // DELETE /admin/tokens/{id}, scope admin.
+  rpc RevokeToken(TokenRef) returns (Empty);
+
+  // The event stream of /events: every type needs its scope (service-state, service-output,
+  // player: services:read; metrics: node:read; node-log: admin). Empty types: every type the
+  // token may see. A slow client loses events, reported in one event of type "dropped".
+  rpc Events(EventsRequest) returns (stream Event);
+}
+
+message Empty {}
+
+// Paging as in REST: limit 1 to 500 (0: all), after = the key of the last entry of the page before.
+message ListRequest {
+  int32 limit = 1;
+  string after = 2;
+}
+
+message ServiceRef {
+  string id = 1;
+}
+
+message StartServiceRequest {
+  string task = 1;
+}
+
+message CommandRequest {
+  string id = 1;
+  string command = 2;
+}
+
+message Service {
+  string id = 1;
+  string group = 2;
+  string task = 3;
+  int32 index = 4;
+  string mode = 5;
+  string state = 6;
+  int32 port = 7;
+  optional int64 pid = 8;
+  optional string started_at = 9;
+  optional int32 exit_code = 10;
+  int32 restart_attempts = 11;
+  optional int32 players_online = 12;
+  optional int32 max_players = 13;
+}
+
+message ServiceList {
+  int32 total_count = 1;
+  string next = 2;
+  repeated Service items = 3;
+}
+
+// Kinds of configuration documents.
+enum DocumentKind {
+  DOCUMENT_KIND_UNSPECIFIED = 0;
+  DOCUMENT_KIND_GROUP = 1;
+  DOCUMENT_KIND_TASK = 2;
+  DOCUMENT_KIND_NODE = 3;
+  // cloud.yml; name stays empty.
+  DOCUMENT_KIND_CONFIG = 4;
+  // a server kind (SetWanted only), for example "lobby".
+  DOCUMENT_KIND_SERVER = 5;
+}
+
+message ListDocumentsRequest {
+  DocumentKind kind = 1;
+  int32 limit = 2;
+  string after = 3;
+}
+
+message DocumentRef {
+  DocumentKind kind = 1;
+  string name = 2;
+}
+
+message PutDocumentRequest {
+  DocumentKind kind = 1;
+  string name = 2;
+  // The document as JSON, as in the REST body.
+  string json = 3;
+  // The ETag read before ("If-Match"); empty: no check.
+  string if_match = 4;
+}
+
+message DeleteDocumentRequest {
+  DocumentKind kind = 1;
+  string name = 2;
+  // The name again, as ?confirm=<name> in REST.
+  string confirm = 3;
+  string if_match = 4;
+}
+
+message SetWantedRequest {
+  DocumentKind kind = 1;
+  string name = 2;
+  bool wanted = 3;
+}
+
+message Document {
+  string etag = 1;
+  string json = 2;
+}
+
+message DocumentEntry {
+  string key = 1;
+  string json = 2;
+}
+
+message DocumentList {
+  int32 total_count = 1;
+  string next = 2;
+  repeated DocumentEntry items = 3;
+}
+
+// An answer that has no message of its own, as JSON in its REST shape.
+message JsonResult {
+  string json = 1;
+}
+
+message NodeStatus {
+  string node_id = 1;
+  string version = 2;
+  string java_version = 3;
+  string os = 4;
+  int64 uptime_seconds = 5;
+  bool shutting_down = 6;
+  int32 services_total = 7;
+  int32 services_running = 8;
+  int64 heap_used_bytes = 9;
+  int64 heap_max_bytes = 10;
+}
+
+message SetupStatus {
+  bool eula_accepted = 1;
+  bool setup_complete = 2;
+  bool ready = 3;
+  repeated string missing = 4;
+}
+
+message Backup {
+  string id = 1;
+  optional string created_at = 2;
+  optional string reason = 3;
+  repeated string services = 4;
+  bool database = 5;
+  int64 size_bytes = 6;
+  bool readable = 7;
+  optional string problem = 8;
+  repeated string warnings = 9;
+}
+
+message BackupList {
+  int32 total_count = 1;
+  string next = 2;
+  repeated Backup items = 3;
+}
+
+message CreateBackupRequest {
+  // Empty: every static service (as a missing "services" in REST).
+  repeated string services = 1;
+  // Set only_database to back up the database alone (an empty "services" list in REST).
+  bool only_database = 2;
+  optional bool database = 3;
+  optional string note = 4;
+}
+
+message Token {
+  string id = 1;
+  string name = 2;
+  repeated string scopes = 3;
+  string created_at = 4;
+  optional string expires_at = 5;
+  bool expired = 6;
+}
+
+message TokenList {
+  int32 total_count = 1;
+  string next = 2;
+  repeated Token items = 3;
+}
+
+message TokenRef {
+  string id = 1;
+}
+
+message CreateTokenRequest {
+  string name = 1;
+  repeated string scopes = 2;
+  // "<n>h" or "<n>d", 1h to 3650d; empty: never expires.
+  string expires_in = 3;
+}
+
+message CreatedToken {
+  Token token_info = 1;
+  // The secret (vct_...). Shown once.
+  string token = 2;
+}
+
+message EventsRequest {
+  repeated string types = 1;
+  repeated string services = 2;
+}
+
+message Event {
+  string type = 1;
+  string time = 2;
+  // data of the event as JSON, as on /events.
+  string json = 3;
+}

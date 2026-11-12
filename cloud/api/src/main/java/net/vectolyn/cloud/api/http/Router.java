@@ -3,6 +3,7 @@
 package net.vectolyn.cloud.api.http;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -12,6 +13,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Pattern;
 import net.vectolyn.cloud.api.auth.Scope;
+import net.vectolyn.cloud.config.validation.ConfigNames;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -19,9 +21,12 @@ import org.jspecify.annotations.Nullable;
  * from the network:
  * <ul>
  *   <li>origin form only ({@code /api/v1/...}), at most {@value #MAX_TARGET} characters, printable ASCII;</li>
- *   <li>no empty segments, no {@code .} or {@code ..}, no percent-encoding in the path;</li>
+ *   <li>no empty segments, no {@code .} or {@code ..}, no percent-encoding in the path; a segment
+ *       is letters, digits, {@code _} and {@code -} in up to eight parts joined by single dots;</li>
  *   <li>each parameter matches its pattern ({@code {id}}: service id, {@code {name}}: group or
- *       task name, {@code {kind}}: server kind);</li>
+ *       task name, {@code {kind}}: server kind, {@code {template}}: template folder);</li>
+ *   <li>{@code {path}} may only end a route and takes the rest of the path, one or more
+ *       segments joined by {@code /}; the handler checks it further;</li>
  *   <li>query parameters are {@code key=value} pairs with lower-case keys, each key once, values
  *       percent-decoded to letters, digits and {@code ._,-}.</li>
  * </ul>
@@ -34,7 +39,7 @@ public final class Router<H> {
     /** Longest request target. */
     public static final int MAX_TARGET = 2048;
 
-    private static final Pattern SEGMENT = Pattern.compile("[A-Za-z0-9_-]{1,64}(\\.[A-Za-z0-9_-]{1,64})?");
+    private static final Pattern SEGMENT = Pattern.compile("[A-Za-z0-9_-]{1,64}(\\.[A-Za-z0-9_-]{1,64}){0,7}");
     private static final Pattern QUERY_KEY = Pattern.compile("[a-z][a-z0-9-]{0,31}");
     private static final Pattern QUERY_VALUE = Pattern.compile("[A-Za-z0-9._,-]{0,512}");
     private static final int MAX_QUERY_PARAMS = 16;
@@ -42,7 +47,10 @@ public final class Router<H> {
     private static final Map<String, Pattern> PARAMETERS = Map.of(
             "id", Pattern.compile("[a-z0-9][a-z0-9_-]{0,63}"),
             "name", Pattern.compile("[a-z0-9][a-z0-9_-]{0,31}"),
-            "kind", Pattern.compile("[a-z]{1,16}"));
+            "kind", Pattern.compile("[a-z]{1,16}"),
+            "template", Pattern.compile(ConfigNames.TEMPLATE));
+    /** The parameter that takes the rest of the path; only as the last segment of a route. */
+    private static final String TAIL = "path";
 
     private final List<Route<H>> routes = new ArrayList<>();
 
@@ -59,8 +67,14 @@ public final class Router<H> {
         Objects.requireNonNull(method, "method");
         Objects.requireNonNull(handler, "handler");
         String[] parts = path.substring(1).split("/", -1);
-        for (String part : parts) {
-            if (part.startsWith("{") && !PARAMETERS.containsKey(part.substring(1, part.length() - 1))) {
+        for (int i = 0; i < parts.length; i++) {
+            String part = parts[i];
+            if (!part.startsWith("{")) {
+                continue;
+            }
+            String name = part.substring(1, part.length() - 1);
+            boolean tail = name.equals(TAIL) && i == parts.length - 1;
+            if (!PARAMETERS.containsKey(name) && !tail) {
                 throw new IllegalArgumentException("unknown parameter " + part);
             }
         }
@@ -139,12 +153,18 @@ public final class Router<H> {
      * A parameter that fails its pattern is stored under the key null.
      */
     private @Nullable Map<String, String> match(Route<H> route, String[] segments) {
-        if (route.segments().size() != segments.length) {
+        int size = route.segments().size();
+        boolean tail = route.segments().get(size - 1).equals("{" + TAIL + "}");
+        if (tail ? segments.length < size : size != segments.length) {
             return null;
         }
         Map<String, String> params = new LinkedHashMap<>();
-        for (int i = 0; i < segments.length; i++) {
+        for (int i = 0; i < size; i++) {
             String template = route.segments().get(i);
+            if (tail && i == size - 1) {
+                params.put(TAIL, String.join("/", Arrays.copyOfRange(segments, i, segments.length)));
+                break;
+            }
             if (template.startsWith("{")) {
                 String name = template.substring(1, template.length() - 1);
                 if (Objects.requireNonNull(PARAMETERS.get(name), name).matcher(segments[i]).matches()) {

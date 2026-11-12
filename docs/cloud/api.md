@@ -56,7 +56,7 @@ curl -X POST -H "Authorization: Bearer vcs_..." https://cloud.example.org:8443/a
 ```
 
 - The setup token is accepted for this one request and nowhere else: on any other endpoint, or with a query string, it is a wrong token (`401`, counted by the limit for wrong tokens). An API token on this endpoint gets `403 setup-token-required`.
-- The exchange removes the setup token before it writes the API token, so it can never be used twice; a second try gets `401`. The API token gets the scope `admin` and the administrator's name, with `-2`, `-3`, … if a token of that name exists.
+- The exchange writes the API token first. If that fails (`500 io-error`), the setup token stays valid and the claim can be repeated. Once the API token exists, the setup token stops working at once, so it can never be used twice; a second try gets `401`. Its file is deleted after that; if the deletion fails, the claim still succeeds and the node logs an error, because the file would make the setup token valid again after a restart (delete the file or replace the token with `api token setup`). The API token gets the scope `admin` and the administrator's name, with `-2`, `-3`, … if a token of that name exists.
 - The answer is the only time the API token leaves the node (`Cache-Control: no-store`). Lost: revoke it at the console and make a new setup token.
 - The web panel (stage 8) will use the same request for its first login.
 
@@ -71,6 +71,8 @@ curl -X POST -H "Authorization: Bearer vcs_..." https://cloud.example.org:8443/a
 | `backups:read` | list backups |
 | `backups:write` | create a backup |
 | `node:read` | node status; metrics events |
+| `templates:read` | list templates and their files, read a file (never secrets) |
+| `templates:write` | create and replace template files |
 | `admin` | everything above, and the token management under `/admin/tokens` |
 
 A write scope does not include the read scope. A missing scope gives `403 missing-scope`. Changing the `api` or `database` section of `cloud.yml` needs `admin`: they decide who can reach the node and which image `docker compose` runs with the database root password.
@@ -110,6 +112,10 @@ All paths start with `/api/v1`. Bodies are `application/json` in UTF-8, with the
 | `GET /setup` | config:read | `eula-accepted`, `setup-complete`, `ready`, `missing` (`eula`, `setup`) |
 | `GET /backups` | backups:read | every backup |
 | `POST /backups` `{"services": ["lobby-1"], "database": true, "note": "before update"}` | backups:write | `201` the backup |
+| `GET /templates` | templates:read | `[{"name": "Lobby-Server"}, ...]` |
+| `GET /templates/{template}/files` | templates:read | `{"template": ..., "files": [{"path": "default/server.properties", "size": 1210}], "truncated": false}` |
+| `GET /templates/{template}/files/{path}` | templates:read | the file as `{"encoding": "utf-8"\|"base64", "content": ...}`, with `ETag` |
+| `PUT /templates/{template}/files/{path}` `{"content": "...", "encoding": "utf-8"}` | templates:write | `201` created or `200` replaced, with `ETag` |
 | `GET /tokens/self` | any | the calling token |
 | `GET /admin/tokens` | admin | every token (never the token or its hash), paged |
 | `POST /admin/tokens` `{"name": "ci", "scopes": ["services:read"], "expires-in": "90d"}` | admin | `201` the token, shown in this answer only |
@@ -136,6 +142,13 @@ Every write goes through `ConfigService.apply`: the whole configuration is valid
 **Groups.** `drain-timeout` is optional (5s to 10m, default 30s), for example `"drain-timeout": "45s"`; outside the range the answer is `422 out-of-range`.
 
 <a id="token-management"></a>**Token management.** `POST /admin/tokens` creates a token like `api token create`: `name` and `scopes` are required, `expires-in` (1h to 3650d) is optional. The answer is the one place the API ever shows a token (`"token": "vct_..."`, with `Cache-Control: no-store` like every answer); the node stores only its SHA-256. A taken name or the 101st token answers `409 conflict`. `DELETE /admin/tokens/{id}` revokes by id or name at once, also the calling token itself. An `admin` token can create another `admin` token, so give `admin` only to whoever may also use the node console.
+
+<a id="templates"></a>**Templates.** The endpoints under `/templates` are what the web panel's file editor uses: it lists the template folders of `local/templates/`, shows a file, and saves it back. `{path}` is the rest of the URL after `/files/`, segments separated by `/` as they are (not percent-encoded), for example `/api/v1/templates/Lobby-Server/files/default/plugins/LuckPerms/config.yml`. The router lets through segments of letters, digits, `_` and `-` in up to eight parts joined by single dots; a file with another name (a space, an umlaut) is listed but cannot be addressed. Then the same rules as the cluster mirror apply (`TemplatePaths` in `cloud/config`): no `..`, `.`, empty segments, backslash, colon or Windows device names, at most 240 bytes and 16 segments, and nothing that looks like a secret (`forwarding.secret`, `*.pem`, `*.key`, `.env`, `secrets/`, `.git/`, ...). Such a path answers `400 invalid-path` before the disk is touched; listings leave those files out. Links, junctions and special files are never followed: one on the way answers `409 not-a-regular-file`.
+
+- **Reading** returns UTF-8 text as it is and anything else (or text with a NUL byte) as Base64, up to 1 MiB (`413 file-too-large` above). The `ETag` is that of the file's bytes.
+- **Writing** is checked against the `ETag`: without `If-Match` only a new file is created, an existing one answers `428 precondition-required`; with the `ETag` of the `GET` (or `*`) the file is replaced, and if it changed in between the answer is `412 precondition-failed`. Check and write run under one lock, so of two editors with the same `ETag` exactly one gets through. A file may be at most 48 KiB (the API reads strings up to 64 KiB, which is 48 KiB in Base64); folders on the way are created; the file is replaced atomically.
+- **Cluster.** On a member the templates come from the head (see [cluster.md](cluster.md)), so `PUT` answers `409 managed-by-head` there; reading works.
+- Services pick a changed template up when they are next prepared from it ([template.md](template.md)); a running service is not touched.
 
 **Shutdown.** While the node shuts down, start, restart, reload and backup creation answer `503 shutting-down`. Reads and stops still work.
 
@@ -174,9 +187,10 @@ File names in `file` and in the `files` of a reload are relative to `config/` (`
 | 403 | `missing-scope`, `origin-not-allowed` |
 | 404 | `not-found` |
 | 405 | `method-not-allowed` (the message lists the allowed methods) |
-| 409 | `conflict` |
+| 409 | `conflict`, `managed-by-head`, `not-a-regular-file` |
 | 412 | `precondition-failed` |
-| 413 | `body-too-large` |
+| 413 | `body-too-large`, `file-too-large` |
+| 428 | `precondition-required` (a template file is replaced without `If-Match`) |
 | 415 | `unsupported-media-type` |
 | 422 | `invalid-config`, `invalid` |
 | 426 | `upgrade-required` (plain `GET /events`) |
@@ -225,6 +239,51 @@ The scope is checked per type on the handshake. Asking with `types` for a type t
 - A browser handshake with an `Origin` that is not in `api.cors-origins` is refused with `403`.
 - At most 32 streams at once.
 - **Load test.** `EventStreamLoadTest` opens 260 streams in waves of 40 against a limit of 200, then publishes 10,000 events from 4 threads at once to all of them. It checks that exactly 200 open, the other 60 get `503`, the REST API keeps answering, every stream accounts for every event (received or counted in `dropped`), and that every stream closes. Its figures are printed into the JUnit XML of each CI run and written to `cloud/api/build/reports/api-load/event-streams.md`; on a Windows desktop: 200 streams in 0.8 s, about 95,000 deliveries a second, 72 % delivered and the rest reported as dropped while the test clients were busy.
+
+## GraphQL: `POST /api/v1/graphql`
+
+A second way into the same endpoints, for clients that want several areas in one request or a typed schema. The schema is in [`schema.graphqls`](../../cloud/api/src/main/resources/net/vectolyn/cloud/api/schema.graphqls): queries for every area (services, groups, tasks, nodes, servers, `cloud.yml`, node status, setup, backups, tokens), a mutation for every change, and the subscription `events`.
+
+```sh
+curl -s -H "Authorization: Bearer $VECTOLYN_TOKEN" -H "Content-Type: application/json" \
+  -d '{"query":"{ services { totalCount items { id state } } nodeStatus { servicesRunning } }"}' \
+  http://127.0.0.1:8085/api/v1/graphql
+```
+
+- **Same rules as REST.** Every field builds the REST request named in its description and runs that route with the caller's token: its scope, its validation, `If-Match` (`ifMatch` argument) and its errors. A refused or failed field is `null` and has an error with `extensions.code` and `extensions.status` (for example `missing-scope`, `403`); the other fields of the document are still answered, so the root fields are nullable. Arguments that become part of a path (ids, names, `after`) must be lower-case names, otherwise `invalid-value`.
+- **Shapes.** Typed objects use camelCase (`startedAt`, `heapUsedBytes`); configuration documents keep their REST shape as the scalar `JSON` (kebab-case keys) together with their `etag`. Lists take `limit` and `after` and answer `totalCount`, `next` and `items`.
+- **Limits**, all checked before a field runs: 16,384 characters, 2,000 parser tokens, selection depth 8, complexity 200 (one per field), and at most 20 fields that read or change data. The request itself takes one request from the token's rate limit, every such field after the first takes one more (`extensions.retryAfter` when it is used up).
+- **Introspection** (`__schema`, `__type`) is off unless `api.graphql-introspection: true` is set in `cloud.yml` (console: `config set api.graphql-introspection true`). Switch it on for development, leave it off in production; the schema file is public anyway.
+- **Subscriptions** run over the WebSocket `GET /api/v1/graphql` with the subprotocol `graphql-transport-ws` (the protocol of the `graphql-ws` client library). The token is checked on the handshake as for `/events` (header, or subprotocol `vectolyn.bearer.<token>` from a browser). Send `connection_init` within 10 s, then `subscribe` with for example `subscription { events(types: ["service-state"]) { type time data } }`. Every event type needs its scope, as on `/events`. Queries and mutations work on the socket too. At most 16 operations per socket, each `subscribe` takes one request from the rate limit. The socket counts against the 32 WebSockets and closes with `1008` when its token is revoked or expires. Protocol errors close with the codes of the protocol (`4400`, `4401`, `4408`, `4409`, `4429`).
+
+## gRPC: `api.grpc-port`
+
+The same endpoints for clients that prefer generated stubs. The service is `vectolyn.api.v1.CloudService` in [`cloud.proto`](../../cloud/api/src/main/resources/vectolyn/api/v1/cloud.proto), also published at `https://vectode.github.io/VectolynCloud/api/vectolyn/api/v1/cloud.proto`. gRPC has its own port, because HTTP/2 on the REST port would change what browsers and `curl` negotiate there. It is off until `api.grpc-port` is set in `cloud.yml` (console: `config set api.grpc-port 8086`); it uses `api.bind` and the TLS setting of the API. With TLS the listener negotiates `h2` through ALPN; on loopback without TLS it speaks HTTP/2 with prior knowledge (`grpcurl -plaintext`, `grpc.insecure_channel`).
+
+```sh
+grpcurl -plaintext -import-path cloud/api/src/main/resources -proto vectolyn/api/v1/cloud.proto \
+  -H "authorization: Bearer $VECTOLYN_TOKEN" -d '{}' 127.0.0.1:8086 vectolyn.api.v1.CloudService/ListServices
+```
+
+```python
+# python -m grpc_tools.protoc -I cloud/api/src/main/resources --python_out=. --grpc_python_out=. vectolyn/api/v1/cloud.proto
+import grpc
+from vectolyn.api.v1 import cloud_pb2, cloud_pb2_grpc
+
+with grpc.insecure_channel("127.0.0.1:8086") as channel:
+    stub = cloud_pb2_grpc.CloudServiceStub(channel)
+    auth = [("authorization", f"Bearer {token}")]
+    print(stub.ListServices(cloud_pb2.ListRequest(limit=50), metadata=auth))
+    for event in stub.Events(cloud_pb2.EventsRequest(types=["service-state"]), metadata=auth):
+        print(event.type, event.json)
+```
+
+- **Same rules as REST.** Every method runs the REST endpoint named in its comment in the proto file with the caller's token (`authorization: Bearer vct_...` metadata): its scope, its validation, `If-Match` (`if_match`) and its errors. Configuration documents travel as JSON text in their REST shape, together with their `etag`; lists take `limit` and `after` and answer `total_count`, `next` and `items`.
+- **Errors** are a gRPC status in the trailers, with `grpc-message` and the REST code in the trailer `vectolyn-code`: `400`, `415`, `422` become `INVALID_ARGUMENT`, `401` `UNAUTHENTICATED`, `403` `PERMISSION_DENIED`, `404` `NOT_FOUND`, `408` `DEADLINE_EXCEEDED`, `409` and `412` `FAILED_PRECONDITION`, `413` and `429` `RESOURCE_EXHAUSTED`, `503` `UNAVAILABLE`, `500` `INTERNAL`. An unknown method is `UNIMPLEMENTED`, so is a compressed message (only `identity` is supported); a broken frame or message is `INTERNAL` with `vectolyn-code: invalid-message`. A request that is not `POST` gets HTTP `405`, one whose content type is not `application/grpc` or `application/grpc+proto` HTTP `415` (gRPC-Web is not supported). A refused stream is reset, so it cannot be kept open.
+- **Checks before anything runs**, in this order: rate limit of the client address, method, content type, known method, too many wrong tokens, the token, the rate limit of the token. One call takes one request from the token's rate limit. The request is exactly one message of at most the body limit (`maxBodyBytes`), must arrive completely within the idle timeout (else `DEADLINE_EXCEEDED`, `request-timeout`), and the unfinished requests of one connection share one body limit (else `UNAVAILABLE`, `busy`), so a gRPC connection holds no more request memory than a REST connection. Large uploads in parallel need one connection each or a retry.
+- **`Events`** streams the events of `/events`: `types` (every type needs its scope; empty means every type the token may see) and `services`. Each `Event` has `type`, `time` and the event data as JSON in `json`. A slow client loses events and gets one event of type `dropped` with the count. A stream counts against the 32 event streams and ends with `UNAUTHENTICATED` when its token is revoked or expires, and with `UNAVAILABLE` when the node stops.
+- **Connections** count against the same limits as HTTP connections. At most 16 calls run at once on one connection and headers are limited to 8 KiB. Only authenticated calls count as activity: a connection without one for the idle timeout is closed, whatever frames the client sends (PING, SETTINGS, refused streams). A connection with an open `Events` stream is pinged instead. Netty's limits against reset, control-frame and empty-frame floods are set explicitly.
+- **Why not grpc-java.** The listener is Netty's HTTP/2 codec plus a small proto3 codec ([`Proto`](../../cloud/api/src/main/java/net/vectolyn/cloud/api/grpc/Proto.java)) driven by the proto file itself. grpc-java would bring a second, shaded Netty and classes generated by `protoc` into the build, while the API only needs unary calls and one server stream. The server reads `cloud.proto` at start and refuses to start if its method table differs from the file. The official Python client (`grpcio`) was run against the listener for unary calls, errors with trailers and `Events`.
 
 ## Transport security
 
@@ -305,6 +364,15 @@ Groups can be written through the API, so `process.jvm-flags` has an allowlist: 
 
 - `RouterFuzzTest.resolveNeverThrowsAndOnlyPassesCleanValues`: against the real table of `ApiRoutes.router()`, any request target resolves without an exception, and a found route only carries parameters and query values from the strict alphabets.
 - `ApiJsonFuzzTest.readFailsOnlyWithBadRequest`: any body becomes a value or fails with a `400` whose message has no control characters.
+- `GraphQlFuzzTest.anyDocumentEndsInAResult`: any GraphQL document runs to a result (data, errors or both) without an exception, against the real routes with a read-only token.
+- `GraphQlFuzzTest.anyBodyIsARequestOrABadRequest`: any body of `POST /graphql` is a GraphQL request or a `400`.
+- `GrpcFuzzTest.anyBodyIsOneMessageOrAFramingError`: any gRPC request body is exactly one uncompressed message or a framing error with `INTERNAL` or `UNIMPLEMENTED`.
+- `GrpcFuzzTest.anyMessageDecodesOrIsRefused`: any bytes decode against every request message of `cloud.proto` or fail with `ProtoException`; a decoded message encodes again and then stays stable.
+- `GrpcFuzzTest.anyProtoFileIsReadOrRefused`: any text is a schema or an `IllegalArgumentException`.
+
+`GraphQlTest` covers the endpoint against a real server: several areas in one document, the scope of every field, arguments that try to leave their path segment, the `ETag` round trip, the limits, introspection on and off, the rate limit per field, and subscriptions over `graphql-transport-ws` with their scopes, protocol errors and revocation.
+
+`GrpcTest` covers the gRPC listener with a Netty HTTP/2 client: unary calls against the REST routes, REST errors as gRPC status codes with `vectolyn-code`, missing and wrong tokens, unknown methods, compressed, truncated and oversized messages, wrong method and content type, the idle close of a connection without authenticated calls, the request timeout and the body budget per connection, `Events` with its scopes, its keep-alive and its end on revocation, and TLS with ALPN `h2`. `ProtoTest` checks the codec against hand-encoded proto3 bytes and the limits of the `.proto` reader.
 
 ```sh
 ./gradlew :cloud:api:test --tests 'net.vectolyn.cloud.api.http.RouterFuzzTest.resolveNeverThrowsAndOnlyPassesCleanValues' -Pfuzz -PfuzzMaxDuration=5m

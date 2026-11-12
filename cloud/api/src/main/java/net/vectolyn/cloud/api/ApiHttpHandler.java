@@ -30,6 +30,7 @@ import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.util.ReferenceCountUtil;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.Locale;
@@ -40,6 +41,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.function.UnaryOperator;
 import java.util.regex.Pattern;
 import net.vectolyn.cloud.api.auth.ApiToken;
 import net.vectolyn.cloud.api.auth.RateLimiter;
@@ -104,6 +106,9 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
 
     /** Key of the setup token in the token rate limiter; API token ids are 8 hex characters. */
     private static final String SETUP_LIMIT_KEY = "setup";
+
+    private static final byte[] INTERNAL_ERROR_BODY =
+            "{\"code\":\"internal-error\",\"message\":\"Internal error.\"}".getBytes(StandardCharsets.UTF_8);
 
     // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
     @Override
@@ -219,8 +224,9 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
                     "This token lacks the scope " + scope.id() + "."), true);
             return;
         }
-        boolean events = found.route().path().equals(ApiRoutes.EVENTS);
-        if (events && upgrade) {
+        String path = found.route().path();
+        boolean socket = path.equals(ApiRoutes.EVENTS) || path.equals(ApiRoutes.GRAPHQL);
+        if (socket && upgrade && method.equals("GET")) {
             if (origin != null && !allowedOrigin) {
                 reject(ctx, null, new ApiException(403, "origin-not-allowed",
                         "This origin is not in api.cors-origins."), true);
@@ -272,21 +278,23 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
         String client = ClientAddress.key(ctx.channel().remoteAddress());
         try {
             server.executor().execute(() -> {
-                FullHttpResponse response;
+                FullHttpResponse answer = null;
                 try {
-                    String setupToken = request.setupToken();
-                    response = respond(setupToken != null ? claim(setupToken, client)
-                            : request.route().route().handler().handle(Objects.requireNonNull(apiRequest, "token")),
-                            request.origin());
-                } catch (Exception e) {
-                    response = error(map(e), request.origin());
+                    answer = answer(request, apiRequest, client);
+                } catch (Throwable t) {
+                    // answer() maps every exception; this is an Error, or a failure of the error path itself.
+                    LOG.log(System.Logger.Level.ERROR, "API request failed", t);
                 } finally {
                     server.requestSlots().release();
+                    FullHttpResponse response = answer;
+                    try {
+                        ctx.channel().eventLoop().execute(() -> finish(ctx, response, request.keepAlive()));
+                    } catch (RuntimeException e) {
+                        // The event loop is gone (shutdown); the connection cannot be answered any more.
+                        ReferenceCountUtil.release(response);
+                        ctx.channel().close();
+                    }
                 }
-                ApiToken limited = request.token();
-                rateLimitHeaders(response, limited != null ? limited.id() : SETUP_LIMIT_KEY);
-                FullHttpResponse answer = response;
-                ctx.channel().eventLoop().execute(() -> finish(ctx, answer, request.keepAlive()));
             });
         } catch (RejectedExecutionException e) {
             server.requestSlots().release();
@@ -311,10 +319,52 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
         return ApiRoutes.claimed(created.get(), server.tokens().clock().instant());
     }
 
-    private void finish(ChannelHandlerContext ctx, FullHttpResponse response, boolean keepAlive) {
+    /**
+     * Runs the handler (or the setup claim) and builds the response with its rate limit headers.
+     * An exception of the handler becomes its error answer; a failure while building the error answer
+     * becomes a plain {@code 500}. Rate limit headers that cannot be computed are left out.
+     */
+    private FullHttpResponse answer(Pending request, @Nullable ApiRequest apiRequest, String client) {
+        FullHttpResponse response;
+        String setupToken = request.setupToken();
+        try {
+            response = respond(setupToken != null ? claim(setupToken, client)
+                    : request.route().route().handler().handle(Objects.requireNonNull(apiRequest, "token")),
+                    request.origin());
+        } catch (Exception e) {
+            try {
+                response = error(toApiException(e, server::redact), request.origin());
+            } catch (RuntimeException inner) {
+                LOG.log(System.Logger.Level.ERROR, "API request failed, and so did its error answer", inner);
+                response = internalError();
+            }
+        }
+        try {
+            ApiToken limited = request.token();
+            rateLimitHeaders(response, limited != null ? limited.id() : SETUP_LIMIT_KEY);
+        } catch (RuntimeException e) {
+            response.headers().remove("X-RateLimit-Limit").remove("X-RateLimit-Remaining");
+            LOG.log(System.Logger.Level.WARNING, "API: the rate limit headers could not be set: {0}",
+                    e.getClass().getSimpleName());
+        }
+        return response;
+    }
+
+    /**
+     * Sends the answer of a request and reads the next one. Without an answer (the handler failed in
+     * a way that left none) the client gets a plain {@code 500} and the connection closes. Whatever
+     * happens, the connection is never left waiting with reading switched off.
+     */
+    private void finish(ChannelHandlerContext ctx, @Nullable FullHttpResponse response, boolean keepAlive) {
         busy = false;
-        boolean close = closeAfterResponse || !keepAlive;
-        send(ctx, response, close);
+        boolean close = response == null || closeAfterResponse || !keepAlive;
+        try {
+            send(ctx, response == null ? internalError() : response, close);
+        } catch (RuntimeException e) {
+            LOG.log(System.Logger.Level.WARNING, "API: the answer could not be sent: {0}", e.getClass().getSimpleName());
+            ctx.close();
+            return;
+        }
         if (!close) {
             ctx.channel().config().setAutoRead(true);
             ctx.read();
@@ -322,8 +372,25 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
     }
 
     /**
+     * A {@code 500 internal-error} built from constants only, for when building the real answer failed.
+     */
+    private static FullHttpResponse internalError() {
+        FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1,
+                HttpResponseStatus.INTERNAL_SERVER_ERROR, Unpooled.wrappedBuffer(INTERNAL_ERROR_BODY));
+        HttpHeaders h = response.headers();
+        h.set(HttpHeaderNames.CONTENT_TYPE, "application/json; charset=utf-8");
+        h.setInt(HttpHeaderNames.CONTENT_LENGTH, INTERNAL_ERROR_BODY.length);
+        h.set(HttpHeaderNames.CACHE_CONTROL, "no-store");
+        h.set("X-Content-Type-Options", "nosniff");
+        h.set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
+        h.set("Referrer-Policy", "no-referrer");
+        return response;
+    }
+
+    /**
      * {@code X-RateLimit-Limit} (the bucket of the token) and {@code X-RateLimit-Remaining} (what
-     * it holds now), so a script can slow down before it gets {@code 429}.
+     * it holds now), so a script can slow down before it gets {@code 429}. {@code limitKey} is the
+     * key {@link #head} charged: the token id, or {@link #SETUP_LIMIT_KEY} for the setup token.
      */
     private void rateLimitHeaders(FullHttpResponse response, String limitKey) {
         RateLimiter<String> limiter = server.tokenLimiter();
@@ -334,6 +401,10 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
     // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
     @SuppressWarnings("FutureReturnValueIgnored")
     private void upgrade(ChannelHandlerContext ctx, Pending request) {
+        if (request.route().route().path().equals(ApiRoutes.GRAPHQL)) {
+            upgradeGraphQl(ctx, request);
+            return;
+        }
         ApiToken token = Objects.requireNonNull(request.token(), "token");
         Set<String> types;
         Set<String> services;
@@ -379,6 +450,56 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
         }
         ctx.pipeline().replace(ApiServer.IDLE, ApiServer.IDLE, new IdleStateHandler(90, 30, 0, TimeUnit.SECONDS));
         ctx.pipeline().replace(this, "vectolyn-api-events", new EventStreamHandler(handshaker));
+        handshaker.handshake(ctx.channel(), full).addListener(f -> {
+            if (!f.isSuccess()) {
+                ctx.channel().close();
+            }
+        });
+    }
+
+    /**
+     * Opens a GraphQL WebSocket ({@code graphql-transport-ws}). Same checks as the event stream:
+     * the token from the head, the origin, the subprotocol and the WebSocket limit.
+     */
+    // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
+    @SuppressWarnings("FutureReturnValueIgnored")
+    private void upgradeGraphQl(ChannelHandlerContext ctx, Pending request) {
+        ApiToken token = Objects.requireNonNull(request.token(), "token");
+        String offered = request.head().headers().get(HttpHeaderNames.SEC_WEBSOCKET_PROTOCOL);
+        if (offered == null || Arrays.stream(offered.split(",")).map(String::strip)
+                .noneMatch(GraphQlSocketHandler.PROTOCOL::equals)) {
+            reject(ctx, request.origin(), new ApiException(400, "subprotocol-required",
+                    "Offer the subprotocol " + GraphQlSocketHandler.PROTOCOL + "."), true);
+            return;
+        }
+        if (server.events().size() >= server.limits().maxWebSockets()) {
+            reject(ctx, request.origin(), new ApiException(503, "too-many-streams", "Too many event streams are open."), true);
+            return;
+        }
+        String scheme = server.settings().tls().isPresent() ? "wss" : "ws";
+        String host = request.head().headers().get(HttpHeaderNames.HOST, "localhost");
+        WebSocketServerHandshakerFactory factory = new WebSocketServerHandshakerFactory(
+                scheme + "://" + host + ApiRoutes.GRAPHQL, GraphQlSocketHandler.PROTOCOL,
+                WebSocketDecoderConfig.newBuilder().maxFramePayloadLength(GraphQlSocketHandler.MAX_MESSAGE)
+                        .allowExtensions(false).build());
+        FullHttpRequest full = new DefaultFullHttpRequest(request.head().protocolVersion(), request.head().method(),
+                request.head().uri(), Unpooled.EMPTY_BUFFER, request.head().headers(), new DefaultHttpHeaders());
+        WebSocketServerHandshaker handshaker = factory.newHandshaker(full);
+        if (handshaker == null) {
+            WebSocketServerHandshakerFactory.sendUnsupportedVersionResponse(ctx.channel());
+            return;
+        }
+        GraphQlSocketHandler handler = new GraphQlSocketHandler(server, handshaker, token);
+        if (!server.events().add(ctx.channel(), token.id(), handler)) {
+            reject(ctx, request.origin(), new ApiException(503, "too-many-streams", "Too many event streams are open."), true);
+            return;
+        }
+        if (!server.tokens().isValid(token.id())) {
+            reject(ctx, request.origin(), unauthorized(), true);
+            return;
+        }
+        ctx.pipeline().replace(ApiServer.IDLE, ApiServer.IDLE, new IdleStateHandler(90, 30, 0, TimeUnit.SECONDS));
+        ctx.pipeline().replace(this, "vectolyn-api-graphql", handler);
         handshaker.handshake(ctx.channel(), full).addListener(f -> {
             if (!f.isSuccess()) {
                 ctx.channel().close();
@@ -552,7 +673,14 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
         });
     }
 
-    private ApiException map(Exception e) {
+    /**
+     * The API error of a failed route, also for GraphQL fields.
+     *
+     * @param e        the failure
+     * @param redactor redacts a backend message
+     * @return the error
+     */
+    static ApiException toApiException(Exception e, UnaryOperator<String> redactor) {
         if (e instanceof InterruptedException) {
             Thread.currentThread().interrupt();
             return new ApiException(503, "interrupted", "The request was interrupted.");
@@ -564,7 +692,7 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
                 case CONFLICT -> 409;
                 case UNAVAILABLE -> 503;
                 case INVALID -> 422;
-            }, backend.reason().name().toLowerCase(Locale.ROOT).replace('_', '-'), clean(backend.getMessage()));
+            }, backend.reason().name().toLowerCase(Locale.ROOT).replace('_', '-'), clean(backend.getMessage(), redactor));
             case ConfigException config -> ApiException.invalidConfig(config.errors());
             case IOException io -> {
                 LOG.log(System.Logger.Level.WARNING, "API request failed: {0}", io.getClass().getSimpleName());
@@ -578,8 +706,8 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
     }
 
     /** Redacts, removes control characters and cuts a backend message. */
-    private String clean(String message) {
-        String text = server.redact(message == null ? "" : message).replaceAll("\\p{Cntrl}", "?");
+    private static String clean(String message, UnaryOperator<String> redactor) {
+        String text = redactor.apply(message == null ? "" : message).replaceAll("\\p{Cntrl}", "?");
         return text.length() > 300 ? text.substring(0, 300) : text;
     }
 

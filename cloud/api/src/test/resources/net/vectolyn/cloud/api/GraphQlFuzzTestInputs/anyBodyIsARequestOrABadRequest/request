@@ -1,0 +1,1 @@
+{"query":"{ self { id } }","operationName":null,"variables":{"a":[1,{"b":null}]}}

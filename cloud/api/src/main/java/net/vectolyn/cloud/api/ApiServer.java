@@ -16,9 +16,17 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.http.HttpDecoderConfig;
 import io.netty.handler.codec.http.HttpServerCodec;
+import io.netty.handler.codec.http2.Http2FrameCodecBuilder;
+import io.netty.handler.codec.http2.Http2MultiplexHandler;
+import io.netty.handler.codec.http2.Http2SecurityUtil;
+import io.netty.handler.codec.http2.Http2Settings;
+import io.netty.handler.codec.http2.Http2StreamChannel;
+import io.netty.handler.ssl.ApplicationProtocolConfig;
+import io.netty.handler.ssl.ApplicationProtocolNames;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
+import io.netty.handler.ssl.SupportedCipherSuiteFilter;
 import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import io.netty.util.concurrent.Future;
@@ -84,10 +92,13 @@ public final class ApiServer implements AutoCloseable {
     private final ApiBackend backend;
     private final Router<ApiRoutes.Handler> router;
     private final RateLimiter<String> addressLimiter;
+    private final LongSupplier nanoTime;
     private final RateLimiter<String> tokenLimiter;
     private final RateLimiter<String> authFailureLimiter;
     private final Semaphore requestSlots;
     private final EventHub events;
+    private final GraphQlApi graphQl;
+    private final GrpcService grpc;
     /** Guards {@link #connections} and {@link #openConnections}; never the server monitor (event loops take it). */
     private final Object connectionLock = new Object();
     private final Map<String, Integer> connections = new HashMap<>();
@@ -101,7 +112,9 @@ public final class ApiServer implements AutoCloseable {
     private @Nullable EventLoopGroup bossGroup;
     private @Nullable EventLoopGroup workerGroup;
     private @Nullable Channel serverChannel;
+    private @Nullable Channel grpcChannel;
     private volatile @Nullable SslContext sslContext;
+    private volatile @Nullable SslContext grpcSslContext;
     private int openConnections;
     private boolean closed;
 
@@ -109,14 +122,19 @@ public final class ApiServer implements AutoCloseable {
         this.settings = Objects.requireNonNull(builder.settings, "settings");
         this.tokens = builder.tokens;
         this.backend = builder.backend;
+        this.nanoTime = builder.nanoTime;
         ApiLimits limits = settings.limits();
-        this.router = new ApiRoutes(builder.config, backend, () -> shuttingDown, tokens).router();
+        this.router = new ApiRoutes(builder.config, backend, () -> shuttingDown, tokens)
+                .graphql(q -> graphQl().handle(q)).router();
         this.addressLimiter = new RateLimiter<>(limits.burstPerIp(), limits.requestsPerMinutePerIp(), builder.nanoTime);
         this.tokenLimiter = new RateLimiter<>(limits.burstPerToken(), limits.requestsPerMinutePerToken(), builder.nanoTime);
         this.authFailureLimiter = new RateLimiter<>(limits.authFailuresPerMinute(), limits.authFailuresPerMinute(),
                 builder.nanoTime);
         this.requestSlots = new Semaphore(limits.maxConcurrentRequests());
         this.events = new EventHub(this::redact, limits.maxWebSockets());
+        this.graphQl = new GraphQlApi(router, e -> ApiHttpHandler.toApiException(e, this::redact),
+                tokenLimiter::tryAcquire, settings.graphqlIntrospection());
+        this.grpc = new GrpcService(new RouteCaller(router, e -> ApiHttpHandler.toApiException(e, this::redact)));
         this.expiryCheckMillis = builder.expiryCheckMillis;
         this.metricsMillis = builder.metricsMillis;
         this.logHandler = new ApiLogHandler(this::publish, events::anyWants);
@@ -156,6 +174,19 @@ public final class ApiServer implements AutoCloseable {
                         .sslProvider(SslProvider.JDK)
                         .protocols("TLSv1.3", "TLSv1.2")
                         .build();
+                if (settings.grpcPort() != 0) {
+                    // gRPC needs HTTP/2 over TLS: ALPN "h2" and the cipher suites HTTP/2 allows.
+                    grpcSslContext = SslContextBuilder.forServer(settings.tls().get().keyManagers())
+                            .sslProvider(SslProvider.JDK)
+                            .protocols("TLSv1.3", "TLSv1.2")
+                            .ciphers(Http2SecurityUtil.CIPHERS, SupportedCipherSuiteFilter.INSTANCE)
+                            .applicationProtocolConfig(new ApplicationProtocolConfig(
+                                    ApplicationProtocolConfig.Protocol.ALPN,
+                                    ApplicationProtocolConfig.SelectorFailureBehavior.NO_ADVERTISE,
+                                    ApplicationProtocolConfig.SelectedListenerFailureBehavior.ACCEPT,
+                                    ApplicationProtocolNames.HTTP_2))
+                            .build();
+                }
             } catch (IOException e) {
                 throw new ApiStartException(Objects.requireNonNullElse(e.getMessage(), e.toString()), e);
             }
@@ -197,6 +228,40 @@ public final class ApiServer implements AutoCloseable {
             throw new IOException("The API cannot listen on port " + settings.port() + ": " + reason, cause);
         }
         serverChannel = binding.channel();
+        if (settings.grpcPort() != 0) {
+            ServerBootstrap grpcBootstrap = new ServerBootstrap()
+                    .group(bossGroup, workerGroup)
+                    .channel(NioServerSocketChannel.class)
+                    .option(ChannelOption.SO_BACKLOG, 64)
+                    .childOption(ChannelOption.TCP_NODELAY, true)
+                    .childOption(ChannelOption.WRITE_BUFFER_WATER_MARK, WATER_MARK)
+                    .childHandler(new ChannelInitializer<SocketChannel>() {
+                        @Override
+                        protected void initChannel(SocketChannel ch) {
+                            initGrpcConnection(ch);
+                        }
+                    });
+            ChannelFuture grpcBinding;
+            try {
+                grpcBinding = grpcBootstrap.bind(new InetSocketAddress(address, Math.max(0, settings.grpcPort()))).await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                serverChannel.close();
+                shutdownGroups();
+                throw new IOException("interrupted while binding the gRPC listener", e);
+            }
+            if (!grpcBinding.isSuccess()) {
+                serverChannel.close();
+                shutdownGroups();
+                Throwable cause = grpcBinding.cause();
+                throw new IOException("The API cannot listen for gRPC on port " + settings.grpcPort() + ": "
+                        + (cause == null ? "unknown reason" : cause.getClass().getSimpleName()), cause);
+            }
+            grpcChannel = grpcBinding.channel();
+            InetSocketAddress grpcBound = (InetSocketAddress) grpcChannel.localAddress();
+            LOG.log(System.Logger.Level.INFO, "API gRPC listening on {0}:{1,number,#} ({2})",
+                    grpcBound.getAddress().getHostAddress(), grpcBound.getPort(), grpcSslContext == null ? "h2c" : "h2, TLS");
+        }
         // A token that expires while its event stream is open: the stream closes with 1008 within
         // EXPIRY_CHECK_SECONDS, as if the token had been revoked.
         workerGroup.scheduleAtFixedRate(() -> events.closeTokensIf(id -> !tokens.isValid(id)),
@@ -254,6 +319,47 @@ public final class ApiServer implements AutoCloseable {
         int idle = settings.limits().idleTimeoutSeconds();
         p.addLast(IDLE, new IdleStateHandler(idle, 0, 0, TimeUnit.SECONDS));
         p.addLast("vectolyn-api-handler", new ApiHttpHandler(this));
+    }
+
+    /** Most concurrent gRPC calls on one connection. */
+    static final int GRPC_MAX_STREAMS = 16;
+
+    /**
+     * One gRPC connection: TLS with ALPN {@code h2} (or HTTP/2 with prior knowledge on loopback),
+     * then one {@link GrpcStreamHandler} per stream. Same connection limits as the HTTP listener;
+     * at most {@value #GRPC_MAX_STREAMS} calls at once, 8 KiB of headers. {@link GrpcConnection}
+     * closes the connection when no authenticated call was open for the idle timeout.
+     */
+    private void initGrpcConnection(SocketChannel ch) {
+        String client = ClientAddress.key(ch.remoteAddress());
+        if (!acquireConnection(client)) {
+            ch.close();
+            return;
+        }
+        ch.closeFuture().addListener(f -> releaseConnection(client));
+        ChannelPipeline p = ch.pipeline();
+        if (grpcSslContext != null) {
+            p.addLast("vectolyn-grpc-tls", grpcSslContext.newHandler(ch.alloc()));
+        }
+        p.addLast("vectolyn-grpc-h2", Http2FrameCodecBuilder.forServer()
+                .initialSettings(Http2Settings.defaultSettings()
+                        .maxConcurrentStreams(GRPC_MAX_STREAMS)
+                        .maxHeaderListSize(8192))
+                .validateHeaders(true)
+                // Netty's defaults, set here so the protection against reset, control-frame and
+                // empty-frame floods is visible.
+                .decoderEnforceMaxRstFramesPerWindow(200, 30)
+                .encoderEnforceMaxQueuedControlFrames(10_000)
+                .decoderEnforceMaxConsecutiveEmptyDataFrames(2)
+                .build());
+        p.addLast("vectolyn-grpc-connection", new GrpcConnection(settings.limits().idleTimeoutSeconds(),
+                settings.limits().maxBodyBytes() + 5L, nanoTime));
+        p.addLast("vectolyn-grpc-mux", new Http2MultiplexHandler(new ChannelInitializer<Http2StreamChannel>() {
+            @Override
+            protected void initChannel(Http2StreamChannel stream) {
+                stream.pipeline().addLast(new GrpcStreamHandler(ApiServer.this, grpc));
+            }
+        }));
     }
 
     private boolean acquireConnection(String client) {
@@ -369,6 +475,9 @@ public final class ApiServer implements AutoCloseable {
         if (serverChannel != null) {
             serverChannel.close().syncUninterruptibly();
         }
+        if (grpcChannel != null) {
+            grpcChannel.close().syncUninterruptibly();
+        }
         shutdownGroups();
         executor.shutdownNow();
     }
@@ -425,6 +534,21 @@ public final class ApiServer implements AutoCloseable {
 
     EventHub events() {
         return events;
+    }
+
+    /**
+     * Where the gRPC listener listens.
+     *
+     * @return the address, or empty while it is off or not started
+     */
+    public java.util.Optional<InetSocketAddress> grpcAddress() {
+        Channel channel = grpcChannel;
+        return channel == null ? java.util.Optional.empty()
+                : java.util.Optional.of((InetSocketAddress) channel.localAddress());
+    }
+
+    GraphQlApi graphQl() {
+        return graphQl;
     }
 
     String redact(String text) {
