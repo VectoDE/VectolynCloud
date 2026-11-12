@@ -588,6 +588,12 @@ jobs:
             sleep 2
           done
           sudo journalctl -u vectolyn-cloud --no-pager | tail -n 60
+          if [ "$ready" != true ]; then
+            sudo ls -ln /opt/vectolyn/database || true
+            sudo cat /opt/vectolyn/database/vectolyn-mariadb.ini || true
+            sudo head -n 25 /opt/vectolyn/database/mariadb.log || true
+            sudo ps -u vectolyn -o pid,args || true
+          fi
           test "$ready" = true
           mariadb_pid=$(pgrep -u vectolyn -f mariadbd | head -n 1)
           echo "mariadbd pid $mariadb_pid, cgroup:"
