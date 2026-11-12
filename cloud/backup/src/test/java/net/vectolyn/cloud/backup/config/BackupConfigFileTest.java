@@ -47,6 +47,15 @@ class BackupConfigFileTest {
     }
 
     @Test
+    void parseChecksContentLikeLoad() throws Exception {
+        assertEquals(BackupConfig.defaults(), BackupConfigFile.parse("schema-version: 1\n".getBytes(StandardCharsets.UTF_8)));
+        assertThrows(ConfigException.class,
+                () -> BackupConfigFile.parse("schema-version: 1\nunknown: 1\n".getBytes(StandardCharsets.UTF_8)));
+        assertThrows(ConfigException.class,
+                () -> BackupConfigFile.parse("schema-version: 1\ndirectory: config\n".getBytes(StandardCharsets.UTF_8)));
+    }
+
+    @Test
     void fullFileIsRead() throws Exception {
         BackupConfig config = load("""
                 schema-version: 1

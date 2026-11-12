@@ -12,6 +12,8 @@ public enum StorageMethod {
     MARIADB("mariadb"),
     /** An external MySQL server. */
     MYSQL("mysql"),
+    /** An external PostgreSQL server. */
+    POSTGRESQL("postgresql"),
     /**
      * Embedded H2 files, one set per server. Data is not shared between servers, so this is for
      * tests and for trying the cloud out.
@@ -27,7 +29,7 @@ public enum StorageMethod {
     /**
      * Returns the value of {@code VECTOLYN_DB_STORAGE_METHOD}.
      *
-     * @return {@code mariadb}, {@code mysql} or {@code h2}
+     * @return {@code mariadb}, {@code mysql}, {@code postgresql} or {@code h2}
      */
     public String placeholderValue() {
         return value;

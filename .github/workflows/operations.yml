@@ -89,7 +89,7 @@ jobs:
               echo "::error file=$f::needs CRLF line ends (.gitattributes)"; exit 1
             fi
           done
-          for f in cloud/dist/start.sh cloud/dist/package.sh cloud/dist/systemd/install.sh .github/scripts/smoke-start-unix.sh .github/scripts/smoke-jar-runtime.sh gradle/update-verification-metadata.sh \
+          for f in cloud/dist/start.sh cloud/dist/package.sh cloud/dist/systemd/install.sh .github/scripts/smoke-start-unix.sh .github/scripts/smoke-jar-runtime.sh .github/scripts/release-gate.sh .github/scripts/release-changelog.sh gradle/update-verification-metadata.sh \
             tools/release-banner/banner-from-tag.sh tools/release-banner/check-tag.sh; do
             if grep -q $'\r' "$f"; then
               echo "::error file=$f::needs LF line ends (.gitattributes)"; exit 1
@@ -101,7 +101,8 @@ jobs:
         run: |
           set -euo pipefail
           shellcheck --version
-          shellcheck cloud/dist/start.sh cloud/dist/package.sh cloud/dist/systemd/install.sh .github/scripts/smoke-start-unix.sh \
+          shellcheck cloud/dist/start.sh cloud/dist/package.sh cloud/dist/systemd/install.sh .github/scripts/smoke-start-unix.sh .github/scripts/smoke-jar-runtime.sh \
+            .github/scripts/release-gate.sh .github/scripts/release-changelog.sh \
             gradle/update-verification-metadata.sh tools/release-banner/banner-from-tag.sh tools/release-banner/check-tag.sh
           # The installer script inside the egg (runs with ash in ghcr.io/pterodactyl/installers:alpine).
           jq -r '.scripts.installation.script' cloud/dist/pterodactyl/egg-vectolyn-cloud.json \
@@ -176,9 +177,19 @@ jobs:
           set -euo pipefail
           bash cloud/dist/package.sh 0.0.0-ci \
             cloud/launcher/build/cloud/VectolynCloud.jar ops-dist
-          (cd ops-dist && sha256sum -- *.jar *.zip *.tar.gz | tee SHA256SUMS)
+          (cd ops-dist && sha256sum -- *.jar *.zip *.tar.gz *.yml | tee SHA256SUMS)
           tar -tzvf ops-dist/VectolynCloud-0.0.0-ci-linux-macos.tar.gz
           unzip -l ops-dist/VectolynCloud-0.0.0-ci-windows.zip
+          tar -tzvf ops-dist/VectolynCloud-0.0.0-ci-templates.tar.gz | sed -n '1,20p'
+          # Exactly the files release.yml lists in SHA256SUMS (plus the banners it adds later).
+          test "$(find ops-dist -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\n' | LC_ALL=C sort | tr '\n' ' ')" = \
+            "VectolynCloud-0.0.0-ci-linux-macos.tar.gz VectolynCloud-0.0.0-ci-templates.tar.gz VectolynCloud-0.0.0-ci-windows.zip VectolynCloud.jar setup.example.yml "
+          # Every server template of the repository is in the templates archive.
+          tar -tzf ops-dist/VectolynCloud-0.0.0-ci-templates.tar.gz > "$RUNNER_TEMP/templates.lst"
+          for dir in templates/*/; do
+            grep -q "/templates/$(basename "$dir")/" "$RUNNER_TEMP/templates.lst" \
+              || { echo "::error::template $dir is missing in the templates archive"; exit 1; }
+          done
 
       # The archives must not depend on when they are built (reproducible release files).
       - name: Package again and compare
@@ -186,7 +197,7 @@ jobs:
           set -euo pipefail
           bash cloud/dist/package.sh 0.0.0-ci \
             cloud/launcher/build/cloud/VectolynCloud.jar "$RUNNER_TEMP/again"
-          (cd "$RUNNER_TEMP/again" && sha256sum -- *.jar *.zip *.tar.gz) | diff - <(cd ops-dist && sha256sum -- *.jar *.zip *.tar.gz)
+          (cd "$RUNNER_TEMP/again" && sha256sum -- *.jar *.zip *.tar.gz *.yml) | diff - <(cd ops-dist && sha256sum -- *.jar *.zip *.tar.gz *.yml)
           echo "Archives are reproducible."
 
       # The tag check of release.yml (check-tag.sh, the version rules of ReleaseVersion) on every
@@ -339,6 +350,102 @@ jobs:
       - name: java -jar VectolynCloud.jar
         shell: bash
         run: bash .github/scripts/smoke-jar-runtime.sh ops-dist/VectolynCloud.jar
+
+  # The release process around the files: the milestone gate for every channel and the changelog of
+  # a release, both on fixtures (a throwaway repository), so the checks do not depend on the state
+  # of this repository's milestones. release.yml runs the same scripts on a real tag.
+  release-process:
+    name: Release gate and changelog
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Milestone gate
+        run: |
+          set -euo pipefail
+          gate=$PWD/.github/scripts/release-gate.sh
+          open='[{"title":"Stage 1","open_issues":0,"closed_issues":4,"html_url":"u"},{"title":"Stage 2: core","open_issues":0,"closed_issues":9,"html_url":"u"},{"title":"Alpha","open_issues":0,"closed_issues":3,"html_url":"u"},{"title":"Beta","open_issues":0,"closed_issues":2,"html_url":"u"},{"title":"RC","open_issues":0,"closed_issues":1,"html_url":"u"}]'
+          printf '%s' "$open" > "$RUNNER_TEMP/all-closed.json"
+          # one open issue in the named milestone
+          for name in Alpha Beta RC "Stage 2: core"; do
+            jq --arg n "$name" 'map(if .title == $n then .open_issues = 1 else . end)' "$RUNNER_TEMP/all-closed.json" \
+              > "$RUNNER_TEMP/open-${name// /_}.json"
+          done
+          jq 'map(select(.title != "Beta"))' "$RUNNER_TEMP/all-closed.json" > "$RUNNER_TEMP/no-beta.json"
+          jq 'map(select(.title | test("^Stage ") | not))' "$RUNNER_TEMP/all-closed.json" > "$RUNNER_TEMP/no-stage.json"
+          expect() {  # expect <exit code> <channel> <json file>
+            local want=$1 channel=$2 file=$3 rc=0
+            bash "$gate" "$channel" "$file" > "$RUNNER_TEMP/gate.log" 2>&1 || rc=$?
+            cat "$RUNNER_TEMP/gate.log"
+            if [ "$rc" -ne "$want" ]; then echo "::error::$channel with $file: exit $rc, expected $want"; exit 1; fi
+            echo "ok: $channel with $(basename "$file") -> $rc"
+          }
+          expect 0 dev "$RUNNER_TEMP/open-Alpha.json"
+          expect 0 alpha "$RUNNER_TEMP/all-closed.json"
+          expect 1 alpha "$RUNNER_TEMP/open-Alpha.json"
+          expect 0 alpha "$RUNNER_TEMP/open-RC.json"
+          expect 0 beta "$RUNNER_TEMP/all-closed.json"
+          expect 1 beta "$RUNNER_TEMP/open-Beta.json"
+          expect 1 beta "$RUNNER_TEMP/no-beta.json"
+          expect 0 rc "$RUNNER_TEMP/all-closed.json"
+          expect 1 rc "$RUNNER_TEMP/open-RC.json"
+          expect 0 stable "$RUNNER_TEMP/all-closed.json"
+          expect 1 stable "$RUNNER_TEMP/open-RC.json"
+          expect 1 stable "$RUNNER_TEMP/open-Stage_2:_core.json"
+          expect 1 stable "$RUNNER_TEMP/no-stage.json"
+          expect 0 lts "$RUNNER_TEMP/all-closed.json"
+          expect 1 lts "$RUNNER_TEMP/open-Alpha.json"
+          expect 64 nightly "$RUNNER_TEMP/all-closed.json"
+          echo "Milestone gate OK."
+
+      - name: Changelog
+        run: |
+          set -euo pipefail
+          script=$PWD/.github/scripts/release-changelog.sh
+          repo=$(mktemp -d)
+          cd "$repo"
+          git init -q
+          git config user.name ci
+          git config user.email ci@invalid
+          git config commit.gpgsign false
+          c() { git commit -q --allow-empty -m "$1"; }
+          c 'feat: first thing'
+          git tag v0.1.0-dev
+          c 'feat(cloud): add the thing (#1)'
+          c 'fix(node)!: change the exit code (#2)'
+          c 'fix: plain fix (#3)'
+          c 'perf(console): faster (#4)'
+          c 'docs: explain (#5)'
+          c 'ci(release): sign (#6)'
+          c 'a subject without a type'
+          git tag v0.2.0-dev
+          c 'feat: after the tag'
+          GITHUB_REPOSITORY=o/r bash "$script" v0.2.0-dev | tee "$RUNNER_TEMP/changelog.md"
+          grep -q '^## Changes since v0.1.0-dev$' "$RUNNER_TEMP/changelog.md"
+          grep -q '^### Breaking changes$' "$RUNNER_TEMP/changelog.md"
+          grep -q '^- \*\*cloud:\*\* add the thing (#1)$' "$RUNNER_TEMP/changelog.md"
+          grep -q '^- plain fix (#3)$' "$RUNNER_TEMP/changelog.md"
+          grep -q '^### Performance$' "$RUNNER_TEMP/changelog.md"
+          grep -q '^### Documentation$' "$RUNNER_TEMP/changelog.md"
+          grep -q '^### Build, CI and maintenance$' "$RUNNER_TEMP/changelog.md"
+          grep -q '^### Other$' "$RUNNER_TEMP/changelog.md"
+          grep -q 'compare/v0.1.0-dev...v0.2.0-dev' "$RUNNER_TEMP/changelog.md"
+          if grep -q 'after the tag' "$RUNNER_TEMP/changelog.md"; then echo "::error::a commit after the tag is in the changelog"; exit 1; fi
+          # the first release has no previous tag: the whole history
+          bash "$script" v0.1.0-dev | grep -q 'first thing'
+          if bash "$script" v9.9.9 2> /dev/null; then echo "::error::an unknown tag must fail"; exit 1; fi
+          echo "Changelog OK."
 
   start-scripts:
     name: Start scripts (${{ matrix.os }})
@@ -747,3 +854,24 @@ jobs:
           # 143 = ended by SIGTERM after the shutdown hook ran; 0 = ended normally.
           case "$code" in 0|143) ;; *) echo "::error::unexpected exit code $code"; exit 1 ;; esac
           docker rm vectolyn-ci
+
+      # The compose example as a user runs it: cloud and MariaDB with secrets files, the image
+      # pinned through VECTOLYN_VERSION (here the locally loaded release-path image under the
+      # name compose.yml expects), waiting for both health checks, then a clean "down".
+      - name: Compose stack (up, healthy, down)
+        working-directory: cloud/dist/docker
+        env:
+          VECTOLYN_VERSION: ci
+        run: |
+          set -euo pipefail
+          docker tag vectolyn-cloud:release "ghcr.io/vectode/vectolyn-cloud:${VECTOLYN_VERSION}"
+          mkdir -p secrets
+          openssl rand -base64 32 | tr -d '\n' > secrets/db_password
+          openssl rand -base64 32 | tr -d '\n' > secrets/db_root_password
+          sed 's/^eula: false/eula: true/' setup.example.yml > setup.yml
+          grep -q '^eula: true' setup.yml
+          trap 'docker compose logs --no-color || true; docker compose down --volumes --timeout 120 || true' EXIT
+          docker compose up --detach --no-build --pull missing --wait --wait-timeout 300
+          docker compose ps
+          docker compose exec -T cloud test -f /data/config/cloud.yml
+          test "$(docker compose exec -T cloud stat -c %u /data)" = 1000

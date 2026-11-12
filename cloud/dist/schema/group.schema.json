@@ -1,0 +1,138 @@
+{
+  "$schema" : "https://json-schema.org/draft/2020-12/schema",
+  "$id" : "https://github.com/VectoDE/VectolynCloud/raw/main/cloud/dist/schema/group.schema.json",
+  "title" : "VectolynCloud groups/<name>.yml",
+  "description" : "Generated from the configuration model of VectolynCloud. Reference: https://github.com/VectoDE/VectolynCloud/blob/main/docs/cloud/config.md",
+  "type" : "object",
+  "properties" : {
+    "schema-version" : {
+      "type" : "integer",
+      "minimum" : 1,
+      "maximum" : 1,
+      "description" : "Version of the file format; 1 is current."
+    },
+    "template" : {
+      "type" : "string"
+    },
+    "software" : {
+      "type" : "string",
+      "enum" : [ "paper", "velocity", "fabric", "pandaspigot" ]
+    },
+    "minecraft-version" : {
+      "type" : "string"
+    },
+    "java" : {
+      "anyOf" : [ {
+        "const" : "auto"
+      }, {
+        "type" : "integer",
+        "minimum" : 8,
+        "maximum" : 99
+      } ],
+      "description" : "auto or a Java major version from 8 to 99"
+    },
+    "heap" : {
+      "$ref" : "#/$defs/HeapConfig"
+    },
+    "catalog" : {
+      "type" : "array",
+      "items" : {
+        "$ref" : "#/$defs/CatalogReference"
+      }
+    },
+    "combat" : {
+      "type" : "string",
+      "enum" : [ "legacy", "modern" ]
+    },
+    "process" : {
+      "$ref" : "#/$defs/ProcessConfig"
+    },
+    "wanted" : {
+      "type" : "boolean"
+    },
+    "drain-timeout" : {
+      "type" : "string",
+      "pattern" : "^(0|[1-9][0-9]{0,5})[smh]$",
+      "description" : "<number>s, <number>m or <number>h, for example 30s"
+    }
+  },
+  "required" : [ "schema-version" ],
+  "additionalProperties" : false,
+  "$defs" : {
+    "CatalogReference" : {
+      "type" : "object",
+      "properties" : {
+        "id" : {
+          "type" : "string"
+        },
+        "kind" : {
+          "type" : "string",
+          "enum" : [ "plugin", "mod", "transitional" ]
+        }
+      },
+      "additionalProperties" : false
+    },
+    "HeapConfig" : {
+      "type" : "object",
+      "properties" : {
+        "min" : {
+          "type" : "string",
+          "pattern" : "^[1-9][0-9]{0,6}[MmGg]$",
+          "description" : "<number>M or <number>G, for example 512M"
+        },
+        "max" : {
+          "type" : "string",
+          "pattern" : "^[1-9][0-9]{0,6}[MmGg]$",
+          "description" : "<number>M or <number>G, for example 512M"
+        }
+      },
+      "additionalProperties" : false
+    },
+    "ProcessConfig" : {
+      "type" : "object",
+      "properties" : {
+        "jvm-flags" : {
+          "type" : "array",
+          "items" : {
+            "type" : "string"
+          }
+        },
+        "stop-command" : {
+          "type" : "string"
+        },
+        "stop-timeout" : {
+          "type" : "string",
+          "pattern" : "^(0|[1-9][0-9]{0,5})[smh]$",
+          "description" : "<number>s, <number>m or <number>h, for example 30s"
+        },
+        "restart" : {
+          "$ref" : "#/$defs/RestartConfig"
+        }
+      },
+      "additionalProperties" : false
+    },
+    "RestartConfig" : {
+      "type" : "object",
+      "properties" : {
+        "on-crash" : {
+          "type" : "boolean"
+        },
+        "max-attempts" : {
+          "type" : "integer"
+        },
+        "backoff" : {
+          "type" : "string",
+          "pattern" : "^(0|[1-9][0-9]{0,5})[smh]$",
+          "description" : "<number>s, <number>m or <number>h, for example 30s"
+        },
+        "max-backoff" : {
+          "type" : "string",
+          "pattern" : "^(0|[1-9][0-9]{0,5})[smh]$",
+          "description" : "<number>s, <number>m or <number>h, for example 30s"
+        }
+      },
+      "required" : [ "on-crash", "max-attempts", "backoff", "max-backoff" ],
+      "additionalProperties" : false
+    }
+  }
+}

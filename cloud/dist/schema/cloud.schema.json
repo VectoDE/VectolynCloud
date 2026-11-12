@@ -1,0 +1,192 @@
+{
+  "$schema" : "https://json-schema.org/draft/2020-12/schema",
+  "$id" : "https://github.com/VectoDE/VectolynCloud/raw/main/cloud/dist/schema/cloud.schema.json",
+  "title" : "VectolynCloud cloud.yml",
+  "description" : "Generated from the configuration model of VectolynCloud. Reference: https://github.com/VectoDE/VectolynCloud/blob/main/docs/cloud/config.md",
+  "type" : "object",
+  "properties" : {
+    "schema-version" : {
+      "type" : "integer",
+      "minimum" : 1,
+      "maximum" : 1,
+      "description" : "Version of the file format; 1 is current."
+    },
+    "network-name" : {
+      "type" : "string"
+    },
+    "language" : {
+      "type" : "string",
+      "enum" : [ "de", "en" ]
+    },
+    "eula-accepted" : {
+      "type" : "boolean"
+    },
+    "setup-complete" : {
+      "type" : "boolean"
+    },
+    "node-id" : {
+      "type" : "string"
+    },
+    "fallback-group" : {
+      "type" : "string"
+    },
+    "servers" : {
+      "$ref" : "#/$defs/WantedServers"
+    },
+    "proxy" : {
+      "$ref" : "#/$defs/ProxyConfig"
+    },
+    "legacy-proxy" : {
+      "$ref" : "#/$defs/LegacyProxyConfig"
+    },
+    "database" : {
+      "$ref" : "#/$defs/DatabaseConfig"
+    },
+    "api" : {
+      "$ref" : "#/$defs/ApiConfig"
+    },
+    "branding" : {
+      "$ref" : "#/$defs/BrandingConfig"
+    }
+  },
+  "required" : [ "schema-version" ],
+  "additionalProperties" : false,
+  "$defs" : {
+    "ApiConfig" : {
+      "type" : "object",
+      "properties" : {
+        "enabled" : {
+          "type" : "boolean"
+        },
+        "bind" : {
+          "type" : "string"
+        },
+        "port" : {
+          "type" : "integer"
+        },
+        "tls" : {
+          "$ref" : "#/$defs/TlsConfig"
+        },
+        "cors-origins" : {
+          "type" : "array",
+          "items" : {
+            "type" : "string"
+          }
+        },
+        "graphql-introspection" : {
+          "type" : "boolean"
+        },
+        "grpc-port" : {
+          "type" : "integer"
+        }
+      },
+      "additionalProperties" : false
+    },
+    "BrandingConfig" : {
+      "type" : "object",
+      "properties" : {
+        "powered-by" : {
+          "type" : "boolean"
+        }
+      },
+      "additionalProperties" : false
+    },
+    "DatabaseConfig" : {
+      "type" : "object",
+      "properties" : {
+        "mode" : {
+          "type" : "string",
+          "enum" : [ "managed", "docker", "external", "h2", "postgresql" ]
+        },
+        "host" : {
+          "type" : "string"
+        },
+        "port" : {
+          "type" : "integer"
+        },
+        "name" : {
+          "type" : "string"
+        },
+        "user" : {
+          "type" : "string"
+        },
+        "docker-image" : {
+          "type" : "string"
+        }
+      },
+      "additionalProperties" : false
+    },
+    "LegacyProxyConfig" : {
+      "type" : "object",
+      "properties" : {
+        "enabled" : {
+          "type" : "boolean"
+        },
+        "port" : {
+          "type" : "integer"
+        }
+      },
+      "additionalProperties" : false
+    },
+    "ProxyConfig" : {
+      "type" : "object",
+      "properties" : {
+        "bind" : {
+          "type" : "string"
+        },
+        "port" : {
+          "type" : "integer"
+        },
+        "bedrock-port" : {
+          "type" : "integer"
+        }
+      },
+      "additionalProperties" : false
+    },
+    "TlsConfig" : {
+      "type" : "object",
+      "properties" : {
+        "enabled" : {
+          "type" : "boolean"
+        },
+        "keystore" : {
+          "type" : "string"
+        }
+      },
+      "additionalProperties" : false
+    },
+    "WantedServers" : {
+      "type" : "object",
+      "properties" : {
+        "proxy" : {
+          "type" : "boolean"
+        },
+        "lobby" : {
+          "type" : "boolean"
+        },
+        "survival" : {
+          "type" : "boolean"
+        },
+        "creative" : {
+          "type" : "boolean"
+        },
+        "mod" : {
+          "type" : "boolean"
+        },
+        "end" : {
+          "type" : "boolean"
+        },
+        "database" : {
+          "type" : "boolean"
+        },
+        "minigame" : {
+          "type" : "boolean"
+        },
+        "legacy-server" : {
+          "type" : "boolean"
+        }
+      },
+      "additionalProperties" : false
+    }
+  }
+}

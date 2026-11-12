@@ -1,0 +1,44 @@
+# Example setup file for VectolynCloud, for starts without questions:
+#
+#   java -jar VectolynCloud.jar --non-interactive --setup-file setup.yml
+#
+# Copy this file to setup.yml and change it. Only "schema-version" and "eula" are required; every
+# other key can be left out and then keeps the default of the setup assistant. The file is used
+# only while the setup is not complete (setup-complete in config/cloud.yml); later changes go
+# through the console ("config set") or config/cloud.yml. Every rule: docs/cloud/setup.md.
+# The file holds no secrets. A database password comes from secrets/vectolyn.env
+# (VECTOLYN_DB_PASSWORD) or from database.password-file.
+schema-version: 1
+
+# Required. Set to true only if you accept the Minecraft EULA: https://aka.ms/MinecraftEULA
+eula: false
+
+language: en                   # en or de
+network-name: Vectolyn         # 1 to 32 letters, digits, space, '.', '_' or '-', with a letter
+
+# Which servers the network has (the values shown are the defaults of the setup assistant).
+servers:
+  proxy: true
+  lobby: true
+  survival: true
+  creative: true
+  mod: false
+  end: true
+  minigame: true
+  legacy-proxy: false          # a second proxy for Minecraft 1.8.8 clients
+  legacy-server: false         # needs legacy-proxy: true
+
+network:
+  bind: 0.0.0.0                # 0.0.0.0 means every address
+  java-port: 25565
+  bedrock-port: 19132          # UDP (Geyser); the next port is used as well
+  legacy-port: 25564
+
+# Maximum heap per group. All of it together must fit into the memory of the machine.
+memory:
+  survival: 4G
+
+# Managed: the cloud downloads and runs its own MariaDB. The other modes are external, docker and
+# h2 (embedded, no shared database); see docs/cloud/database.md.
+database:
+  mode: managed
