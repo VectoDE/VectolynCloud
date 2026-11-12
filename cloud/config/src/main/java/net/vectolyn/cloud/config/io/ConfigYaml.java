@@ -12,6 +12,7 @@ import net.vectolyn.cloud.config.model.JavaSelection;
 import net.vectolyn.cloud.config.model.MemorySize;
 import net.vectolyn.cloud.config.model.TimeSpan;
 import net.vectolyn.cloud.config.validation.ConfigNames;
+import org.jspecify.annotations.Nullable;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.JsonParser;
 import tools.jackson.core.TokenStreamLocation;
@@ -226,7 +227,7 @@ public final class ConfigYaml {
                 || message.startsWith("Cannot map `null` into type");
     }
 
-    private static String expected(Class<?> type) {
+    private static String expected(@Nullable Class<?> type) {
         if (type == null) {
             return "a valid value";
         }

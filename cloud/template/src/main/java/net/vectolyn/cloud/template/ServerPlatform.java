@@ -3,6 +3,7 @@
 package net.vectolyn.cloud.template;
 
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Server software a template is for. It decides which files the cloud generates next to the
@@ -37,12 +38,12 @@ public enum ServerPlatform {
     /** No Minecraft software (the database template): nothing is generated. */
     NONE(null, null, false, false);
 
-    private final String floodgateKey;
-    private final String forwardingPlaceholder;
+    private final @Nullable String floodgateKey;
+    private final @Nullable String forwardingPlaceholder;
     private final boolean eula;
     private final boolean spigot;
 
-    ServerPlatform(String floodgateKey, String forwardingPlaceholder, boolean eula, boolean spigot) {
+    ServerPlatform(@Nullable String floodgateKey, @Nullable String forwardingPlaceholder, boolean eula, boolean spigot) {
         this.floodgateKey = floodgateKey;
         this.forwardingPlaceholder = forwardingPlaceholder;
         this.eula = eula;

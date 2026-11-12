@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package net.vectolyn.cloud.config.model;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Database server of the network. Passwords are not part of it: they live in
  * {@code secrets/vectolyn.env} ({@code VECTOLYN_DB_PASSWORD}, {@code VECTOLYN_DB_ROOT_PASSWORD}).
@@ -13,7 +15,8 @@ package net.vectolyn.cloud.config.model;
  * @param user        database user ({@code VECTOLYN_DB_USER})
  * @param dockerImage container image, only for mode {@code docker} (for example {@code mariadb:12.3}); null otherwise
  */
-public record DatabaseConfig(DatabaseMode mode, String host, int port, String name, String user, String dockerImage) {
+public record DatabaseConfig(DatabaseMode mode, String host, int port, String name, String user,
+                             @Nullable String dockerImage) {
 
     /** Image used when switching to Docker mode without naming one. */
     public static final String DEFAULT_DOCKER_IMAGE = "mariadb:12.3";

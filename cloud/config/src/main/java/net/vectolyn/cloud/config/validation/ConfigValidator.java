@@ -34,6 +34,7 @@ import net.vectolyn.cloud.config.model.ScalingConfig;
 import net.vectolyn.cloud.config.model.ServerSoftware;
 import net.vectolyn.cloud.config.model.TaskConfig;
 import net.vectolyn.cloud.config.model.TimeSpan;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Checks a whole {@link ConfigSnapshot}: value ranges, patterns, references between files and port
@@ -233,7 +234,7 @@ public final class ConfigValidator {
         }
         validateProcess(c, f, group.process());
         if (group.drainTimeout() != null) {
-            long seconds = group.drainTimeout().duration().getSeconds();
+            long seconds = group.drainTimeout().duration().toSeconds();
             if (seconds < GroupConfig.MIN_DRAIN_TIMEOUT_SECONDS || seconds > GroupConfig.MAX_DRAIN_TIMEOUT_SECONDS) {
                 c.add(ConfigError.of(f, "drain-timeout", ErrorCode.OUT_OF_RANGE,
                         TimeSpan.ofSeconds(GroupConfig.MIN_DRAIN_TIMEOUT_SECONDS),
@@ -242,7 +243,7 @@ public final class ConfigValidator {
         }
     }
 
-    private static void validateProcess(Checks c, String f, ProcessConfig process) {
+    private static void validateProcess(Checks c, String f, @Nullable ProcessConfig process) {
         if (process == null) {
             return;
         }
@@ -258,7 +259,7 @@ public final class ConfigValidator {
         if (process.stopCommand() != null) {
             c.pattern(f, "process.stop-command", process.stopCommand(), ProcessConfig.STOP_COMMAND);
         }
-        c.range(f, "process.stop-timeout", process.stopTimeout().duration().getSeconds(),
+        c.range(f, "process.stop-timeout", process.stopTimeout().duration().toSeconds(),
                 ProcessConfig.MIN_STOP_TIMEOUT_SECONDS, ProcessConfig.MAX_STOP_TIMEOUT_SECONDS);
         RestartConfig restart = process.restart();
         c.range(f, "process.restart.max-attempts", restart.maxAttempts(), 1, RestartConfig.MAX_ATTEMPTS);
@@ -412,8 +413,9 @@ public final class ConfigValidator {
             return true;
         }
 
-        boolean pattern(String file, String path, String value, String regex) {
-            if (!required(file, path, value)) {
+        boolean pattern(String file, String path, @Nullable String value, String regex) {
+            if (value == null) {
+                add(ConfigError.of(file, path, ErrorCode.REQUIRED));
                 return false;
             }
             if (!PATTERNS.computeIfAbsent(regex, Pattern::compile).matcher(value).matches()) {
