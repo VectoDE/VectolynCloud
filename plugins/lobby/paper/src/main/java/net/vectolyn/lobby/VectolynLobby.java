@@ -37,6 +37,7 @@ public final class VectolynLobby extends JavaPlugin implements Listener {
         saveDefaultConfig();
         getServer().getPluginManager().registerEvents(this, this);
         getServer().getPluginManager().registerEvents(new BuildProtection(), this);
+        getServer().getPluginManager().registerEvents(new FireProtection(getLogger()), this);
         Bukkit.getScheduler().runTaskLater(this, () -> {
             World world = Bukkit.getWorlds().getFirst();
             configureWorld(world);

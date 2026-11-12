@@ -104,7 +104,7 @@ jobs:
           cd "$RUNNER_TEMP/paper"
           echo "eula=true" > eula.txt
           printf '%s\n' 'online-mode=false' 'server-ip=127.0.0.1' 'server-port=25599' \
-            'level-type=minecraft\:flat' 'view-distance=4' 'simulation-distance=4' > server.properties
+            'level-type=minecraft\:flat' 'view-distance=4' 'simulation-distance=4' 'difficulty=normal' > server.properties
           rules="advance_time advance_weather spawn_mobs spawn_monsters spawn_patrols spawn_wandering_traders spawn_wardens spawn_phantoms raids mob_griefing fire_spread_radius_around_player fall_damage drowning_damage fire_damage freeze_damage pvp"
           mkfifo commands
           timeout 900 java -Xmx1G -jar paper.jar --nogui < commands > server.log 2>&1 &
@@ -146,6 +146,17 @@ jobs:
           sleep 1
           echo "gamerule fire_spread_radius_around_player" >&3
           burn control-unlimited 90 90
+          # Lightning: it lights a fire on planks at normal difficulty with the spread rule off. The
+          # lobby must cancel that ignition: its log line has to appear and no fire may stand.
+          echo "forceload add 130 130" >&3
+          sleep 4
+          echo "setblock 130 200 130 minecraft:oak_planks" >&3
+          sleep 1
+          echo "summon minecraft:lightning_bolt 130 201 130" >&3
+          sleep 4
+          echo "execute if block 130 201 130 minecraft:fire run say LIGHTNING_FIRE_PRESENT" >&3
+          echo "execute unless block 130 201 130 minecraft:fire run say LIGHTNING_NO_FIRE" >&3
+          sleep 3
           echo "stop" >&3
           exec 3>&-
           wait "$server"
@@ -185,6 +196,10 @@ jobs:
           }
           report lobby-rule
           report control-unlimited
+          # Lightning: an ignition must have been cancelled by the lobby and no fire may stand.
+          check "lightning ignition was cancelled by the lobby" 'Fire blocked: LIGHTNING at 130 201 130'
+          check "no fire after the lightning" 'LIGHTNING_NO_FIRE'
+          if grep -q 'LIGHTNING_FIRE_PRESENT' "$log"; then echo "FAIL fire stands after the lightning"; fail=1; fi
           {
             echo "### Lobby on Paper"
             echo
