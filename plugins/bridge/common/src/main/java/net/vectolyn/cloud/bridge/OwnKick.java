@@ -5,6 +5,7 @@ package net.vectolyn.cloud.bridge;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The network kick a backend bridge carries out right now ({@code networkKick}), so that it is
@@ -20,8 +21,8 @@ import java.util.UUID;
  */
 public final class OwnKick {
 
-    private UUID player;
-    private String reason;
+    private @Nullable UUID player;
+    private @Nullable String reason;
     private boolean passed;
 
     /**
@@ -73,6 +74,6 @@ public final class OwnKick {
             return Optional.empty();
         }
         passed = true;
-        return Optional.of(reason);
+        return Optional.of(Objects.requireNonNull(reason, "reason"));
     }
 }

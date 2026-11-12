@@ -43,6 +43,7 @@ import org.bukkit.event.world.EntitiesLoadEvent;
 import org.bukkit.event.world.LootGenerateEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Removes command blocks from a Paper server ({@link CommandBlocks}): command blocks, chain and
@@ -75,11 +76,11 @@ final class CommandBlockGuard implements Listener {
         this.log = Objects.requireNonNull(log, "log");
     }
 
-    static boolean forbidden(Material material) {
+    static boolean forbidden(@Nullable Material material) {
         return material != null && CommandBlocks.forbidden(material.name());
     }
 
-    static boolean forbidden(ItemStack item) {
+    static boolean forbidden(@Nullable ItemStack item) {
         return item != null && forbidden(item.getType());
     }
 
@@ -183,7 +184,7 @@ final class CommandBlockGuard implements Listener {
     @EventHandler(priority = EventPriority.LOWEST)
     public void onSpawn(EntitySpawnEvent event) {
         Entity entity = event.getEntity();
-        if (entity instanceof CommandMinecart || entity instanceof Item item && forbidden(item.getItemStack())) {
+        if (entity instanceof CommandMinecart || (entity instanceof Item item && forbidden(item.getItemStack()))) {
             event.setCancelled(true);
         }
     }

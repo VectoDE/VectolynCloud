@@ -12,6 +12,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The network kicks ({@code NetworkKick}) the proxy heard of, and the kicks that wait for one.
@@ -162,7 +163,8 @@ public final class KickMarks {
         if (before != null) {
             before.complete(Optional.empty());
         }
-        waiter.whenComplete((result, error) -> {
+        // The callback only cleans up; there is nothing to report from the derived future.
+        var unused = waiter.whenComplete((result, error) -> {
             synchronized (this) {
                 waiting.remove(player, waiter);
             }
@@ -206,7 +208,7 @@ public final class KickMarks {
         }
     }
 
-    private Timed live(Map<UUID, Timed> map, UUID player) {
+    private @Nullable Timed live(Map<UUID, Timed> map, UUID player) {
         Timed entry = map.get(player);
         if (entry != null && !clock.instant().isBefore(entry.until())) {
             map.remove(player);

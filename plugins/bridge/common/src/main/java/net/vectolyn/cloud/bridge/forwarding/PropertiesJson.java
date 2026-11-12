@@ -4,6 +4,7 @@ package net.vectolyn.cloud.bridge.forwarding;
 
 import java.util.ArrayList;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Reads and writes the properties part of a forwarded handshake: a JSON array of objects with the
@@ -144,14 +145,14 @@ public final class PropertiesJson {
         return new GameProperty(name, value, signature);
     }
 
-    private static String require(String member, String key) throws MalformedHandshakeException {
+    private static String require(@Nullable String member, String key) throws MalformedHandshakeException {
         if (member == null) {
             throw new MalformedHandshakeException("member " + key + " is null");
         }
         return member;
     }
 
-    private String nullLiteral() throws MalformedHandshakeException {
+    private @Nullable String nullLiteral() throws MalformedHandshakeException {
         if (!in.startsWith("null", pos)) {
             throw new MalformedHandshakeException("expected a string or null");
         }

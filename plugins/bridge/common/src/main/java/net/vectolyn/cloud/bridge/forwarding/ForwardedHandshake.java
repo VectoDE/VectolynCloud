@@ -84,7 +84,7 @@ public record ForwardedHandshake(String serverHostname, String playerAddress, UU
             String body = zone >= 0 ? address.substring(0, zone) : address;
             for (int i = 0; i < body.length(); i++) {
                 char c = body.charAt(i);
-                if (!(c == ':' || c == '.' || Character.digit(c, 16) >= 0 && c < 0x80)) {
+                if (!(c == ':' || c == '.' || (Character.digit(c, 16) >= 0 && c < 0x80))) {
                     throw new MalformedHandshakeException("player address is not an IP literal");
                 }
             }

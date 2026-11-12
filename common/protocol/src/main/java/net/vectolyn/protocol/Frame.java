@@ -17,6 +17,8 @@ import java.util.Objects;
  * @param requestId id that pairs a request with its response, 0 for none
  * @param payload encoded message
  */
+// The wire payload is a byte array; the constructor and accessor copy it, so the record stays immutable.
+@SuppressWarnings("ArrayRecordComponent")
 public record Frame(ProtocolVersion version, int messageId, int requestId, byte[] payload) {
 
     /**

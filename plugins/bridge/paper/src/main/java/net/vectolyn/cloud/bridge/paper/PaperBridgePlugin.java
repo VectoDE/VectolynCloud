@@ -51,6 +51,7 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.server.RemoteServerCommandEvent;
 import org.bukkit.event.server.ServerCommandEvent;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.jspecify.annotations.Nullable;
 
 /**
  * VectolynCloud bridge for Paper 26.3. Thin adapter over plugins/bridge/common: every call to the
@@ -84,8 +85,8 @@ public final class PaperBridgePlugin extends JavaPlugin implements Listener {
     public static final long STATUS_PERIOD_TICKS = 100;
 
     private final KickCommandWatch kicks = new KickCommandWatch();
-    private BridgeSender sender;
-    private ServiceId service;
+    private @Nullable BridgeSender sender;
+    private @Nullable ServiceId service;
     /** The kick {@link #networkKick} carries out right now; reported once its event went through. */
     private final OwnKick own = new OwnKick();
 
@@ -355,8 +356,8 @@ public final class PaperBridgePlugin extends JavaPlugin implements Listener {
         if (!player.isOnline()) {
             return;
         }
-        Location at = player.getLocation();
-        World world = at.getWorld();
+        Location at = Objects.requireNonNull(player.getLocation(), "location");
+        World world = Objects.requireNonNull(at.getWorld(), "world");
         int x = at.getBlockX();
         int z = at.getBlockZ();
         SafeSpawn.Column column = new SafeSpawn.Column() {
@@ -383,7 +384,12 @@ public final class PaperBridgePlugin extends JavaPlugin implements Listener {
             // No player name in the log, like everywhere else in the bridge.
             getLogger().info("A player joined inside blocks at y=" + at.getBlockY() + "; moved on top to y="
                     + target.getAsInt());
-            player.teleportAsync(new Location(world, x + 0.5, target.getAsInt(), z + 0.5, at.getYaw(), at.getPitch()));
+            // The future is only watched for failures; a refused teleport is logged, never thrown.
+            var unused = player.teleportAsync(new Location(world, x + 0.5, target.getAsInt(), z + 0.5, at.getYaw(),
+                    at.getPitch())).exceptionally(error -> {
+                        getLogger().log(Level.WARNING, "Could not move a player on top of the blocks", error);
+                        return false;
+                    });
         }
     }
 

@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Decides whether a forwarded handshake comes from the legacy proxy: it must carry exactly one
@@ -21,9 +22,9 @@ public final class BungeeGuardCheck {
     /** Name of the property Velocity adds in {@code bungeeguard} mode. */
     public static final String TOKEN_PROPERTY = "bungeeguard-token";
 
-    private final ForwardingSecret secret;
+    private final @Nullable ForwardingSecret secret;
 
-    private BungeeGuardCheck(ForwardingSecret secret) {
+    private BungeeGuardCheck(@Nullable ForwardingSecret secret) {
         this.secret = secret;
     }
 
@@ -38,7 +39,7 @@ public final class BungeeGuardCheck {
     }
 
     /** Checks the handshake text exactly as the client sent it (the original server address field). */
-    public Result check(String originalHandshake) {
+    public Result check(@Nullable String originalHandshake) {
         if (secret == null) {
             return new Rejected(Reason.NO_SECRET);
         }
@@ -51,7 +52,7 @@ public final class BungeeGuardCheck {
         } catch (MalformedHandshakeException e) {
             return new Rejected(Reason.MALFORMED);
         }
-        String token = null;
+        @Nullable String token = null;
         int tokens = 0;
         List<GameProperty> rest = new ArrayList<>(handshake.properties().size());
         for (GameProperty property : handshake.properties()) {
@@ -62,7 +63,7 @@ public final class BungeeGuardCheck {
                 rest.add(property);
             }
         }
-        if (tokens == 0) {
+        if (tokens == 0 || token == null) {
             return new Rejected(Reason.MISSING_TOKEN);
         }
         // Compare even if there are several, so the answer takes the same time either way.

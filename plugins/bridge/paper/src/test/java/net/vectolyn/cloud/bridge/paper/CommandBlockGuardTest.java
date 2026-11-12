@@ -42,6 +42,8 @@ class CommandBlockGuardTest {
     /** What the fakes were asked to do, e.g. {@code "air 1,64,2"} or {@code "remove minecart"}. */
     private final List<String> changes = new ArrayList<>();
 
+    // Identity is the contract of Object.equals for the proxy; calling proxy.equals here would recurse.
+    @SuppressWarnings("ReferenceEquality")
     private static Object fake(Class<?> type, Answer answer) {
         return Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[] {type}, (proxy, method, args) ->
                 switch (method.getName()) {

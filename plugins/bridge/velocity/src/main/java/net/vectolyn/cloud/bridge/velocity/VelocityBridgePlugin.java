@@ -32,6 +32,7 @@ import net.vectolyn.cloud.bridge.ProxyRole;
 import net.vectolyn.cloud.bridge.TransferMessages;
 import net.vectolyn.cloud.client.CloudClientSettings;
 import net.vectolyn.protocol.ServiceEnvironment;
+import org.jspecify.annotations.Nullable;
 
 /**
  * VectolynCloud bridge for Velocity 4.3, in the main proxy and in the legacy proxy. Thin adapter
@@ -65,9 +66,9 @@ public final class VelocityBridgePlugin {
     private static final System.Logger LOG = System.getLogger(VelocityBridgePlugin.class.getName());
 
     private final ProxyServer proxy;
-    private volatile BridgeSender sender;
-    private volatile ProxyBridge bridge;
-    private volatile ScheduledTask statusTask;
+    private volatile @Nullable BridgeSender sender;
+    private volatile @Nullable ProxyBridge bridge;
+    private volatile @Nullable ScheduledTask statusTask;
 
     /** Created by Velocity. */
     @Inject
@@ -139,7 +140,7 @@ public final class VelocityBridgePlugin {
      * </ul>
      */
     @Subscribe
-    public EventTask onKickedFromServer(KickedFromServerEvent event) {
+    public @Nullable EventTask onKickedFromServer(KickedFromServerEvent event) {
         ProxyBridge target = bridge;
         if (target == null) {
             return null;
@@ -244,7 +245,7 @@ public final class VelocityBridgePlugin {
         }
     }
 
-    private synchronized ProxyBridge connect() {
+    private synchronized @Nullable ProxyBridge connect() {
         if (bridge != null) {
             return bridge;
         }

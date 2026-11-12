@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package net.vectolyn.lobby;
 
+import java.util.logging.Level;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
-import org.bukkit.GameRule;
+import org.bukkit.GameRules;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -50,26 +51,26 @@ public final class VectolynLobby extends JavaPlugin implements Listener {
     }
 
     private void configureWorld(World world) {
-        world.setGameRule(GameRule.DO_DAYLIGHT_CYCLE, false);
-        world.setGameRule(GameRule.DO_WEATHER_CYCLE, false);
+        world.setGameRule(GameRules.ADVANCE_TIME, false);
+        world.setGameRule(GameRules.ADVANCE_WEATHER, false);
         world.setTime(1000);
         world.setStorm(false);
         // Nothing may hurt a player and no mob may appear; the event handlers below enforce the
         // same rules, the game rules additionally stop the work server-side.
-        world.setGameRule(GameRule.DO_MOB_SPAWNING, false);
-        world.setGameRule(GameRule.SPAWN_MONSTERS, false);
-        world.setGameRule(GameRule.DO_PATROL_SPAWNING, false);
-        world.setGameRule(GameRule.DO_TRADER_SPAWNING, false);
-        world.setGameRule(GameRule.DO_WARDEN_SPAWNING, false);
-        world.setGameRule(GameRule.DO_INSOMNIA, false);
-        world.setGameRule(GameRule.DISABLE_RAIDS, true);
-        world.setGameRule(GameRule.MOB_GRIEFING, false);
-        world.setGameRule(GameRule.DO_FIRE_TICK, false);
-        world.setGameRule(GameRule.FALL_DAMAGE, false);
-        world.setGameRule(GameRule.DROWNING_DAMAGE, false);
-        world.setGameRule(GameRule.FIRE_DAMAGE, false);
-        world.setGameRule(GameRule.FREEZE_DAMAGE, false);
-        world.setGameRule(GameRule.PVP, false);
+        world.setGameRule(GameRules.SPAWN_MOBS, false);
+        world.setGameRule(GameRules.SPAWN_MONSTERS, false);
+        world.setGameRule(GameRules.SPAWN_PATROLS, false);
+        world.setGameRule(GameRules.SPAWN_WANDERING_TRADERS, false);
+        world.setGameRule(GameRules.SPAWN_WARDENS, false);
+        world.setGameRule(GameRules.SPAWN_PHANTOMS, false);
+        world.setGameRule(GameRules.RAIDS, false);
+        world.setGameRule(GameRules.MOB_GRIEFING, false);
+        world.setGameRule(GameRules.FIRE_SPREAD_RADIUS_AROUND_PLAYER, 0);
+        world.setGameRule(GameRules.FALL_DAMAGE, false);
+        world.setGameRule(GameRules.DROWNING_DAMAGE, false);
+        world.setGameRule(GameRules.FIRE_DAMAGE, false);
+        world.setGameRule(GameRules.FREEZE_DAMAGE, false);
+        world.setGameRule(GameRules.PVP, false);
         for (Entity entity : world.getEntities()) {
             if (isHostile(entity)) entity.remove();
         }
@@ -164,10 +165,18 @@ public final class VectolynLobby extends JavaPlugin implements Listener {
         world.getBlockAt(x, y, z).setType(material, false);
     }
 
+    private void teleportToSpawn(Player player) {
+        // The future is only watched for failures: a refused teleport is logged, never thrown.
+        var unused = player.teleportAsync(player.getWorld().getSpawnLocation()).exceptionally(error -> {
+            getLogger().log(Level.WARNING, "Could not teleport " + player.getName() + " to the lobby spawn", error);
+            return false;
+        });
+    }
+
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        Bukkit.getScheduler().runTaskLater(this, () -> player.teleportAsync(player.getWorld().getSpawnLocation()), 1L);
+        Bukkit.getScheduler().runTaskLater(this, () -> teleportToSpawn(player), 1L);
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -176,7 +185,7 @@ public final class VectolynLobby extends JavaPlugin implements Listener {
         event.setCancelled(true);
         if (event.getCause() == DamageCause.VOID) {
             player.setFallDistance(0);
-            player.teleportAsync(player.getWorld().getSpawnLocation());
+            teleportToSpawn(player);
         }
     }
 

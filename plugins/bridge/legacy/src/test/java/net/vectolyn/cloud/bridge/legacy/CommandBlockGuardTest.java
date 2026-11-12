@@ -53,18 +53,16 @@ class CommandBlockGuardTest {
         Object answer(String method, Object[] args);
     }
 
+    // Identity is the contract of Object.equals for the proxy; calling proxy.equals here would recurse.
+    @SuppressWarnings("ReferenceEquality")
     private static <T> T fake(Class<T> type, Answer answer) {
         return type.cast(Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[] {type}, (proxy, method, args) -> {
-            switch (method.getName()) {
-                case "hashCode":
-                    return System.identityHashCode(proxy);
-                case "equals":
-                    return proxy == args[0];
-                case "toString":
-                    return type.getSimpleName();
-                default:
-                    return answer.answer(method.getName(), args == null ? new Object[0] : args);
-            }
+            return switch (method.getName()) {
+                case "hashCode" -> System.identityHashCode(proxy);
+                case "equals" -> proxy == args[0];
+                case "toString" -> type.getSimpleName();
+                default -> answer.answer(method.getName(), args == null ? new Object[0] : args);
+            };
         }));
     }
 
@@ -81,81 +79,65 @@ class CommandBlockGuardTest {
                                    int z) {
         Material[] type = {material};
         Block block = fake(Block.class, (method, args) -> {
-            switch (method) {
-                case "getType":
-                    return type[0];
-                case "getX":
-                    return x;
-                case "getY":
-                    return y;
-                case "getZ":
-                    return z;
-                case "getWorld":
-                    return world;
-                case "setType":
+            return switch (method) {
+                case "getType" -> type[0];
+                case "getX" -> x;
+                case "getY" -> y;
+                case "getZ" -> z;
+                case "getWorld" -> world;
+                case "setType" -> {
                     type[0] = (Material) args[0];
                     changes.add(type[0].name().toLowerCase(Locale.ROOT) + " " + x + "," + y + "," + z);
-                    return null;
-                default:
-                    throw new UnsupportedOperationException(method);
-            }
+                    yield null;
+                }
+                default -> throw new UnsupportedOperationException(method);
+            };
         });
         return fake(stateType, (method, args) -> {
-            switch (method) {
-                case "getBlock":
-                    return block;
-                case "getType":
-                    return type[0];
-                default:
-                    throw new UnsupportedOperationException(method);
-            }
+            return switch (method) {
+                case "getBlock" -> block;
+                case "getType" -> type[0];
+                default -> throw new UnsupportedOperationException(method);
+            };
         });
     }
 
     private <T extends Entity> T entity(Class<T> type, World world, String name) {
         return fake(type, (method, args) -> {
-            switch (method) {
-                case "getLocation":
-                    return new Location(world, 5.5, 70, -5.5);
-                case "getWorld":
-                    return world;
-                case "remove":
+            return switch (method) {
+                case "getLocation" -> new Location(world, 5.5, 70, -5.5);
+                case "getWorld" -> world;
+                case "remove" -> {
                     changes.add("remove " + name);
-                    return null;
-                default:
-                    throw new UnsupportedOperationException(method);
-            }
+                    yield null;
+                }
+                default -> throw new UnsupportedOperationException(method);
+            };
         });
     }
 
     private Item droppedItem(World world, ItemStack stack) {
         return fake(Item.class, (method, args) -> {
-            switch (method) {
-                case "getItemStack":
-                    return stack;
-                case "getWorld":
-                    return world;
-                case "remove":
+            return switch (method) {
+                case "getItemStack" -> stack;
+                case "getWorld" -> world;
+                case "remove" -> {
                     changes.add("remove item " + stack.getType().name().toLowerCase(Locale.ROOT));
-                    return null;
-                default:
-                    throw new UnsupportedOperationException(method);
-            }
+                    yield null;
+                }
+                default -> throw new UnsupportedOperationException(method);
+            };
         });
     }
 
     private static Chunk chunk(World world, List<BlockState> blockEntities, List<Entity> entities) {
         return fake(Chunk.class, (method, args) -> {
-            switch (method) {
-                case "getWorld":
-                    return world;
-                case "getTileEntities":
-                    return blockEntities.toArray(new BlockState[0]);
-                case "getEntities":
-                    return entities.toArray(new Entity[0]);
-                default:
-                    throw new UnsupportedOperationException(method);
-            }
+            return switch (method) {
+                case "getWorld" -> world;
+                case "getTileEntities" -> blockEntities.toArray(new BlockState[0]);
+                case "getEntities" -> entities.toArray(new Entity[0]);
+                default -> throw new UnsupportedOperationException(method);
+            };
         });
     }
 
@@ -194,14 +176,11 @@ class CommandBlockGuardTest {
         Chunk chunk = chunk(plain, Arrays.asList(blockEntity(plain, Material.COMMAND, CommandBlock.class, 8, 70, 8)),
                 Arrays.<Entity>asList(entity(CommandMinecart.class, plain, "command minecart")));
         World world = fake(World.class, (method, args) -> {
-            switch (method) {
-                case "getName":
-                    return "world";
-                case "getLoadedChunks":
-                    return new Chunk[] {chunk};
-                default:
-                    throw new UnsupportedOperationException(method);
-            }
+            return switch (method) {
+                case "getName" -> "world";
+                case "getLoadedChunks" -> new Chunk[] {chunk};
+                default -> throw new UnsupportedOperationException(method);
+            };
         });
         guard.purgeLoaded(Arrays.asList(world), "found by the sweep");
         assertEquals(Arrays.asList("air 8,70,8", "remove command minecart"), changes);
@@ -236,22 +215,20 @@ class CommandBlockGuardTest {
                 new ItemStack(Material.COMMAND_MINECART, 3)};
         ItemStack[] armour = {null, null, null, new ItemStack(Material.COMMAND)};
         PlayerInventory inventory = fake(PlayerInventory.class, (method, args) -> {
-            switch (method) {
-                case "getSize":
-                    return slots.length;
-                case "getItem":
-                    return slots[(Integer) args[0]];
-                case "setItem":
+            return switch (method) {
+                case "getSize" -> slots.length;
+                case "getItem" -> slots[(Integer) args[0]];
+                case "setItem" -> {
                     slots[(Integer) args[0]] = (ItemStack) args[1];
-                    return null;
-                case "getArmorContents":
-                    return armour.clone();
-                case "setArmorContents":
+                    yield null;
+                }
+                case "getArmorContents" -> armour.clone();
+                case "setArmorContents" -> {
                     System.arraycopy((ItemStack[]) args[0], 0, armour, 0, armour.length);
-                    return null;
-                default:
-                    throw new UnsupportedOperationException(method);
-            }
+                    yield null;
+                }
+                default -> throw new UnsupportedOperationException(method);
+            };
         });
         assertEquals(3, CommandBlockGuard.strip(inventory));
         assertNull(slots[0]);
@@ -261,17 +238,15 @@ class CommandBlockGuardTest {
 
         ItemStack[] chest = {new ItemStack(Material.COMMAND)};
         Inventory container = fake(Inventory.class, (method, args) -> {
-            switch (method) {
-                case "getSize":
-                    return chest.length;
-                case "getItem":
-                    return chest[(Integer) args[0]];
-                case "setItem":
+            return switch (method) {
+                case "getSize" -> chest.length;
+                case "getItem" -> chest[(Integer) args[0]];
+                case "setItem" -> {
                     chest[(Integer) args[0]] = (ItemStack) args[1];
-                    return null;
-                default:
-                    throw new UnsupportedOperationException(method);
-            }
+                    yield null;
+                }
+                default -> throw new UnsupportedOperationException(method);
+            };
         });
         assertEquals(1, CommandBlockGuard.strip(container));
         assertNull(chest[0]);
