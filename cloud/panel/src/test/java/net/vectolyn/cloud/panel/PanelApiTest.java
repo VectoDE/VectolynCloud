@@ -280,8 +280,11 @@ class PanelApiTest {
                 "code", code.equals("000000") ? "111111" : "000000")).status());
         Reply again = browser.post("/api/panel/account/totp/start", Map.of());
         secret = (String) again.json().get("secret");
+        // Kept, not computed again below: a step boundary between confirmation and sign-in would
+        // otherwise give a fresh, unused code and the replay check would see a 200.
+        String confirmationCode = code(secret, 0);
         Reply confirmed = browser.post("/api/panel/account/totp/confirm", Map.of("ticket", again.json().get("ticket"),
-                "code", code(secret, 0)));
+                "code", confirmationCode));
         assertEquals(200, confirmed.status(), confirmed.body());
         assertEquals(true, confirmed.json().get("totp"));
 
@@ -289,7 +292,7 @@ class PanelApiTest {
         Reply first = fresh.post("/api/panel/login", Map.of("name", "OWNER", "password", PASSWORD));
         assertEquals("totp", first.json().get("second-factor"));
         assertTrue(fresh.session == null, "no session before the second factor");
-        assertEquals(401, fresh.post("/api/panel/login/totp", Map.of("ticket", first.json().get("ticket"), "code", code(secret, 0))).status(),
+        assertEquals(401, fresh.post("/api/panel/login/totp", Map.of("ticket", first.json().get("ticket"), "code", confirmationCode)).status(),
                 "the code of the confirmation does not work twice");
         Reply second = fresh.post("/api/panel/login", Map.of("name", "owner", "password", PASSWORD));
         Reply done = fresh.post("/api/panel/login/totp", Map.of("ticket", second.json().get("ticket"), "code", code(secret, 1)));
