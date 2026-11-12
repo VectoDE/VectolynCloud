@@ -4,6 +4,7 @@ package net.vectolyn.cloud.setup;
 
 import java.util.Collections;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -12,8 +13,10 @@ import java.util.TreeSet;
  *
  * @param status what happened
  * @param files  files written, relative to the home, sorted; empty unless something was saved
+ * @param admin  the first administrator chosen in the setup, only with {@link Status#COMPLETED};
+ *               null otherwise. The node issues the one-time setup token for this name
  */
-public record SetupResult(Status status, Set<String> files) {
+public record SetupResult(Status status, Set<String> files, String admin) {
 
     /** How the run ended. */
     public enum Status {
@@ -37,9 +40,19 @@ public record SetupResult(Status status, Set<String> files) {
         files = Collections.unmodifiableSortedSet(new TreeSet<>(Objects.requireNonNull(files, "files")));
     }
 
+    /** A result without an administrator. */
+    public SetupResult(Status status, Set<String> files) {
+        this(status, files, null);
+    }
+
     /** A result without files. */
     public static SetupResult of(Status status) {
         return new SetupResult(status, Set.of());
+    }
+
+    /** The first administrator, present only when this run completed the first setup. */
+    public Optional<String> firstAdmin() {
+        return status == Status.COMPLETED ? Optional.ofNullable(admin) : Optional.empty();
     }
 
     /** Whether the node may go on and start servers: the setup is complete now or was before. */

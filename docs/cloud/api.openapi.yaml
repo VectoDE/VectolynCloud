@@ -685,6 +685,29 @@ paths:
       responses:
         "101":
           description: Switching to the WebSocket
+  /setup/claim:
+    post:
+      tags: [tokens]
+      summary: Exchange the one-time setup token for the first administrator's API token
+      description: |
+        Only the setup token (`vcs_` and 43 characters, shown once on the console at the end of the
+        first setup or by `api token setup`) is accepted here, and only here. It is valid for 24 hours
+        and exactly once. An API token gets 403 setup-token-required; a used, expired or wrong setup
+        token gets 401. The answer is the only place the new token appears.
+      operationId: claimSetupToken
+      security:
+        - setupToken: []
+      responses:
+        "201":
+          description: The new admin token
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - {$ref: "#/components/schemas/Token"}
+                  - type: object
+                    properties:
+                      token: {type: string, pattern: "^vct_[A-Za-z0-9_-]{43}$"}
         default: {$ref: "#/components/responses/Error"}
 
   /events:
@@ -726,6 +749,10 @@ components:
       type: http
       scheme: bearer
       bearerFormat: "vct_ followed by 43 characters [A-Za-z0-9_-]"
+    setupToken:
+      type: http
+      scheme: bearer
+      bearerFormat: "vcs_ followed by 43 characters [A-Za-z0-9_-]; one-time, only for POST /setup/claim"
   parameters:
     ServiceId:
       name: id

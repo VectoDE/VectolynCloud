@@ -143,6 +143,7 @@ Comes from `cloud/api` ([api.md](api.md)). The whole command is sensitive: no li
 | `api token create <name> <scopes>` | Creates a token with the comma-separated scopes (`services:read,config:read`) and prints it once. Only its SHA-256 is stored. |
 | `api token list` | Id, name, creation time and scopes of every token, never the token. |
 | `api token revoke <id\|name>` | Revokes it at once; open event streams of the token are closed. Aliases: `delete`, `remove`. |
+| `api token setup [name]` | Makes a new one-time setup token for the first administrator (default `admin`), valid 24 hours, and prints it once; it replaces an earlier one. See [setup](setup.md#first-administrator). |
 | `api scopes` | Lists the scopes. |
 
 ## Adding commands

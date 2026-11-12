@@ -195,6 +195,7 @@ public final class ApiTls {
     }
 
     private static void runKeytool(List<String> command, Secret password, Path draft) throws IOException {
+        // nosemgrep: java.lang.security.audit.command-injection-process-builder.command-injection-process-builder -- keytool by its full path from the running JDK, arguments are separate list elements, no shell
         ProcessBuilder builder = new ProcessBuilder(command).redirectErrorStream(true);
         builder.environment().put(PASSWORD_ENV, password.reveal());
         Process process = builder.start();

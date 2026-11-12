@@ -154,7 +154,9 @@ final class NodeFixture {
             options.network(network -> network.withAddress("127.0.0.1", 0))
                     .database(database)
                     // No Pterodactyl or Docker detection from the machine the tests run on.
-                    .environment(Map.of());
+                    .environment(Map.of())
+                    // No request to PaperMC: the setup offers the compiled-in Minecraft version.
+                    .minecraftVersions(List::of);
             options.services()
                     .javaRuntimes(JavaRuntimeResolver.current())
                     .serverSoftware(fakeSoftware())

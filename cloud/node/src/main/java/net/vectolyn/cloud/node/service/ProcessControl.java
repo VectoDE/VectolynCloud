@@ -68,6 +68,7 @@ public interface ProcessControl {
             @Override
             public Process start(List<String> command, Path directory, Map<String, String> environment)
                     throws IOException {
+                // nosemgrep: java.lang.security.audit.command-injection-process-builder.command-injection-process-builder -- starting the game servers is the job of the node; the command is a list built from the service configuration, no shell
                 ProcessBuilder builder = new ProcessBuilder(command)
                         .directory(directory.toFile())
                         .redirectErrorStream(true);

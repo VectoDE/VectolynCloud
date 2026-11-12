@@ -22,8 +22,9 @@ The assistant asks in this order. Every question shows its default in brackets; 
 2. **Minecraft EULA**, with the link <https://aka.ms/MinecraftEULA>. Without consent the setup stops and the cloud starts no server. Once accepted, a later run skips the question.
 3. **Network name**, 1 to 32 letters, digits, space, `.`, `_` or `-`.
 4. **Servers.** One yes/no switch per server: proxy, lobby, Survival, Creative, Mod-Server (Fabric), End, minigames and the legacy proxy (Velocity for 1.8.8, own port, off by default). With the legacy proxy on, it also asks for the 1.8.8 server (PandaSpigot). Switching the proxy off prints a warning, because then nobody can join from outside. With two or more minigame groups, each group gets its own switch.
-5. **Network.** Bind address (`0.0.0.0` means every address). With the proxy on: Java port and Bedrock port (UDP). With the legacy proxy on: its port. A port that the node's channel or the service range already uses is refused where you type it. On Pterodactyl the Java port defaults to `SERVER_PORT`, and the assistant reminds you that every port needs an allocation in the panel.
-6. **Memory.** Maximum heap per wanted group, with these defaults:
+5. **Minecraft version**, only when the setup creates a group (always on the first run). The list holds the [supported](#minecraft-version) stable versions, newest first; Enter takes the newest. With only one supported version known (for example offline), the assistant names it instead of asking. The groups the setup creates run this version; the 1.8.8 server always runs 1.8.8, and existing groups keep their version (`group set <name> minecraft-version` changes one later).
+6. **Network.** Bind address (`0.0.0.0` means every address). With the proxy on: Java port and Bedrock port (UDP). With the legacy proxy on: its port. A port that the node's channel or the service range already uses is refused where you type it. On Pterodactyl the Java port defaults to `SERVER_PORT`, and the assistant reminds you that every port needs an allocation in the panel.
+7. **Memory.** Maximum heap per wanted group, with these defaults:
 
    | Group | Default |
    |---|---|
@@ -34,7 +35,7 @@ The assistant asks in this order. Every question shows its default in brackets; 
    | survival, mod | 3G |
 
    Values from 256M, in `M` or `G`. The minimum heap is set to 512M or the maximum, whichever is smaller. The assistant adds everything up and warns when the sum exceeds the memory of the machine or of the Pterodactyl server (`SERVER_MEMORY`).
-7. **Services.** For every wanted server except the proxies, the number of services as `static/min/max`, with these defaults:
+8. **Services.** For every wanted server except the proxies, the number of services as `static/min/max`, with these defaults:
 
    | Server | Default |
    |---|---|
@@ -44,8 +45,9 @@ The assistant asks in this order. Every question shows its default in brackets; 
    | survival, creative, mod, end | 1/1/1 |
 
    Static services keep their worlds and always run; above them the cloud adds dynamic ones by player count, fresh from the template, up to max (see [scaling](scaling.md#static-and-dynamic-in-one-task)). `static ≤ min ≤ max` and max from 1 to 1000 are checked where you type them. The proxies always get 1/1/1. New tasks get `scale-up-at` 75 and `scale-down-below` 50; for an existing task only the three numbers are written, and only if they changed.
-8. **Advanced settings** (optional). One yes/no question, default no; with no, nothing of this is asked. With yes: the `drain-timeout` of every wanted group (5s to 10m, shown as 30s while unset), then for this node `max-memory` (at least 512M, `auto` lets the node work it out) and `memory-reserve.system`, `.node-overhead`, `.database` (1M to 64G each; defaults 1G, 256M, 512M). Enter keeps the value in brackets, `default` removes a set value so the default applies again. Each answer is checked where you type it, with the same limits as the [validator](config.md#validation-rules). See [scaling](scaling.md#node-settings-for-the-scaler).
-9. **Database.** `managed` (the cloud runs its own MariaDB), `docker`, `external` or `h2`. On Pterodactyl `docker` is left out, since the server already runs inside a container without access to Docker. Where MariaDB has no server build (anything except Windows x64 and Linux x86_64 with glibc), `managed` is marked as falling back to H2, and H2 is the default. After `managed` the assistant explains the switch behind it: `servers.database: true` in `cloud.yml` runs MariaDB, `false` uses H2 files per server. For `external` it asks for host, port (3306), database name, user and password.
+9. **Advanced settings** (optional). One yes/no question, default no; with no, nothing of this is asked. With yes: the `drain-timeout` of every wanted group (5s to 10m, shown as 30s while unset), then for this node `max-memory` (at least 512M, `auto` lets the node work it out) and `memory-reserve.system`, `.node-overhead`, `.database` (1M to 64G each; defaults 1G, 256M, 512M). Enter keeps the value in brackets, `default` removes a set value so the default applies again. Each answer is checked where you type it, with the same limits as the [validator](config.md#validation-rules). See [scaling](scaling.md#node-settings-for-the-scaler).
+10. **Database.** `managed` (the cloud runs its own MariaDB), `docker`, `external` or `h2`. On Pterodactyl `docker` is left out, since the server already runs inside a container without access to Docker. Where MariaDB has no server build (anything except Windows x64 and Linux x86_64 with glibc), `managed` is marked as falling back to H2, and H2 is the default. After `managed` the assistant explains the switch behind it: `servers.database: true` in `cloud.yml` runs MariaDB, `false` uses H2 files per server. For `external` it asks for host, port (3306), database name, user and password.
+11. **First administrator**, only on the first run: a name (`[a-z0-9][a-z0-9_-]{0,31}`, default `admin`). See [first administrator](#first-administrator).
 
 Then it prints a summary: every answer, the generated secrets (as "hidden"), and the files it would write. You choose `save`, `change` (all questions again, your answers are the new defaults) or `cancel`. Only `save` writes. If the checks find a problem, `save` is not offered until you change the answer.
 
@@ -63,9 +65,25 @@ Secrets never appear on the screen and never go into the console history.
 
 All other secrets (forwarding secrets, database passwords of the managed server, management secret, Floodgate key) are generated with `SecureRandom` and never shown. See [config](config.md#secrets).
 
+### Minecraft version
+
+The rule for what is offered: a version must lie between `26.1` (`MinecraftVersions.OLDEST`, the first release with the year numbering, which needs Java 25 like the bridges) and the Paper API the Paper bridge of this release is built against (`NetworkServer.MINECRAFT_VERSION`, now `26.3`), patch releases such as `26.3.1` included, and Paper must have a `STABLE` build of it. Before the first setup the node asks PaperMC's Fill API (`PaperFillProvider.stableVersions`, at most ten version requests). Without an answer (offline, blocked) the assistant offers `26.3` alone. A newer Paper release appears in the list once a release of the cloud ships bridges built for it.
+
+A setup file may name any supported version (`minecraft-version: "26.1"`) without asking Fill; quote it, YAML would read `26.1` as a number. Anything outside the range is refused with the range in the message.
+
+### First administrator
+
+There is no default password anywhere. At the end of the first completed setup (questions or setup file), the node makes a one-time **setup token** for the administrator named in step 11 and prints it once on the console:
+
+- `vcs_` and 43 characters from 32 bytes of `SecureRandom`;
+- only its SHA-256, the administrator and the expiry are stored, in `secrets/setup-token.json` (owner-only, like the API tokens);
+- valid for 24 hours and exactly once; a new one replaces the old one.
+
+`POST /api/v1/setup/claim` with `Authorization: Bearer <setup token>` exchanges it for an API token with the scope `admin`, named after the administrator (with `-2`, `-3`, … if that name is taken). The API has to be switched on for that (`api.enabled`, see [API](api.md#first-administrator)). The setup token works for nothing else. The web panel (stage 8) will use the same exchange for its first login. `api token setup [name]` in the console makes a new setup token, for example after the first one expired. Without a console (only in tests and embedding) the node shows and makes none.
+
 ### Running it again: `setup`
 
-The console command `setup` runs the questions again. The current configuration provides the defaults, and only what you change is written. If you change nothing, the assistant says so and writes nothing; if you only change the lobby's heap, only `config/groups/lobby.yml` is written. The assistant reads the files when it starts; someone may change them through the API or the console while you answer. For the heap, the `static/min/max` of each task (each number on its own), `drain-timeout`, `max-memory` and every field of `memory-reserve`, a value you kept as shown takes what the file holds when you save, so such a change is not reset. A value you changed is written, and `default` or `auto` removes the setting even if it was changed in the meantime. An existing EULA consent and `setup-complete` stay. A server switched off stops right away (see [node](node.md#reload)); a server switched on starts with `service start <task>` or at the next start of the cloud, and the assistant says so after saving.
+The console command `setup` runs the questions again. The current configuration provides the defaults, and only what you change is written. The administrator is not asked again, and the Minecraft version only when a server switched on gets a new group; its default is then the version of the existing groups. If you change nothing, the assistant says so and writes nothing; if you only change the lobby's heap, only `config/groups/lobby.yml` is written. The assistant reads the files when it starts; someone may change them through the API or the console while you answer. For the heap, the `static/min/max` of each task (each number on its own), `drain-timeout`, `max-memory` and every field of `memory-reserve`, a value you kept as shown takes what the file holds when you save, so such a change is not reset. A value you changed is written, and `default` or `auto` removes the setting even if it was changed in the meantime. An existing EULA consent and `setup-complete` stay. A server switched off stops right away (see [node](node.md#reload)); a server switched on starts with `service start <task>` or at the next start of the cloud, and the assistant says so after saving.
 
 ## Setup file (`--setup-file`)
 
@@ -80,6 +98,8 @@ schema-version: 1
 eula: true                    # required; you accept https://aka.ms/MinecraftEULA
 language: en                  # en or de
 network-name: Vectolyn
+minecraft-version: "26.3"     # optional, quoted; default: the newest supported stable version
+admin-name: admin             # optional; the first administrator (setup token), default admin
 servers:                      # every switch is optional and keeps its default
   proxy: true
   lobby: true
@@ -129,6 +149,7 @@ Rules:
 - Everything except `schema-version` and `eula` may be left out and then keeps the default the assistant would offer.
 - The file is read as strictly as `cloud.yml`: unknown fields, duplicate keys, wrong types or a missing `eula: true` are errors. The file is checked with exactly the same rules as typed answers (ports, heap, legacy server only with legacy proxy, Docker not on Pterodactyl, the whole-configuration validation). On any error nothing is written and every problem is listed.
 - `memory` and `minigames` may only name groups that exist or that the setup creates. `services` may only name tasks that exist or that the setup creates; the proxies are not among them, they always run one service. Each entry is checked like a typed answer (`static ≤ min ≤ max`, max from 1 to 1000). `drain-timeout` may only name groups that exist or that the setup creates; the console assistant asks for it under advanced settings, `group set <name> drain-timeout` changes it later.
+- `minecraft-version` must be [supported](#minecraft-version); it applies to the groups the setup creates. `admin-name` follows the rule of token names.
 - `node` changes the node this cloud runs as (`node-id` in `cloud.yml`), checked like `nodes.yml`. The console assistant asks for it under advanced settings; `node set` changes it later. `max-memory: auto` removes the limit; any other text than a size is refused.
 - The file is used only while `setup-complete` is false. Once the setup is done, a file that stays mounted is ignored, so it cannot undo later changes made with `config set` or the dashboard.
 - The file holds no secret. The password of an external database comes from `secrets/vectolyn.env` (`VECTOLYN_DB_PASSWORD`) or from `database.password-file`: a regular file (a link to one is fine; a FIFO or device is refused) with the password on one line (a trailing line break is dropped), at most 4 KiB, UTF-8, relative to the home or absolute. That fits Docker and Kubernetes secrets.
@@ -188,6 +209,8 @@ if (!result.ready()) {
 }
 ```
 
+A second start with `setup-complete: true` asks nothing: `ensureComplete` returns `ALREADY_COMPLETE`, the wanted servers start and the console keeps reading commands (`NodeWiringTest.theFirstSetupShowsASetupTokenOnceAndASecondStartRunsTheNetworkWithoutQuestions`). When a run completes the first setup (`SetupResult.firstAdmin()`), the node issues the setup token; for the `setup` command it learns that through `CommandHooks.completed`.
+
 `ensureComplete` does nothing once `setup-complete` is true, uses the setup file if there is one, asks on the console if questions are allowed, and otherwise throws a `SetupException` that explains `--setup-file`. The node prints the exception with `describe(language)` (on the console, or in the log without one) and starts no service. `nonInteractive` checks `setup-complete` itself as well, so a setup file that stays mounted never undoes later changes. The launcher passes `setup-file`, `non-interactive` and the `platform.*` entries through to `SetupEnvironment`. If the setup is finished later with `setup` on the console, the node starts the wanted servers right after it.
 
 ## What gets written
@@ -198,8 +221,8 @@ Writing happens in three steps, so nothing ends up half done and marked complete
 2. only then the secrets: every missing generated secret, then the password of an external database, so a password never goes with a host and user that were not saved;
 3. last, `eula-accepted: true` and `setup-complete: true`.
 
-If step 2 or 3 fails, the configuration goes back to the state before (groups and tasks the setup created are removed again) and a password the setup wrote goes back to the one before. Generated secrets that were missing stay; they never replace a value. `setup-complete` stays false and the next start asks again. For every wanted server without a group, the assistant creates the group (template, software, Minecraft version, heap, `combat: legacy` for PandaSpigot) and a task with the service counts from step 7 (proxies 1/1/1). An unwanted server only gets its switch under `servers:` in `cloud.yml` turned off; an existing group stays as it is. Minigame groups switched off one by one get `wanted: false` in their group file. The download catalog of new groups starts empty and is filled by the server templates.
+If step 2 or 3 fails, the configuration goes back to the state before (groups and tasks the setup created are removed again) and a password the setup wrote goes back to the one before. Generated secrets that were missing stay; they never replace a value. `setup-complete` stays false and the next start asks again. For every wanted server without a group, the assistant creates the group (template, software, Minecraft version, heap, `combat: legacy` for PandaSpigot) and a task with the service counts from step 8 (proxies 1/1/1). An unwanted server only gets its switch under `servers:` in `cloud.yml` turned off; an existing group stays as it is. Minigame groups switched off one by one get `wanted: false` in their group file. The download catalog of new groups starts empty and is filled by the server templates.
 
 ## Tests
 
-`cloud/setup/src/test`: the questions through a scripted terminal (order, defaults, cancel at any point, EOF, Ctrl+C, declined EULA, Pterodactyl, masked and visible password input, reserved ports, `change`, rerun with no and with one change, changes through the API or console while the questions run, German texts, the `setup` command), the setup file (every rule above, `ensureComplete`, only regular files up to the limit), the writer (`SetupApplierTest`: declined EULA, rollback after a failed secret write, no secret after a failed configuration write), password files (also FIFOs and devices), the Administrators group, the environment, and a check that no text opens with "No" or "Not", including the `setup` command's description, the labels of the port hint and the problems of cloud-config that the setup passes on. Jazzer fuzz tests: `SetupFileFuzzTest.setupFileFailsOnlyWithReadableProblems` and `SetupFileFuzzTest.passwordFileGivesASecretOrAProblem`, seeds in `src/test/resources/net/vectolyn/cloud/setup/SetupFileFuzzTestInputs/`.
+`cloud/setup/src/test`: the questions through a scripted terminal (order, defaults, cancel at any point, EOF, Ctrl+C, declined EULA, Pterodactyl, masked and visible password input, reserved ports, `change`, rerun with no and with one change, changes through the API or console while the questions run, German texts, the `setup` command, the Minecraft version list and the administrator name), `MinecraftVersionsTest` (the supported range, order, offline fallback), the setup file (every rule above, `ensureComplete`, only regular files up to the limit), the writer (`SetupApplierTest`: declined EULA, rollback after a failed secret write, no secret after a failed configuration write), password files (also FIFOs and devices), the Administrators group, the environment, and a check that no text opens with "No" or "Not", including the `setup` command's description, the labels of the port hint and the problems of cloud-config that the setup passes on. Jazzer fuzz tests: `SetupFileFuzzTest.setupFileFailsOnlyWithReadableProblems` and `SetupFileFuzzTest.passwordFileGivesASecretOrAProblem`, seeds in `src/test/resources/net/vectolyn/cloud/setup/SetupFileFuzzTestInputs/`. The setup token is tested in `cloud/api` (`ApiTokensTest`, `ApiServerTest`, `ApiCommandsTest`) and, with the second start, in `cloud/node` (`NodeWiringTest`).

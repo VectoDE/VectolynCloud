@@ -76,6 +76,31 @@ class ApiServerTest {
     }
 
     @Test
+    void theSetupTokenIsExchangedOnceForAnAdminTokenAndWorksNowhereElse() throws Exception {
+        try (TestApi api = new TestApi(home)) {
+            String setup = api.tokens.issueSetupToken("owner", net.vectolyn.cloud.api.auth.ApiTokens.SETUP_TOKEN_TTL)
+                    .token().reveal();
+            assertEquals(401, api.get("/api/v1/services", setup).statusCode(), "only the claim takes it");
+            assertEquals(401, api.get("/api/v1/tokens/self", setup).statusCode());
+            assertEquals(401, api.send("POST", "/api/v1/setup/claim?x=1", setup, null).statusCode(), "exact target only");
+            HttpResponse<String> withApiToken = api.send("POST", "/api/v1/setup/claim", api.admin, null);
+            assertEquals(403, withApiToken.statusCode());
+            assertTrue(withApiToken.body().contains("setup-token-required"), withApiToken.body());
+
+            HttpResponse<String> claimed = api.send("POST", "/api/v1/setup/claim", setup, null);
+            assertEquals(201, claimed.statusCode(), claimed.body());
+            assertTrue(claimed.body().contains("\"name\":\"owner\"") && claimed.body().contains("\"scopes\":[\"admin\"]"),
+                    claimed.body());
+            assertEquals("no-store", claimed.headers().firstValue("Cache-Control").orElse(null));
+            String admin = claimed.body().replaceAll(".*\"token\":\"(vct_[A-Za-z0-9_-]{43})\".*", "$1");
+            assertTrue(admin.startsWith("vct_"), claimed.body());
+            assertEquals(200, api.get("/api/v1/config", admin).statusCode(), "the new token has every right");
+
+            assertEquals(401, api.send("POST", "/api/v1/setup/claim", setup, null).statusCode(), "used up");
+        }
+    }
+
+    @Test
     void aTokenWithoutTheScopeGets403() throws Exception {
         try (TestApi api = new TestApi(home)) {
             String reader = api.token("reader", Scope.SERVICES_READ);

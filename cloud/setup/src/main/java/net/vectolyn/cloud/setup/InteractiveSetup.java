@@ -215,11 +215,57 @@ final class InteractiveSetup {
                 .defaultValue(answers.networkName()).validate(SetupChecks::networkName)));
 
         answers = servers(current, answers);
+        answers = minecraft(current, answers);
         answers = network(current, answers);
         answers = memory(current, answers);
         answers = services(current, answers);
         answers = advanced(current, answers);
-        return database(current, answers);
+        answers = database(current, answers);
+        return admin(current, answers);
+    }
+
+    /**
+     * The Minecraft version of the groups the setup creates, only if it creates one. With several
+     * supported stable versions a choice (newest first, Enter keeps the newest or the version chosen
+     * before); with one a line that names it.
+     */
+    private SetupAnswers minecraft(ConfigSnapshot current, SetupAnswers answers) throws PromptCancelledException {
+        if (!SetupPlan.createsVersionedGroup(current, answers)) {
+            return answers;
+        }
+        List<String> offered = new ArrayList<>(MinecraftVersions.offered(env.minecraftVersions()));
+        if (!offered.contains(answers.minecraftVersion()) && MinecraftVersions.supported(answers.minecraftVersion())) {
+            offered.add(answers.minecraftVersion());
+        }
+        out.heading(SetupMessages.MINECRAFT.get(out.language()));
+        if (offered.size() == 1) {
+            out.println(SetupMessages.MINECRAFT_ONLY, offered.getFirst());
+            return answers.withMinecraftVersion(offered.getFirst());
+        }
+        out.println(SetupMessages.MINECRAFT_HELP);
+        List<Question.Option<String>> options = new ArrayList<>();
+        for (int i = 0; i < offered.size(); i++) {
+            String version = offered.get(i);
+            options.add(Question.option(version, SetupMessages.fill(
+                    i == 0 ? SetupMessages.MINECRAFT_NEWEST : SetupMessages.MINECRAFT_OLDER, version), version));
+        }
+        String fallback = offered.contains(answers.minecraftVersion()) ? answers.minecraftVersion() : offered.getFirst();
+        return answers.withMinecraftVersion(ask.ask(Question.choice(SetupMessages.MINECRAFT_VERSION, options)
+                .defaultValue(fallback)));
+    }
+
+    /**
+     * The first administrator, only before the first setup is complete: the name of the admin API
+     * token the setup token is exchanged for (docs/cloud/setup.md#first-administrator).
+     */
+    private SetupAnswers admin(ConfigSnapshot current, SetupAnswers answers) throws PromptCancelledException {
+        if (current.cloud().setupComplete()) {
+            return answers;
+        }
+        out.heading(SetupMessages.ADMIN.get(out.language()));
+        out.println(SetupMessages.ADMIN_HELP);
+        return answers.withAdminName(ask.ask(Question.text(SetupMessages.ADMIN_NAME)
+                .defaultValue(answers.adminName()).validate(SetupChecks::adminName)));
     }
 
     /**
@@ -660,6 +706,12 @@ final class InteractiveSetup {
         rows.put(SetupMessages.S_LANGUAGE, lang == Language.DE ? "Deutsch" : "English");
         rows.put(SetupMessages.S_EULA, SetupMessages.S_ACCEPTED.get(lang));
         rows.put(SetupMessages.S_NETWORK, answers.networkName());
+        if (SetupPlan.createsVersionedGroup(current, answers)) {
+            rows.put(SetupMessages.S_MINECRAFT, answers.minecraftVersion());
+        }
+        if (!current.cloud().setupComplete()) {
+            rows.put(SetupMessages.S_ADMIN, answers.adminName());
+        }
         rows.put(SetupMessages.S_WANTED, on.isEmpty() ? SetupMessages.S_NONE.get(lang) : String.join(", ", on));
         rows.put(SetupMessages.S_OFF, off.isEmpty() ? SetupMessages.S_NONE.get(lang) : String.join(", ", off));
         rows.put(SetupMessages.S_ADDRESS, answers.bind());

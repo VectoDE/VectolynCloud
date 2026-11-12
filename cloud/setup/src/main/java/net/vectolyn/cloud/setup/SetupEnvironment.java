@@ -3,6 +3,7 @@
 package net.vectolyn.cloud.setup;
 
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -28,18 +29,31 @@ import net.vectolyn.cloud.download.provider.TargetPlatform;
  * @param serverMemory    memory limit of the Pterodactyl server in megabytes ({@code SERVER_MEMORY}), if set
  * @param serverPort      port Pterodactyl assigned ({@code SERVER_PORT}), the default Java port there
  * @param totalMemory     physical memory of the machine in megabytes, if the JVM can tell
+ * @param minecraftVersions Minecraft versions with a stable Paper build, as the node found them
+ *                        before the setup; empty when it could not ask (offline). The assistant
+ *                        offers the supported ones, see {@link MinecraftVersions}
  */
 public record SetupEnvironment(Language language, boolean interactive, Optional<Path> setupFile, boolean windows,
                                boolean container, boolean pterodactyl, boolean managedDatabase,
-                               OptionalLong serverMemory, OptionalInt serverPort, OptionalLong totalMemory) {
+                               OptionalLong serverMemory, OptionalInt serverPort, OptionalLong totalMemory,
+                               List<String> minecraftVersions) {
 
-    /** Checks the arguments. */
+    /** Checks the arguments and copies the versions. */
     public SetupEnvironment {
         Objects.requireNonNull(language, "language");
         Objects.requireNonNull(setupFile, "setupFile");
         Objects.requireNonNull(serverMemory, "serverMemory");
         Objects.requireNonNull(serverPort, "serverPort");
         Objects.requireNonNull(totalMemory, "totalMemory");
+        minecraftVersions = List.copyOf(Objects.requireNonNull(minecraftVersions, "minecraftVersions"));
+    }
+
+    /** Without known Minecraft versions: the assistant offers the compiled-in one. */
+    public SetupEnvironment(Language language, boolean interactive, Optional<Path> setupFile, boolean windows,
+                            boolean container, boolean pterodactyl, boolean managedDatabase,
+                            OptionalLong serverMemory, OptionalInt serverPort, OptionalLong totalMemory) {
+        this(language, interactive, setupFile, windows, container, pterodactyl, managedDatabase, serverMemory,
+                serverPort, totalMemory, List.of());
     }
 
     /**
@@ -87,7 +101,13 @@ public record SetupEnvironment(Language language, boolean interactive, Optional<
     /** A copy with another language (tests, and the language the operator picked). */
     public SetupEnvironment withLanguage(Language value) {
         return new SetupEnvironment(value, interactive, setupFile, windows, container, pterodactyl, managedDatabase,
-                serverMemory, serverPort, totalMemory);
+                serverMemory, serverPort, totalMemory, minecraftVersions);
+    }
+
+    /** A copy with the Minecraft versions that have a stable Paper build (newest first, any order works). */
+    public SetupEnvironment withMinecraftVersions(List<String> value) {
+        return new SetupEnvironment(language, interactive, setupFile, windows, container, pterodactyl, managedDatabase,
+                serverMemory, serverPort, totalMemory, value);
     }
 
     private static boolean present(String value) {

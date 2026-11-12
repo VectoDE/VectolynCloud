@@ -1,0 +1,7 @@
+# Parsers without a fuzz test of their own, each with the reason. Format: Class.method # reason
+# check-fuzz-coverage.py fails for a parser that is neither fuzzed nor listed here, and for an
+# entry here that no longer matches a parser.
+BackupService.readManifest # reads the file and hands the content to ManifestCodec.read, which ManifestCodecFuzzTest covers
+ForwardedHandshake.parse # called by BungeeGuardCheck.check, which ForwardedHandshakeFuzzTest.checkNeverThrowsAndNeverPassesTheToken fuzzes
+JLineTerminal.readLine # returns one line the operator typed at the terminal; there is no format to parse
+PlainTerminal.readLine # returns one line the operator typed at the terminal; there is no format to parse

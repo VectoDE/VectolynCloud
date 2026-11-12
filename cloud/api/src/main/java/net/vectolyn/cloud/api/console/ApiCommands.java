@@ -30,6 +30,8 @@ import net.vectolyn.cloud.console.command.CommandException;
  *       once; with a lifetime ({@code 12h}, {@code 90d}) it stops working after that time</td></tr>
  *   <tr><td>{@code api token list}</td><td>id, name, scopes, creation time and expiry of every token</td></tr>
  *   <tr><td>{@code api token revoke <id|name>}</td><td>revokes a token at once</td></tr>
+ *   <tr><td>{@code api token setup [admin]}</td><td>makes a new one-time setup token for the first
+ *       administrator ({@code admin} by default) and shows it once</td></tr>
  *   <tr><td>{@code api scopes}</td><td>lists the scopes</td></tr>
  * </table>
  *
@@ -38,6 +40,24 @@ import net.vectolyn.cloud.console.command.CommandException;
  * the node keeps its SHA-256 only.
  */
 public final class ApiCommands {
+
+    /** The setup token; %1$s the administrator, %2$s when it expires (UTC). */
+    public static final Text SETUP_TOKEN = Text.of(
+            "One-time setup token for administrator %1$s, valid once until %2$s:",
+            "Einmaliger Einrichtungs-Token für Administrator %1$s, einmal gültig bis %2$s:");
+    /** How to use the setup token; %1$s the endpoint. */
+    public static final Text SETUP_TOKEN_USE = Text.of(
+            "Copy it now: it is shown only this once, the cloud keeps only its SHA-256. Exchange it for the"
+                    + " administrator's API token: switch the API on (api.enabled in cloud.yml), then send POST %1$s"
+                    + " with \"Authorization: Bearer <setup token>\". \"api token setup\" makes a new one.",
+            "Jetzt kopieren: Er wird nur dieses eine Mal angezeigt, die Cloud speichert nur seinen SHA-256. Tausche ihn"
+                    + " gegen das API-Token des Administrators: API einschalten (api.enabled in cloud.yml), dann POST %1$s"
+                    + " mit „Authorization: Bearer <Einrichtungs-Token>“ senden. „api token setup“ erstellt einen neuen.");
+    /** The setup token could not be made; %1$s the reason. */
+    public static final Text SETUP_TOKEN_FAILED = Text.of(
+            "The setup token could not be created (%1$s). \"api token setup\" in the console tries again.",
+            "Der Einrichtungs-Token konnte nicht erstellt werden (%1$s). „api token setup“ in der Konsole versucht es"
+                    + " erneut.");
 
     private final TokenFile file;
     private volatile ApiTokens tokens;
@@ -144,7 +164,13 @@ public final class ApiCommands {
                                 .argument(Argument.required("token", Text.of("Id or name of the token",
                                         "ID oder Name des Tokens"))
                                         .suggest(previous -> tokenNames()))
-                                .executes(context -> revoke(context.out(), context.argument("token")))))
+                                .executes(context -> revoke(context.out(), context.argument("token"))))
+                        .subcommand(Command.builder("setup")
+                                .description(Text.of("Makes a new one-time setup token for the first administrator.",
+                                        "Erstellt einen neuen einmaligen Einrichtungs-Token für den ersten Administrator."))
+                                .argument(Argument.optional("admin", Text.of("Name of the administrator, default admin",
+                                        "Name des Administrators, Standard admin")))
+                                .executes(context -> setup(context.out(), context.optional("admin").orElse("admin")))))
                 .subcommand(Command.builder("scopes")
                         .description(Text.of("Lists the scopes a token can have.",
                                 "Listet die Scopes, die ein Token haben kann."))
@@ -196,6 +222,28 @@ public final class ApiCommands {
                         + "and created again.",
                 "Jetzt kopieren: Es wird nur dieses eine Mal angezeigt und nicht gespeichert. Ein verlorenes Token "
                         + "wird widerrufen und neu erstellt."));
+    }
+
+    private void setup(ConsoleOutput out, String admin) throws Exception {
+        if (!ConfigNames.isValidName(admin)) {
+            throw new CommandException(Text.of("The name must match %1$s.", "Der Name muss %1$s entsprechen."),
+                    ConfigNames.NAME);
+        }
+        printSetupToken(out, tokens().issueSetupToken(admin, ApiTokens.SETUP_TOKEN_TTL));
+    }
+
+    /**
+     * Shows a new setup token once, with how to exchange it. Used by {@code api token setup} and by
+     * the node at the end of the first setup.
+     *
+     * @param out   where to write
+     * @param token the new setup token
+     */
+    public static void printSetupToken(ConsoleOutput out, ApiTokens.SetupToken token) {
+        out.success(SETUP_TOKEN, token.admin(), token.expiresAt().truncatedTo(java.time.temporal.ChronoUnit.SECONDS));
+        // The one place the setup token is shown. Built from a fixed alphabet, so println is safe.
+        out.println("  " + token.token().reveal());
+        out.warning(SETUP_TOKEN_USE, net.vectolyn.cloud.api.http.ApiRoutes.SETUP_CLAIM);
     }
 
     private void list(ConsoleOutput out) throws CommandException {

@@ -60,6 +60,8 @@ class InteractiveSetupTest {
      * service-count questions and the advanced-settings question, so these blocks are passed together.
      */
     private static final int MEMORY_QUESTIONS = 7 + SERVICE_QUESTIONS + ADVANCED_QUESTION;
+    /** The name of the first administrator, asked on the first run only, right after the database. */
+    private static final int ADMIN_QUESTION = 1;
     /** Drain-timeout questions with the default servers: every wanted group. */
     private static final int DRAIN_QUESTIONS = 7;
 
@@ -95,7 +97,7 @@ class InteractiveSetupTest {
 
     /** Every question after the EULA with its default, then "save". */
     private ScriptedTerminal defaultsAndSave() {
-        return terminal.enter(SERVER_QUESTIONS + 3 + MEMORY_QUESTIONS + 1 + 1);
+        return terminal.enter(SERVER_QUESTIONS + 3 + MEMORY_QUESTIONS + 1 + ADMIN_QUESTION + 1);
     }
 
     @Test
@@ -146,10 +148,52 @@ class InteractiveSetupTest {
     }
 
     @Test
+    void minecraftVersionIsChosenFromTheSupportedStableVersionsAndTheAdministratorIsNamed() throws Exception {
+        SetupEnvironment online = env(false, true).withMinecraftVersions(List.of("26.4", "26.3", "26.2", "1.21.11", "26.1"));
+        start();
+        terminal.enter(SERVER_QUESTIONS).type("26.2") // the version question follows the servers
+                .enter(3 + MEMORY_QUESTIONS + 1).type("Not Valid", "owner").enter(1);
+
+        SetupResult result = SetupWizard.run(console, config, online);
+
+        assertEquals(SetupResult.Status.COMPLETED, result.status(), terminal.output());
+        assertEquals(0, terminal.pending(), "every scripted answer was used");
+        assertEquals(java.util.Optional.of("owner"), result.firstAdmin());
+        String text = terminal.output();
+        assertTrue(text.contains("1) 26.3 (newest stable)"), "newest supported first: " + text);
+        assertTrue(text.contains("2) 26.2") && text.contains("3) 26.1"), text);
+        assertFalse(text.contains("26.4") || text.contains("1.21.11"), "versions the bridges do not support are left out");
+        assertTrue(text.contains("lower-case letters"), "a bad name is refused where it is typed");
+        assertTrue(text.contains("one-time setup token") && text.contains("no default password"), text);
+        assertTrue(text.lines().anyMatch(l -> l.contains("Minecraft version") && l.contains("26.2")), "summary row");
+        assertTrue(text.lines().anyMatch(l -> l.contains("Administrator") && l.contains("owner")), "summary row");
+        config.snapshot().groups().forEach((name, group) -> assertEquals("26.2", group.minecraftVersion(), name));
+        List<String> prompts = terminal.reads().stream().map(ScriptedTerminal.Read::prompt).toList();
+        assertTrue(prompts.get(3 + SERVER_QUESTIONS).startsWith("Which Minecraft version?"), prompts.toString());
+
+        // Running again: every group exists, so neither the version nor the administrator is asked.
+        terminal.enter(1 + 1 + SERVER_QUESTIONS + 3 + MEMORY_QUESTIONS + 1);
+        SetupResult again = SetupWizard.run(console, config, online);
+        assertEquals(SetupResult.Status.UNCHANGED, again.status(), terminal.output());
+        assertEquals(java.util.Optional.empty(), again.firstAdmin());
+        assertEquals(0, terminal.pending());
+    }
+
+    @Test
+    void enterTakesTheNewestSupportedVersion() throws Exception {
+        start();
+        terminal.enter(SERVER_QUESTIONS + 1 + 3 + MEMORY_QUESTIONS + 1 + ADMIN_QUESTION + 1);
+        SetupResult result = SetupWizard.run(console, config, env(false, true).withMinecraftVersions(List.of("26.1", "26.3")));
+        assertEquals(SetupResult.Status.COMPLETED, result.status(), terminal.output());
+        assertEquals(java.util.Optional.of(SetupPlan.DEFAULT_ADMIN), result.firstAdmin());
+        assertEquals("26.3", config.snapshot().groups().get("lobby").minecraftVersion());
+    }
+
+    @Test
     void cancellingAtTheSummaryWritesNothing() throws Exception {
         byte[] before = Files.readAllBytes(config.home().cloudFile());
         start();
-        terminal.enter(SERVER_QUESTIONS + 3 + MEMORY_QUESTIONS + 1).type("cancel");
+        terminal.enter(SERVER_QUESTIONS + 3 + MEMORY_QUESTIONS + 1 + ADMIN_QUESTION).type("cancel");
 
         SetupResult result = SetupWizard.run(console, config, env(false, true));
 
@@ -195,7 +239,7 @@ class InteractiveSetupTest {
     void pterodactylHidesDockerAndPresetsTheAssignedPort() throws Exception {
         start();
         terminal.enter(SERVER_QUESTIONS);
-        terminal.enter(3).enter(MEMORY_QUESTIONS).type("docker", "h2").enter(1);
+        terminal.enter(3).enter(MEMORY_QUESTIONS).type("docker", "h2").enter(ADMIN_QUESTION + 1);
 
         SetupResult result = SetupWizard.run(console, config, env(true, false));
 
@@ -221,7 +265,7 @@ class InteractiveSetupTest {
     void externalDatabaseOnAMaskingConsoleTakesTheTypedPassword() throws Exception {
         start();
         terminal.enter(SERVER_QUESTIONS + 3 + MEMORY_QUESTIONS)
-                .type("external", "db.example.org", "", "lp", "lpuser", "a-typed-password-1234").enter(1);
+                .type("external", "db.example.org", "", "lp", "lpuser", "a-typed-password-1234").enter(ADMIN_QUESTION + 1);
 
         SetupResult result = SetupWizard.run(console, config, env(false, true));
 
@@ -251,7 +295,7 @@ class InteractiveSetupTest {
                 .type("y")
                 .then(() -> write(env, "VECTOLYN_DB_PASSWORD=written-by-the-operator\n"))
                 .type("y")
-                .enter(1);
+                .enter(ADMIN_QUESTION + 1);
 
         SetupResult result = SetupWizard.run(console, config, env(false, true));
 
@@ -270,7 +314,7 @@ class InteractiveSetupTest {
         start();
         terminal.enter(SERVER_QUESTIONS - 1).type("y", "y") // legacy proxy, then the 1.8.8 server
                 .enter(3).type("25577") // bind, java, bedrock, legacy port
-                .enter(MEMORY_QUESTIONS + 2 + 1).enter(1).enter(1); // two more heaps, one more count
+                .enter(MEMORY_QUESTIONS + 2 + 1).enter(1).enter(ADMIN_QUESTION).enter(1); // two more heaps, one more count
         SetupResult result = SetupWizard.run(console, config, env(false, true));
         assertEquals(SetupResult.Status.COMPLETED, result.status(), terminal.output());
         assertEquals(new ServiceCounts(1, 1, 3), ServiceCounts.of(config.snapshot().tasks().get("legacy-server").scaling()));
@@ -288,7 +332,7 @@ class InteractiveSetupTest {
         // Servers, network, memory with defaults; then the lobby: two invalid answers, then 1/2/6.
         terminal.enter(SERVER_QUESTIONS + 3 + 7)
                 .type("2/1/4", "1-1-4", "1/2/6")
-                .enter(SERVICE_QUESTIONS - 1 + ADVANCED_QUESTION + 1 + 1);
+                .enter(SERVICE_QUESTIONS - 1 + ADVANCED_QUESTION + 1 + ADMIN_QUESTION + 1);
         SetupResult result = SetupWizard.run(console, config, env(false, true));
         assertEquals(SetupResult.Status.COMPLETED, result.status(), terminal.output());
         assertEquals(0, terminal.pending(), "every scripted answer was used");
@@ -324,7 +368,7 @@ class InteractiveSetupTest {
                 .type("4s", "11m", "45s").enter(DRAIN_QUESTIONS - 1) // proxy, then the other groups keep 30s
                 .type("256M", "8G") // max-memory
                 .type("65G", "2G").enter(2) // reserve: system, then node-overhead and database keep the default
-                .enter(1 + 1); // database, save
+                .enter(1 + ADMIN_QUESTION + 1); // database, administrator, save
         SetupResult result = SetupWizard.run(console, config, env(false, true));
 
         assertEquals(SetupResult.Status.COMPLETED, result.status(), terminal.output());
@@ -403,7 +447,7 @@ class InteractiveSetupTest {
     void removingWithDefaultOrAutoWinsOverAChangeInTheMeantime() throws Exception {
         start();
         terminal.enter(SERVER_QUESTIONS + 3 + 7 + SERVICE_QUESTIONS).type("y", "45s").enter(DRAIN_QUESTIONS - 1)
-                .type("8G", "2G").enter(2).enter(1 + 1);
+                .type("8G", "2G").enter(2).enter(1 + ADMIN_QUESTION + 1);
         assertEquals(SetupResult.Status.COMPLETED, SetupWizard.run(console, config, env(false, true)).status(),
                 terminal.output());
 
@@ -436,7 +480,7 @@ class InteractiveSetupTest {
     void reservedPortsAreRefusedWhereTheyAreTyped() throws Exception {
         start();
         terminal.enter(SERVER_QUESTIONS).enter(1).type("7010", "30001", "25570", "25570", "19140")
-                .enter(MEMORY_QUESTIONS + 1 + 1);
+                .enter(MEMORY_QUESTIONS + 1 + ADMIN_QUESTION + 1);
         SetupResult result = SetupWizard.run(console, config, env(false, true));
         assertEquals(SetupResult.Status.COMPLETED, result.status(), terminal.output());
         assertEquals(25570, config.snapshot().cloud().proxy().port());
@@ -448,8 +492,8 @@ class InteractiveSetupTest {
     @Test
     void changeAnswersAsksAgainWithThePreviousAnswers() throws Exception {
         start();
-        terminal.enter(SERVER_QUESTIONS + 3).type("2G").enter(MEMORY_QUESTIONS - 1 + 1).type("change");
-        terminal.enter(2).enter(1 + SERVER_QUESTIONS + 3 + MEMORY_QUESTIONS + 1).enter(1);
+        terminal.enter(SERVER_QUESTIONS + 3).type("2G").enter(MEMORY_QUESTIONS - 1 + 1 + ADMIN_QUESTION).type("change");
+        terminal.enter(2).enter(1 + SERVER_QUESTIONS + 3 + MEMORY_QUESTIONS + 1 + ADMIN_QUESTION).enter(1);
         SetupResult result = SetupWizard.run(console, config, env(false, true));
         assertEquals(SetupResult.Status.COMPLETED, result.status(), terminal.output());
         assertEquals(MemorySize.parse("2G"), config.snapshot().groups().get("proxy").heap().max(), "the changed answer stayed");
@@ -508,7 +552,7 @@ class InteractiveSetupTest {
 
     @Test
     void germanTextsAfterChoosingGerman() throws Exception {
-        terminal.type("de", "j").enter(1 + SERVER_QUESTIONS + 3 + MEMORY_QUESTIONS + 1 + 1);
+        terminal.type("de", "j").enter(1 + SERVER_QUESTIONS + 3 + MEMORY_QUESTIONS + 1 + ADMIN_QUESTION + 1);
         SetupResult result = SetupWizard.run(console, config, env(false, true));
         assertEquals(SetupResult.Status.COMPLETED, result.status());
         assertEquals(Language.DE, config.snapshot().cloud().language());

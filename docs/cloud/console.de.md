@@ -116,6 +116,7 @@ Kommt aus `cloud/api` ([api.de.md](api.de.md)). Der ganze Befehl gilt als sensib
 | `api token create <Name> <Scopes>` | Erstellt ein Token mit den durch Komma getrennten Scopes (`services:read,config:read`) und zeigt es einmal an. Gespeichert wird nur der SHA-256-Wert. |
 | `api token list` | ID, Name, Erstellungszeit und Scopes aller Tokens, nie das Token selbst. |
 | `api token revoke <ID\|Name>` | Widerruft sofort; offene Event-Streams des Tokens werden geschlossen. Aliase: `delete`, `remove`. |
+| `api token setup [Name]` | Erstellt einen neuen einmaligen Einrichtungs-Token für den ersten Administrator (Standard `admin`), 24 Stunden gültig, und zeigt ihn einmal an; er ersetzt einen früheren. Siehe [Einrichtung](setup.de.md#erster-administrator). |
 | `api scopes` | Listet die Scopes auf. |
 
 ## Fragen von Assistenten

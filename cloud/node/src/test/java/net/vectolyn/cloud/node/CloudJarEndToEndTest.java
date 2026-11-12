@@ -299,6 +299,7 @@ class CloudJarEndToEndTest {
                 eula: true
                 language: en
                 network-name: Vectolyn E2E
+                minecraft-version: "26.3"
                 network:
                   bind: 127.0.0.1
                   java-port: %d
