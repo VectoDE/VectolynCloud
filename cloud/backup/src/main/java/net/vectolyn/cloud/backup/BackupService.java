@@ -513,7 +513,7 @@ public final class BackupService {
             case POSTGRESQL -> {
                 run.warnings.add("database mode postgresql: the cloud does not dump a PostgreSQL server; back it up "
                         + "with pg_dump, see docs/cloud/backup.md");
-                return new DatabaseEntry(mode, "manual", null, "dump it with pg_dump, see docs/cloud/backup.md");
+                yield new DatabaseEntry(mode, "manual", null, "dump it with pg_dump, see docs/cloud/backup.md");
             }
             case H2 -> {
                 String detail = "SCRIPT TO for: " + (run.h2Dumped.isEmpty() ? "none" : String.join(", ", run.h2Dumped));
