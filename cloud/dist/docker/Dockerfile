@@ -17,7 +17,7 @@
 
 # ---------------------------------------------------------------------------------------------
 # Stage 1: build VectolynCloud.jar from source.
-FROM eclipse-temurin:25-jdk-noble@sha256:95e350ad1eb738f943e141640f7e3d797e483359a3b33c3864255bfd1ad71f8a AS build
+FROM eclipse-temurin:26-jdk-noble@sha256:9c0e8eddecccc0d5679b317b0c90fa7103ad25cae33df1c00280675eb681c7f8 AS build
 WORKDIR /src
 COPY . .
 # --no-daemon: one build, no background process left in the layer.
@@ -31,7 +31,7 @@ COPY --from=build /VectolynCloud.jar /VectolynCloud.jar
 
 # ---------------------------------------------------------------------------------------------
 # Stage 3: runtime.
-FROM eclipse-temurin:25-jre-noble@sha256:a98128a57de944a72bd31fbc79b898edd5a5864d3652071d5bbd2160ab7d7dce AS runtime
+FROM eclipse-temurin:26-jre-noble@sha256:adfd44c114916dc79fa9a24087fbac34252096edb9892d1c2d9d82db3f8947b3 AS runtime
 
 ARG VERSION=dev
 LABEL org.opencontainers.image.title="VectolynCloud" \
