@@ -115,7 +115,7 @@ public final class ServiceStateStore {
      * @throws IOException if writing fails
      */
     public void save(ServiceStates states) throws IOException {
-        Files.createDirectories(file.getParent());
+        Files.createDirectories(Objects.requireNonNull(file.getParent(), "state directory"));
         writer.write(file, write(states));
     }
 

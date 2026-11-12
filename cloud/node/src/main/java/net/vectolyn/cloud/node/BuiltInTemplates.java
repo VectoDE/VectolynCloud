@@ -220,7 +220,7 @@ public final class BuiltInTemplates {
         for (String segment : entry.relative().split("/", -1)) {
             file = file.resolve(segment);
         }
-        Files.createDirectories(file.getParent());
+        Files.createDirectories(Objects.requireNonNull(file.getParent(), "template file directory"));
         MessageDigest digest = sha256();
         try (InputStream in = source.open(entry.path());
              OutputStream out = Files.newOutputStream(file, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
