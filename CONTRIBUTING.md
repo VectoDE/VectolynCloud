@@ -60,6 +60,15 @@ tests (`test-secret-0000`), never a real key, token or password, not even an exp
 dummy value is still flagged, run `gitleaks detect --no-banner` locally and add an entry to
 `.gitleaks.toml` that names the file and the exact value. Whole folders are not allowed.
 
+## Parsers need a fuzz test
+
+Code that parses text or bytes from outside (files an operator edits, network input, command
+output, headers) needs a Jazzer `@FuzzTest` in the same module. CI runs
+`.github/scripts/check-fuzz-coverage.py` and fails a pull request that adds a `parse*`, `decode*`,
+`read*` or similar method without one. The test says which exception the parser may throw and
+checks what it must never do (return a negative size, loop, throw something else). In the rare case
+that another fuzz test already covers the parser, list it with the reason in `.github/fuzz-exempt.txt`.
+
 ## Releases
 
 A maintainer releases by pushing a tag, and the tag has to follow the [version rules](docs/cloud/operations.md#versions-and-tags): below 1.0.0 only `-dev` (`v0.2.0-dev`, `v0.2.0-dev.3`); from 1.0.0 also `-alpha`, `-beta` and `-rc` (each with an optional `.N`), `-lts` without a counter, or no suffix for a stable release. Any other tag stops the release before anything is built. Check a tag first with `bash tools/release-banner/check-tag.sh <tag>`. The full checklist is in [Releasing](docs/development/releasing.md).

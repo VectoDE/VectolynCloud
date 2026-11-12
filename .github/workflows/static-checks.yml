@@ -5,6 +5,7 @@ name: Static checks
 # - zizmor: security audit of workflows and Dependabot configuration (injection, excessive
 #   permissions, unpinned actions, cache poisoning, ...), including the online audits
 # - Checkov: policy checks of the Dockerfiles and the workflows, results in code scanning
+# - Fuzz coverage: every parser of untrusted input has a fuzz test (issue #225)
 # Findings fail the job. A finding is fixed, or silenced in the file itself with a reason
 # (`# zizmor: ignore[rule]`, `# checkov:skip=ID: reason`), so every exception is visible in review.
 
@@ -134,3 +135,26 @@ jobs:
         with:
           sarif_file: checkov-out/results_sarif.sarif
           category: checkov
+
+  fuzz-coverage:
+    name: Fuzz coverage of parsers
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Every parser of untrusted input needs a Jazzer fuzz test, or a reasoned entry in
+      # .github/fuzz-exempt.txt. A new parser without either fails here.
+      - name: Check
+        run: python3 -I .github/scripts/check-fuzz-coverage.py
