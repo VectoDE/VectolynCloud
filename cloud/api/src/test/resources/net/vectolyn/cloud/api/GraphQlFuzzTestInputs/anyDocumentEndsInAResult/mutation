@@ -1,0 +1,1 @@
+mutation { stopService(id: "lobby-1") { id } }

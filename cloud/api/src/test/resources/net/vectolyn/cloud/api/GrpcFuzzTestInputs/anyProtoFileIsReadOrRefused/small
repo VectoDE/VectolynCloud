@@ -1,0 +1,5 @@
+syntax = "proto3";
+package a.b;
+enum E { E_A = 0; }
+message M { repeated E e = 1; optional M m = 2; }
+service S { rpc X(M) returns (stream M); }

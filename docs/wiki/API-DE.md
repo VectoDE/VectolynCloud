@@ -53,6 +53,7 @@ Alle Pfade beginnen mit `/api/v1`.
 | `GET /node`, `GET /setup` | Node-Status, Einrichtungsstand |
 | `GET/POST /backups` | Backups auflisten und anlegen |
 | `GET /events` (WebSocket) | Live-Ereignisse: Dienstzustand, Dienstausgabe, Spieler, Metriken (`node:read`), Node-Log (`admin`) |
+| `POST /graphql`, `GET /graphql` (WebSocket) | GraphQL über alles oben, Subscriptions mit `graphql-transport-ws` |
 
 Schreibzugriffe werden als Ganzes geprüft, bevor etwas gespeichert wird. `DELETE` braucht `?confirm=<name>`. `GET` liefert einen `ETag`; schickst du ihn als `If-Match` zurück, überschreibst du keine fremde Änderung (sonst `412`). Fehler haben eine einheitliche Form mit `code`, Meldung und, bei Konfigurationsproblemen, Datei, Pfad und Zeile.
 
@@ -66,6 +67,24 @@ Bodys sind höchstens 256 KiB groß, JSON wird strikt gelesen, und es gibt Raten
 curl -s -H "Authorization: Bearer $VECTOLYN_TOKEN" http://127.0.0.1:8085/api/v1/services
 ```
 
+## GraphQL
+
+`POST /api/v1/graphql` beantwortet Queries und Mutations für jeden Bereich; jedes Feld prüft den Scope des REST-Endpunkts, für den es steht. Grenzen: Tiefe 8, Komplexität 200, höchstens 20 Datenfelder je Dokument. Introspection ist aus, solange `api.graphql-introspection: true` nicht gesetzt ist. Subscriptions (`events`) laufen über den WebSocket desselben Pfads mit `graphql-transport-ws`. Details: [API-Referenz, GraphQL](https://github.com/VectoDE/VectolynCloud/blob/main/docs/cloud/api.de.md#graphql-post-apiv1graphql).
+
+```sh
+curl -s -H "Authorization: Bearer $VECTOLYN_TOKEN" -H "Content-Type: application/json" \
+  -d '{"query":"{ services { items { id state } } }"}' http://127.0.0.1:8085/api/v1/graphql
+```
+
+## gRPC
+
+Mit `api.grpc-port` (zum Beispiel `config set api.grpc-port 8086`) öffnet die API einen gRPC-Listener mit demselben Bind und derselben TLS-Einstellung. Der Dienst `vectolyn.api.v1.CloudService` steht in [`cloud.proto`](https://github.com/VectoDE/VectolynCloud/blob/main/cloud/api/src/main/resources/vectolyn/api/v1/cloud.proto); jede Methode führt den REST-Endpunkt aus, der in ihrem Kommentar steht, mit demselben Scope. Den Token als Metadaten `authorization: Bearer vct_...` senden. Fehler sind gRPC-Statuscodes mit dem REST-Code im Trailer `vectolyn-code`. Details: [API-Referenz, gRPC](https://github.com/VectoDE/VectolynCloud/blob/main/docs/cloud/api.de.md#grpc-apigrpc-port).
+
+```sh
+grpcurl -plaintext -import-path cloud/api/src/main/resources -proto vectolyn/api/v1/cloud.proto \
+  -H "authorization: Bearer $VECTOLYN_TOKEN" -d '{}' 127.0.0.1:8086 vectolyn.api.v1.CloudService/ListServices
+```
+
 ## Noch nicht verfügbar
 
-gRPC, GraphQL und das Web-Panel sind geplant ([#154](https://github.com/VectoDE/VectolynCloud/issues/154), [#155](https://github.com/VectoDE/VectolynCloud/issues/155), [#151](https://github.com/VectoDE/VectolynCloud/issues/151)).
+Das Web-Panel ist geplant ([#151](https://github.com/VectoDE/VectolynCloud/issues/151)).
