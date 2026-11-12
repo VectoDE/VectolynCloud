@@ -28,8 +28,9 @@ def main() -> int:
     java, jar, workdir, port = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
     timeout = int(sys.argv[5]) if len(sys.argv) > 5 else 300
 
-    # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args -- runs a server jar built in the same CI job, arguments are a list, no shell
-    proc = subprocess.Popen(
+    # The jar was built in the same CI job and the arguments are a list, no shell. The encoding and errors
+    # arguments need Python 3.6, CI runs 3.12.
+    proc = subprocess.Popen(  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args, python.lang.compatibility.python36.python36-compatibility-Popen1, python.lang.compatibility.python36.python36-compatibility-Popen2
         [java, "-Xms512M", "-Xmx1G", "-jar", jar, "nogui"],
         cwd=workdir,
         stdin=subprocess.PIPE,
