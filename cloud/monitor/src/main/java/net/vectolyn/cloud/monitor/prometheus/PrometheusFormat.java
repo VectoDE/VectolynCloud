@@ -79,6 +79,16 @@ public final class PrometheusFormat {
             add(rss, labels, s, x -> x.rss() < 0 ? Double.NaN : x.rss());
         }
 
+        Series ups = series(all, "vectolyn_scaling_ups_total", "counter",
+                "Services the autoscaler started since the cloud started.");
+        Series downs = series(all, "vectolyn_scaling_downs_total", "counter",
+                "Services the autoscaler emptied and stopped since the cloud started.");
+        for (Monitor.ScalingCount count : monitor.scalingCounts()) {
+            String labels = "{task=\"" + escape(count.task()) + "\",group=\"" + escape(count.group()) + "\"}";
+            ups.lines.add(ups.name + labels + " " + count.ups());
+            downs.lines.add(downs.name + labels + " " + count.downs());
+        }
+
         Series alerts = series(all, "vectolyn_alerts_active", "gauge", "Alerts that fire now.");
         Map<Severity, Integer> counts = new EnumMap<>(Severity.class);
         for (Severity severity : Severity.values()) {

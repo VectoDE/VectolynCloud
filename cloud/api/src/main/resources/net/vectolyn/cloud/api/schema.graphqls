@@ -94,12 +94,12 @@ type Mutation {
 }
 
 type Subscription {
-    "The event stream of /api/v1/events: every type needs its scope (service-state, service-output, player: services:read; metrics: node:read; node-log: admin). Without types: every type the token may see."
+    "The event stream of /api/v1/events: every type needs its scope (service-state, service-output, player, scaling: services:read; metrics: node:read; node-log: admin). Without types: every type the token may see."
     events(types: [String!], services: [ID!]): Event!
 }
 
 type Event {
-    "service-state, service-output, player, metrics, node-log, or dropped (data.count events were skipped for a slow client)."
+    "service-state, service-output, player, scaling, metrics, node-log, or dropped (data.count events were skipped for a slow client)."
     type: String!
     time: String!
     data: JSON!

@@ -86,6 +86,7 @@ import net.vectolyn.cloud.node.database.NodeDatabase;
 import net.vectolyn.cloud.node.database.NodeDatabaseProcesses;
 import net.vectolyn.cloud.node.jre.ManagedJavaRuntimes;
 import net.vectolyn.cloud.node.scaling.Autoscaler;
+import net.vectolyn.cloud.node.scaling.ScalingEvent;
 import net.vectolyn.cloud.node.scaling.ScalingSignals;
 import net.vectolyn.cloud.node.scaling.ScalingTarget;
 import net.vectolyn.cloud.node.service.ServiceException;
@@ -476,6 +477,13 @@ public final class CloudNode implements AutoCloseable {
                 Clock.systemUTC());
         Autoscaler scaler = Autoscaler.create(ScalingTarget.of(services, channel), config::snapshot, signals);
         services.addListener(scaler);
+        // Decisions as data: scaling events for the API, scale-ups and scale-downs for Prometheus.
+        scaler.addListener(api);
+        scaler.addListener(event -> {
+            if (event.action() == ScalingEvent.Action.START || event.action() == ScalingEvent.Action.STOP) {
+                monitoring.monitor().scaled(event.task(), event.group(), event.action() == ScalingEvent.Action.START);
+            }
+        });
         ApiCommands.TokenFile tokenFile = tokens.isPresent() ? tokens::get : () -> ApiTokens.open(home);
         // One version per cluster: the update system (#74) hooks in at ClusterService.Events. On a
         // member the service switches the config to the mirror mode: nodes.yml, groups and tasks

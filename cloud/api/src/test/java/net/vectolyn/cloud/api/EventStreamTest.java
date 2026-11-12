@@ -132,6 +132,33 @@ class EventStreamTest {
     }
 
     @Test
+    void scalingDecisionsNeedServicesReadAndFollowTheServicesFilter() throws Exception {
+        try (TestApi api = new TestApi(home)) {
+            String node = api.token("node", Scope.NODE_READ);
+            assertHandshakeStatus(api, "?types=scaling", node, 403);
+            String services = api.token("services", Scope.SERVICES_READ);
+            Recorder all = new Recorder();
+            connect(api, "?types=scaling", services, all);
+            Recorder lobby = new Recorder();
+            connect(api, "?types=scaling&services=lobby-2", services, lobby);
+            waitForStreams(api, 2);
+
+            api.server.publish(new ApiEvent.Scaling("minigame", "minigame", "hold", "memory-budget", null));
+            api.server.publish(new ApiEvent.Scaling("lobby", "lobby", "start", "cpu", "lobby-2"));
+
+            String hold = all.next();
+            assertTrue(hold.startsWith("{\"type\":\"scaling\""), hold);
+            assertTrue(hold.contains("\"data\":{\"task\":\"minigame\",\"group\":\"minigame\",\"action\":\"hold\","
+                    + "\"reason\":\"memory-budget\"}"), "no service, no field: " + hold);
+            String start = all.next();
+            assertTrue(start.contains("\"action\":\"start\",\"reason\":\"cpu\",\"service\":\"lobby-2\""), start);
+            String filtered = lobby.next();
+            assertTrue(filtered.contains("\"service\":\"lobby-2\""), filtered);
+            assertNull(lobby.messages.poll(500, TimeUnit.MILLISECONDS), "a hold names no service and misses the filter");
+        }
+    }
+
+    @Test
     void theNodeLogReachesAdminStreamsRedacted() throws Exception {
         try (TestApi api = new TestApi(home)) {
             api.backend.filter = RedactingFilter.of(List.of(Secret.of("hunter2-very-secret")));

@@ -8,6 +8,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -30,13 +33,17 @@ import net.vectolyn.cloud.config.model.MemoryReserve;
 import net.vectolyn.cloud.config.model.MemorySize;
 import net.vectolyn.cloud.config.model.NodeConfig;
 import net.vectolyn.cloud.config.model.NodesConfig;
+import net.vectolyn.cloud.config.model.ScaleUpTriggers;
 import net.vectolyn.cloud.config.model.ScalingConfig;
+import net.vectolyn.cloud.config.model.ScalingSchedule;
 import net.vectolyn.cloud.config.model.ServerKind;
 import net.vectolyn.cloud.config.model.ServerSoftware;
 import net.vectolyn.cloud.config.model.TaskConfig;
 import net.vectolyn.cloud.config.model.TaskMode;
+import net.vectolyn.cloud.config.model.TimeOfDay;
 import net.vectolyn.cloud.config.model.TimeSpan;
 import net.vectolyn.cloud.config.model.WantedServers;
+import net.vectolyn.cloud.config.model.Weekday;
 import net.vectolyn.cloud.node.scaling.ScalingPlanner.Decision;
 import net.vectolyn.cloud.node.scaling.ScalingPlanner.Drain;
 import net.vectolyn.cloud.node.scaling.ScalingPlanner.Hold;
@@ -45,6 +52,7 @@ import net.vectolyn.cloud.node.scaling.ScalingPlanner.Load;
 import net.vectolyn.cloud.node.scaling.ScalingPlanner.Memory;
 import net.vectolyn.cloud.node.scaling.ScalingPlanner.Reason;
 import net.vectolyn.cloud.node.scaling.ScalingPlanner.Start;
+import net.vectolyn.cloud.node.scaling.ScalingPlanner.Usage;
 import net.vectolyn.cloud.node.service.ServiceInfo;
 import net.vectolyn.cloud.node.service.ServiceState;
 import net.vectolyn.protocol.ServiceId;
@@ -583,6 +591,168 @@ class ScalingPlannerTest {
         assertEquals(Optional.empty(), s.load("lobby", null));
     }
 
+    // ---------------------------------------------------------------- scale-up-on
+
+    @Test
+    void cpuAboveStartsAServiceOnlyAboveTheAverage() {
+        // 10 of 50 players: the load alone starts nothing.
+        Scenario s = new Scenario().task("minigame", TaskMode.DYNAMIC, 1, 3).running("minigame", 1, TaskMode.DYNAMIC, 10)
+                .triggers("minigame", new ScaleUpTriggers(80, null, null)).usage("minigame-1", 80, 20, 10);
+        assertEquals(List.of(), s.plan(), "80 % is not above 80 %");
+        s.usage("minigame-1", 80.5, 20, 10);
+        assertEquals(List.of(new Start("minigame", OptionalInt.empty(), Reason.CPU)), s.plan());
+
+        // The average of the task: 90 and 70 are 80.
+        s.running("minigame", 2, TaskMode.DYNAMIC, 0).usage("minigame-1", 90, 20, 10).usage("minigame-2", 70, 20, 10);
+        assertEquals(List.of(), s.plan());
+        s.usage("minigame-2", 71, 20, 10);
+        assertEquals(List.of(new Start("minigame", OptionalInt.empty(), Reason.CPU)), s.plan());
+    }
+
+    @Test
+    void tpsBelowStartsAServiceOnlyBelowTheAverage() {
+        Scenario s = new Scenario().task("minigame", TaskMode.DYNAMIC, 1, 3).running("minigame", 1, TaskMode.DYNAMIC, 10)
+                .triggers("minigame", new ScaleUpTriggers(null, 18, null)).usage("minigame-1", 5, 18, 10);
+        assertEquals(List.of(), s.plan(), "18 is not below 18");
+        s.usage("minigame-1", 5, 17.9, 10);
+        assertEquals(List.of(new Start("minigame", OptionalInt.empty(), Reason.TPS)), s.plan());
+        // Not measured (a proxy, no report): nothing fires.
+        s.usage("minigame-1", Double.NaN, Double.NaN, Double.NaN);
+        assertEquals(List.of(), s.plan());
+        s.usage.clear();
+        assertEquals(List.of(), s.plan(), "no sample at all");
+    }
+
+    @Test
+    void ramAboveStartsAServiceOnlyAboveTheAverageHeap() {
+        Scenario s = new Scenario().task("minigame", TaskMode.DYNAMIC, 1, 3).running("minigame", 1, TaskMode.DYNAMIC, 10)
+                .triggers("minigame", new ScaleUpTriggers(null, null, 90)).usage("minigame-1", 5, 20, 90);
+        assertEquals(List.of(), s.plan());
+        s.usage("minigame-1", 5, 20, 91);
+        assertEquals(List.of(new Start("minigame", OptionalInt.empty(), Reason.RAM)), s.plan());
+    }
+
+    @Test
+    void theLoadComesFirstThenCpuTpsAndRam() {
+        Scenario s = new Scenario().task("minigame", TaskMode.DYNAMIC, 1, 3).running("minigame", 1, TaskMode.DYNAMIC, 40)
+                .triggers("minigame", new ScaleUpTriggers(50, 19, 50)).usage("minigame-1", 99, 1, 99);
+        assertEquals(List.of(new Start("minigame", OptionalInt.empty(), Reason.LOAD)), s.plan());
+        s.running("minigame", 1, TaskMode.DYNAMIC, 10);
+        assertEquals(List.of(new Start("minigame", OptionalInt.empty(), Reason.CPU)), s.plan());
+        s.usage("minigame-1", 10, 1, 99);
+        assertEquals(List.of(new Start("minigame", OptionalInt.empty(), Reason.TPS)), s.plan());
+        s.usage("minigame-1", 10, 20, 99);
+        assertEquals(List.of(new Start("minigame", OptionalInt.empty(), Reason.RAM)), s.plan());
+    }
+
+    @Test
+    void aTriggerRespectsMaxServicesCooldownStartingServicesAndMemory() {
+        Scenario s = new Scenario().task("minigame", TaskMode.DYNAMIC, 1, 2).running("minigame", 1, TaskMode.DYNAMIC, 10)
+                .triggers("minigame", new ScaleUpTriggers(50, null, null)).usage("minigame-1", 99, 20, 10)
+                .running("minigame", 2, TaskMode.DYNAMIC, 10).usage("minigame-2", 99, 20, 10);
+        assertEquals(List.of(), s.plan(), "max-services 2 reached");
+
+        s.task("minigame", TaskMode.DYNAMIC, 1, 3).triggers("minigame", new ScaleUpTriggers(50, null, null));
+        s.lastAction.put("minigame", NOW.minusSeconds(59));
+        assertEquals(List.of(), s.plan(), "cooldown");
+        s.lastAction.put("minigame", NOW.minusSeconds(60));
+        assertEquals(List.of(new Start("minigame", OptionalInt.empty(), Reason.CPU)), s.plan());
+
+        s.service("minigame", 3, TaskMode.DYNAMIC, ServiceState.STARTING);
+        assertEquals(List.of(), s.plan(), "wait for the service that is starting");
+
+        Scenario memory = new Scenario().task("minigame", TaskMode.DYNAMIC, 1, 3).running("minigame", 1, TaskMode.DYNAMIC, 10)
+                .triggers("minigame", new ScaleUpTriggers(50, null, null)).usage("minigame-1", 99, 20, 10)
+                .memory(Optional.empty());
+        assertEquals(List.of(new Held("minigame", Hold.MEMORY_UNKNOWN)), memory.plan());
+    }
+
+    @Test
+    void aTriggerFiresAlsoWhileThePlayerCountIsUnknownButIgnoresServicesBeingEmptied() {
+        Scenario s = new Scenario().task("minigame", TaskMode.DYNAMIC, 1, 3).runningUnknown("minigame", 1, TaskMode.DYNAMIC)
+                .triggers("minigame", new ScaleUpTriggers(50, null, null)).usage("minigame-1", 99, 20, 10);
+        assertEquals(List.of(new Start("minigame", OptionalInt.empty(), Reason.CPU)), s.plan(),
+                "the CPU is measured even if the bridge does not report players");
+
+        Scenario draining = new Scenario().task("minigame", TaskMode.DYNAMIC, 1, 3)
+                .running("minigame", 1, TaskMode.DYNAMIC, 10).running("minigame", 2, TaskMode.DYNAMIC, 0)
+                .triggers("minigame", new ScaleUpTriggers(50, null, null))
+                .usage("minigame-1", 10, 20, 10).usage("minigame-2", 99, 20, 10);
+        draining.draining.add(new ServiceId("minigame-2"));
+        assertEquals(List.of(), draining.plan(), "the busy service is on its way out");
+    }
+
+    @Test
+    void aFiringTriggerKeepsSurplusServicesRunning() {
+        // max-services 2: the trigger cannot add a service, but it keeps both.
+        Scenario s = surplus().task("minigame", TaskMode.DYNAMIC, 1, 2)
+                .triggers("minigame", new ScaleUpTriggers(50, null, null))
+                .usage("minigame-1", 60, 20, 10).usage("minigame-2", 60, 20, 10);
+        assertEquals(List.of(), s.plan(), "the CPU is high although the players are few");
+        assertTrue(s.candidate("minigame").isEmpty(), "so the low-load timer starts over");
+        // Counter-check: below the trigger the surplus service goes.
+        s.usage("minigame-1", 40, 20, 10).usage("minigame-2", 40, 20, 10);
+        assertEquals(List.of(new Drain("minigame", new ServiceId("minigame-2"), Reason.LOW_LOAD)), s.plan());
+    }
+
+    // ---------------------------------------------------------------- schedules
+
+    /** NOW is Thursday 2026-10-29, 12:00 UTC. */
+    private static ScalingSchedule thursday(int fromHour, int toHour, int minServices) {
+        return new ScalingSchedule(List.of(Weekday.THU), TimeOfDay.of(fromHour, 0), TimeOfDay.of(toHour, 0), minServices);
+    }
+
+    @Test
+    void anActiveScheduleRaisesTheMinimumWithDynamicServices() {
+        Scenario s = new Scenario().task("lobby", "lobby", 1, 1, 4).running("lobby", 1, TaskMode.STATIC, 0)
+                .schedules("lobby", thursday(12, 13, 3));
+        assertEquals(List.of(new Start("lobby", OptionalInt.empty(), Reason.SCHEDULE),
+                new Start("lobby", OptionalInt.empty(), Reason.SCHEDULE)), s.plan(), "from is inclusive");
+
+        s.schedules("lobby", thursday(11, 12, 3));
+        assertEquals(List.of(), s.plan(), "to is exclusive");
+        s.schedules("lobby", new ScalingSchedule(List.of(Weekday.FRI), TimeOfDay.of(11, 0), TimeOfDay.of(13, 0), 3));
+        assertEquals(List.of(), s.plan(), "another day");
+    }
+
+    @Test
+    void schedulesAreReadInTheZoneOfTheNode() {
+        // 12:00 UTC is 13:00 in Berlin on 29 October 2026 (winter time).
+        Scenario s = new Scenario().task("lobby", "lobby", 1, 1, 4).running("lobby", 1, TaskMode.STATIC, 0)
+                .schedules("lobby", thursday(11, 13, 2));
+        assertEquals(List.of(new Start("lobby", OptionalInt.empty(), Reason.SCHEDULE)), s.plan());
+        s.zone = ZoneId.of("Europe/Berlin");
+        assertEquals(List.of(), s.plan());
+        s.schedules("lobby", thursday(13, 14, 2));
+        assertEquals(List.of(new Start("lobby", OptionalInt.empty(), Reason.SCHEDULE)), s.plan());
+    }
+
+    @Test
+    void minServicesFillsBeforeTheScheduleAndOnlyTheScheduledStartsNeedTheMemoryBudget() {
+        // Nothing runs; min-services 1 (static), the schedule asks for 3. Heaps of 1G, max-memory 2G.
+        Scenario s = new Scenario().task("lobby", "lobby", 1, 1, 4).schedules("lobby", thursday(12, 13, 3)).maxMemory("2G");
+        assertEquals(List.of(new Start("lobby", OptionalInt.of(1), Reason.MIN_SERVICES),
+                new Start("lobby", OptionalInt.empty(), Reason.SCHEDULE),
+                new Held("lobby", Hold.MEMORY_BUDGET)), s.plan(), "the third heap does not fit into 2G");
+        s.maxMemory("3G");
+        assertEquals(List.of(new Start("lobby", OptionalInt.of(1), Reason.MIN_SERVICES),
+                new Start("lobby", OptionalInt.empty(), Reason.SCHEDULE),
+                new Start("lobby", OptionalInt.empty(), Reason.SCHEDULE)), s.plan());
+        s.memory(Optional.empty());
+        assertEquals(List.of(new Start("lobby", OptionalInt.of(1), Reason.MIN_SERVICES),
+                new Held("lobby", Hold.MEMORY_UNKNOWN)), s.plan(), "min-services itself never waits for memory");
+    }
+
+    @Test
+    void anActiveScheduleKeepsItsServicesFromScalingDown() {
+        Scenario s = surplus().schedules("minigame", thursday(12, 13, 2));
+        assertEquals(List.of(), s.plan(), "two are scheduled");
+        assertTrue(s.candidate("minigame").isEmpty());
+        s.schedules("minigame", thursday(10, 12, 2));
+        assertEquals(List.of(new Drain("minigame", new ServiceId("minigame-2"), Reason.LOW_LOAD)), s.plan(),
+                "the window has ended");
+    }
+
     // ---------------------------------------------------------------- fixture
 
     /** One configuration and one set of services; every method changes it in place. */
@@ -593,6 +763,7 @@ class ScalingPlannerTest {
         final Map<ServiceId, Integer> players = new HashMap<>();
         /** The higher count of bridge and proxy, where it differs from {@link #players}. */
         final Map<ServiceId, Integer> present = new HashMap<>();
+        final Map<ServiceId, Usage> usage = new HashMap<>();
         final Map<String, Instant> lastAction = new HashMap<>();
         final Map<String, Instant> pausedUntil = new HashMap<>();
         final Map<String, Instant> lowSince = new HashMap<>();
@@ -602,6 +773,7 @@ class ScalingPlannerTest {
         /** {@code max-memory} 64G, so the budget is the measured memory in most tests. */
         NodesConfig nodes = withMaxMemory(MemorySize.parse("64G"));
         Optional<Memory> memory = ROOMY;
+        ZoneId zone = ZoneOffset.UTC;
 
         Scenario() {
             group("lobby", ServerKind.LOBBY.templateFolder(), ServerSoftware.PAPER);
@@ -638,6 +810,30 @@ class ScalingPlannerTest {
                     new ScalingConfig(staticServices, min, max, 50, 80, 50, TimeSpan.parse("5m"), TimeSpan.parse("60s")),
                     List.of()));
             return this;
+        }
+
+        Scenario triggers(String task, ScaleUpTriggers triggers) {
+            tasks.put(task, tasks.get(task).withScaling(tasks.get(task).scaling().withScaleUpOn(triggers)));
+            return this;
+        }
+
+        Scenario schedules(String task, ScalingSchedule... schedules) {
+            tasks.put(task, tasks.get(task).withScaling(tasks.get(task).scaling().withSchedules(List.of(schedules))));
+            return this;
+        }
+
+        Scenario usage(String id, double cpu, double tps, double heap) {
+            usage.put(new ServiceId(id), new Usage(cpu, tps, heap));
+            return this;
+        }
+
+        ScalingPlanner.Signals signals() {
+            return new ScalingPlanner.Signals(Map.copyOf(players), Map.copyOf(present), Map.copyOf(usage), memory);
+        }
+
+        Optional<ServiceInfo> candidate(String task) {
+            return ScalingPlanner.scaleDownCandidate(snapshot(), task, new ArrayList<>(services.values()), signals(),
+                    Set.copyOf(released), Set.copyOf(draining), LocalDateTime.ofInstant(NOW, zone));
         }
 
         Scenario switchOff(ServerKind kind) {
@@ -697,8 +893,8 @@ class ScalingPlannerTest {
 
         List<Decision> plan() {
             return ScalingPlanner.plan(new ScalingPlanner.Input(snapshot(), "node-1", new ArrayList<>(services.values()),
-                    new ScalingPlanner.Signals(Map.copyOf(players), Map.copyOf(present), memory), Map.copyOf(lastAction),
-                    Map.copyOf(pausedUntil), Map.copyOf(lowSince), Set.copyOf(released), Set.copyOf(draining), NOW));
+                    signals(), Map.copyOf(lastAction), Map.copyOf(pausedUntil), Map.copyOf(lowSince), Set.copyOf(released),
+                    Set.copyOf(draining), NOW, zone));
         }
     }
 }

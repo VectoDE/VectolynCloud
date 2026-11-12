@@ -13,10 +13,10 @@ import net.vectolyn.cloud.api.backend.ServiceView;
 /**
  * A live event for the WebSocket {@code /api/v1/events}. cloud-node hands them to
  * {@code ApiServer.publish}: state changes and output lines from its {@code ServiceListener},
- * player events from the cloud channel (the bridges, PR 13).
+ * player events from the cloud channel (the bridges, PR 13), scaling decisions from its autoscaler.
  *
- * <p>Each type needs a scope ({@link #scopeOf}): service states, output lines and players
- * {@code services:read}, metrics {@code node:read}, the node log {@code admin}.
+ * <p>Each type needs a scope ({@link #scopeOf}): service states, output lines, players and scaling
+ * decisions {@code services:read}, metrics {@code node:read}, the node log {@code admin}.
  *
  * <p>On the wire every event is one JSON text frame {@code {"type": ..., "time": ..., "data": {...}}}.
  */
@@ -27,6 +27,7 @@ public sealed interface ApiEvent {
             "service-state", Scope.SERVICES_READ,
             "service-output", Scope.SERVICES_READ,
             "player", Scope.SERVICES_READ,
+            "scaling", Scope.SERVICES_READ,
             "metrics", Scope.NODE_READ,
             "node-log", Scope.ADMIN);
 
@@ -180,6 +181,39 @@ public sealed interface ApiEvent {
         @Override
         public String service() {
             return null;
+        }
+    }
+
+    /**
+     * A decision of the autoscaler: a service started, emptied, stopped or kept, or a task that needs
+     * another service but does not get one now. See {@code docs/cloud/scaling.md}.
+     *
+     * @param task      task name
+     * @param group     group of the task, empty if the task is gone
+     * @param action    {@code start}, {@code drain}, {@code stop}, {@code keep} or {@code hold}
+     * @param reason    why, for example {@code load}, {@code cpu}, {@code schedule} or {@code memory-budget}
+     * @param serviceId the service, null for {@code hold}
+     */
+    @JsonPropertyOrder({"task", "group", "action", "reason", "service"})
+    record Scaling(String task, String group, String action, String reason,
+                   @JsonProperty("service") String serviceId) implements ApiEvent {
+
+        /** Checks the values. */
+        public Scaling {
+            Objects.requireNonNull(task, "task");
+            Objects.requireNonNull(group, "group");
+            Objects.requireNonNull(action, "action");
+            Objects.requireNonNull(reason, "reason");
+        }
+
+        @Override
+        public String type() {
+            return "scaling";
+        }
+
+        @Override
+        public String service() {
+            return serviceId;
         }
     }
 }

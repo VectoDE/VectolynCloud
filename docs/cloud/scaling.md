@@ -1,6 +1,6 @@
 # VectolynCloud autoscaling
 
-Package `net.vectolyn.cloud.node.scaling` in `cloud/node`. The node keeps `min-services` of every task running, adds dynamic services when the load of a group is high, and empties and removes them when it is low. German version: [scaling.de.md](scaling.de.md).
+Package `net.vectolyn.cloud.node.scaling` in `cloud/node`. The node keeps `min-services` of every task running (more within a [schedule](#schedules)), adds dynamic services when the load of a group is high or a [trigger](#triggers-besides-the-load) on CPU, TPS or heap fires, and empties and removes them when the load is low. Every decision is also [data](#decisions-as-data): an API event and a Prometheus counter. German version: [scaling.de.md](scaling.de.md).
 
 ## Configuration
 
@@ -18,8 +18,19 @@ scaling:
   scale-down-below: 50       # load in percent that one service fewer must stay below
   scale-down-after: 5m       # the low load must hold this long before a service goes
   cooldown: 60s              # at least this long between two decisions of the task
+  scale-up-on:               # optional: more reasons for one more service
+    cpu-above: 80            # average CPU of the task's services, percent of the machine
+    tps-below: 18            # average TPS
+    ram-above: 90            # average used heap, percent of heap.max
+  schedules:                 # optional: a higher minimum at set times
+    - days: [fri, sat]
+      from: "18:00"
+      to: "23:30"
+      min-services: 3
 nodes: []
 ```
+
+Limits per task, not per group: `min-services`, `max-services`, `cooldown` and the triggers belong to the task. A group with one task (the usual case) behaves as if they were per group. The load that decides is still the load of the whole group (below).
 
 ### Static and dynamic in one task
 
@@ -68,13 +79,13 @@ The load is not known while a running service of the group has no known player c
 
 Every 5 seconds the scaler looks at each task once. After a decision by load (rules 3 and 4) the task waits `cooldown` before the next one.
 
-1. **min-services.** If fewer services count than `min-services`, all missing ones start in the same round, without `cooldown`, for example after the EULA was accepted again.
+1. **min-services.** If fewer services count than `min-services`, all missing ones start in the same round, without `cooldown`, for example after the EULA was accepted again. An active [schedule](#schedules) raises this minimum the same way.
    - A dynamic service counts while it is prepared, starting, running, or crashed and waiting for its restart.
    - A static service within `static-services` always counts, also when it is stopped or gave up after its crashes. A server stopped with `service stop` therefore stays down. Only a static service that stopped because its group was switched off (or because `eula-accepted` or `setup-complete` was taken back) comes back once the switch is on again, at its own index and in its own folder. Whether a switch caused the stop is judged by the configuration at the moment of the stop.
    - A new static slot (a new task, a higher `static-services`) gets the lowest index of the group that no service has used in this run, so a folder of a server stopped by hand is not touched.
 2. **Above max-services.** If a task has more services than `max-services` (the limit was lowered), an empty dynamic service is removed the same way as in rule 4: closed on the proxies, checked once more, then stopped. A service with players is never removed for this.
-3. **Scale up.** One more dynamic service starts when the load of the group has reached `scale-up-at`, no service of the group is still starting, no other task of the group started one in the same round, the task may have dynamic services (`static-services < max-services`), `max-services` leaves room, and the memory budget allows it (below). With 50 slots per service and 75 %: 75 of 100 players on two services.
-4. **Scale down.** The task has more than `min-services`, and without its emptiest running dynamic service the rest of the group would stay below `scale-down-below`, with the players of that service counted on the rest. Once that has held without a break for `scale-down-after`, the service goes:
+3. **Scale up.** One more dynamic service starts when the load of the group has reached `scale-up-at` (or a [trigger](#triggers-besides-the-load) fires), no service of the group is still starting, no other task of the group started one in the same round, the task may have dynamic services (`static-services < max-services`), `max-services` leaves room, and the memory budget allows it (below). With 50 slots per service and 75 %: 75 of 100 players on two services.
+4. **Scale down.** The task has more than `min-services` (or than an active [schedule](#schedules) asks for), no [trigger](#triggers-besides-the-load) fires, and without its emptiest running dynamic service the rest of the group would stay below `scale-down-below`, with the players of that service counted on the rest. Once that has held without a break for `scale-down-after`, the service goes:
    - it is always **closed** on the proxies first, so no new player gets there;
    - every player on it is moved to the other services of the group (static ones included). The node reads the players again on every check, so someone who joined in between is moved too. A player who is still on it 2 seconds after his move was sent gets it again, then after 4 and every 8 seconds, in case a proxy lost or refused the first one. The repeated move names the same target as long as that server is open and has room, so a late proxy never sends the player on a second hop. Each player gets a short message in their client language (German for `de`, English otherwise);
    - it stops only when it is empty: the proxies list nobody on it **and** its own bridge reports 0 players. Here the higher of both counts decides, so a proxy that has not seen a join yet cannot get a server stopped under a player;
@@ -123,6 +134,46 @@ Scaling: group survival is not scaled while survival-1 reports no player count: 
 
 The first is the server: its bridge is silent (a server that hardly ticks reports less often, see [monitor.md](monitor.md#what-the-bridges-report-and-what-the-monitor-expects)), or "has not reported since the server started" if it never did. The second is the node: the monitor's rounds have stopped. A slow process probe (`tasklist` on a busy Windows machine) is neither, because it runs on its own thread and the rounds do not wait for it. With `enabled: false` in `monitor.yml` there are no samples: the scaler then keeps `min-services` and does not scale up or down.
 
+## Triggers besides the load
+
+`scale-up-on` in the scaling section of a task adds reasons to start one more dynamic service. Each field is optional; a missing one is not checked.
+
+| Field | Range | Fires when |
+|---|---|---|
+| `cpu-above` | 1 to 100 | the average CPU use of the task's services, in percent of the machine, is **above** it |
+| `tps-below` | 1 to 20 | the average ticks per second are **below** it |
+| `ram-above` | 1 to 100 | the average used heap, in percent of `heap.max`, is **above** it |
+
+- The average is taken over the running services of the task that are not being emptied, from the newest [monitor](monitor.md) sample of each, as long as it is not older than `stale-after`. A service without the value (a proxy has no TPS, an operating system that does not report the CPU of another process) is left out; if no service has it, the trigger does not fire. Exactly at the limit does not fire (80 % with `cpu-above: 80`).
+- A trigger is one more way into rule 3: `max-services`, `cooldown`, a service of the group that is still starting, a paused task and the [memory budget](#memory-budget) hold it back as they hold back a scale-up by load. The load comes first; of the triggers CPU, then TPS, then heap gives the reason.
+- Unlike the load, a trigger also fires while the player count of a service is unknown: CPU, TPS and heap come from the monitor's samples, not from the player count.
+- While a trigger fires, no service of the task is scaled down, and the time for `scale-down-after` starts again. A busy group with few players therefore does not lose the service it just got.
+- The heap value moves with the garbage collector. `ram-above` near 100 rarely fires; 85 to 90 is a sensible start.
+
+## Schedules
+
+`schedules` raise the minimum of a task at set times, for example for an evening event:
+
+```yaml
+schedules:
+  - days: [fri, sat]          # mon, tue, wed, thu, fri, sat, sun
+    from: "18:00"             # HH:mm, 24 hours
+    to: "02:00"               # before from: the window ends on the next day
+    min-services: 4
+```
+
+- A window starts on each listed day at `from` and ends at `to` (`from` belongs to it, `to` does not). A `to` before `from` ends on the next day: Friday 18:00 to 02:00 lasts until Saturday 02:00. `from` equal to `to` lasts a whole day from `from` on.
+- The times are read in the **time zone of the node**: the default zone of its JVM (the machine's zone; `-Duser.timezone=Europe/Berlin` in the launcher's JVM flags or `TZ` sets another one). Each node of a [cluster](cluster.md) reads them in its own zone. At a change between summer and winter time a window follows the local clock.
+- While windows are active, the minimum is the highest of `min-services` and their `min-services`, at most `max-services`. A schedule never lowers `min-services`. A task may have up to 32.
+- The missing services start in one round like rule 1 and are dynamic once the static ones are there. The ones above `min-services` itself need the [memory budget](#memory-budget); if it is short, the task waits and the log says why. When the window ends, the extra services are scaled down by rule 4 like any other, after `scale-down-after` of low load.
+
+## Decisions as data
+
+Every decision is also handed on as data (`ScalingEvent`, `ScalingListener`):
+
+- **API.** The event type `scaling` on [`/api/v1/events`](api.md#live-events-get-apiv1events) (scope `services:read`), also in GraphQL and gRPC: `task`, `group`, `action` (`start`, `drain`, `stop`, `keep`, `hold`), `reason` (`min-services`, `schedule`, `load`, `cpu`, `tps`, `ram`, `low-load`, `above-max`; for `hold` `memory-unknown`, `memory-budget`, `memory-free`, `paused`; for `keep` `no-target`, `timeout`, `interrupted`) and `service` (missing for `hold`). A `hold` is sent once until its cause changes, like its log line.
+- **Prometheus.** `vectolyn_scaling_ups_total{task,group}` counts the services the scaler started, `vectolyn_scaling_downs_total{task,group}` the ones it emptied and stopped, since the cloud started (see [monitor.md](monitor.md#prometheus-optional)).
+
 ## Memory budget
 
 A scale-up (rule 3) also needs:
@@ -146,7 +197,7 @@ If either fails, or the node's memory is not measured yet, the task waits and th
 Scaling: task minigame needs another service (1G heap), but the maximum heaps of the services on this node would exceed its memory
 ```
 
-`min-services` is not held back by the budget, the same as on the start of the node: whoever sets the minimum asks for those servers. `service start` by hand is not checked either.
+`min-services` is not held back by the budget, the same as on the start of the node: whoever sets the minimum asks for those servers. `service start` by hand is not checked either. The services a [schedule](#schedules) adds above `min-services` are checked, like a scale-up.
 
 ## Failed starts
 
@@ -158,6 +209,8 @@ Every start and stop is logged with its reason:
 
 ```text
 Scaling: minigame-3 of task minigame is started (the load of the group has reached 75 %)
+Scaling: minigame-4 of task minigame is started (the average CPU of its services is above 80 %)
+Scaling: lobby-3 of task lobby is started (an active schedule raises the minimum above min-services 1)
 Scaling: minigame-3 of task minigame is stopped (with one service fewer the load stays below 50 %, for 5m)
 Scaling: the players of minigame-2 of task minigame are moved to other servers (with one service fewer the load stays below 50 %, for 5m)
 Scaling: minigame-2 keeps running: players are still on it after 30 s, a move did not work
@@ -175,9 +228,10 @@ A scaled service is an ordinary service of the service core ([node.md](node.md#i
 
 | Class | Does |
 |---|---|
-| `ScalingPlanner` | The rules above as a pure function of configuration, services, signals and what earlier rounds remember. No I/O, no clock. |
+| `ScalingPlanner` | The rules above as a pure function of configuration, services, signals and what earlier rounds remember. No I/O, no clock: the time and zone of the round come with its input. |
 | `Autoscaler` | The rounds on the thread `vectolyn-scaling`; starts, stops and drains on `vectolyn-scaling-action` (the starts of a task one after the other; a drain does not hold its task, so a crashed service is replaced while another one is emptied); the memory of the rounds (cooldown, low load since, services being emptied, switched-off static services, failures). Registered as `ServiceListener`. |
-| `ScalingSignals` | Player counts and node memory from the monitor and the proxies' player events; `merge` is the pure rule. |
+| `ScalingSignals` | Player counts, the usage of the services (CPU, TPS, heap) and node memory from the monitor and the proxies' player events; `merge` is the pure rule. |
+| `ScalingEvent`, `ScalingListener` | The decisions as data. `CloudNode` registers `NodeApi` (API events) and a listener that counts starts and stops in the monitor. |
 | `ScalingTarget` | What the scaler starts, stops and empties: `ServiceManager.startDynamic(task)`, `start(task, index)`, `stop(id)` and `ChannelBridge.drain(id, timeout)`. |
 | `ChannelBridge.drain` | Closes a backend on the proxies (`ServerCapacity`), sends `TransferPlayer` for each player on it (again after 2, 4 and every 8 s while the player is still there), waits until the proxies report it empty, and opens it again if not. |
 | `TransferPlanner` | Where the players of an emptied backend go: the emptiest backend of the group, one player at a time. |
@@ -188,9 +242,11 @@ A scaled service is an ordinary service of the service core ([node.md](node.md#i
 
 | Test | Covers |
 |---|---|
-| `ScalingPlannerTest` | every rule with its boundary (39 and 40 of 50 at 80 %, 10 + 70 and 10 + 69 of 100 for the group, 24 and 25 of 50 below 50 %, 4:59 and 5:00 low load, 59 s and 60 s cooldown, memory exactly enough and 1 byte or 1 MB short, `max-memory` and the reserve with and without a database), unknown counts, starting and draining services, static services taking players, proxies, unwanted groups and other nodes, each with a counter-check |
-| `ScalingSignalsTest` | `stale-after` to the second (a version without the check fails), `min(online, max)`, the lower count while a proxy watches and the bridge's count without one, node memory fresh, stale or not measured; the three cases of the warning about a missing count, with the boundary at exactly `stale-after`; a real monitor whose process probe hangs for twice `stale-after` still gives the scaler the count of every round |
-| `AutoscalerTest` | the rounds on a fake service core and clock: setup and EULA, suspend and close, low load reset by a rise, a drain that empties and one that does not (no stop, the time starts again, the log names timeout, no target or interrupt), a service being emptied never chosen twice, a crash during a drain replaced in the next round, released static services judged by the configuration at the stop, pause after three failures and its end by time or by a changed task file, crashes and the reset by a stable service, one start per task at a time, memory holds |
+| `ScalingPlannerTest` | every rule with its boundary (39 and 40 of 50 at 80 %, 10 + 70 and 10 + 69 of 100 for the group, 24 and 25 of 50 below 50 %, 4:59 and 5:00 low load, 59 s and 60 s cooldown, memory exactly enough and 1 byte or 1 MB short, `max-memory` and the reserve with and without a database), unknown counts, starting and draining services, static services taking players, proxies, unwanted groups and other nodes; `scale-up-on` at each limit (80 and 80.5 % CPU, 18 and 17.9 TPS, 90 and 91 % heap, the average of two services), the order load, CPU, TPS, heap, max, cooldown, a starting service and memory, an unknown player count, services being emptied, no scale-down while a trigger fires; schedules at `from` and `to`, another day, the node's zone, `min-services` first and the budget for the scheduled starts, no scale-down within a window; each with a counter-check |
+| `ScalingSignalsTest` | the usage from fresh samples, also without a player count, none from outdated ones; `stale-after` to the second (a version without the check fails), `min(online, max)`, the lower count while a proxy watches and the bridge's count without one, node memory fresh, stale or not measured; the three cases of the warning about a missing count, with the boundary at exactly `stale-after`; a real monitor whose process probe hangs for twice `stale-after` still gives the scaler the count of every round |
+| `AutoscalerTest` | the rounds on a fake service core and clock: setup and EULA, suspend and close, low load reset by a rise, a drain that empties and one that does not (no stop, the time starts again, the log names timeout, no target or interrupt), a service being emptied never chosen twice, a crash during a drain replaced in the next round, released static services judged by the configuration at the stop, pause after three failures and its end by time or by a changed task file, crashes and the reset by a stable service, one start per task at a time, memory holds; every decision handed to the listeners (hold once, start, drain, stop, keep with its cause, a failing listener does not stop the others), schedules and triggers through the rounds |
+| `ScalingScheduleTest` (cloud-config) | windows within a day and past midnight, `from` equal to `to`, midnight as `to`, the highest active minimum capped at `max-services`, `HH:mm` parsing |
+| `PrometheusTest.countsScalingStepsPerTask` (cloud-monitor), `EventStreamTest.scalingDecisionsNeedServicesReadAndFollowTheServicesFilter` (cloud-api) | the counters and the event on the wire |
 | `ChannelBridgeDrainTest` | `ChannelBridge.drain` on a fake service core, channel and clock: a newcomer during the poll gets a move of his own, a move that did not happen is sent again after 2, 4 and 8 s, to the same target while it is open and has room (counter-check: a target that is gone), the timeout, no target and an interrupt open the backend again, empty only when both lists say so |
 | `TransferPlannerTest` | lowest load first, counting the players already sent, then fewer players, then name |
 | `NodeWiringTest.theScalerFollowsThePlayerCountsOfTheBridgesAndNeverStopsAStaticServer` | the whole node with fake servers: a reported player starts `minigame-2`, low load stops it again, `minigame-1` and the static lobby stay, a lobby stopped by hand stays down |
@@ -205,5 +261,5 @@ A scaled service is an ordinary service of the service core ([node.md](node.md#i
 
 - One node. In a [cluster](cluster.md) each node scales its own tasks; a task on several nodes is not balanced between them yet.
 - The proxies know the slots only of backends the node registered; servers listed by hand in `velocity.toml` are chosen the way Velocity would.
-- Scaling starts from a running service: a task with `min-services: 0` and no service has no player count to scale on (no queue yet).
+- Scaling starts from a running service: a task with `min-services: 0` and no service has no player count to scale on (no queue yet). A schedule can start such a task at set times.
 - The budget looks at the maximum heaps, not at what a JVM uses beyond its heap (metaspace, threads, native memory). Leave headroom in `heap.max`.

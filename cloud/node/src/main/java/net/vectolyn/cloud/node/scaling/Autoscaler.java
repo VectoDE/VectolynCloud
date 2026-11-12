@@ -5,6 +5,7 @@ package net.vectolyn.cloud.node.scaling;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -13,7 +14,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -32,6 +35,7 @@ import net.vectolyn.cloud.config.model.ServerSoftware;
 import net.vectolyn.cloud.config.model.TaskConfig;
 import net.vectolyn.cloud.config.model.TaskMode;
 import net.vectolyn.cloud.node.channel.ChannelBridge.DrainResult;
+import net.vectolyn.cloud.node.scaling.ScalingEvent.Action;
 import net.vectolyn.cloud.node.scaling.ScalingPlanner.Decision;
 import net.vectolyn.cloud.node.scaling.ScalingPlanner.Drain;
 import net.vectolyn.cloud.node.scaling.ScalingPlanner.Held;
@@ -65,6 +69,10 @@ import net.vectolyn.protocol.ServiceId;
  * </ul>
  * Nothing happens before the setup is complete and the EULA accepted, while {@link #suspend} is on
  * (the {@code setup} command saves in steps), and after {@link #close()}.
+ *
+ * <p>Every decision is logged and handed to the {@link ScalingListener}s as a {@link ScalingEvent}
+ * (the API's {@code scaling} events, the monitor's counters). The {@code schedules} of a task are
+ * read in the time zone of the clock, the default zone of the node's JVM.
  *
  * <p>Starts and stops run on their own threads; a round never waits for a server. The starts of a
  * task run one after the other, and the task gets no other decision meanwhile. A service being
@@ -109,6 +117,7 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
     /** Those of them whose unknown player count was logged; logged again after they reported. */
     private final Set<ServiceId> unknownCounts = new HashSet<>();
     private final Map<String, Hold> lastHold = new HashMap<>();
+    private final List<ScalingListener> listeners = new CopyOnWriteArrayList<>();
     private boolean suspended;
     private boolean closed;
     private ScheduledExecutorService scheduler;
@@ -139,7 +148,7 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
      * @return the autoscaler
      */
     public static Autoscaler create(ScalingTarget target, Supplier<ConfigSnapshot> config, ScalingSignals signals) {
-        return new Autoscaler(target, config, signals, Clock.systemUTC(), null);
+        return new Autoscaler(target, config, signals, Clock.systemDefaultZone(), null);
     }
 
     /**
@@ -149,6 +158,31 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
     static Autoscaler create(ScalingTarget target, Supplier<ConfigSnapshot> config, ScalingSignals signals,
                              Clock clock, Executor actions) {
         return new Autoscaler(target, config, signals, clock, Objects.requireNonNull(actions, "actions"));
+    }
+
+    /**
+     * Adds a listener for the decisions.
+     *
+     * @param listener the listener
+     */
+    public void addListener(ScalingListener listener) {
+        listeners.add(Objects.requireNonNull(listener, "listener"));
+    }
+
+    private void emit(Action action, String task, String reason, Optional<ServiceId> service, ConfigSnapshot snapshot) {
+        if (listeners.isEmpty()) {
+            return;
+        }
+        TaskConfig config = snapshot.tasks().get(task);
+        ScalingEvent event = new ScalingEvent(clock.instant(), task, config == null ? "" : config.group(), action,
+                reason, service);
+        for (ScalingListener listener : listeners) {
+            try {
+                listener.decided(event);
+            } catch (RuntimeException e) {
+                LOG.log(System.Logger.Level.WARNING, "A scaling listener failed", e);
+            }
+        }
     }
 
     /** Starts the rounds, every {@link #INTERVAL}. A second call does nothing. */
@@ -207,7 +241,7 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
             // planner's input must stay as it was read.
             input = new ScalingPlanner.Input(snapshot, node, services, values, new HashMap<>(lastAction),
                     new HashMap<>(pausedUntil), new HashMap<>(lowSince), new HashSet<>(released),
-                    new HashSet<>(draining), now);
+                    new HashSet<>(draining), now, clock.getZone());
         }
         List<Decision> done = new ArrayList<>();
         Set<String> held = new HashSet<>();
@@ -223,6 +257,7 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
                     held.add(h.task());
                     if (lastHold.put(h.task(), h.hold()) != h.hold()) {
                         logHold(h, snapshot);
+                        emit(Action.HOLD, h.task(), ScalingEvent.kebab(h.hold()), Optional.empty(), snapshot);
                     }
                     done.add(decision);
                     continue;
@@ -308,8 +343,10 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
             }
         }
         // The low-load condition has to hold without a break for scale-down-after.
+        LocalDateTime local = LocalDateTime.ofInstant(now, clock.getZone());
         for (String task : snapshot.tasks().keySet()) {
-            if (ScalingPlanner.scaleDownCandidate(snapshot, task, services, values, released, draining).isPresent()) {
+            if (ScalingPlanner.scaleDownCandidate(snapshot, task, services, values, released, draining, local)
+                    .isPresent()) {
                 lowSince.putIfAbsent(task, now);
             } else {
                 lowSince.remove(task);
@@ -362,6 +399,7 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
                         : target.startDynamic(start.task());
                 LOG.log(System.Logger.Level.INFO, "Scaling: {0} of task {1} is started ({2})", info.id(),
                         start.task(), describe(start.reason(), snapshot.tasks().get(start.task())));
+                emit(Action.START, start.task(), ScalingEvent.kebab(start.reason()), Optional.of(info.id()), snapshot);
             } else if (decision instanceof Drain drain) {
                 drainAndStop(drain, snapshot);
             }
@@ -387,6 +425,7 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
         try {
             LOG.log(System.Logger.Level.INFO, "Scaling: the players of {0} of task {1} are moved to other servers ({2})",
                     drain.service(), drain.task(), describe(drain.reason(), snapshot.tasks().get(drain.task())));
+            emit(Action.DRAIN, drain.task(), ScalingEvent.kebab(drain.reason()), Optional.of(drain.service()), snapshot);
             Duration timeout = drainTimeout(snapshot, drain.task());
             DrainResult result;
             try {
@@ -395,17 +434,20 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
                 Thread.currentThread().interrupt();
                 LOG.log(System.Logger.Level.WARNING, "Scaling: {0} keeps running: moving its players was"
                         + " interrupted", drain.service());
+                emit(Action.KEEP, drain.task(), "interrupted", Optional.of(drain.service()), snapshot);
                 return;
             }
             switch (result) {
                 case NO_TARGET -> {
                     LOG.log(System.Logger.Level.WARNING, "Scaling: {0} keeps running: no other open server of its"
                             + " group can take its players", drain.service());
+                    emit(Action.KEEP, drain.task(), "no-target", Optional.of(drain.service()), snapshot);
                     return;
                 }
                 case TIMEOUT -> {
                     LOG.log(System.Logger.Level.WARNING, "Scaling: {0} keeps running: players are still on it"
                             + " after {1} s, a move did not work", drain.service(), timeout.toSeconds());
+                    emit(Action.KEEP, drain.task(), "timeout", Optional.of(drain.service()), snapshot);
                     return;
                 }
                 case EMPTY -> {
@@ -421,6 +463,7 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
                 target.reopen(drain.service());
                 throw e;
             }
+            emit(Action.STOP, drain.task(), ScalingEvent.kebab(drain.reason()), Optional.of(drain.service()), snapshot);
         } finally {
             synchronized (lock) {
                 draining.remove(drain.service());
@@ -448,7 +491,15 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
         ScalingConfig s = task == null ? null : task.scaling();
         return switch (reason) {
             case MIN_SERVICES -> "min-services is " + (s == null ? "?" : s.minServices());
+            case SCHEDULE -> "an active schedule raises the minimum above min-services "
+                    + (s == null ? "?" : s.minServices());
             case LOAD -> s == null ? "load" : "the load of the group has reached " + s.scaleUpAt() + " %";
+            case CPU -> s == null || s.scaleUpOn() == null ? "cpu"
+                    : "the average CPU of its services is above " + s.scaleUpOn().cpuAbove() + " %";
+            case TPS -> s == null || s.scaleUpOn() == null ? "tps"
+                    : "the average TPS of its services is below " + s.scaleUpOn().tpsBelow();
+            case RAM -> s == null || s.scaleUpOn() == null ? "ram"
+                    : "the average heap use of its services is above " + s.scaleUpOn().ramAbove() + " %";
             case LOW_LOAD -> s == null ? "low load"
                     : "with one service fewer the load stays below " + s.scaleDownBelow() + " %, for "
                     + s.scaleDownAfter();
