@@ -286,7 +286,7 @@ public final class ConfigValidator {
     }
 
     /** {@code scaling.scale-up-on}: each value that is set lies in its range. */
-    private static void validateTriggers(Checks c, String f, ScaleUpTriggers triggers) {
+    private static void validateTriggers(Checks c, String f, @Nullable ScaleUpTriggers triggers) {
         if (triggers == null) {
             return;
         }
@@ -453,7 +453,7 @@ public final class ConfigValidator {
     }
 
     private static String lower(Enum<?> value) {
-        return value.name().toLowerCase(java.util.Locale.ROOT);
+        return value.name().toLowerCase(Locale.ROOT);
     }
 
     /** Collects errors; each check returns whether the value passed. */

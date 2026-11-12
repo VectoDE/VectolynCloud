@@ -197,7 +197,7 @@ public sealed interface ApiEvent {
      */
     @JsonPropertyOrder({"task", "group", "action", "reason", "service"})
     record Scaling(String task, String group, String action, String reason,
-                   @JsonProperty("service") String serviceId) implements ApiEvent {
+                   @JsonProperty("service") @Nullable String serviceId) implements ApiEvent {
 
         /** Checks the values. */
         public Scaling {
@@ -213,7 +213,7 @@ public sealed interface ApiEvent {
         }
 
         @Override
-        public String service() {
+        public @Nullable String service() {
             return serviceId;
         }
     }

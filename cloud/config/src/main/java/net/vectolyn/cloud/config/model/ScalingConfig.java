@@ -6,6 +6,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import java.time.LocalDateTime;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 /**
  * How many services of a task run, and which of them are static. The rules are in
@@ -40,7 +41,7 @@ import java.util.List;
         "scale-down-below", "scale-down-after", "cooldown", "scale-up-on", "schedules"})
 public record ScalingConfig(@JsonProperty(required = true) int staticServices, int minServices, int maxServices, int playersPerService, int scaleUpAt,
                             Integer scaleDownBelow, TimeSpan scaleDownAfter, TimeSpan cooldown,
-                            ScaleUpTriggers scaleUpOn, List<ScalingSchedule> schedules) {
+                            @Nullable ScaleUpTriggers scaleUpOn, @Nullable List<ScalingSchedule> schedules) {
 
     /** {@code scale-up-at} of new tasks, in percent. */
     public static final int DEFAULT_SCALE_UP_AT = 75;

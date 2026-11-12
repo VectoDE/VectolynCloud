@@ -6,6 +6,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -30,6 +31,7 @@ import net.vectolyn.cloud.config.model.CloudConfig;
 import net.vectolyn.cloud.config.model.ConfigSnapshot;
 import net.vectolyn.cloud.config.model.GroupConfig;
 import net.vectolyn.cloud.config.model.RestartConfig;
+import net.vectolyn.cloud.config.model.ScaleUpTriggers;
 import net.vectolyn.cloud.config.model.ScalingConfig;
 import net.vectolyn.cloud.config.model.ServerSoftware;
 import net.vectolyn.cloud.config.model.TaskConfig;
@@ -149,7 +151,7 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
      * @return the autoscaler
      */
     public static Autoscaler create(ScalingTarget target, Supplier<ConfigSnapshot> config, ScalingSignals signals) {
-        return new Autoscaler(target, config, signals, Clock.systemDefaultZone(), null);
+        return new Autoscaler(target, config, signals, Clock.system(ZoneId.systemDefault()), null);
     }
 
     /**
@@ -495,17 +497,15 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
 
     private static String describe(ScalingPlanner.Reason reason, @Nullable TaskConfig task) {
         ScalingConfig s = task == null ? null : task.scaling();
+        ScaleUpTriggers on = s == null ? null : s.scaleUpOn();
         return switch (reason) {
             case MIN_SERVICES -> "min-services is " + (s == null ? "?" : s.minServices());
             case SCHEDULE -> "an active schedule raises the minimum above min-services "
                     + (s == null ? "?" : s.minServices());
             case LOAD -> s == null ? "load" : "the load of the group has reached " + s.scaleUpAt() + " %";
-            case CPU -> s == null || s.scaleUpOn() == null ? "cpu"
-                    : "the average CPU of its services is above " + s.scaleUpOn().cpuAbove() + " %";
-            case TPS -> s == null || s.scaleUpOn() == null ? "tps"
-                    : "the average TPS of its services is below " + s.scaleUpOn().tpsBelow();
-            case RAM -> s == null || s.scaleUpOn() == null ? "ram"
-                    : "the average heap use of its services is above " + s.scaleUpOn().ramAbove() + " %";
+            case CPU -> on == null ? "cpu" : "the average CPU of its services is above " + on.cpuAbove() + " %";
+            case TPS -> on == null ? "tps" : "the average TPS of its services is below " + on.tpsBelow();
+            case RAM -> on == null ? "ram" : "the average heap use of its services is above " + on.ramAbove() + " %";
             case LOW_LOAD -> s == null ? "low load"
                     : "with one service fewer the load stays below " + s.scaleDownBelow() + " %, for "
                     + s.scaleDownAfter();

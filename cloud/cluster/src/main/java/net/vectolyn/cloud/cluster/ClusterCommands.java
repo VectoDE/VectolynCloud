@@ -237,7 +237,7 @@ public final class ClusterCommands {
         });
         if (status.role() == ClusterService.Role.HEAD) {
             out.println(Text.of("  Revoked:     %1$s", "  Widerrufen:  %1$s"), status.revoked());
-            java.util.Set<net.vectolyn.protocol.NodeId> lost = cluster.lostMembers();
+            java.util.Set<NodeId> lost = cluster.lostMembers();
             for (ClusterService.MemberStatus member : status.members()) {
                 String state = member.connected() ? "connected" : lost.contains(member.id()) ? "lost" : "offline";
                 out.println("  - " + member.id() + "  " + state + "  " + member.joinedAt());

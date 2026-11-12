@@ -460,7 +460,7 @@ public final class ScalingPlanner {
      * @param draining services being emptied
      * @return the reason, or empty if no trigger fires
      */
-    public static Optional<Reason> trigger(ScaleUpTriggers triggers, String task, List<ServiceInfo> services,
+    public static Optional<Reason> trigger(@Nullable ScaleUpTriggers triggers, String task, List<ServiceInfo> services,
                                            Signals signals, Set<ServiceId> draining) {
         if (triggers == null) {
             return Optional.empty();

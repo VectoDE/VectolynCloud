@@ -223,7 +223,7 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
     private volatile Duration lossGrace = LOSS_GRACE;
     private volatile Duration lossCheck = LOSS_CHECK;
     /** Head: which members are lost; only touched on {@link #mirrorTimer}. */
-    private volatile MemberWatch watch;
+    private volatile @Nullable MemberWatch watch;
     /** Head: the plan for every member that is lost now. */
     private final Map<NodeId, FailoverPlanner.Plan> plans = new ConcurrentHashMap<>();
     private final String version;
@@ -750,8 +750,12 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
                 }, memberHandlers);
         created.start();
         link = created;
-        long interval = STATUS_INTERVAL.toMillis();
-        mirrorTimer.scheduleWithFixedDelay(this::reportStatus, interval, interval, TimeUnit.MILLISECONDS);
+        scheduleStatusReports(STATUS_INTERVAL.toMillis());
+    }
+
+    @SuppressWarnings("FutureReturnValueIgnored") // the timer lives as long as the service; reportStatus catches its failures
+    private void scheduleStatusReports(long millis) {
+        mirrorTimer.scheduleWithFixedDelay(this::reportStatus, millis, millis, TimeUnit.MILLISECONDS);
     }
 
     // ---------------------------------------------------------------- placement
@@ -840,7 +844,7 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
             return PlacementPlanner.place(config.snapshot(), task, reachable(), Set.of());
         } catch (IllegalArgumentException e) {
             throw new ClusterException("The task cannot be placed: " + e.getMessage(),
-                    "Der Task lässt sich nicht platzieren: " + e.getMessage());
+                    "Der Task lässt sich nicht platzieren: " + e.getMessage(), e);
         }
     }
 
