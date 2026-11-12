@@ -74,6 +74,15 @@ jobs:
               --exclude 'templates' --exclude 'branding' \
               --sarif-output=semgrep.sarif
 
+      # A finding that is allowed in the source (nosemgrep with a reason) is marked as suppressed in
+      # the SARIF file, but code scanning would still open an alert for it. Only the open findings
+      # are listed and uploaded.
+      - name: Drop the suppressed findings
+        if: ${{ !cancelled() && hashFiles('semgrep.sarif') != '' }}
+        run: |
+          jq '.runs[].results |= map(select((.suppressions // []) | length == 0))' semgrep.sarif > semgrep-open.sarif
+          mv semgrep-open.sarif semgrep.sarif
+
       - name: List the findings
         if: ${{ !cancelled() && hashFiles('semgrep.sarif') != '' }}
         run: |
