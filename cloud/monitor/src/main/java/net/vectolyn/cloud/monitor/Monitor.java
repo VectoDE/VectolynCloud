@@ -57,6 +57,8 @@ import net.vectolyn.protocol.message.ServiceStatus;
  *   <li>{@link MetricSource}: CPU and memory from the operating system. The process values come
  *       from a probe on a thread of its own ({@link #probeNow()}), so a slow helper program never
  *       holds up a round.</li>
+ *   <li>{@link #scaled(String, String, boolean)}: every service the autoscaler started or stopped,
+ *       counted per task for {@link #scalingCounts()}.</li>
  * </ul>
  *
  * <p>A status report counts for {@code stale-after}; after that the bridge values are missing.
@@ -75,6 +77,8 @@ public final class Monitor implements AutoCloseable {
     private final HistoryStore store;
     private final List<AlertListener> listeners = new CopyOnWriteArrayList<>();
     private final Map<ServiceId, Track> tracks = new ConcurrentHashMap<>();
+    /** Scaling steps per task, see {@link #scaled}. */
+    private final Map<String, ScalingCount> scaling = new ConcurrentHashMap<>();
     private final RingBuffer<NodeSample> nodeHistory;
     private final Object sampling = new Object();
     private final Object probing = new Object();
@@ -503,6 +507,40 @@ public final class Monitor implements AutoCloseable {
     /** The node samples, oldest first. */
     public List<NodeSample> nodeHistory() {
         return nodeHistory.snapshot();
+    }
+
+    /**
+     * How often the autoscaler changed the services of one task since the cloud started.
+     *
+     * @param task  task name
+     * @param group group of the task
+     * @param ups   services started
+     * @param downs services emptied and stopped
+     */
+    public record ScalingCount(String task, String group, long ups, long downs) {
+    }
+
+    /**
+     * Counts a scaling step of the autoscaler.
+     *
+     * @param task  task name
+     * @param group group of the task, empty if unknown
+     * @param up    true for a started service, false for a stopped one
+     */
+    public void scaled(String task, String group, boolean up) {
+        Objects.requireNonNull(task, "task");
+        Objects.requireNonNull(group, "group");
+        scaling.merge(task, new ScalingCount(task, group, up ? 1 : 0, up ? 0 : 1),
+                (old, add) -> new ScalingCount(task, group, old.ups() + add.ups(), old.downs() + add.downs()));
+    }
+
+    /**
+     * The scaling steps per task since the cloud started, ordered by task name.
+     *
+     * @return the counts
+     */
+    public List<ScalingCount> scalingCounts() {
+        return scaling.values().stream().sorted(Comparator.comparing(ScalingCount::task)).toList();
     }
 
     /** The rules in use. */

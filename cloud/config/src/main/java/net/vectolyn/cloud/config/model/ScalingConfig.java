@@ -4,6 +4,8 @@ package net.vectolyn.cloud.config.model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
+import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * How many services of a task run, and which of them are static. The rules are in
@@ -29,20 +31,63 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
  *                          {@link #DEFAULT_SCALE_DOWN_BELOW}
  * @param scaleDownAfter    stop a surplus empty service after it has been empty this long
  * @param cooldown          minimum time between two scaling decisions of the task
+ * @param scaleUpOn         extra reasons for one more dynamic service (CPU, TPS, heap); null if
+ *                          there are none (a missing or empty section)
+ * @param schedules         time windows with a higher minimum; null if there are none (a missing or
+ *                          empty list), see {@link #schedulesOrEmpty()}
  */
 @JsonPropertyOrder({"static-services", "min-services", "max-services", "players-per-service", "scale-up-at",
-        "scale-down-below", "scale-down-after", "cooldown"})
+        "scale-down-below", "scale-down-after", "cooldown", "scale-up-on", "schedules"})
 public record ScalingConfig(@JsonProperty(required = true) int staticServices, int minServices, int maxServices, int playersPerService, int scaleUpAt,
-                            Integer scaleDownBelow, TimeSpan scaleDownAfter, TimeSpan cooldown) {
+                            Integer scaleDownBelow, TimeSpan scaleDownAfter, TimeSpan cooldown,
+                            ScaleUpTriggers scaleUpOn, List<ScalingSchedule> schedules) {
 
     /** {@code scale-up-at} of new tasks, in percent. */
     public static final int DEFAULT_SCALE_UP_AT = 75;
     /** {@code scale-down-below} of new tasks and of files without the field, in percent. */
     public static final int DEFAULT_SCALE_DOWN_BELOW = 50;
 
-    /** A missing {@code scale-down-below} becomes {@link #DEFAULT_SCALE_DOWN_BELOW}. */
+    /**
+     * A missing {@code scale-down-below} becomes {@link #DEFAULT_SCALE_DOWN_BELOW}; an empty
+     * {@code scale-up-on} or {@code schedules} becomes null, so it is not written.
+     */
     public ScalingConfig {
         scaleDownBelow = scaleDownBelow == null ? DEFAULT_SCALE_DOWN_BELOW : scaleDownBelow;
+        scaleUpOn = scaleUpOn == null || scaleUpOn.noneSet() ? null : scaleUpOn;
+        schedules = schedules == null || schedules.isEmpty() ? null : List.copyOf(schedules);
+    }
+
+    /** Without {@code scale-up-on} and {@code schedules}. */
+    public ScalingConfig(int staticServices, int minServices, int maxServices, int playersPerService, int scaleUpAt,
+                         Integer scaleDownBelow, TimeSpan scaleDownAfter, TimeSpan cooldown) {
+        this(staticServices, minServices, maxServices, playersPerService, scaleUpAt, scaleDownBelow, scaleDownAfter,
+                cooldown, null, null);
+    }
+
+    /**
+     * The schedules, an empty list if there are none.
+     *
+     * @return the schedules
+     */
+    public List<ScalingSchedule> schedulesOrEmpty() {
+        return schedules == null ? List.of() : schedules;
+    }
+
+    /**
+     * The minimum at a local time: {@code min-services}, raised by every schedule active then, at
+     * most {@code max-services}.
+     *
+     * @param at the date and time in the zone of the node
+     * @return the minimum
+     */
+    public int minServicesAt(LocalDateTime at) {
+        int result = minServices;
+        for (ScalingSchedule schedule : schedulesOrEmpty()) {
+            if (schedule.activeAt(at)) {
+                result = Math.max(result, schedule.minServices());
+            }
+        }
+        return Math.min(result, Math.max(minServices, maxServices));
     }
 
     /**
@@ -79,7 +124,7 @@ public record ScalingConfig(@JsonProperty(required = true) int staticServices, i
     /** A copy with other service counts. */
     public ScalingConfig withCounts(int newStatic, int newMin, int newMax) {
         return new ScalingConfig(newStatic, newMin, newMax, playersPerService, scaleUpAt, scaleDownBelow, scaleDownAfter,
-                cooldown);
+                cooldown, scaleUpOn, schedules);
     }
 
     /** A copy with another {@code static-services}. */
@@ -100,30 +145,42 @@ public record ScalingConfig(@JsonProperty(required = true) int staticServices, i
     /** A copy with another {@code players-per-service}. */
     public ScalingConfig withPlayersPerService(int value) {
         return new ScalingConfig(staticServices, minServices, maxServices, value, scaleUpAt, scaleDownBelow, scaleDownAfter,
-                cooldown);
+                cooldown, scaleUpOn, schedules);
     }
 
     /** A copy with another {@code scale-up-at}. */
     public ScalingConfig withScaleUpAt(int value) {
         return new ScalingConfig(staticServices, minServices, maxServices, playersPerService, value, scaleDownBelow,
-                scaleDownAfter, cooldown);
+                scaleDownAfter, cooldown, scaleUpOn, schedules);
     }
 
     /** A copy with another {@code scale-down-below}. */
     public ScalingConfig withScaleDownBelow(int value) {
         return new ScalingConfig(staticServices, minServices, maxServices, playersPerService, scaleUpAt, value,
-                scaleDownAfter, cooldown);
+                scaleDownAfter, cooldown, scaleUpOn, schedules);
     }
 
     /** A copy with another {@code scale-down-after}. */
     public ScalingConfig withScaleDownAfter(TimeSpan value) {
         return new ScalingConfig(staticServices, minServices, maxServices, playersPerService, scaleUpAt, scaleDownBelow,
-                value, cooldown);
+                value, cooldown, scaleUpOn, schedules);
+    }
+
+    /** A copy with other {@code scale-up-on} triggers; null removes them. */
+    public ScalingConfig withScaleUpOn(ScaleUpTriggers value) {
+        return new ScalingConfig(staticServices, minServices, maxServices, playersPerService, scaleUpAt, scaleDownBelow,
+                scaleDownAfter, cooldown, value, schedules);
+    }
+
+    /** A copy with other {@code schedules}; null or empty removes them. */
+    public ScalingConfig withSchedules(List<ScalingSchedule> value) {
+        return new ScalingConfig(staticServices, minServices, maxServices, playersPerService, scaleUpAt, scaleDownBelow,
+                scaleDownAfter, cooldown, scaleUpOn, value);
     }
 
     /** A copy with another {@code cooldown}. */
     public ScalingConfig withCooldown(TimeSpan value) {
         return new ScalingConfig(staticServices, minServices, maxServices, playersPerService, scaleUpAt, scaleDownBelow,
-                scaleDownAfter, value);
+                scaleDownAfter, value, scaleUpOn, schedules);
     }
 }

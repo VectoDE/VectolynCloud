@@ -35,7 +35,7 @@ The cloud rewrites a file when it changes it and drops comments in that file; ke
 
 ## Scaling
 
-A task decides how many services of a group run. The first `static-services` are static and keep their folder; above them the cloud adds dynamic services when the load of the group passes `scale-up-at` and removes them below `scale-down-below`, within `min-services` and `max-services`. The node respects its memory budget. Details: [docs/cloud/scaling.md](https://github.com/VectoDE/VectolynCloud/blob/main/docs/cloud/scaling.md).
+A task decides how many services of a group run. The first `static-services` are static and keep their folder; above them the cloud adds dynamic services when the load of the group passes `scale-up-at` and removes them below `scale-down-below`, within `min-services` and `max-services`. Optional `scale-up-on` adds services on high CPU, low TPS or a full heap, and `schedules` raise the minimum at set times. The node respects its memory budget. Details: [docs/cloud/scaling.md](https://github.com/VectoDE/VectolynCloud/blob/main/docs/cloud/scaling.md).
 
 ## Database
 

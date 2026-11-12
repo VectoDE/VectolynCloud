@@ -35,7 +35,7 @@ Die Cloud schreibt eine Datei neu, wenn sie sie ändert, und verliert dabei die 
 
 ## Skalierung
 
-Ein Task bestimmt, wie viele Dienste einer Gruppe laufen. Die ersten `static-services` sind statisch und behalten ihren Ordner; darüber fügt die Cloud dynamische Dienste hinzu, wenn die Last der Gruppe `scale-up-at` überschreitet, und entfernt sie unterhalb von `scale-down-below`, jeweils zwischen `min-services` und `max-services`. Der Node hält sein Speicherbudget ein. Details: [docs/cloud/scaling.de.md](https://github.com/VectoDE/VectolynCloud/blob/main/docs/cloud/scaling.de.md).
+Ein Task bestimmt, wie viele Dienste einer Gruppe laufen. Die ersten `static-services` sind statisch und behalten ihren Ordner; darüber fügt die Cloud dynamische Dienste hinzu, wenn die Last der Gruppe `scale-up-at` überschreitet, und entfernt sie unterhalb von `scale-down-below`, jeweils zwischen `min-services` und `max-services`. Das optionale `scale-up-on` fügt Dienste bei hoher CPU-Last, niedrigen TPS oder vollem Heap hinzu, `schedules` heben das Minimum zu festen Zeiten an. Der Node hält sein Speicherbudget ein. Details: [docs/cloud/scaling.de.md](https://github.com/VectoDE/VectolynCloud/blob/main/docs/cloud/scaling.de.md).
 
 ## Datenbank
 

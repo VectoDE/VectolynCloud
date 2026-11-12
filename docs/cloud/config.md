@@ -125,12 +125,21 @@ scaling:
   scale-down-below: 50       # percent, 0 to 99, lower than scale-up-at; default 50
   scale-down-after: 5m       # s, m or h; at most 7 days
   cooldown: 60s
+  scale-up-on:               # optional, every field optional; averages over the task's running services
+    cpu-above: 80            # CPU of a service in percent of the machine, 1 to 100
+    tps-below: 18            # ticks per second, 1 to 20
+    ram-above: 90            # used heap in percent of the maximum heap, 1 to 100
+  schedules:                 # optional, at most 32; raise the minimum in a time window
+    - days: [fri, sat]       # mon, tue, wed, thu, fri, sat, sun; at least one, none twice
+      from: "18:00"          # HH:mm, time zone of the node
+      to: "23:30"            # before from: ends on the next day; equal to from: a whole day
+      min-services: 3        # 0 to max-services
 nodes: [node-1]              # empty: any node
 ```
 
 A task mixes static and dynamic services. The first `static-services` services are static: they keep their folder (`local/services/<id>`, for example `lobby-1`, `lobby-2`) and are never stopped by the scaler. Every service above that is dynamic: it runs in `temp/services/<id>_<run>` and its folder is deleted when it stops. `static-services = max-services` is a purely static task, `static-services = 0` a purely dynamic one.
 
-What the node does with these values (when a service starts or stops, the memory budget, what is never stopped) is in [scaling.md](scaling.md).
+What the node does with these values (when a service starts or stops, the memory budget, what is never stopped) is in [scaling.md](scaling.md). `scale-up-on` and `schedules` are optional and were added without a new `schema-version`: a file without them is read as before, and the cloud writes neither while it is empty. A cloud older than these fields refuses a file that has them (`unknown-field`). See [scaling.md](scaling.md#triggers-besides-the-load) and [scaling.md](scaling.md#schedules).
 
 #### From schema-version 1
 
@@ -215,6 +224,7 @@ Besides types and patterns, `ConfigValidator` checks the configuration as a whol
 - The fixed ports of this node do not collide: proxy, Bedrock, legacy proxy (if enabled), API (if enabled), database (in `managed` and `docker` mode) and the node's channel port. The Bedrock port counts although it is UDP, because Geyser also opens TCP.
 - None of these lie inside the node's `service-ports`.
 - `heap.min` ≤ `heap.max`, `static-services` ≤ `min-services` ≤ `max-services` (`static-above-min`), `scale-down-below` < `scale-up-at` (`scale-down-not-below-up`), `service-ports.first` ≤ `last`.
+- A task's `scale-up-on`: `cpu-above` and `ram-above` from 1 to 100, `tps-below` from 1 to 20 (`out-of-range`). Its `schedules`: at most 32 (`out-of-range`), each with `days` not empty (`empty`) and no day twice (`duplicate-entry`), and `min-services` from 0 to the task's `max-services` (`out-of-range`, `min-greater-than-max`).
 - A node's `max-memory`, if set, lies between 512M and the largest size the cloud accepts.
 - Every field of a node's `memory-reserve`, if set, lies between 1M and 64G (`out-of-range`).
 - Tasks refer to existing groups and nodes; `node-id` refers to an existing node; node ids are unique.

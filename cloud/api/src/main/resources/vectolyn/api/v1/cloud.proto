@@ -70,7 +70,7 @@ service CloudService {
   rpc RevokeToken(TokenRef) returns (Empty);
 
   // The event stream of /events: every type needs its scope (service-state, service-output,
-  // player: services:read; metrics: node:read; node-log: admin). Empty types: every type the
+  // player, scaling: services:read; metrics: node:read; node-log: admin). Empty types: every type the
   // token may see. A slow client loses events, reported in one event of type "dropped".
   rpc Events(EventsRequest) returns (stream Event);
 }
