@@ -602,12 +602,14 @@ final class GraphQlApi {
         if (depth > ApiJson.MAX_DEPTH) {
             throw new CoercingParseLiteralException("The JSON literal is nested too deep.");
         }
+        if (value instanceof NullValue) {
+            return null;
+        }
         return switch (value) {
             case StringValue s -> s.getValue();
             case BooleanValue b -> b.isValue();
             case IntValue i -> i.getValue();
             case FloatValue f -> f.getValue();
-            case NullValue n -> null;
             case ArrayValue a -> {
                 List<Object> list = new ArrayList<>();
                 for (Value<?> v : a.getValues()) {

@@ -89,6 +89,10 @@ final class GrpcStreamHandler extends SimpleChannelInboundHandler<Http2StreamFra
         if (finished) {
             return;
         }
+        if (frame instanceof Http2ResetFrame) {
+            ctx.close();
+            return;
+        }
         switch (frame) {
             case Http2HeadersFrame headers -> {
                 if (body == null) {
@@ -123,7 +127,6 @@ final class GrpcStreamHandler extends SimpleChannelInboundHandler<Http2StreamFra
                     complete(ctx);
                 }
             }
-            case Http2ResetFrame reset -> ctx.close();
             default -> {
                 // window updates and the like: nothing to do
             }
