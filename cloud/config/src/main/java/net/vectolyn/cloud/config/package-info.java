@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * Configuration layer of VectolynCloud: {@code cloud.yml}, {@code nodes.yml}, {@code groups/},
  * {@code tasks/} and {@code secrets/vectolyn.env} in the cloud home. Console, setup assistant, files and

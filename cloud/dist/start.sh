@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 VectoDE
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Starts VectolynCloud on Linux and macOS.
 #
 #   ./start.sh [launcher arguments]      for example: ./start.sh --non-interactive --setup-file setup.yml

@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * Backups of VectolynCloud: zip archives of the static services (worlds and configuration of
  * {@code runtime/}), database dumps, a manifest with SHA-256 hashes, retention, restore with hash

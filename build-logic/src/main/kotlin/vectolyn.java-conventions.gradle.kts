@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Shared setup for every Java module.
 //
 // Java policy (see docs/java-compatibility.md): bytecode target is Java 21. The compiler always

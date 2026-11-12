@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 VectoDE
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Rewrites gradle/verification-metadata.xml (Gradle dependency verification, SHA-256) from scratch.
 #
 # Usage: bash gradle/update-verification-metadata.sh

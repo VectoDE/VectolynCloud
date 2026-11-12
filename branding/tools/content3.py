@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 VectoDE
+# SPDX-License-Identifier: GPL-3.0-or-later
 """In-game content, version 3: MOTD, neighbouring entries, tab list (TAB configuration from the repo and
 Vectolyn branding), chat, console."""
 import colorsys

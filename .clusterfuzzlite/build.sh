@@ -1,4 +1,6 @@
 #!/bin/bash -eu
+# SPDX-FileCopyrightText: 2026 VectoDE
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Builds the ClusterFuzzLite fuzzers. Each *Fuzzer.java under .clusterfuzzlite/fuzzers is one
 # target; it lives in the package of the class it fuzzes, because those classes are not public.
 #

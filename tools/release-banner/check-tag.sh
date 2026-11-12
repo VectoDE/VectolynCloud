@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 VectoDE
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Checks a release tag against the version rules (docs/cloud/operations.md#versions-and-tags) with
 # the parser that also draws the banner (ReleaseVersion), and prints on stdout:
 #   channel=<dev|alpha|beta|rc|lts|stable>

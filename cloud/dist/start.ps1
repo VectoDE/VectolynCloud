@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 VectoDE
+# SPDX-License-Identifier: GPL-3.0-or-later
 <#
 .SYNOPSIS
     Starts VectolynCloud (Windows PowerShell 5.1 and PowerShell 7).

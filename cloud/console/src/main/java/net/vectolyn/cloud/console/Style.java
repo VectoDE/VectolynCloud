@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 package net.vectolyn.cloud.console;
 
 /** Text styles of the console. ANSI codes are added only when the terminal supports them. */

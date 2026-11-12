@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 VectoDE
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Vectolyn mark as a 3D object, rendered with Cycles. Usage:
 blender -b --factory-startup --python render_mark.py -- <job> <output> [width height samples [view [exposure]]]
 Jobs: hero, social, release, readme_dark, readme_light, mark_alpha, turntable, test

@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 plugins {
     id("vectolyn.java-conventions")
     // ServerVersion parses text the database server sends; SqlQuoting guards every setup statement.

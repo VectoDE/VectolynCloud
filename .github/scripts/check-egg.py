@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 VectoDE
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Checks cloud/dist/pterodactyl/egg-vectolyn-cloud.json (operations.yml).
 
     python3 -I .github/scripts/check-egg.py cloud/dist/pterodactyl/egg-vectolyn-cloud.json

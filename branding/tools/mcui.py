@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 VectoDE
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Game UI views in GUI pixels (scale 1), version 3: server list with neighbouring entries, selection frame and
 blurred panorama, tab list after PlayerTabOverlay, Bedrock target design. No Mojang files: font (mcfont),
 heads, ping icon, icons and backgrounds are our own drawings."""

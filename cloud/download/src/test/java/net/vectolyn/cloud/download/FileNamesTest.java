@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 package net.vectolyn.cloud.download;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;

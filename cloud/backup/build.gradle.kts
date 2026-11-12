@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Backups of VectolynCloud: archives of the static services (worlds and configuration from
 // local/services/<id>/), database dumps, manifest with hashes, retention, schedule, restore and the console
 // commands. cloud-node implements the small interfaces (BackupTargets, ServiceControl,

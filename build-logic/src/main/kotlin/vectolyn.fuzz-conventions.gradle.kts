@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Fuzz tests with Jazzer (methods annotated with @FuzzTest).
 //
 // Default: regression mode. Every normal test run executes each @FuzzTest once per stored input

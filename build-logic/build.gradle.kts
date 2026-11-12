@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Included build with the shared Gradle setup of all Java modules.
 //
 // Why an included build instead of the old subprojects {} block in the root build file:

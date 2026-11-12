@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 VectoDE
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Smoke test of cloud/dist/start.sh and the linux-macos archive (operations.yml).
 #
 #   .github/scripts/smoke-start-unix.sh <folder with VectolynCloud.jar and the archives>

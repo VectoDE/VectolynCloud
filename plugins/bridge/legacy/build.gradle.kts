@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Java release target: 21 (project default, see build-logic/).
 //
 // Bridge for the PandaSpigot 1.8.8 backends behind the legacy proxy. PandaSpigot runs on Java 21

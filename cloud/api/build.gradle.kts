@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 // REST and WebSocket API of VectolynCloud: services, groups, tasks, configuration, node status,
 // backups and live events, for scripts and later the dashboard (stage 8). Every change goes through
 // ConfigService.apply of cloud-config, the same layer the console and the files use.

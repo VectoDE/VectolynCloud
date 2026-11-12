@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * The node's console: built-in commands with the real shutdown, the service commands
  * ({@link net.vectolyn.cloud.node.console.ServiceCommands}) and the log output above the prompt.

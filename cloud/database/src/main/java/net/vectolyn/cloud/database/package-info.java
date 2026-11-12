@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * Database setup of the network: the four modes behind {@link net.vectolyn.cloud.database.DatabaseProvisioner}
  * (managed MariaDB, Docker, external server, embedded H2) and the central sizing of the connection

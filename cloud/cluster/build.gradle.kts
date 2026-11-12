@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Cluster of several VectolynCloud nodes: own CA (made with the JDK's keytool), join tokens,
 // mutual TLS 1.3 on a dedicated cluster port, NodeId in the certificate, revocation list. Plain
 // JSSE and blocking sockets: a cluster has few nodes, so no Netty here. Reads frames and join

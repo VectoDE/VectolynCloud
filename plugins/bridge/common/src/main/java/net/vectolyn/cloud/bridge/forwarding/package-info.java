@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * Check of the BungeeCord handshake that the legacy proxy (Velocity in {@code bungeeguard} mode)
  * forwards to the 1.8.8 backends: parse it, compare the {@code bungeeguard-token} with the

@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Wire format of the cloud channel, shared by VectolynCloud, common/client and the bridges.
 // Deliberately without any dependency: it ends up on the class path of every proxy and server.
 

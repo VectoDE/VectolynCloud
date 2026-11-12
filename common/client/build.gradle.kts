@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Client side of the cloud channel, used by the bridges and later by the Vectolyn plugin.
 // Depends on common/protocol only and uses the JDK for networking (no Netty, neither shaded nor
 // the server's own copy), so it adds nothing to the class path of the servers it runs on.

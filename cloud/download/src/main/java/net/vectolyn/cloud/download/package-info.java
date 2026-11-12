@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * Downloads server software, plugins, mods and JREs over HTTPS from allowlisted hosts and
  * verifies their checksums.

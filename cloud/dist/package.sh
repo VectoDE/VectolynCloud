@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 VectoDE
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Packs the VectolynCloud release files. Used by .github/workflows/release.yml and, as a dry run,
 # by .github/workflows/operations.yml, so both produce exactly the same files.
 #
