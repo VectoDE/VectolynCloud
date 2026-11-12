@@ -64,7 +64,7 @@ curl -X POST -H "Authorization: Bearer vcs_..." https://cloud.example.org:8443/a
 
 | Scope | Allows |
 |---|---|
-| `services:read` | list and read services; service and player events |
+| `services:read` | list and read services; service, player and scaling events |
 | `services:write` | start, stop, restart, send a console command |
 | `config:read` | read `cloud.yml`, groups, tasks, server switches, warnings, setup status |
 | `config:write` | write and delete groups and tasks, set `wanted`, write `cloud.yml` except `api` and `database`, reload |
@@ -221,16 +221,18 @@ A WebSocket (text frames). Optional filters as query: `?types=service-state,metr
 | `service-state` | `services:read` | a service changed its state |
 | `service-output` | `services:read` | a line a service printed (its log) |
 | `player` | `services:read` | a player joined, switched or left |
+| `scaling` | `services:read` | a decision of the autoscaler ([scaling.md](scaling.md#decisions-as-data)) |
 | `metrics` | `node:read` | the node status (as `GET /node`) every 10 s |
 | `node-log` | `admin` | a line of the node's own log, INFO and above |
 
-The scope is checked per type on the handshake. Asking with `types` for a type the token may not see answers `403 missing-scope`; without `types` the stream gets every type its token may see, and a token that may see none gets `403`. A client should ignore types it does not know: new ones may be added within `vectolyn.v1`. The `services` filter applies to service and player events; `metrics` and `node-log` belong to the node and always pass it.
+The scope is checked per type on the handshake. Asking with `types` for a type the token may not see answers `403 missing-scope`; without `types` the stream gets every type its token may see, and a token that may see none gets `403`. A client should ignore types it does not know: new ones may be added within `vectolyn.v1`. The `services` filter applies to service, player and scaling events (a scaling `hold` names no service and passes only a stream without the filter); `metrics` and `node-log` belong to the node and always pass it.
 
 ```json
 {"type": "service-state", "time": "2026-10-29T10:00:00Z",
  "data": {"service": {"id": "lobby-1", "state": "running", ...}, "previous": "starting"}}
 {"type": "service-output", "time": "...", "data": {"service": "lobby-1", "line": "Done (3.2s)!"}}
 {"type": "player", "time": "...", "data": {"kind": "join", "player-id": "...", "player-name": "Steve", "service": "lobby-1"}}
+{"type": "scaling", "time": "...", "data": {"task": "minigame", "group": "minigame", "action": "start", "reason": "cpu", "service": "minigame-3"}}
 {"type": "metrics", "time": "...", "data": {"node": {"node-id": "node-1", "services-running": 3, "heap-used-bytes": 123456789, ...}}}
 {"type": "node-log", "time": "...", "data": {"level": "warning", "logger": "net.vectolyn.cloud.node.CloudNode", "message": "..."}}
 {"type": "dropped", "time": "...", "data": {"count": 12}}

@@ -12,12 +12,13 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Predicate;
 import net.vectolyn.cloud.monitor.Monitor;
+import net.vectolyn.cloud.monitor.metric.Metric;
 import net.vectolyn.cloud.monitor.metric.NodeSample;
 import net.vectolyn.cloud.monitor.metric.ServiceSample;
 import net.vectolyn.cloud.node.channel.NetworkPlayers;
 import net.vectolyn.protocol.ServiceId;
 
-/** Where the autoscaler gets player counts and the memory of the node from. */
+/** Where the autoscaler gets player counts, the usage of the services and the memory of the node from. */
 @FunctionalInterface
 public interface ScalingSignals {
 
@@ -183,6 +184,8 @@ public interface ScalingSignals {
      *       cannot start servers. Without such a proxy, the bridge's count is used.</li>
      *   <li>For "is it empty" ({@code present}) the higher one counts instead: a server is only
      *       empty if neither the bridge nor the proxy sees a player on it.</li>
+     *   <li>Usage (CPU, TPS, heap in percent) for the triggers of {@code scale-up-on}: from each
+     *       sample not older than {@code staleAfter}, a value that is not measured stays NaN.</li>
      *   <li>Memory: the newest node sample, unless it is older than {@code staleAfter} or a value
      *       is not measured.</li>
      * </ul>
@@ -201,9 +204,15 @@ public interface ScalingSignals {
                                        Duration staleAfter, long nodeHeap) {
         Map<ServiceId, Integer> counts = new HashMap<>();
         Map<ServiceId, Integer> present = new HashMap<>();
+        Map<ServiceId, ScalingPlanner.Usage> usage = new HashMap<>();
         for (Report report : reports) {
             ServiceSample sample = report.sample();
-            if (sample.playersOnline() < 0 || sample.at().plus(staleAfter).isBefore(now)) {
+            if (sample.at().plus(staleAfter).isBefore(now)) {
+                continue;
+            }
+            usage.put(report.service(), new ScalingPlanner.Usage(sample.cpu(), sample.tps(),
+                    sample.value(Metric.HEAP).orElse(Double.NaN)));
+            if (sample.playersOnline() < 0) {
                 continue;
             }
             int count = sample.maxPlayers() >= 0 ? Math.min(sample.playersOnline(), sample.maxPlayers())
@@ -223,6 +232,6 @@ public interface ScalingSignals {
                 .filter(n -> n.memoryUsed() != NodeSample.UNKNOWN && n.memoryTotal() != NodeSample.UNKNOWN)
                 .filter(n -> !n.at().plus(staleAfter).isBefore(now))
                 .map(n -> new ScalingPlanner.Memory(n.memoryUsed(), n.memoryTotal(), nodeHeap));
-        return new ScalingPlanner.Signals(counts, present, memory);
+        return new ScalingPlanner.Signals(counts, present, usage, memory);
     }
 }

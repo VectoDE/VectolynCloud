@@ -53,6 +53,18 @@ class ScalingSignalsTest {
     }
 
     @Test
+    void theUsageComesFromFreshSamplesEvenWithoutAPlayerCount() {
+        // report(): CPU 1 %, TPS 20, heap 1 GB of 2 GB.
+        assertEquals(Map.of(LOBBY, new ScalingPlanner.Usage(1.0, 20.0, 50.0)),
+                merge(report(LOBBY, NOW.minus(STALE), 7, 50)).usage());
+        assertEquals(Map.of(LOBBY, new ScalingPlanner.Usage(1.0, 20.0, 50.0)),
+                merge(report(LOBBY, NOW, ServiceSample.UNKNOWN, 50)).usage(), "a bridge without a count still has a CPU");
+        assertEquals(Map.of(), merge(report(LOBBY, NOW.minus(STALE).minusSeconds(1), 7, 50)).usage(), "outdated");
+        ScalingPlanner.Usage unmeasured = merge(new Report(LOBBY, ServiceSample.empty(NOW))).usage().get(LOBBY);
+        assertTrue(Double.isNaN(unmeasured.cpu()) && Double.isNaN(unmeasured.tps()) && Double.isNaN(unmeasured.heap()));
+    }
+
+    @Test
     void anUnknownCountIsLeftOutAndACountIsCappedAtTheReportedLimit() {
         assertEquals(Map.of(), merge(report(LOBBY, NOW, ServiceSample.UNKNOWN, 50)).players());
         assertEquals(Map.of(LOBBY, 50), merge(report(LOBBY, NOW, 500, 50)).players(), "min(online, max)");

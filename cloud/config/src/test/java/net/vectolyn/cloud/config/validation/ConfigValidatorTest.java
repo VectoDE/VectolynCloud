@@ -5,6 +5,7 @@ package net.vectolyn.cloud.config.validation;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -31,11 +32,15 @@ import net.vectolyn.cloud.config.model.PortRange;
 import net.vectolyn.cloud.config.model.ProcessConfig;
 import net.vectolyn.cloud.config.model.ProxyConfig;
 import net.vectolyn.cloud.config.model.RestartConfig;
+import net.vectolyn.cloud.config.model.ScaleUpTriggers;
 import net.vectolyn.cloud.config.model.ScalingConfig;
+import net.vectolyn.cloud.config.model.ScalingSchedule;
 import net.vectolyn.cloud.config.model.ServerSoftware;
 import net.vectolyn.cloud.config.model.TaskConfig;
+import net.vectolyn.cloud.config.model.TimeOfDay;
 import net.vectolyn.cloud.config.model.TimeSpan;
 import net.vectolyn.cloud.config.model.TlsConfig;
+import net.vectolyn.cloud.config.model.Weekday;
 import org.junit.jupiter.api.Test;
 
 class ConfigValidatorTest {
@@ -244,6 +249,53 @@ class ConfigValidatorTest {
         // Counter-checks: just below, and 0.
         assertEquals(Set.of(), codes(valid.withTask("lobby", Samples.lobbyTask().withScaling(base.withScaleDownBelow(74)))));
         assertEquals(Set.of(), codes(valid.withTask("lobby", Samples.lobbyTask().withScaling(base.withScaleDownBelow(0)))));
+    }
+
+    @Test
+    void scaleUpTriggersHaveRangesAndEachIsOptional() {
+        ScalingConfig base = Samples.lobbyTask().scaling();
+        assertEquals(Set.of(), codes(withScaling(base.withScaleUpOn(new ScaleUpTriggers(1, 1, 1)))));
+        assertEquals(Set.of(), codes(withScaling(base.withScaleUpOn(new ScaleUpTriggers(100, 20, 100)))));
+        assertEquals(Set.of(), codes(withScaling(base.withScaleUpOn(new ScaleUpTriggers(null, 18, null)))));
+        assertEquals(Set.of("tasks/lobby.yml scaling.scale-up-on.cpu-above OUT_OF_RANGE",
+                        "tasks/lobby.yml scaling.scale-up-on.tps-below OUT_OF_RANGE",
+                        "tasks/lobby.yml scaling.scale-up-on.ram-above OUT_OF_RANGE"),
+                codes(withScaling(base.withScaleUpOn(new ScaleUpTriggers(0, 0, 0)))));
+        assertEquals(Set.of("tasks/lobby.yml scaling.scale-up-on.cpu-above OUT_OF_RANGE",
+                        "tasks/lobby.yml scaling.scale-up-on.tps-below OUT_OF_RANGE",
+                        "tasks/lobby.yml scaling.scale-up-on.ram-above OUT_OF_RANGE"),
+                codes(withScaling(base.withScaleUpOn(new ScaleUpTriggers(101, 21, 101)))));
+    }
+
+    @Test
+    void schedulesNeedDaysWithoutRepeatsAndAMinimumUpToMaxServices() {
+        ScalingConfig base = Samples.lobbyTask().scaling().withCounts(1, 1, 4);
+        TimeOfDay from = TimeOfDay.of(18, 0);
+        TimeOfDay to = TimeOfDay.of(22, 0);
+        assertEquals(Set.of(), codes(withScaling(base.withSchedules(
+                List.of(new ScalingSchedule(List.of(Weekday.FRI), from, to, 4))))), "max-services itself is fine");
+        assertEquals(Set.of(), codes(withScaling(base.withSchedules(
+                List.of(new ScalingSchedule(List.of(Weekday.FRI), from, to, 0))))));
+        assertEquals(Set.of("tasks/lobby.yml scaling.schedules[0].min-services MIN_GREATER_THAN_MAX"),
+                codes(withScaling(base.withSchedules(List.of(new ScalingSchedule(List.of(Weekday.FRI), from, to, 5))))));
+        assertEquals(Set.of("tasks/lobby.yml scaling.schedules[0].min-services OUT_OF_RANGE"),
+                codes(withScaling(base.withSchedules(List.of(new ScalingSchedule(List.of(Weekday.FRI), from, to, -1))))));
+        assertEquals(Set.of("tasks/lobby.yml scaling.schedules[0].days EMPTY"),
+                codes(withScaling(base.withSchedules(List.of(new ScalingSchedule(List.of(), from, to, 2))))));
+        assertEquals(Set.of("tasks/lobby.yml scaling.schedules[1].days[1] DUPLICATE_ENTRY"),
+                codes(withScaling(base.withSchedules(List.of(new ScalingSchedule(List.of(Weekday.MON), from, to, 2),
+                        new ScalingSchedule(List.of(Weekday.SAT, Weekday.SAT), from, to, 2))))));
+        List<ScalingSchedule> many = new ArrayList<>();
+        for (int i = 0; i <= ConfigValidator.MAX_SCHEDULES; i++) {
+            many.add(new ScalingSchedule(List.of(Weekday.MON), from, to, 2));
+        }
+        assertEquals(Set.of("tasks/lobby.yml scaling.schedules OUT_OF_RANGE"), codes(withScaling(base.withSchedules(many))));
+        many.removeLast();
+        assertEquals(Set.of(), codes(withScaling(base.withSchedules(many))), "exactly the limit");
+    }
+
+    private ConfigSnapshot withScaling(ScalingConfig scaling) {
+        return valid.withTask("lobby", Samples.lobbyTask().withScaling(scaling));
     }
 
     @Test
