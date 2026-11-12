@@ -26,7 +26,8 @@ import org.junit.jupiter.api.io.TempDir;
  */
 class RouteScopesTest {
 
-    private static final Set<Scope> WRITE = Set.of(Scope.SERVICES_WRITE, Scope.CONFIG_WRITE, Scope.BACKUPS_WRITE);
+    private static final Set<Scope> WRITE = Set.of(Scope.SERVICES_WRITE, Scope.CONFIG_WRITE, Scope.BACKUPS_WRITE,
+            Scope.TEMPLATES_WRITE);
 
     @TempDir
     Path home;
