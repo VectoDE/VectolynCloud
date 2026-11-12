@@ -7,6 +7,7 @@ import java.time.Duration;
 import java.util.Objects;
 import net.vectolyn.cloud.config.model.DatabaseConfig;
 import net.vectolyn.cloud.database.docker.DockerProvisioner;
+import net.vectolyn.cloud.database.sql.PostgresJdbcConnector;
 import net.vectolyn.cloud.database.managed.ManagedMariaDbProvisioner;
 import net.vectolyn.cloud.database.managed.ManagedPlatform;
 import net.vectolyn.cloud.database.managed.MariaDbBinaries;
@@ -71,6 +72,7 @@ public final class DatabaseProvisioners {
             case DOCKER -> new DockerProvisioner(config, secrets, home, connector, DOCKER_WAIT);
             case EXTERNAL -> new ExternalProvisioner(config, secrets.application(), connector);
             case H2 -> new EmbeddedProvisioner(config);
+            case POSTGRESQL -> new PostgresProvisioner(config, secrets.application(), new PostgresJdbcConnector());
         };
     }
 }

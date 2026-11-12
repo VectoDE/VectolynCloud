@@ -51,7 +51,7 @@ public final class ManifestCodec {
     private static final Pattern VERSION = Pattern.compile("[0-9A-Za-z._+-]{1,64}");
     private static final Pattern MINECRAFT_VERSION = Pattern.compile("[0-9A-Za-z._+-]{0,64}");
     private static final Pattern GROUP = Pattern.compile(ConfigNames.NAME);
-    private static final Set<String> MODES = Set.of("managed", "external", "docker", "h2");
+    private static final Set<String> MODES = Set.of("managed", "external", "docker", "h2", "postgresql");
     private static final Set<String> STATUSES = Set.of("dumped", "per-service", "manual", "failed");
 
     private static final JsonMapper MAPPER = ConfigMappers.configure(JsonMapper.builder(JsonFactory.builder()

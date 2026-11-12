@@ -5,7 +5,7 @@ package net.vectolyn.cloud.database;
 import net.vectolyn.cloud.config.model.DatabaseMode;
 
 /**
- * Makes the network's database usable, in one of the four modes of {@code database.mode}.
+ * Makes the network's database usable, in one of the modes of {@code database.mode}.
  *
  * <table>
  *   <caption>Modes</caption>
@@ -18,6 +18,8 @@ import net.vectolyn.cloud.config.model.DatabaseMode;
  *       socket.</td><td>nothing</td></tr>
  *   <tr><td>{@code external}</td><td>checks that the application user can log in and use its
  *       database</td><td>nothing</td></tr>
+ *   <tr><td>{@code postgresql}</td><td>checks login, rights, version and {@code max_connections} of
+ *       the operator's PostgreSQL server</td><td>nothing</td></tr>
  *   <tr><td>{@code h2}</td><td>nothing; the servers keep embedded H2 files</td><td>nothing</td></tr>
  * </table>
  *

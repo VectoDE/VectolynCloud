@@ -36,7 +36,7 @@ Locally:
 | `plugins/portal/paper` | 21 | paper-api 26.3 (class files for Java 25) | Java 25 (Paper 26.3) | uses `disableAutoTargetJvm()`, see below |
 | `common/protocol` | 21 | JDK only | Java 21 | no dependencies |
 | `common/client` | 21 | common/protocol | Java 21 | runs inside proxies and servers; JDK sockets only, no Netty (see [network.md](cloud/network.md)) |
-| `cloud/config`, `cloud/template`, `cloud/download`, `cloud/network`, `cloud/database`, `cloud/launcher` | 21 (`Bootstrap` in `cloud/launcher`: 8) | Jackson 3, Netty 4.2, MariaDB Connector/J 4 (all Java 17 or lower) | Java 21 | |
+| `cloud/config`, `cloud/template`, `cloud/download`, `cloud/network`, `cloud/database`, `cloud/launcher` | 21 (`Bootstrap` in `cloud/launcher`: 8) | Jackson 3, Netty 4.2, MariaDB Connector/J 4, PostgreSQL JDBC 42.7 (all Java 17 or lower) | Java 21 | |
 | `cloud/console` | 21 | cloud-config, JLine 3 | Java 21 | JLine `ffm` provider only on Java 22+, see below |
 | `cloud/backup` | 21 | cloud-config, cloud-console, cloud-download | Java 21 | Starts `mariadb-dump` and, for H2, the Java runtime it runs on |
 | `cloud/monitor` | 21 | cloud-config, cloud-console, common/protocol | Java 21 | Prometheus endpoint uses the JDK module `jdk.httpserver` |

@@ -16,6 +16,8 @@ dependencies {
     // Managed mode downloads the MariaDB server through the shared downloader.
     api(project(":cloud:download"))
     implementation(libs.mariadb.java.client)
+    // Mode postgresql: an operator's PostgreSQL server (BSD-2-Clause).
+    implementation(libs.postgresql)
 
     // Only to check that the generated compose file is valid YAML.
     testImplementation(platform(libs.jackson.bom))

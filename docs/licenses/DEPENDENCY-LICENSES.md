@@ -30,6 +30,7 @@ Transitive Abhängigkeiten sind nicht einzeln aufgeführt. Die Verifikation der 
 | tools.jackson.core:jackson-databind | 3.2.4 | implementation, api | Apache-2.0 | yes |
 | tools.jackson.dataformat:jackson-dataformat-yaml | 3.2.4 | implementation, test | Apache-2.0 | yes |
 | org.mariadb.jdbc:mariadb-java-client | 4.0.0 | implementation | LGPL-2.1-or-later | yes (the "or later" clause allows combination under GPL-3.0) |
+| org.postgresql:postgresql | 42.7.14 | implementation | BSD-2-Clause (transitiv: org.checkerframework:checker-qual, MIT) | yes |
 | com.code-intelligence:jazzer-junit | 0.30.0 | test (fuzz) | Apache-2.0 | yes |
 
 ## Build tooling (not shipped)
@@ -53,6 +54,6 @@ Geyser, Floodgate, ViaVersion, ViaBackwards und ViaRewind bleiben extern und sin
 
 ## Summary
 
-- Direct Gradle dependencies: 21 (davon 3 BOMs), plus 2 Build-Werkzeuge und 5 externe Ausnahmen.
+- Direct Gradle dependencies: 22 (davon 3 BOMs), plus 2 Build-Werkzeuge und 5 externe Ausnahmen.
 - Unknown licenses: 0.
-- Conflicts with GPL-3.0: none found. Hinweise: JUnit (EPL-2.0) ist nur Testabhängigkeit und wird nicht ausgeliefert. MariaDB Connector/J (LGPL-2.1-or-later) ist mit GPL-3.0 kombinierbar.
+- Conflicts with GPL-3.0: none found. Hinweise: JUnit (EPL-2.0) ist nur Testabhängigkeit und wird nicht ausgeliefert. MariaDB Connector/J (LGPL-2.1-or-later) ist mit GPL-3.0 kombinierbar. Der PostgreSQL-JDBC-Treiber (BSD-2-Clause) ebenso.

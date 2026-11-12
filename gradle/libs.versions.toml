@@ -21,6 +21,7 @@ netty = "4.2.20.Final"
 jline = "3.30.17"
 jackson = "3.2.4"
 mariadb-java-client = "4.0.0"
+postgresql = "42.7.14"
 # Fuzz tests (test scope only), see build-logic/src/main/kotlin/vectolyn.fuzz-conventions.gradle.kts.
 jazzer = "0.30.0"
 
@@ -51,5 +52,6 @@ jackson-databind = { module = "tools.jackson.core:jackson-databind" }
 jackson-dataformat-yaml = { module = "tools.jackson.dataformat:jackson-dataformat-yaml" }
 
 mariadb-java-client = { module = "org.mariadb.jdbc:mariadb-java-client", version.ref = "mariadb-java-client" }
+postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" }
 
 jazzer-junit = { module = "com.code-intelligence:jazzer-junit", version.ref = "jazzer" }

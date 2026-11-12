@@ -91,6 +91,7 @@ The rules behind it:
 | Jackson 3 (`jackson-databind`, `jackson-dataformat-yaml`) | 3.2.4 | `cloud/config`, `cloud/download` | One data model for the YAML files and the JSON API, with explicit `schema-version` handling and exact error positions for broken config files. `cloud/download` also reads the download APIs, `software.lock.yml` and its catalog with it. |
 | JDK `keytool` and JSSE | Java 21 | `cloud/cluster` | The cluster CA and the node keys come from `keytool`, the cluster port is a plain `SSLServerSocket` with TLS 1.3 and a virtual thread per node (at most 64 members, so no event loop is needed). No certificate library is added. |
 | MariaDB Connector/J (`mariadb-java-client`) | 4.0.0 | `cloud/database` | Talks to the managed or external MariaDB/MySQL server: creating databases and users, checking the connection, sizing the pools. |
+| PostgreSQL JDBC (`postgresql`) | 42.7.14 | `cloud/database` | Mode `postgresql`: checks login, rights, version and `max_connections` of the operator's PostgreSQL server. |
 
 Test only: JUnit 6 and Jazzer 0.30.0 (fuzz tests, see below). Compile only: `velocity-api` 4.3.1, `paper-api` 26.3 and `pandaspigot-api` 1.8.8 (with `adventure-api` 4.24.0) in the bridges. The proxy and the server provide them at runtime.
 
