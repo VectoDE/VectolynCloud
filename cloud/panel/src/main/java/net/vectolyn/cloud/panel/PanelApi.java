@@ -973,7 +973,16 @@ public final class PanelApi {
                 throw new Refusal(403, "csrf", "The CSRF token does not belong to this session.");
             }
         }
-        Set<Scope> scopes = PanelRight.scopes(users.rights(currentUser(session)));
+        Set<PanelRight> rights = users.rights(currentUser(session));
+        // File contents of templates are files: besides the template scope they need the file right.
+        if (call.path().matches("/api/v1/templates/[^/]+/files(/.*)?")) {
+            PanelRight files = call.method().equals("GET") || call.method().equals("HEAD")
+                    ? PanelRight.FILES_READ : PanelRight.FILES_WRITE;
+            if (!rights.contains(files)) {
+                throw new Refusal(403, "missing-right", "This user lacks the right " + files.id() + ".");
+            }
+        }
+        Set<Scope> scopes = PanelRight.scopes(rights);
         if (scopes.isEmpty()) {
             throw new Refusal(403, "missing-scope", "This user has no rights in the API.");
         }

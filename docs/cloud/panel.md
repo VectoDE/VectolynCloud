@@ -114,9 +114,9 @@ A user has one or more roles; their rights add up. Built-in roles cannot be chan
 |---|---|
 | `owner` | all |
 | `operator` | services:read, services:write, config:read, backups:read, node:read, templates:read, templates:write, files:read, files:write, players:manage |
-| `viewer` | services:read, config:read, backups:read, node:read, templates:read |
+| `viewer` | services:read, config:read, backups:read, node:read |
 
-Custom roles are made under **Users and roles** from these rights: the ten scopes of the [REST API](api.md) (`services:read`, `services:write`, `config:read`, `config:write`, `backups:read`, `backups:write`, `node:read`, `templates:read`, `templates:write`, `admin`) and the panel's own `files:read`, `files:write`, `players:manage`, `audit:read`, `users:manage`. When the panel calls the API for a user, it passes exactly the API scopes of that user's rights.
+Custom roles are made under **Users and roles** from these rights: the ten scopes of the [REST API](api.md) (`services:read`, `services:write`, `config:read`, `config:write`, `backups:read`, `backups:write`, `node:read`, `templates:read`, `templates:write`, `admin`) and the panel's own `files:read`, `files:write`, `players:manage`, `audit:read`, `users:manage`. When the panel calls the API for a user, it passes exactly the API scopes of that user's rights. Template file contents (`/api/v1/templates/<name>/files/...`) also need `files:read` to read and `files:write` to change, so state and metadata stay separate from file contents.
 
 Nobody gives more than they hold: a role or a user can only be given rights the acting user has, and a user with more rights than the acting user cannot be changed or deleted. At least one enabled user keeps the `owner` role. Accounts and roles are stored in `secrets/panel-users.json` (owner-only, written atomically, only password hashes).
 

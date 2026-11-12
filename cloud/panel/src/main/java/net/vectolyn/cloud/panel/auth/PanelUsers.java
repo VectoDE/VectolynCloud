@@ -325,7 +325,7 @@ public final class PanelUsers {
                 PanelRight.CONFIG_READ, PanelRight.BACKUPS_READ, PanelRight.NODE_READ, PanelRight.TEMPLATES_READ,
                 PanelRight.TEMPLATES_WRITE, PanelRight.FILES_READ, PanelRight.FILES_WRITE, PanelRight.PLAYERS_MANAGE)));
         roles.put("viewer", Set.copyOf(EnumSet.of(PanelRight.SERVICES_READ, PanelRight.CONFIG_READ,
-                PanelRight.BACKUPS_READ, PanelRight.NODE_READ, PanelRight.TEMPLATES_READ)));
+                PanelRight.BACKUPS_READ, PanelRight.NODE_READ)));
         return java.util.Collections.unmodifiableMap(roles);
     }
 

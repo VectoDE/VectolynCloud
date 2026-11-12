@@ -377,6 +377,25 @@ class PanelApiTest {
         }
     }
 
+    @Test
+    void aViewerCannotReadTemplateFiles() throws Exception {
+        start(null);
+        Browser owner = owner();
+        assertEquals(200, owner.post("/api/panel/users", Map.of("name", "vic", "password", PASSWORD,
+                "roles", List.of("viewer"))).status());
+        Browser viewer = new Browser();
+        assertEquals(200, viewer.post("/api/panel/login", Map.of("name", "vic", "password", PASSWORD)).status());
+        node.lastPrincipal.set(null);
+        Reply files = viewer.get("/api/v1/templates/lobby/files/server.properties");
+        assertEquals(403, files.status(), files.body());
+        assertEquals(null, node.lastPrincipal.get(), "the API is not even called");
+        assertEquals(403, viewer.get("/api/v1/templates/lobby/files").status());
+        assertEquals(200, viewer.get("/api/v1/services").status());
+        assertFalse(node.lastPrincipal.get().scopes().contains(net.vectolyn.cloud.api.auth.Scope.TEMPLATES_READ),
+                "the viewer role has no template scope");
+        assertEquals(200, owner.get("/api/v1/templates/lobby/files/server.properties").status(), "the owner reads them");
+    }
+
     private static String query(String url, String key) {
         for (String pair : url.substring(url.indexOf('?') + 1).split("&")) {
             if (pair.startsWith(key + "=")) {
