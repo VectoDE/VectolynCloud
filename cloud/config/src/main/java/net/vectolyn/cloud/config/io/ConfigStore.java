@@ -111,7 +111,7 @@ public final class ConfigStore {
         for (Map.Entry<String, Object> entry : after.entrySet()) {
             String file = entry.getKey();
             if (previous == null || force.contains(file) || !entry.getValue().equals(before.get(file))) {
-                writer.write(home.resolve(file), ConfigYaml.write(entry.getValue()));
+                writer.write(home.resolve(file), ConfigYaml.write(file, entry.getValue()));
                 touched.add(file);
             }
         }
@@ -160,7 +160,7 @@ public final class ConfigStore {
         Set<String> touched = new LinkedHashSet<>();
         for (Map.Entry<String, Object> entry : wanted.entrySet()) {
             Path path = home.resolve(entry.getKey());
-            byte[] content = ConfigYaml.write(entry.getValue());
+            byte[] content = ConfigYaml.write(entry.getKey(), entry.getValue());
             if (!sameContent(path, content)) {
                 writer.write(path, content);
                 touched.add(entry.getKey());
