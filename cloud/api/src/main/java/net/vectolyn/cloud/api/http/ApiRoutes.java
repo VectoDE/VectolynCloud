@@ -18,6 +18,7 @@ import net.vectolyn.cloud.api.auth.Scope;
 import net.vectolyn.cloud.api.backend.ApiBackend;
 import net.vectolyn.cloud.api.backend.BackupAccess;
 import net.vectolyn.cloud.api.backend.BackupOrder;
+import net.vectolyn.cloud.api.backend.BackupView;
 import net.vectolyn.cloud.api.backend.ServiceView;
 import net.vectolyn.cloud.config.CloudHome;
 import net.vectolyn.cloud.config.ConfigChanged;
@@ -97,7 +98,8 @@ public final class ApiRoutes {
      */
     public Router<Handler> router() {
         Router<Handler> r = new Router<>();
-        r.add("GET", PREFIX + "/services", Scope.SERVICES_READ, q -> ApiResponse.ok(backend.services().list()));
+        r.add("GET", PREFIX + "/services", Scope.SERVICES_READ,
+                q -> Page.list(q, PREFIX + "/services", backend.services().list(), ServiceView::id));
         r.add("POST", PREFIX + "/services", Scope.SERVICES_WRITE, this::startService);
         r.add("GET", PREFIX + "/services/{id}", Scope.SERVICES_READ, q -> ApiResponse.ok(service(q.param("id"))));
         r.add("POST", PREFIX + "/services/{id}/stop", Scope.SERVICES_WRITE,
@@ -108,7 +110,7 @@ public final class ApiRoutes {
         });
         r.add("POST", PREFIX + "/services/{id}/command", Scope.SERVICES_WRITE, this::command);
 
-        r.add("GET", PREFIX + "/groups", Scope.CONFIG_READ, q -> ApiResponse.ok(config.snapshot().groups()));
+        r.add("GET", PREFIX + "/groups", Scope.CONFIG_READ, q -> Page.map(q, PREFIX + "/groups", config.snapshot().groups()));
         r.add("GET", PREFIX + "/groups/{name}", Scope.CONFIG_READ, q -> ApiResponse.document(200, group(q.param("name"))));
         r.add("PUT", PREFIX + "/groups/{name}", Scope.CONFIG_WRITE, this::putGroup);
         r.add("DELETE", PREFIX + "/groups/{name}", Scope.CONFIG_WRITE, q -> {
@@ -124,7 +126,7 @@ public final class ApiRoutes {
                     return setGroupWanted(q.param("name"), q);
                 });
 
-        r.add("GET", PREFIX + "/tasks", Scope.CONFIG_READ, q -> ApiResponse.ok(config.snapshot().tasks()));
+        r.add("GET", PREFIX + "/tasks", Scope.CONFIG_READ, q -> Page.map(q, PREFIX + "/tasks", config.snapshot().tasks()));
         r.add("GET", PREFIX + "/tasks/{name}", Scope.CONFIG_READ, q -> ApiResponse.document(200, task(q.param("name"))));
         r.add("PUT", PREFIX + "/tasks/{name}", Scope.CONFIG_WRITE, this::putTask);
         r.add("DELETE", PREFIX + "/tasks/{name}", Scope.CONFIG_WRITE, q -> {
@@ -142,7 +144,8 @@ public final class ApiRoutes {
             return setGroupWanted(task.group(), q);
         });
 
-        r.add("GET", PREFIX + "/nodes", Scope.CONFIG_READ, q -> ApiResponse.ok(config.snapshot().nodes().nodes()));
+        r.add("GET", PREFIX + "/nodes", Scope.CONFIG_READ,
+                q -> Page.list(q, PREFIX + "/nodes", config.snapshot().nodes().nodes(), NodeConfig::id));
         r.add("GET", PREFIX + "/nodes/{name}", Scope.CONFIG_READ, q -> ApiResponse.document(200, node(q.param("name"))));
         r.add("PUT", PREFIX + "/nodes/{name}", Scope.CONFIG_WRITE, this::putNode);
 
@@ -178,7 +181,8 @@ public final class ApiRoutes {
         r.add("GET", PREFIX + "/setup", Scope.CONFIG_READ,
                 q -> ApiResponse.ok(backend.node().setup(config.snapshot())));
 
-        r.add("GET", PREFIX + "/backups", Scope.BACKUPS_READ, q -> ApiResponse.ok(backups().list()));
+        r.add("GET", PREFIX + "/backups", Scope.BACKUPS_READ,
+                q -> Page.list(q, PREFIX + "/backups", backups().list(), BackupView::id));
         r.add("POST", PREFIX + "/backups", Scope.BACKUPS_WRITE, q -> {
             refuseDuringShutdown();
             BackupBody body = q.json(BackupBody.class);

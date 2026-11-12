@@ -40,6 +40,7 @@ import java.util.TreeSet;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import net.vectolyn.cloud.api.auth.ApiToken;
+import net.vectolyn.cloud.api.auth.RateLimiter;
 import net.vectolyn.cloud.api.auth.Scope;
 import net.vectolyn.cloud.api.backend.ApiBackendException;
 import net.vectolyn.cloud.api.http.ApiException;
@@ -254,6 +255,7 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
                 } finally {
                     server.requestSlots().release();
                 }
+                rateLimitHeaders(response, request.token());
                 FullHttpResponse answer = response;
                 ctx.channel().eventLoop().execute(() -> finish(ctx, answer, request.keepAlive()));
             });
@@ -273,6 +275,16 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
             ctx.channel().config().setAutoRead(true);
             ctx.read();
         }
+    }
+
+    /**
+     * {@code X-RateLimit-Limit} (the bucket of the token) and {@code X-RateLimit-Remaining} (what
+     * it holds now), so a script can slow down before it gets {@code 429}.
+     */
+    private void rateLimitHeaders(FullHttpResponse response, ApiToken token) {
+        RateLimiter<String> limiter = server.tokenLimiter();
+        response.headers().set("X-RateLimit-Limit", Integer.toString(limiter.burst()));
+        response.headers().set("X-RateLimit-Remaining", Integer.toString(limiter.remaining(token.id())));
     }
 
     private void upgrade(ChannelHandlerContext ctx, Pending request) {
@@ -424,7 +436,8 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
         if (origin != null) {
             h.set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN, origin);
             h.set(HttpHeaderNames.VARY, HttpHeaderNames.ORIGIN);
-            h.set(HttpHeaderNames.ACCESS_CONTROL_EXPOSE_HEADERS, "ETag, Retry-After");
+            h.set(HttpHeaderNames.ACCESS_CONTROL_EXPOSE_HEADERS,
+                    "ETag, Retry-After, Link, X-Total-Count, X-RateLimit-Limit, X-RateLimit-Remaining");
         }
     }
 
