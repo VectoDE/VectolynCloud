@@ -29,12 +29,12 @@ The token starts with `vct_`, is shown once and is stored only as a SHA-256 hash
 
 | Scope | Allows |
 |---|---|
-| `services:read` | list and read services, event stream |
+| `services:read` | list and read services; service and player events |
 | `services:write` | start, stop, restart, send a console command |
 | `config:read` | read configuration, setup status |
 | `config:write` | change groups, tasks, server switches, `cloud.yml` (not `api` and `database`), reload |
 | `backups:read`, `backups:write` | list backups, create a backup |
-| `node:read` | node status |
+| `node:read` | node status; metrics events |
 | `admin` | everything, including the `api` and `database` sections and token management |
 
 ## Endpoints
@@ -52,7 +52,7 @@ All paths start with `/api/v1`.
 | `GET/PUT /config`, `POST /config/reload`, `GET /config/warnings` | `cloud.yml` and reload |
 | `GET /node`, `GET /setup` | node status, setup status |
 | `GET/POST /backups` | list and create backups |
-| `GET /events` (WebSocket) | live events: service state, service output, players |
+| `GET /events` (WebSocket) | live events: service state, service output, players, metrics (`node:read`), node log (`admin`) |
 
 Writes are validated as a whole before anything is saved. `DELETE` needs `?confirm=<name>`. `GET` returns an `ETag`; send it back as `If-Match` to avoid overwriting someone else's change (`412` otherwise). Errors have one body shape with a `code`, a message and, for configuration problems, the file, path and line.
 
