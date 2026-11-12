@@ -52,6 +52,16 @@ Jede Anfrage muss das Panel im `Host`-Header nennen (`localhost`, `127.0.0.1`, `
 
 **Audit-Log:** `logs/panel-audit.jsonl`, eine Zeile je Anmeldung, Fehlversuch, Sperre, Abmeldung und Änderung an Konten, Faktoren und Rollen, ohne Passwörter oder Codes. Lesbar mit dem Recht `audit:read`.
 
+## Dienste, Konsole und Dateien
+
+**Dienste** zeigt alle Dienste dieses Knotens mit Aufgabe, Zustand, Port und Spielern; der Zustand ändert sich live. Mit `services:write` startest du einen Dienst aus einer Aufgabe, stoppst ihn (nach Rückfrage) oder startest ihn neu.
+
+**Konsole** zeigt die Zeilen, die ein Dienst ab dem Öffnen der Seite ausgibt (die letzten 1000), und schickt mit `services:write` Befehle bis 256 Zeichen. Screenreader lesen neue Zeilen nur vor, wenn **Neue Zeilen vorlesen** an ist.
+
+**Live-Daten** kommen über den WebSocket `GET /api/panel/events`. Der Handshake braucht das Sitzungs-Cookie und den eigenen `Origin` des Panels, sonst `403`. Der Stream bekommt nur die Ereignisse, die die Rechte des Benutzers erlauben. Alle 15 Sekunden schließt das Panel Streams abgelaufener Sitzungen und gesperrter Benutzer mit `1008`.
+
+**Dateien** öffnet den Ordner eines Dienstes (`temp/services/<id>` oder `local/services/<id>`). Lesen braucht `files:read`, Schreiben, Hochladen, neue Ordner und Löschen brauchen `files:write`. Pfade sind relativ, ohne `.`, `..`, `\ : * ? " < > |`, Steuerzeichen und Windows-Gerätenamen, höchstens 512 Zeichen. Verknüpfungen werden nie verfolgt. Dateien werden atomar ersetzt, Downloads immer als Anhang ausgeliefert, jede Änderung landet im Audit-Log. Uploads bis 8 MiB, höchstens vier gleichzeitig; alle anderen Anfragen bis 256 KiB. Details in [panel.md](panel.md#services-console-and-files).
+
 ## Oberfläche bauen
 
 ```sh
@@ -66,4 +76,4 @@ Ziel ist WCAG 2.2 AA, AAA wo erreichbar: Sprunglink zum Inhalt, sichtbarer Fokus
 
 ## Tests
 
-`PanelServerTest`, `PanelConfigLoaderTest` und die Fuzz-Ziele in `PanelInputFuzzTest` (Anfrageziele, `panel.yml`, öffentliche URLs). Der Job **Panel frontend** in `ci.yml` prüft die Sprachkataloge, die Typen und den statischen Export.
+`PanelServerTest`, `PanelConfigLoaderTest`, `ServiceFilesTest`, `BodyLimitHandlerTest`, `PanelStreamTest` (echter WebSocket, Ereignisse unter einer Sekunde) und die Fuzz-Ziele in `PanelInputFuzzTest` (Anfrageziele, `panel.yml`, öffentliche URLs, Dateipfade). Der Job **Panel frontend** in `ci.yml` prüft die Sprachkataloge, die Typen und den statischen Export.

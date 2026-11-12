@@ -35,6 +35,35 @@ class PanelInputFuzzTest {
     }
 
     @FuzzTest
+    void filePathsStayInsideTheServiceFolder(FuzzedDataProvider data) {
+        String text = data.consumeRemainingAsString();
+        java.util.List<String> parts;
+        try {
+            parts = net.vectolyn.cloud.panel.files.ServiceFiles.parsePath(text);
+        } catch (net.vectolyn.cloud.panel.files.ServiceFiles.FileException e) {
+            assertTrue(e.status() == 400, e.code());
+            return;
+        }
+        assertTrue(text.length() <= 512, text);
+        assertTrue(String.join("/", parts).equals(text), text);
+        for (String part : parts) {
+            assertFalse(part.isEmpty() || part.equals(".") || part.equals(".."), text);
+            assertFalse(part.chars().anyMatch(c -> c < 0x20 || "\\/:*?\"<>|".indexOf(c) >= 0), text);
+            assertFalse(part.endsWith(".") || part.endsWith(" "), text);
+        }
+        java.nio.file.Path root = java.nio.file.Path.of("root");
+        java.nio.file.Path resolved = root;
+        for (String part : parts) {
+            try {
+                resolved = resolved.resolve(part);
+            } catch (java.nio.file.InvalidPathException e) {
+                return;
+            }
+        }
+        assertTrue(resolved.normalize().startsWith(root), text);
+    }
+
+    @FuzzTest
     void panelYmlIsSettingsOrConfigErrors(byte[] content) {
         try {
             PanelConfigLoader.Settings settings = PanelConfigLoader.parse(content);

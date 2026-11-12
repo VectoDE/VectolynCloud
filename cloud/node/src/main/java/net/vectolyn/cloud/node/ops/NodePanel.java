@@ -64,7 +64,8 @@ public final class NodePanel {
             PanelUsers users = PanelUsers.load(home.resolve(CloudHome.SECRETS_DIR).resolve(PanelUsers.FILE_NAME));
             AuditLog audit = new AuditLog(home.resolve(CloudHome.LOGS_DIR).resolve(AuditLog.FILE_NAME), Clock.systemUTC());
             OidcClient oidc = oidc(settings, secrets);
-            PanelApi api = new PanelApi(users, audit, NodeAccess.of(apiServer), oidc, Clock.systemUTC(), System::nanoTime);
+            PanelApi api = new PanelApi(users, audit, NodeAccess.of(apiServer), oidc, Clock.systemUTC(), System::nanoTime,
+                    new net.vectolyn.cloud.panel.files.ServiceFiles(home));
             panel = PanelServer.builder(settings).tls(apiServer.tls()).version(version).api(api).build();
             InetSocketAddress address = panel.start();
             LOG.log(System.Logger.Level.INFO, "Panel listens on {0}:{1,number,#}", address.getHostString(),

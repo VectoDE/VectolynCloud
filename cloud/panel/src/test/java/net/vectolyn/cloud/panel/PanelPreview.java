@@ -57,7 +57,32 @@ public final class PanelPreview {
         @Override
         public ApiResponse call(ApiToken principal, String method, String target, byte[] body, String ifMatch)
                 throws ApiException {
+            if (method.equals("GET") && target.equals("/services")) {
+                return ApiResponse.ok(java.util.List.of(
+                        Map.of("id", "lobby-1", "group", "lobby", "task", "lobby", "index", 1, "mode", "static",
+                                "state", "running", "port", 30001, "restart-attempts", 0, "players-online", 3,
+                                "max-players", 50),
+                        Map.of("id", "survival-1", "group", "survival", "task", "survival", "index", 1, "mode", "dynamic",
+                                "state", "starting", "port", 30002, "restart-attempts", 0)));
+            }
+            if (method.equals("GET") && target.equals("/tasks")) {
+                return ApiResponse.ok(Map.of("lobby", Map.of(), "survival", Map.of()));
+            }
             return ApiResponse.ok(Map.of("items", java.util.List.of()));
+        }
+
+        @Override
+        public java.util.Set<String> subscribe(io.netty.channel.Channel channel, ApiToken principal,
+                                               java.util.Set<String> types, java.util.Set<String> services) {
+            // One made-up output line a second, so the console has something to show.
+            java.util.concurrent.atomic.AtomicInteger n = new java.util.concurrent.atomic.AtomicInteger();
+            var task = channel.eventLoop().scheduleAtFixedRate(() -> channel.writeAndFlush(
+                    new io.netty.handler.codec.http.websocketx.TextWebSocketFrame("{\"type\":\"service-output\","
+                            + "\"time\":\"2026-11-12T10:00:00Z\",\"data\":{\"service\":\"lobby-1\","
+                            + "\"line\":\"[preview] line " + n.incrementAndGet() + "\"}}")), 1, 1,
+                    java.util.concurrent.TimeUnit.SECONDS);
+            channel.closeFuture().addListener(f -> task.cancel(false));
+            return types.isEmpty() ? java.util.Set.of("service-state", "service-output") : types;
         }
     }
 
@@ -76,7 +101,11 @@ public final class PanelPreview {
         String token = "vcs_preview" + HexFormat.of().formatHex(random);
         PanelApi api = new PanelApi(PanelUsers.load(home.resolve("secrets").resolve(PanelUsers.FILE_NAME)),
                 new AuditLog(home.resolve("logs").resolve(AuditLog.FILE_NAME), Clock.systemUTC()),
-                new PreviewNode(token), null, Clock.systemUTC(), System::nanoTime);
+                new PreviewNode(token), null, Clock.systemUTC(), System::nanoTime,
+                new net.vectolyn.cloud.panel.files.ServiceFiles(home));
+        Path lobby = Files.createDirectories(home.resolve("temp/services/lobby-1/plugins"));
+        Files.writeString(lobby.getParent().resolve("server.properties"), "motd=Preview\nmax-players=50\n");
+        Files.writeString(lobby.resolve("config.yml"), "greeting: hello\n");
         PanelServer server = PanelServer.builder(settings).version("preview").api(api).build();
         InetSocketAddress address = server.start();
         System.out.println("Panel preview on http://localhost:" + address.getPort() + "/");

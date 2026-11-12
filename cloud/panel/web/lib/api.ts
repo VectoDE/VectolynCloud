@@ -51,6 +51,54 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
   return json as T;
 }
 
+/** Sends raw bytes (a file upload); the answer is JSON like {@link api}. */
+export async function upload(path: string, content: Blob | string): Promise<void> {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/octet-stream", "X-Vectolyn-CSRF": csrfToken ?? "1" },
+    credentials: "same-origin",
+    body: content,
+  });
+  if (!response.ok) {
+    let json: Record<string, unknown> = {};
+    try {
+      json = (await response.json()) as Record<string, unknown>;
+    } catch {
+      // not JSON
+    }
+    throw new ApiError(response.status, String(json.code ?? "http-" + response.status), String(json.message ?? ""), json);
+  }
+}
+
+/** Reads raw bytes (a file of a service). */
+export async function download(path: string): Promise<ArrayBuffer> {
+  const response = await fetch(path, { credentials: "same-origin" });
+  if (!response.ok) {
+    let json: Record<string, unknown> = {};
+    try {
+      json = (await response.json()) as Record<string, unknown>;
+    } catch {
+      // not JSON
+    }
+    throw new ApiError(response.status, String(json.code ?? "http-" + response.status), String(json.message ?? ""), json);
+  }
+  return response.arrayBuffer();
+}
+
+/** A service of the node (GET /api/v1/services). */
+export interface Service {
+  id: string;
+  group: string;
+  task: string;
+  index: number;
+  mode: string;
+  state: string;
+  port: number;
+  "players-online"?: number;
+  "max-players"?: number;
+  "started-at"?: string;
+}
+
 export interface PanelInfo {
   name: string;
   version: string;
