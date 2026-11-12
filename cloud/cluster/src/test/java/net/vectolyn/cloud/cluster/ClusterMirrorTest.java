@@ -130,7 +130,8 @@ class ClusterMirrorTest {
         // A change on the head arrives by push.
         long before = revision(member);
         head.config.apply(new PutGroup("lobby", group("1G")));
-        await(() -> group("1G").equals(member.config.snapshot().groups().get("lobby")));
+        // The revision is counted after the group is visible, so wait for both.
+        await(() -> group("1G").equals(member.config.snapshot().groups().get("lobby")) && revision(member) > before);
         assertTrue(revision(member) > before);
 
         // So does a removal.
