@@ -22,7 +22,12 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.LongSupplier;
+import io.netty.channel.Channel;
+import io.netty.handler.codec.http.websocketx.CloseWebSocketFrame;
+import io.netty.handler.codec.http.websocketx.WebSocketCloseStatus;
+import net.vectolyn.cloud.panel.files.ServiceFiles;
 import net.vectolyn.cloud.api.ApiServer;
 import net.vectolyn.cloud.api.auth.ApiToken;
 import net.vectolyn.cloud.api.auth.RateLimiter;
@@ -65,6 +70,8 @@ public final class PanelApi {
     static final String ISSUER = "VectolynCloud";
 
     private static final int MAX_STRING = 4096;
+    /** Largest JSON body; only file uploads may be larger (up to the server's body limit). */
+    static final int MAX_JSON_BODY = 256 * 1024;
 
     private final PanelUsers users;
     private final Sessions sessions;
@@ -73,6 +80,8 @@ public final class PanelApi {
     private final OidcClient oidc;
     private final Clock clock;
     private final RateLimiter<String> signInLimiter;
+    private final ServiceFiles files;
+    private final Map<Channel, String> streams = new ConcurrentHashMap<>();
     private PanelServer server;
 
     /**
@@ -86,6 +95,22 @@ public final class PanelApi {
      * @param nanoTime the monotonic clock of the rate limits
      */
     public PanelApi(PanelUsers users, AuditLog audit, NodeAccess api, OidcClient oidc, Clock clock, LongSupplier nanoTime) {
+        this(users, audit, api, oidc, clock, nanoTime, null);
+    }
+
+    /**
+     * Creates the endpoints with the file manager.
+     *
+     * @param users    the account store
+     * @param audit    the audit log
+     * @param api      the node's API
+     * @param oidc     the single sign-on client, or null
+     * @param clock    the clock
+     * @param nanoTime the monotonic clock of the rate limits
+     * @param files    the service folders, or null without a file manager
+     */
+    public PanelApi(PanelUsers users, AuditLog audit, NodeAccess api, OidcClient oidc, Clock clock, LongSupplier nanoTime,
+                    ServiceFiles files) {
         this.users = Objects.requireNonNull(users, "users");
         this.audit = Objects.requireNonNull(audit, "audit");
         this.api = api;
@@ -93,6 +118,7 @@ public final class PanelApi {
         this.clock = Objects.requireNonNull(clock, "clock");
         this.sessions = new Sessions(clock);
         this.signInLimiter = new RateLimiter<>(10, 20, nanoTime);
+        this.files = files;
     }
 
     void attach(PanelServer panelServer) {
@@ -130,6 +156,19 @@ public final class PanelApi {
             this.status = status;
             this.code = code;
         }
+    }
+
+    /** Path of the live-event stream (WebSocket). */
+    static final String EVENTS = "/api/panel/events";
+
+    /**
+     * The answer to a refusal outside {@link #handle}.
+     *
+     * @param r the refusal
+     * @return the error response
+     */
+    FullHttpResponse refusal(Refusal r) {
+        return Responses.error(r.status, r.code, r.getMessage(), secure());
     }
 
     FullHttpResponse handle(Call call) {
@@ -192,6 +231,14 @@ public final class PanelApi {
                     require(session, PanelRight.AUDIT_READ);
                     yield readAudit(call);
                 }
+                case "/api/panel/files" -> {
+                    require(session, PanelRight.FILES_READ);
+                    yield listFiles(call);
+                }
+                case "/api/panel/files/content" -> {
+                    require(session, PanelRight.FILES_READ);
+                    yield readFile(call);
+                }
                 default -> throw notFound();
             };
         }
@@ -200,6 +247,17 @@ public final class PanelApi {
         String csrf = call.header(CSRF_HEADER);
         if (csrf == null || csrf.isEmpty()) {
             throw new Refusal(403, "csrf", "The request lacks the " + CSRF_HEADER + " header.");
+        }
+        if (path.equals("/api/panel/files/write")) {
+            Sessions.Session session = session(call).orElseThrow(Refusal401::new);
+            if (!Sessions.csrfMatches(session, csrf)) {
+                throw new Refusal(403, "csrf", "The CSRF token does not belong to this session.");
+            }
+            require(session, PanelRight.FILES_WRITE);
+            return writeFile(call, session);
+        }
+        if (call.body() != null && call.body().length > MAX_JSON_BODY) {
+            throw new Refusal(413, "body-too-large", "The body is larger than " + MAX_JSON_BODY / 1024 + " KiB.");
         }
         Map<String, Object> body = body(call);
         switch (path) {
@@ -261,6 +319,14 @@ public final class PanelApi {
             case "/api/panel/roles/delete" -> {
                 require(session, PanelRight.USERS_MANAGE);
                 yield deleteRole(call, session, body);
+            }
+            case "/api/panel/files/folder" -> {
+                require(session, PanelRight.FILES_WRITE);
+                yield createFolder(call, session, body);
+            }
+            case "/api/panel/files/delete" -> {
+                require(session, PanelRight.FILES_WRITE);
+                yield deleteFile(call, session, body);
             }
             default -> throw notFound();
         };
@@ -982,12 +1048,7 @@ public final class PanelApi {
                 throw new Refusal(403, "missing-right", "This user lacks the right " + files.id() + ".");
             }
         }
-        Set<Scope> scopes = PanelRight.scopes(rights);
-        if (scopes.isEmpty()) {
-            throw new Refusal(403, "missing-scope", "This user has no rights in the API.");
-        }
-        ApiToken principal = new ApiToken(ApiServer.LOCAL_PREFIX + session.user(), "panel:" + session.user(), scopes,
-                session.created());
+        ApiToken principal = principal(session, rights);
         String target = call.path().substring("/api/v1".length());
         if (target.isEmpty()) {
             target = "/";
@@ -1012,6 +1073,189 @@ public final class PanelApi {
             }
             return response;
         }
+    }
+
+    private static ApiToken principal(Sessions.Session session, Set<PanelRight> rights) throws Refusal {
+        Set<Scope> scopes = PanelRight.scopes(rights);
+        if (scopes.isEmpty()) {
+            throw new Refusal(403, "missing-scope", "This user has no rights in the API.");
+        }
+        return new ApiToken(ApiServer.LOCAL_PREFIX + session.user(), "panel:" + session.user(), scopes, session.created());
+    }
+
+    // ---- live events ------------------------------------------------------------------------
+
+    /**
+     * The checked start of an event stream.
+     *
+     * @param principal the user as a local token
+     * @param sessionId the session the stream belongs to
+     * @param types     event types asked for
+     * @param services  services to follow
+     */
+    record StreamGrant(ApiToken principal, String sessionId, Set<String> types, Set<String> services) {
+    }
+
+    /**
+     * Checks a WebSocket upgrade to {@code /api/panel/events}: a session, the panel's own origin
+     * (browsers send it with every WebSocket, which stops other sites from opening one with the
+     * user's cookie) and the query {@code types} and {@code services}, comma-separated.
+     *
+     * @param call the upgrade request
+     * @return the grant
+     * @throws Refusal 401, 403 or 400
+     */
+    StreamGrant openStream(Call call) throws Refusal {
+        if (api == null) {
+            throw notFound();
+        }
+        Sessions.Session session = session(call).orElseThrow(Refusal401::new);
+        String origin = call.header(HttpHeaderNames.ORIGIN);
+        if (origin == null || !origin.equalsIgnoreCase(origin(call))) {
+            throw new Refusal(403, "origin", "The request does not come from the panel's own page.");
+        }
+        return new StreamGrant(principal(session, users.rights(currentUser(session))), session.id(),
+                listQuery(call, "types"), listQuery(call, "services"));
+    }
+
+    private static Set<String> listQuery(Call call, String key) throws Refusal {
+        String value = call.query().get(key);
+        if (value == null || value.isEmpty()) {
+            return Set.of();
+        }
+        Set<String> out = new java.util.LinkedHashSet<>();
+        for (String item : value.split(",", -1)) {
+            if (!item.matches("[a-z0-9][a-z0-9_.-]{0,63}") || out.size() >= 64) {
+                throw new Refusal(400, "invalid-query", "\"" + key + "\" must be a comma-separated list of names.");
+            }
+            out.add(item);
+        }
+        return out;
+    }
+
+    /**
+     * Subscribes an upgraded WebSocket and remembers its session, so the stream ends with it.
+     *
+     * @param channel the WebSocket
+     * @param grant   the checked request
+     * @return the event types the stream gets
+     * @throws ApiException as {@link NodeAccess#subscribe}
+     */
+    Set<String> subscribe(Channel channel, StreamGrant grant) throws ApiException {
+        Set<String> types = api.subscribe(channel, grant.principal(), grant.types(), grant.services());
+        streams.put(channel, grant.sessionId());
+        channel.closeFuture().addListener(f -> streams.remove(channel));
+        return types;
+    }
+
+    /** Closes every event stream whose session has ended or whose user was disabled or removed. */
+    void sweepStreams() {
+        streams.forEach((channel, sessionId) -> {
+            if (!sessions.alive(sessionId) || sessions.userOf(sessionId)
+                    .flatMap(users::find).map(PanelUsers.User::disabled).orElse(true)) {
+                streams.remove(channel);
+                channel.writeAndFlush(new CloseWebSocketFrame(WebSocketCloseStatus.POLICY_VIOLATION, "session ended"))
+                        .addListener(f -> channel.close());
+            }
+        });
+    }
+
+    // ---- file manager ---------------------------------------------------------------------
+
+    private ServiceFiles requireFiles() throws Refusal {
+        if (files == null) {
+            throw notFound();
+        }
+        return files;
+    }
+
+    private static String queryText(Call call, String key) throws Refusal {
+        String raw = call.query().get(key);
+        if (raw == null) {
+            return "";
+        }
+        String decoded = decode(raw);
+        if (decoded == null) {
+            throw new Refusal(400, "invalid-query", "\"" + key + "\" is not valid percent-encoding.");
+        }
+        return decoded;
+    }
+
+    private static Refusal refusal(ServiceFiles.FileException e) {
+        return new Refusal(e.status(), e.code(), e.getMessage());
+    }
+
+    private FullHttpResponse listFiles(Call call) throws Refusal, IOException {
+        try {
+            List<ServiceFiles.Entry> entries = requireFiles().list(queryText(call, "service"), queryText(call, "path"));
+            List<Map<String, Object>> out = new ArrayList<>();
+            for (ServiceFiles.Entry e : entries) {
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("name", e.name());
+                item.put("folder", e.folder());
+                item.put("size", e.size());
+                item.put("modified", e.modified());
+                out.add(item);
+            }
+            return Responses.json(200, Map.of("entries", out), secure());
+        } catch (ServiceFiles.FileException e) {
+            throw refusal(e);
+        }
+    }
+
+    private FullHttpResponse readFile(Call call) throws Refusal, IOException {
+        String path = queryText(call, "path");
+        byte[] content;
+        try {
+            content = requireFiles().read(queryText(call, "service"), path);
+        } catch (ServiceFiles.FileException e) {
+            throw refusal(e);
+        }
+        FullHttpResponse response = Responses.jsonBytes(200, content, secure());
+        response.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/octet-stream");
+        // Always a download, never rendered: a file of a service is not a page of the panel.
+        String name = ServiceFiles.fileName(path).orElse("file").replaceAll("[^A-Za-z0-9._-]", "_");
+        response.headers().set(HttpHeaderNames.CONTENT_DISPOSITION, "attachment; filename=\"" + name + "\"");
+        return response;
+    }
+
+    private FullHttpResponse writeFile(Call call, Sessions.Session session) throws Refusal, IOException {
+        String service = queryText(call, "service");
+        String path = queryText(call, "path");
+        try {
+            requireFiles().write(service, path, call.body() == null ? new byte[0] : call.body());
+        } catch (ServiceFiles.FileException e) {
+            throw refusal(e);
+        }
+        audit.record("file.written", session.user(), service + "/" + path, call.client(),
+                Map.of("bytes", call.body() == null ? 0 : call.body().length));
+        return Responses.json(200, Map.of("written", true), secure());
+    }
+
+    private FullHttpResponse createFolder(Call call, Sessions.Session session, Map<String, Object> body)
+            throws Refusal, IOException {
+        String service = text(body, "service", 64);
+        String path = text(body, "path", 512);
+        try {
+            requireFiles().createFolder(service, path);
+        } catch (ServiceFiles.FileException e) {
+            throw refusal(e);
+        }
+        audit.record("folder.created", session.user(), service + "/" + path, call.client(), Map.of());
+        return Responses.json(200, Map.of("created", true), secure());
+    }
+
+    private FullHttpResponse deleteFile(Call call, Sessions.Session session, Map<String, Object> body)
+            throws Refusal, IOException {
+        String service = text(body, "service", 64);
+        String path = text(body, "path", 512);
+        try {
+            requireFiles().delete(service, path);
+        } catch (ServiceFiles.FileException e) {
+            throw refusal(e);
+        }
+        audit.record("file.deleted", session.user(), service + "/" + path, call.client(), Map.of());
+        return Responses.json(200, Map.of("deleted", true), secure());
     }
 
     // ---- request checks and helpers --------------------------------------------------------

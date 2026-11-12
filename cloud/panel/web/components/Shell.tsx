@@ -69,6 +69,7 @@ export function Shell({ children }: { children: ReactNode }) {
             {session && (
               <>
                 <NavLink href="/" path={path}>{t("nav.overview")}</NavLink>
+                {can("services:read") && <NavLink href="/services/" path={path}>{t("nav.services")}</NavLink>}
                 {can("users:manage") && <NavLink href="/users/" path={path}>{t("nav.users")}</NavLink>}
                 <NavLink href="/account/" path={path}>{t("nav.account")}</NavLink>
                 <button type="button" onClick={() => void signOut()}

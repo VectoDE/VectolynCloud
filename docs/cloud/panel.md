@@ -74,7 +74,7 @@ Every page has its own `Content-Security-Policy`: scripts, styles, images, fonts
 | Requests per client address (IPv6 per /64) | 600 per minute, burst 120 (`429` with `Retry-After`) |
 | Connections | 256, at most 32 per address |
 | Request line / headers | 4 KiB / 8 KiB |
-| Body | 256 KiB (`413`) |
+| Body | 256 KiB, file uploads 8 MiB with at most four at once (`413`, `503`) |
 | Idle connection | closed after 120 s |
 
 Request targets are checked before anything else: printable ASCII, no `%` (nothing is ever decoded), no backslash, no empty, `.` or `..` segment, at most 2048 characters (`400`).
@@ -131,6 +131,47 @@ Nobody gives more than they hold: a role or a user can only be given rights the 
 
 `logs/panel-audit.jsonl` gets one JSON line for every setup, sign-in, failed sign-in, lock, sign-out, password change, TOTP and passkey change, single sign-on link, and every change of users and roles: time, event, acting user, affected user or role, client address. Never a password, code or key. At 10 MiB the file moves to `panel-audit.1.jsonl`. Users with `audit:read` read it through `GET /api/panel/audit?limit=100`.
 
+## Services, console and files
+
+### Services
+
+**Services** lists every service of this node with task, state, port and players. The state changes live. With `services:write` a service is started from a task (the list comes from `GET /api/v1/tasks` when the user also has `config:read`, otherwise the task name is typed), stopped (after a confirmation) or restarted. These are the REST routes of the [API](api.md#endpoints), called with the user's scopes.
+
+### Console
+
+**Console** shows the lines a service prints from the moment the page is open (`service-output` events; older output is in the service's log file) and keeps the last 1000. The view follows new lines unless that is switched off. Screen readers announce new lines only when **Read new lines aloud** is on, so a busy server does not drown everything else. With `services:write` a command of up to 256 characters goes to the service (`POST /api/v1/services/{id}/command`).
+
+### Live events
+
+The pages get events over one WebSocket, `GET /api/panel/events?types=...&services=...`, with the same events and filters as [`/api/v1/events`](api.md#live-events-get-apiv1events):
+
+- The handshake needs the session cookie and an `Origin` equal to the panel's own address. A page of another site cannot open a stream with the user's cookie (`403`).
+- The stream gets the event types the user's rights allow, exactly as an API token with the same scopes. It counts against the API's stream limit.
+- Every 15 seconds the panel closes streams whose session ended (sign-out, timeout, password change) or whose user was disabled or deleted, with `1008`. The browser then stops reconnecting; after other drops it reconnects after 1, 2, 4 ... up to 30 seconds.
+- The browser may only send ping, pong and close, at most 4 KiB per frame. The server pings after 30 s without traffic and closes a stream silent for 90 s.
+
+### File manager
+
+**Files** browses the folder of a service on this node: `temp/services/<id>` while it runs, else `local/services/<id>` for a static service. It needs `files:read`; writing, uploading, new folders and deleting need `files:write`.
+
+| Endpoint | Right | Does |
+|---|---|---|
+| `GET /api/panel/files?service=&path=` | files:read | lists a folder, folders first, at most 2000 entries |
+| `GET /api/panel/files/content?service=&path=` | files:read | the file, at most 8 MiB, always as a download (`application/octet-stream`, `Content-Disposition: attachment`, `nosniff`) |
+| `POST /api/panel/files/write?service=&path=` (raw body) | files:write | creates or replaces a file, folders on the way included |
+| `POST /api/panel/files/folder` `{"service", "path"}` | files:write | creates a folder |
+| `POST /api/panel/files/delete` `{"service", "path"}` | files:write | deletes a file or an empty folder |
+
+Rules for every path, checked before the disk is touched (`400 invalid-path`):
+
+- relative, parts separated by `/`, at most 512 characters and 255 per part;
+- no empty part, no `.` or `..`, no `\ : * ? " < > |`, no control characters;
+- no name ending in a dot or a space, no Windows device name (`con`, `nul`, `com1` ...).
+
+Links, junctions and other special entries below the service folder are never followed (`403 link-refused`) and are left out of listings. A file is written next to its target and then moved over it, so a service never reads half a file. Every write, new folder and delete goes into the [audit log](#audit-log) with user, service, path and size.
+
+The editor opens UTF-8 text up to 1 MiB; anything else is offered as a download. An upload may be 8 MiB; every other request body stays at 256 KiB, and at most four uploads are read at the same time on the whole panel (`503 busy` for a fifth), so the memory a stranger can make the panel hold stays small.
+
 ## Building the frontend
 
 The frontend is built by Gradle when `-Pvectolyn.panel.web=true` is set; this needs Node.js 20.9 or newer with npm on the `PATH`:
@@ -162,4 +203,5 @@ The panel aims at WCAG 2.2 AA and AAA where it is reachable: a skip link to the 
 - `PanelServerTest` runs the server on `127.0.0.1` with a random port: CSP with the page's hash and no `unsafe-inline`, the security headers, `ETag` and `304`, immutable caching of hashed files, gzip, the redirect of a folder without slash, the 404 page, `405`, the info endpoint, refused `Host` names, refused targets (`..`, `.`, `%2e`, backslash, empty segments), and that a public address without TLS does not start.
 - `PanelConfigLoaderTest`: defaults without a file, strict reading, port and `public-url` rules.
 - Fuzz targets (Jazzer, see [architecture](architecture.md#fuzz-tests)) in `PanelInputFuzzTest`: request targets are clean or refused, `panel.yml` is settings or configuration errors, public URLs are origins or refused.
+- `ServiceFilesTest`: path rules, atomic writes, listing order, the 8 MiB read limit, links never followed. `PanelApiTest`: rights of the file endpoints, CSRF on uploads, refused paths (`..`, `%2E%2E`, backslash, drive letter, device name), audit entries, and the checks of the event stream (session, origin, end with the session). `BodyLimitHandlerTest`: the body limits and the upload limit. `PanelStreamTest`: a real WebSocket against the running server, refused for another origin and without a session, 20 events each within a second (the worst delay is printed, about 10 ms on a desktop), closed with `1008` after sign-out. Fuzz target `filePathsStayInsideTheServiceFolder`.
 - The **Panel frontend** job of `ci.yml` checks that both languages have the same keys, type-checks the TypeScript and builds the static export.

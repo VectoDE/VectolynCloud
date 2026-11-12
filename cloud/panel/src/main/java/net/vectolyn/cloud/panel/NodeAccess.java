@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package net.vectolyn.cloud.panel;
 
+import io.netty.channel.Channel;
 import java.io.IOException;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import net.vectolyn.cloud.api.ApiServer;
 import net.vectolyn.cloud.api.auth.ApiToken;
 import net.vectolyn.cloud.api.auth.ApiTokens;
@@ -39,6 +41,19 @@ public interface NodeAccess {
     ApiResponse call(ApiToken principal, String method, String target, byte[] body, String ifMatch) throws ApiException;
 
     /**
+     * Adds the WebSocket of a signed-in user to the node's event streams.
+     *
+     * @param channel   the WebSocket, after its handshake
+     * @param principal the user as a local token
+     * @param types     event types asked for, empty for all the user may see
+     * @param services  services to follow, empty for all
+     * @return the event types the stream gets
+     * @throws ApiException 400 for an unknown type, 403 for a missing scope, 503 for too many streams
+     */
+    Set<String> subscribe(Channel channel, ApiToken principal, Set<String> types, Set<String> services)
+            throws ApiException;
+
+    /**
      * Adapts a running API server.
      *
      * @param server the server
@@ -56,6 +71,12 @@ public interface NodeAccess {
             public ApiResponse call(ApiToken principal, String method, String target, byte[] body, String ifMatch)
                     throws ApiException {
                 return server.call(principal, method, target, body, ifMatch);
+            }
+
+            @Override
+            public Set<String> subscribe(Channel channel, ApiToken principal, Set<String> types, Set<String> services)
+                    throws ApiException {
+                return server.subscribe(channel, principal, types, services);
             }
         };
     }
