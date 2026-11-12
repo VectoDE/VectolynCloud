@@ -152,6 +152,43 @@
     });
   }
 
+  // ---------- Header: shrinks after the first scroll; thin scroll progress bar ----------
+  var bar = document.querySelector('.progress span');
+  var ticking = false;
+  function onScroll() {
+    ticking = false;
+    var y = window.scrollY || 0;
+    if (head) head.classList.toggle('scrolled', y > 24);
+    if (bar) {
+      var max = document.documentElement.scrollHeight - window.innerHeight;
+      bar.style.setProperty('--p', max > 0 ? Math.min(1, y / max).toFixed(4) : '0');
+    }
+  }
+  window.addEventListener('scroll', function () { if (!ticking) { ticking = true; requestAnimationFrame(onScroll); } }, { passive: true });
+  onScroll();
+
+  // ---------- Big numbers count up briefly once visible (only with motion); bars grow ----------
+  if ('IntersectionObserver' in window) {
+    var countIO = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        countIO.unobserve(e.target);
+        var el = e.target;
+        if (el.classList.contains('bar')) { el.classList.add('grown'); return; }
+        var end = parseInt(el.getAttribute('data-count'), 10);
+        if (!(end > 0) || reduce.matches || motion.paused()) return;
+        var t0 = performance.now(), dur = 700;
+        var step = function (now) {
+          var k = Math.min(1, (now - t0) / dur);
+          el.textContent = String(Math.max(1, Math.round(end * (1 - Math.pow(1 - k, 3)))));
+          if (k < 1) requestAnimationFrame(step); else el.textContent = String(end);
+        };
+        requestAnimationFrame(step);
+      });
+    }, { threshold: 0.6 });
+    document.querySelectorAll('[data-count],.bar').forEach(function (el) { countIO.observe(el); });
+  }
+
   // ---------- Copy the server address ----------
   document.querySelectorAll('[data-copy]').forEach(function (btn) {
     btn.addEventListener('click', function () {

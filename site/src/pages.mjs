@@ -32,18 +32,18 @@ export const nav = {
     { id: 'product', de: 'VectolynCloud', en: 'VectolynCloud',
       intro: { de: 'Die Software für dein eigenes Netzwerk', en: 'The software for your own network' },
       items: [
-        { key: 'home', de: 'Überblick', en: 'Overview', desc: { de: 'Was die Cloud macht und wo das Projekt steht', en: 'What the cloud does and where the project stands' } },
-        { key: 'download', de: 'Download', en: 'Download', desc: { de: 'Releases, Voraussetzungen, Signaturen', en: 'Releases, requirements, signatures' } },
-        { key: 'docs', de: 'Dokumentation', en: 'Documentation', desc: { de: 'Betrieb, Setup, Konsole, API', en: 'Operations, setup, console, API' } },
-        { key: 'websites', de: 'Website für dein Netzwerk', en: 'A website for your network', desc: { de: 'Drei geplante Wege', en: 'Three planned ways' } },
+        { key: 'home', art: 'window', de: 'Überblick', en: 'Overview', desc: { de: 'Was die Cloud macht und wo das Projekt steht', en: 'What the cloud does and where the project stands' } },
+        { key: 'download', art: 'download', de: 'Download', en: 'Download', desc: { de: 'Releases, Voraussetzungen, Signaturen', en: 'Releases, requirements, signatures' } },
+        { key: 'docs', art: 'book', de: 'Dokumentation', en: 'Documentation', desc: { de: 'Betrieb, Setup, Konsole, API', en: 'Operations, setup, console, API' } },
+        { key: 'websites', art: 'setup', de: 'Website für dein Netzwerk', en: 'A website for your network', desc: { de: 'Drei geplante Wege', en: 'Three planned ways' } },
       ] },
     { id: 'network', de: 'Testnetzwerk', en: 'Test network',
       intro: { de: 'Vectolyn Network: VectolynCloud zum Anfassen', en: 'Vectolyn Network: try VectolynCloud in game' },
       items: [
-        { key: 'network', de: 'So spielst du mit', en: 'How to join', desc: { de: 'Status, Adresse, Java und Bedrock', en: 'Status, address, Java and Bedrock' } },
-        { key: 'rules', de: 'Regeln', en: 'Rules', desc: { de: 'Was gilt und was bei Verstößen passiert', en: 'What applies and what happens on a breach' } },
-        { key: 'shop', de: 'Shop', en: 'Shop', desc: { de: 'Kosmetisch, im Testmodus', en: 'Cosmetic, in test mode' } },
-        { key: 'team', de: 'Team', en: 'Team', desc: { de: 'Wer dahintersteht', en: 'Who is behind it' } },
+        { key: 'network', art: 'crossplay', de: 'So spielst du mit', en: 'How to join', desc: { de: 'Status, Adresse, Java und Bedrock', en: 'Status, address, Java and Bedrock' } },
+        { key: 'rules', art: 'rules', de: 'Regeln', en: 'Rules', desc: { de: 'Was gilt und was bei Verstößen passiert', en: 'What applies and what happens on a breach' } },
+        { key: 'shop', art: 'crown', de: 'Shop', en: 'Shop', desc: { de: 'Kosmetisch, im Testmodus', en: 'Cosmetic, in test mode' } },
+        { key: 'team', art: 'head', de: 'Team', en: 'Team', desc: { de: 'Wer dahintersteht', en: 'Who is behind it' } },
       ] },
   ],
   flat: [
@@ -82,7 +82,7 @@ export const footerLinks = [
 
 export const strings = {
   de: {
-    skip: 'Zum Inhalt springen', menu: 'Menü', switchHint: 'Sprache wechseln:', switchShort: 'EN', toLight: 'Helles Design', toDark: 'Dunkles Design', navCta: 'Herunterladen', mainNav: 'Hauptnavigation', crumbs: 'Brotkrumen', switchLabel: 'English',
+    skip: 'Zum Inhalt springen', newsLabel: 'Neuigkeiten', footClaim: 'Freie Software für dein eigenes Minecraft-Netzwerk. Gebaut in Itzehoe, offen auf GitHub.', allNews: 'Alle Neuigkeiten', fmtDate: (d) => dateDe(d), menu: 'Menü', switchHint: 'Sprache wechseln:', switchShort: 'EN', toLight: 'Helles Design', toDark: 'Dunkles Design', navCta: 'Herunterladen', mainNav: 'Hauptnavigation', crumbs: 'Brotkrumen', switchLabel: 'English',
     ogAlt: 'Wortmarke VectolynCloud mit dem Pixel-Zeichen',
     trustHeading: 'Bewertungen und Prüfungen', socialHeading: 'Folgen', feedTitle: 'VectolynCloud: Neuigkeiten', trustpilot: 'Bewertungen auf Trustpilot', gridinsoft: 'Website-Prüfung bei Gridinsoft',
     footMeta: (d, repo) => `Herausgegeben von Tim Hauke (VectoDE). Stand: ${dateDe(d)}. Diese Website ist Teil des <a href="${repo}/tree/main/site">Quelltexts</a> und steht wie alles im Projekt unter GPL-3.0.`,
@@ -91,7 +91,7 @@ export const strings = {
     consentMore: 'Mehr dazu', motionPause: 'Animationen anhalten', motionPlay: 'Animationen abspielen', consentYes: 'Zustimmen', consentNo: 'Ablehnen', consentSettings: 'Statistik-Einstellungen',
   },
   en: {
-    skip: 'Skip to content', menu: 'Menu', switchHint: 'Switch language:', switchShort: 'DE', toLight: 'Light mode', toDark: 'Dark mode', navCta: 'Download', mainNav: 'Main navigation', crumbs: 'Breadcrumb', switchLabel: 'Deutsch',
+    skip: 'Skip to content', newsLabel: 'News', footClaim: 'Free software for your own Minecraft network. Built in Itzehoe, open on GitHub.', allNews: 'All news', fmtDate: (d) => dateEn(d), menu: 'Menu', switchHint: 'Switch language:', switchShort: 'DE', toLight: 'Light mode', toDark: 'Dark mode', navCta: 'Download', mainNav: 'Main navigation', crumbs: 'Breadcrumb', switchLabel: 'Deutsch',
     ogAlt: 'The VectolynCloud wordmark with the pixel mark',
     trustHeading: 'Reviews and checks', socialHeading: 'Follow', feedTitle: 'VectolynCloud news', trustpilot: 'Reviews on Trustpilot', gridinsoft: 'Website check by Gridinsoft',
     footMeta: (d, repo) => `Published by Tim Hauke (VectoDE). Last updated ${dateEn(d)}. This website is part of the <a href="${repo}/tree/main/site">source code</a> and, like the rest of the project, licensed under GPL-3.0.`,
@@ -138,11 +138,18 @@ const ext = (href, text) => `<a href="${href}">${text}</a>`;
 
 const ICONS = {
   crossplay: 'M1 2h6v6H1zM9 8h6v6H9zM7 4h3v2H7zM10 4h2v4h-2zM4 8h2v4H4zM6 10h3v2H6z',
-  check: 'M1 8h2v2h2v2h2v-2h2V8h2V6h2V4h2v2h-2v2h-2v2h-2v2H9v2H7v-2H5v-2H3V8H1z',
+  check: 'M1 7h3v3h3v3H4v-3H1zM7 10h3V7h3V4h3v3h-3v3h-3v3H7z',
   setup: 'M1 2h4v4H1zM7 3h8v2H7zM1 7h4v4H1zM7 8h8v2H7zM1 12h4v3H1zM7 12h6v2H7z',
   scale: 'M1 11h4v4H1zM6 7h4v8H6zM11 2h4v13h-4z',
   window: 'M1 2h14v12H1zM3 6v6h10V6z',
   key: 'M1 4h7v7H1zM3 6v3h3V6zM8 6h7v3H8zM11 9h2v3h-2zM14 9h1v3h-1z',
+  download: 'M7 1h2v7h2V6h2v2h-2v2H9v2H7v-2H5V8H3V6h2v2h2zM1 13h14v2H1z',
+  book: 'M1 2h6v1h2V2h6v12H9v1H7v-1H1zM3 4v8h4V4zM9 4v8h4V4z',
+  rules: 'M3 1h10v14H3zM5 4h6v1H5zM5 7h6v1H5zM5 10h4v1H5z',
+  head: 'M3 1h10v10H3zM5 5h2v2H5zM9 5h2v2H9zM6 8h4v1H6zM4 12h8v3H4z',
+  crown: 'M1 4h2v3h2V4h2v3h2V4h2v3h2V4h2v9H1zM3 10v1h10v-1z',
+  news: 'M1 2h12v12H1zM13 5h2v9h-2zM3 4h8v3H3zM3 9h8v1H3zM3 11h5v1H3z',
+  status: 'M1 11h3v4H1zM5 8h3v7H5zM9 5h3v10H9zM13 1h2v14h-2z',
 };
 const SHOP_ART = {
   crown: 'M1 4h2v3h2V4h2v3h2V4h2v3h2V4h2v9H1zM3 10v1h10v-1z',
@@ -150,7 +157,7 @@ const SHOP_ART = {
   hourglass: 'M3 1h10v2h-1v3h-1v1h-1v2h1v1h1v3h1v2H3v-2h1v-3h1V9h1V7H5V6H4V3H3zM6 12v1h4v-1z',
   picture: 'M1 2h14v12H1zM3 4v8h10V4zM10 5h2v2h-2zM4 11V9h2V7h2v2h1v1h2v1z',
 };
-const icon = (name) => `<svg class="icon" viewBox="0 0 16 16" width="32" height="32" aria-hidden="true" focusable="false"><path fill-rule="evenodd" d="${ICONS[name]}"/></svg>`;
+export const icon = (name, cls = 'icon') => `<svg class="${cls}" viewBox="0 0 16 16" width="32" height="32" aria-hidden="true" focusable="false" shape-rendering="crispEdges"><path fill-rule="evenodd" d="${ICONS[name]}"/></svg>`;
 
 
 /** Hero picture: a voxel island. Static AVIF/WebP for everyone; scene.js swaps in the live 3D view on capable devices. */
@@ -191,8 +198,8 @@ function netVisual(t) {
 
 /** A pixel head as a CSS cube. Purely decorative; open roles get an empty wireframe. */
 // Team head: the real Minecraft head (cropped at build time, see heads.mjs) or the open placeholder cube.
-const head3d = (head, label) => head
-  ? `<div class="head3d head-skin skin-${head}" role="img" aria-label="${label}"><div class="cube" aria-hidden="true"><span class="f f-front"></span><span class="f f-back"></span><span class="f f-right"></span><span class="f f-left"></span><span class="f f-top"></span><span class="f f-bottom"></span></div></div>`
+const head3d = (head, label, size = '') => head
+  ? `<div class="head3d head-skin skin-${head} ${size}" role="img" aria-label="${label}"><div class="cube" aria-hidden="true"><span class="f f-front"></span><span class="f f-back"></span><span class="f f-right"></span><span class="f f-left"></span><span class="f f-top"></span><span class="f f-bottom"></span></div></div>`
   : `<div class="head3d head-open" role="img" aria-label="${label}"><div class="cube" aria-hidden="true"><span class="f f-front"></span><span class="f f-back"></span><span class="f f-right"></span><span class="f f-left"></span><span class="f f-top"></span><span class="f f-bottom"></span></div></div>`;
 
 /** Team roster. mcName is the Java Edition name whose active skin the build fetches; leave it out for open roles. */
@@ -269,29 +276,37 @@ export const pages = {
       description: t('VectolynCloud ist freie Software (GPL-3.0), die dein Minecraft-Netzwerk aufsetzt und betreibt: Proxy, Lobby, Spielserver und Minispiele, für Java- und Bedrock-Spieler.',
         'VectolynCloud is free software (GPL-3.0) that sets up and runs your Minecraft network: proxy, lobby, game servers and minigames, for Java and Bedrock players.'),
       crumbs: null,
-      body: (ctx) => `<section class="hero">
+      body: (ctx) => {
+        const lead = team.find((m) => m.mcName && ctx.config.heads?.[m.mcName]);
+        const leadHead = lead && ctx.config.heads[lead.mcName];
+        const openRoles = team.filter((m) => !m.who).length;
+        const nowStage = stages(t).findIndex(([, s]) => s === 'now') + 1;
+        return `<section class="hero">
   <div class="hero-text">
     <h1>${t('Dein Minecraft-Netzwerk, betrieben von einem Programm.', 'Your Minecraft network, run by one program.')}</h1>
-    <p class="lede">${t('VectolynCloud lädt die Serversoftware, prüft jede Datei, richtet die Datenbank ein und startet Proxy, Lobby und Spielserver. Java- und Bedrock-Spieler landen auf denselben Servern. Du hostest alles selbst.',
-      'VectolynCloud downloads the server software, checks every file, sets up the database and starts proxy, lobby and game servers. Java and Bedrock players end up on the same servers. You host all of it yourself.')}</p>
+    <p class="lede">${t('VectolynCloud lädt die Serversoftware, prüft jede Datei, richtet die Datenbank ein und startet Proxy, Lobby und Spielserver. Java- und Bedrock-Spieler landen auf denselben Servern, und du hostest alles selbst.',
+      'VectolynCloud downloads the server software, checks every file, sets up the database and starts proxy, lobby and game servers. Java and Bedrock players end up on the same servers, and you host all of it yourself.')}</p>
     <p class="actions">
-      <a class="btn btn-primary" href="${ctx.link('download')}">${t('Herunterladen', 'Download')}</a>
-      <a class="btn" href="${ctx.link('docs')}">${t('Dokumentation lesen', 'Read the docs')}</a>
+      <a class="btn btn-primary btn-large" href="${ctx.link('download')}">${icon('download', 'btn-icon')}${t('Herunterladen', 'Download')}</a>
+      <a class="btn btn-large" href="${ctx.link('network')}">${icon('crossplay', 'btn-icon')}${t('Zum Testnetzwerk', 'Test network')}</a>
     </p>
-    <p class="fineprint">${t('Stufe 2 von 8. Die Releases sind signierte Vorabversionen zum Ausprobieren, noch nicht für den Echtbetrieb.', 'Stage 2 of 8. Releases so far are signed pre-releases for trying out, not for production yet.')}</p>
   </div>
-  ${worldVisual(t, ctx)}
+  <div class="hero-art">
+    ${worldVisual(t, ctx)}
+    <div class="hero-deco" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+  </div>
 </section>
 
 <section class="band" aria-labelledby="h-why">
+  <p class="kicker">${t('Produkt', 'Product')}</p>
   <h2 id="h-why">${t('Was VectolynCloud dir abnimmt', 'What VectolynCloud takes off your hands')}</h2>
   <ul class="features">
-    <li class="feature feature-lead">${icon('crossplay')}<h3>${t('Java und Bedrock auf denselben Servern', 'Java and Bedrock on the same servers')}</h3><p>${t('Velocity ist der einzige Eingang. Geyser und Floodgate lassen Bedrock-Spieler herein, ViaVersion, ViaBackwards und ViaRewind übersetzen ältere Java-Versionen bis 1.8. Von Hand richtest du nichts davon ein.', 'Velocity is the single entry point. Geyser and Floodgate let Bedrock players in, ViaVersion, ViaBackwards and ViaRewind translate older Java versions back to 1.8. You set none of it up by hand.')}</p></li>
+    <li class="feature">${icon('crossplay')}<h3>${t('Java und Bedrock auf denselben Servern', 'Java and Bedrock on the same servers')}</h3><p>${t('Velocity ist der einzige Eingang. Geyser und Floodgate lassen Bedrock-Spieler herein, ViaVersion, ViaBackwards und ViaRewind übersetzen ältere Java-Versionen bis 1.8.', 'Velocity is the single entry point. Geyser and Floodgate let Bedrock players in, ViaVersion, ViaBackwards and ViaRewind translate older Java versions back to 1.8.')}</p></li>
     <li class="feature">${icon('check')}<h3>${t('Geprüfte Downloads', 'Verified downloads')}</h3><p>${t('Paper, Velocity, Fabric und die Plugins kommen von den offiziellen Quellen und werden gegen ihre Prüfsumme geprüft, bevor ein Server sie startet.', 'Paper, Velocity, Fabric and the plugins come from their official sources and are checked against their checksum before a server starts them.')}</p></li>
     <li class="feature">${icon('setup')}<h3>${t('Setup ohne Handarbeit', 'Setup without busywork')}</h3><p>${t('Ein Assistent fragt beim ersten Start alles Nötige ab und schreibt erst, wenn du speicherst. Ohne Terminal liest er eine Setup-Datei.', 'An assistant asks what it needs on the first start and writes nothing until you save. Without a terminal it reads a setup file instead.')}</p></li>
     <li class="feature">${icon('scale')}<h3>${t('Minispiele nach Bedarf', 'Minigames on demand')}</h3><p>${t('Statische Server laufen dauerhaft, Minispiel-Server startet und beendet die Cloud, wenn Spieler sie brauchen.', 'Static servers keep running; the cloud starts and stops minigame servers as players need them.')}</p></li>
     <li class="feature">${icon('window')}<h3>${t('Läuft, wo du willst', 'Runs where you want')}</h3><p>${t('Windows, Linux mit systemd, macOS, Docker, Pelican und Pterodactyl. Nötig ist Java 21 oder neuer.', 'Windows, Linux with systemd, macOS, Docker, Pelican and Pterodactyl. You need Java 21 or newer.')}</p></li>
-    <li class="feature">${icon('key')}<h3>${t('Offen und signiert', 'Open and signed')}</h3><p>${t('Der Quelltext ist unter GPL-3.0 lizenziert. Jede Release-Datei ist mit cosign signiert und hat eine SLSA-Herkunftsbescheinigung.', 'The source code is licensed under GPL-3.0. Every release file is signed with cosign and carries SLSA build provenance.')}</p></li>
+    <li class="feature">${icon('key')}<h3>${t('Offen und signiert', 'Open and signed')}</h3><p>${t('Der Quelltext steht unter GPL-3.0. Jede Release-Datei ist mit cosign signiert und hat eine SLSA-Herkunftsbescheinigung.', 'The source code is under GPL-3.0. Every release file is signed with cosign and carries SLSA build provenance.')}</p></li>
   </ul>
 </section>
 
@@ -326,27 +341,57 @@ export const pages = {
   </figure>
 </section>
 
-<section class="band band-split band-network" aria-labelledby="h-test">
+<section class="band band-network" aria-labelledby="h-test">
+  <div class="network-inner">
+    <div>
+      <p class="kicker">${t('Netzwerk', 'Network')}</p>
+      <h2 id="h-test">${t('Erst ausprobieren: Vectolyn Network', 'Try it first: Vectolyn Network')}</h2>
+      <p>${t('Auf unserem öffentlichen Testnetzwerk siehst du, wie sich ein Netzwerk mit VectolynCloud anfühlt, bevor du dein eigenes aufsetzt. Es ist noch nicht online; die Adresse steht hier, sobald es läuft.', 'On our public test network you can see what a network run by VectolynCloud feels like before you set up your own. It is not online yet; the address will appear here once it runs.')}</p>
+      <p class="actions"><a class="btn btn-primary" href="${ctx.link('network')}">${t('So spielst du mit', 'How to join')}</a> <a class="btn" href="${ctx.link('rules')}">${t('Regeln', 'Rules')}</a> <a class="text-link" href="${ctx.link('shop')}">${t('Shop im Testmodus', 'Shop in test mode')}</a></p>
+    </div>
+    <ul class="editions">
+      <li>${icon('window', 'ed-icon')}<span class="ed-name">Java Edition</span><span class="ed-sub">${t('aktuelle Version, ältere bis 1.8', 'current version, older back to 1.8')}</span></li>
+      <li>${icon('crossplay', 'ed-icon')}<span class="ed-name">Bedrock Edition</span><span class="ed-sub">${t('über Geyser und Floodgate', 'through Geyser and Floodgate')}</span></li>
+    </ul>
+  </div>
+</section>
+
+<section class="band band-split band-status" aria-labelledby="h-status">
   <div>
-    <p class="audience">${t('Für Spieler', 'For players')}</p>
-    <h2 id="h-test">${t('Erst ausprobieren: Vectolyn Network', 'Try it first: Vectolyn Network')}</h2>
-    <p>${t('Auf unserem öffentlichen Testnetzwerk siehst du, wie sich ein Netzwerk mit VectolynCloud anfühlt, bevor du dein eigenes aufsetzt. Es ist noch nicht online; die Adresse steht hier, sobald es läuft.', 'On our public test network you can see what a network run by VectolynCloud feels like before you set up your own. It is not online yet; the address will appear here once it runs.')}</p>
-    <p class="actions"><a class="btn" href="${ctx.link('network')}">${t('Zum Testnetzwerk', 'About the test network')}</a> <a class="text-link" href="${ctx.link('rules')}">${t('Regeln lesen', 'Read the rules')}</a></p>
+    <p class="kicker">Status</p>
+    <h2 id="h-status">${t('Wo das Projekt steht', 'Where the project stands')}</h2>
+    <dl class="bignums">
+      <div><dt>${t('Projektstufe', 'Project stage')}</dt><dd><span class="num" data-count="${nowStage}">${nowStage}</span><span class="of">/ 8</span></dd><dd class="bar bar-${nowStage}" aria-hidden="true"><span></span></dd></div>
+      <div><dt>${t('Java-Versionen', 'Java versions')}</dt><dd><span class="num">1.8</span><span class="of">${t('bis aktuell', 'to current')}</span></dd></div>
+      <div><dt>${t('Plattformen', 'Platforms')}</dt><dd><span class="num" data-count="6">6</span><span class="of">${t('Systeme', 'systems')}</span></dd></div>
+    </dl>
+    ${roadmap(t)}
+    <p>${t('Den Fortschritt je Aufgabe zeigt das', 'Progress per task is on the')} ${ext('https://github.com/users/VectoDE/projects/11', t('Roadmap-Board auf GitHub', 'roadmap board on GitHub'))}.</p>
   </div>
   ${statusCard(t, ctx)}
 </section>
 
-<section class="band" aria-labelledby="h-road">
-  <h2 id="h-road">${t('Wo das Projekt steht', 'Where the project stands')}</h2>
-  ${roadmap(t)}
-  <p>${t('Den Fortschritt je Aufgabe zeigt das', 'Progress per task is on the')} ${ext('https://github.com/users/VectoDE/projects/11', t('Roadmap-Board auf GitHub', 'roadmap board on GitHub'))}.</p>
+<section class="band" aria-labelledby="h-docs">
+  <p class="kicker">${t('Doku', 'Docs')}</p>
+  <h2 id="h-docs">${t('Alles zum Betrieb an einem Ort', 'Everything about running it in one place')}</h2>
+  <ul class="doc-cards">
+    <li><a class="card-link" href="${ctx.link('download')}">${icon('download')}<span class="cl-title">Download</span><span class="cl-desc">${t('Releases, Voraussetzungen, Signaturen prüfen', 'Releases, requirements, checking signatures')}</span></a></li>
+    <li><a class="card-link" href="${ctx.link('docs')}">${icon('book')}<span class="cl-title">${t('Dokumentation', 'Documentation')}</span><span class="cl-desc">${t('Betrieb, Setup, Konsole und API', 'Operations, setup, console and API')}</span></a></li>
+    <li><a class="card-link" href="${ctx.link('websites')}">${icon('setup')}<span class="cl-title">${t('Website für dein Netzwerk', 'A website for your network')}</span><span class="cl-desc">${t('Drei geplante Wege, mit Shop', 'Three planned ways, with a shop')}</span></a></li>
+    <li><a class="card-link" href="${ctx.link('faq')}">${icon('news')}<span class="cl-title">${t('Häufige Fragen', 'FAQ')}</span><span class="cl-desc">${t('Kurze Antworten zu Lizenz, Betrieb und Testnetzwerk', 'Short answers on licence, operation and the test network')}</span></a></li>
+  </ul>
 </section>
 
-<section class="band band-cta" aria-labelledby="h-site">
-  <h2 id="h-site">${t('Website und Shop für dein Netzwerk', 'A website and shop for your network')}</h2>
-  <p>${t('Zu einem Netzwerk gehört eine Website. Geplant sind drei Wege dahin: eine Vorlage, ein Baukasten im Panel und ein reines Code-Projekt. Geplant ist außerdem ein Shop für kosmetische Inhalte mit Stripe oder Mollie.', 'A network needs a website. Three ways to get one are planned: a template, a block builder in the panel, and a plain code project. A shop for cosmetic items, paid through Stripe or Mollie, is planned as well.')}</p>
-  <p class="actions"><a class="btn" href="${ctx.link('websites')}">${t('Die drei Wege', 'The three ways')}</a></p>
-</section>`,
+<section class="band band-team" aria-labelledby="h-team">
+  ${leadHead ? head3d(leadHead.key, ctx.esc(t(`Kopf von ${leadHead.name}`, `Head of ${leadHead.name}`) + (lead.person ? ` (${lead.person})` : '')), 'head-xl') : ''}
+  <div>
+    <p class="kicker">Team</p>
+    <h2 id="h-team">${t('Wer dahintersteht', 'Who is behind it')}</h2>
+    <p>${t(`Heute entwickelt Tim Hauke das Projekt allein. Für das Testnetzwerk sind ${openRoles} Rollen offen: Administration, Moderation, Support und Bau.`, `Today Tim Hauke develops the project alone. For the test network ${openRoles} roles are open: administration, moderation, support and building.`)}</p>
+    <p class="actions"><a class="btn" href="${ctx.link('team')}">${t('Zum Team', 'Meet the team')}</a></p>
+  </div>
+</section>`;
+      },
     };
   },
 
@@ -642,7 +687,7 @@ ${rules.map((r, i) => `  <section id="${id(r)}" aria-labelledby="${id(r)}-h"><h2
   <ul class="team">${team.map((m) => {
     const head = m.mcName && ctx.config.heads?.[m.mcName];
     const label = head ? t(`Kopf von ${head.name}`, `Head of ${head.name}`) + (m.person ? ` (${m.person})` : '') : t('Offene Stelle, noch ohne Kopf', 'Open position, no head yet');
-    return `<li class="${m.who ? '' : 'open'}">${head3d(head && head.key, ctx.esc(label))}<h2>${m.role[lang]}</h2><p>${m.what[lang]}</p><p class="who">${m.who || t('noch offen', 'not filled yet')}</p></li>`;
+    return `<li class="${m.who ? '' : 'open'}">${head3d(head && head.key, ctx.esc(label), 'head-lg')}<h2>${m.role[lang]}</h2><p>${m.what[lang]}</p><p class="who">${m.who || t('noch offen', 'not filled yet')}</p></li>`;
   }).join('')}</ul>
   <p>${t('Du willst mitmachen? Code, Übersetzungen und Dokumentation kannst du jederzeit beitragen, siehe', 'Want to help? You can contribute code, translations and documentation at any time, see the')} ${ext(REPO + '/blob/main/CONTRIBUTING' + (lang === 'de' ? '.de' : '') + '.md', t('Anleitung zum Mitmachen', 'contributing guide'))}. ${t('Bewerbungen für Moderation und Support öffnen wir vor dem Start des Testnetzwerks.', 'Applications for moderation and support open before the test network launches.')}</p>
 </section>`,
