@@ -98,7 +98,7 @@ jobs:
           echo "ok   the SHA-256 check rejects a wrong hash"
           cp plugins/lobby/paper/build/libs/VectolynLobby-*.jar "$RUNNER_TEMP/paper/plugins/"
 
-      - name: Start Paper with the lobby and query the world rules
+      - name: Start Paper with the lobby, query the world rules and burn a fire
         run: |
           set -uo pipefail
           cd "$RUNNER_TEMP/paper"
@@ -106,21 +106,49 @@ jobs:
           printf '%s\n' 'online-mode=false' 'server-ip=127.0.0.1' 'server-port=25599' \
             'level-type=minecraft\:flat' 'view-distance=4' 'simulation-distance=4' > server.properties
           rules="advance_time advance_weather spawn_mobs spawn_monsters spawn_patrols spawn_wandering_traders spawn_wardens spawn_phantoms raids mob_griefing fire_spread_radius_around_player fall_damage drowning_damage fire_damage freeze_damage pvp"
-          {
-            for i in $(seq 1 240); do
-              grep -q 'Done (' server.log 2>/dev/null && break
-              sleep 2
-            done
-            # The lobby sets the rules a moment after it enabled; ask only once it said so.
-            for i in $(seq 1 60); do
-              grep -q 'sky lobby has been created' server.log 2>/dev/null && break
+          mkfifo commands
+          timeout 900 java -Xmx1G -jar paper.jar --nogui < commands > server.log 2>&1 &
+          server=$!
+          exec 3> commands
+          waitfor() { # pattern, seconds
+            for _ in $(seq 1 "$2"); do
+              grep -q "$1" server.log 2>/dev/null && return 0
               sleep 1
             done
+            return 1
+          }
+          waitfor 'Done (' 480 || echo "The server did not report Done."
+          # The lobby sets the rules a moment after it enabled; ask only once it said so.
+          waitfor 'sky lobby has been created' 60 || echo "The lobby did not report its world."
+          sleep 2
+          for r in $rules; do echo "gamerule $r" >&3; sleep 1; done
+          echo "plugins" >&3; sleep 2
+          # Fire: a fire on stone burns out on its own in vanilla. Once with the rule the lobby set
+          # (0) and once, as a control, with the rule unlimited (-1). No player is online, so the
+          # control shows what the server does without the rule; the lobby run shows what the rule does.
+          echo "forceload add 50 50" >&3
+          echo "forceload add 90 90" >&3
+          sleep 6
+          burn() { # label, x, z
+            echo "setblock $2 200 $3 minecraft:stone" >&3
+            echo "setblock $2 201 $3 minecraft:fire" >&3
             sleep 2
-            for r in $rules; do echo "gamerule $r"; sleep 1; done
-            echo "plugins"; sleep 2
-            echo "stop"
-          } | timeout 600 java -Xmx1G -jar paper.jar --nogui > server.log 2>&1
+            start=$SECONDS
+            for _ in $(seq 1 12); do
+              echo "execute if block $2 201 $3 minecraft:fire run say FIRE_PRESENT $1 t=$((SECONDS - start))" >&3
+              echo "execute unless block $2 201 $3 minecraft:fire run say FIRE_GONE $1 t=$((SECONDS - start))" >&3
+              sleep 5
+            done
+          }
+          echo "gamerule fire_spread_radius_around_player" >&3
+          burn lobby-rule 50 50
+          echo "gamerule fire_spread_radius_around_player -1" >&3
+          sleep 1
+          echo "gamerule fire_spread_radius_around_player" >&3
+          burn control-unlimited 90 90
+          echo "stop" >&3
+          exec 3>&-
+          wait "$server"
           echo "server exit: $?"
 
       - name: Check the log and the rules
@@ -140,14 +168,27 @@ jobs:
             echo "ok   no plugin error"
           fi
           for r in advance_time advance_weather spawn_mobs spawn_monsters spawn_patrols spawn_wandering_traders spawn_wardens spawn_phantoms raids mob_griefing fall_damage drowning_damage fire_damage freeze_damage pvp; do
-            check "$r is false" "$r[^0-9a-z]*(is currently set to)?[^a-z]*false"
+            check "${r} is false" "Game rule ${r} is currently set to false"
           done
-          check "fire_spread_radius_around_player is 0" 'fire_spread_radius_around_player[^0-9]*0([^0-9]|$)'
+          check "fire_spread_radius_around_player is 0" 'Game rule fire_spread_radius_around_player is currently set to 0'
+          # Fire: reported, not a pass or fail of the rule (the owner decides what a burning fire means).
+          report() { # label
+            gone=$(grep -E "FIRE_GONE $1 " "$log" | head -1 | sed 's/.*t=//')
+            present=$(grep -cE "FIRE_PRESENT $1 " "$log")
+            if [ -n "$gone" ]; then
+              echo "FIRE $1: gone at t=${gone} s (present in ${present} checks before)"
+            else
+              echo "FIRE $1: still burning after 60 s (present in ${present} of 12 checks)"
+              echo "::warning::Fire ($1) did not go out within 60 s"
+            fi
+          }
+          report lobby-rule
+          report control-unlimited
           {
             echo "### Lobby on Paper"
             echo
             echo '```'
-            grep -Ei 'VectolynLobby|gamerule|Done \(|Paper' "$log" | head -80
+            grep -Ei 'VectolynLobby|Game rule|Done \(|FIRE_' "$log" | head -120
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           exit $fail
