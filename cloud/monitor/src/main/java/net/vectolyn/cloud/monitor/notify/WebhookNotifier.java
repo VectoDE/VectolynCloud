@@ -17,6 +17,7 @@ import javax.net.ssl.SSLException;
 import net.vectolyn.cloud.monitor.alert.Alert;
 import net.vectolyn.cloud.monitor.alert.AlertEvent;
 import net.vectolyn.cloud.monitor.config.MonitorConfig.WebhookFormat;
+import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
 
@@ -63,7 +64,8 @@ public final class WebhookNotifier implements Notifier {
     }
 
     /** Same, with a custom TLS context (tests trust a self-signed certificate). */
-    WebhookNotifier(WebhookUrl url, WebhookFormat format, Duration timeout, String origin, SSLContext tls) {
+    WebhookNotifier(WebhookUrl url, WebhookFormat format, Duration timeout, String origin,
+            @Nullable SSLContext tls) {
         this.url = Objects.requireNonNull(url, "url");
         this.format = Objects.requireNonNull(format, "format");
         this.timeout = Objects.requireNonNull(timeout, "timeout");

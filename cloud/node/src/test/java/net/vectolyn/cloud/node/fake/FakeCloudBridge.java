@@ -42,19 +42,17 @@ public final class FakeCloudBridge {
                         out.println("[fake] cloud disconnected " + disconnected.reason());
                 case CloudClientEvent.MessageReceived received -> {
                     // What a Velocity bridge would apply to its server list.
-                    if (received.message() instanceof RegisterServer register) {
-                        out.println("[fake] register " + register.name() + " " + register.host() + ":" + register.port()
-                                + " group=" + register.group() + " legacy=" + register.legacy());
-                    } else if (received.message() instanceof UnregisterServer unregister) {
-                        out.println("[fake] unregister " + unregister.name());
-                    } else if (received.message() instanceof ServerCapacity capacity) {
-                        out.println("[fake] capacity " + capacity.name() + " " + capacity.slots()
-                                + " open=" + capacity.open());
-                    } else if (received.message() instanceof TransferPlayer transfer) {
+                    switch (received.message()) {
+                        case RegisterServer register -> out.println("[fake] register " + register.name() + " "
+                                + register.host() + ":" + register.port() + " group=" + register.group()
+                                + " legacy=" + register.legacy());
+                        case UnregisterServer unregister -> out.println("[fake] unregister " + unregister.name());
+                        case ServerCapacity capacity -> out.println("[fake] capacity " + capacity.name() + " "
+                                + capacity.slots() + " open=" + capacity.open());
                         // The test answers with "player switch", as a proxy reports the move.
-                        out.println("[fake] transfer " + transfer.uuid() + " " + transfer.to() + " " + transfer.reason());
-                    } else {
-                        out.println("[fake] cloud message");
+                        case TransferPlayer transfer -> out.println("[fake] transfer " + transfer.uuid() + " "
+                                + transfer.to() + " " + transfer.reason());
+                        default -> out.println("[fake] cloud message");
                     }
                 }
             }
@@ -75,7 +73,7 @@ public final class FakeCloudBridge {
      * @param line   the console line
      */
     public static void command(Object client, PrintStream out, String line) {
-        String[] parts = line.split(" ");
+        String[] parts = line.split(" ", -1);
         CloudClient cloud = (CloudClient) client;
         if (parts[0].equals("status")) {
             // "status <online> <max>": what a bridge reports every 5 seconds, sent once.

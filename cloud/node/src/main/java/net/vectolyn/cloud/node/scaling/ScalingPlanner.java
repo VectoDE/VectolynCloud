@@ -25,6 +25,7 @@ import net.vectolyn.cloud.node.service.ServiceInfo;
 import net.vectolyn.cloud.node.service.ServicePlanner;
 import net.vectolyn.cloud.node.service.ServiceState;
 import net.vectolyn.protocol.ServiceId;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The pure decisions of the autoscaler, without any I/O or clock of its own: which task gets
@@ -279,7 +280,7 @@ public final class ScalingPlanner {
      * The starts that bring a task up to {@code min-services}, all in this round and without
      * {@code cooldown}; {@code null} if the task has its minimum, so the other rules apply.
      */
-    private static List<Decision> fillToMinimum(Input in, String name, TaskConfig task) {
+    private static @Nullable List<Decision> fillToMinimum(Input in, String name, TaskConfig task) {
         ScalingConfig scaling = task.scaling();
         List<ServiceInfo> mine = in.services().stream().filter(s -> name.equals(s.task())).toList();
         Set<ServiceId> demoted = demoted(mine, scaling);
@@ -441,7 +442,7 @@ public final class ScalingPlanner {
      * @return the load
      */
     public static Optional<Load> groupLoad(ConfigSnapshot snapshot, String group, List<ServiceInfo> services,
-                                           Signals signals, Set<ServiceId> draining, ServiceId leaveOut) {
+                                           Signals signals, Set<ServiceId> draining, @Nullable ServiceId leaveOut) {
         long players = 0;
         long slots = 0;
         for (ServiceInfo s : services) {

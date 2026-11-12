@@ -7,6 +7,7 @@ import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import net.vectolyn.cloud.config.secret.EnvFile;
@@ -71,7 +72,7 @@ public final class ServiceSecrets {
      * @return the placeholder names
      */
     public static List<String> placeholdersOf(ServerPlatform platform) {
-        return PLACEHOLDERS.get(platform);
+        return Objects.requireNonNull(PLACEHOLDERS.get(platform), "every platform has placeholders");
     }
 
     /**

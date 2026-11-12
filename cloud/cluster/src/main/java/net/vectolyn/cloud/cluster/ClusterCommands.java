@@ -164,13 +164,13 @@ public final class ClusterCommands {
     }
 
     private void listTokens(ConsoleOutput out) throws Exception {
-        List<JoinTokens.Info> all = call(cluster::tokens);
+        List<JoinTokens.TokenInfo> all = call(cluster::tokens);
         if (all.isEmpty()) {
             out.println(Text.of("No open join tokens.", "Keine offenen Beitritts-Tokens."));
             return;
         }
         out.heading(Text.of("Join tokens", "Beitritts-Tokens").get(out.language()));
-        for (JoinTokens.Info token : all) {
+        for (JoinTokens.TokenInfo token : all) {
             out.println("  " + token.id() + "  " + token.node() + "  " + token.expiresAt());
         }
     }
@@ -197,10 +197,7 @@ public final class ClusterCommands {
         int port = port(head.substring(colon + 1));
         String target = host;
         out.println(Text.of("Joining %1$s ...", "Trete %1$s bei ..."), head);
-        call(() -> {
-            cluster.join(target, port, headNode, token, pin);
-            return null;
-        });
+        run(() -> cluster.join(target, port, headNode, token, pin));
         out.success(Text.of("Joined the cluster of %1$s.", "Dem Cluster von %1$s beigetreten."),
                 cluster.status().head().map(NodeId::value).orElse("?"));
     }
@@ -257,8 +254,9 @@ public final class ClusterCommands {
                     "Der Abgleich läuft im Hintergrund weiter; „cluster status“ zeigt, wann er fertig ist."));
             return;
         } catch (ExecutionException e) {
+            Throwable cause = e.getCause() == null ? e : e.getCause();
             throw new CommandException(Text.of("Sync failed: %1$s", "Abgleich fehlgeschlagen: %1$s"),
-                    String.valueOf(e.getCause().getMessage()));
+                    String.valueOf(cause.getMessage()));
         }
         ClusterService.MirrorStatus mirror = cluster.status().mirror().orElseThrow();
         if (head) {
@@ -274,10 +272,7 @@ public final class ClusterCommands {
 
     private void remove(ConsoleOutput out, String nodeId) throws Exception {
         NodeId node = nodeId(nodeId);
-        call(() -> {
-            cluster.remove(node);
-            return null;
-        });
+        run(() -> cluster.remove(node));
         out.success(Text.of("%1$s removed; its certificate is revoked.", "%1$s entfernt; sein Zertifikat ist widerrufen."),
                 node);
     }
@@ -312,6 +307,19 @@ public final class ClusterCommands {
         } catch (IOException e) {
             throw new CommandException(Text.of("Cluster: %1$s", "Cluster: %1$s"), String.valueOf(e.getMessage()));
         }
+    }
+
+    /** Like {@link #call}, for an action without a result. */
+    private static void run(VoidAction action) throws CommandException {
+        call(() -> {
+            action.run();
+            return Boolean.TRUE;
+        });
+    }
+
+    @FunctionalInterface
+    private interface VoidAction {
+        void run() throws ClusterException, IOException;
     }
 
     @FunctionalInterface

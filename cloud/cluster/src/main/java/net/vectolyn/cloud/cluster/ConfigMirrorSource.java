@@ -22,6 +22,7 @@ import net.vectolyn.cloud.config.model.ConfigSnapshot;
 import net.vectolyn.protocol.NodeId;
 import net.vectolyn.protocol.PacketReader;
 import net.vectolyn.protocol.ProtocolException;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The head's side of the config mirror: renders {@code nodes.yml}, the groups and the tasks of its
@@ -42,12 +43,13 @@ final class ConfigMirrorSource {
      * @param entries  the manifest, sorted by path
      * @param files    the content by path
      */
+    @SuppressWarnings("ArrayRecordComponent") // raw bytes of the wire format; a List<Byte> would only cost memory
     record Rendered(long revision, byte[] digest, List<FileEntry> entries, SortedMap<String, byte[]> files) {
     }
 
     private final Path stateFile;
     private final Supplier<ConfigSnapshot> snapshot;
-    private volatile Rendered current;
+    private volatile @Nullable Rendered current;
 
     /**
      * Creates the source; nothing is rendered until {@link #refresh()}.

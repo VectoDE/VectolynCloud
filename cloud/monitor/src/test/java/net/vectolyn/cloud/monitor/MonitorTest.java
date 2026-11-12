@@ -272,8 +272,13 @@ class MonitorTest {
     @Test
     void gaugeAlertsEndWhenTheServiceStopsCrashAlertsDoNot() throws Exception {
         directory.running("lobby-1", "lobby", 100);
-        try (Monitor monitor = monitor("rules:\n  - name: low-tps\n    when: tps < 18\n"
-                + "  - name: crash-loop\n    when: crashes >= 2 within 10m\n")) {
+        try (Monitor monitor = monitor("""
+                rules:
+                  - name: low-tps
+                    when: tps < 18
+                  - name: crash-loop
+                    when: crashes >= 2 within 10m
+                """)) {
             monitor.statusReported(status(LOBBY, 5, 1, 2));
             assertEquals(1, monitor.sampleNow().size());
             monitor.serviceStateChanged(LOBBY, ServicePhase.CRASHED, ServicePhase.RUNNING);

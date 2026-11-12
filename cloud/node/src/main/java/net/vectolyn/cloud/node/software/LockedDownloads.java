@@ -74,7 +74,7 @@ public final class LockedDownloads implements ArtifactSource {
         this.downloader = Objects.requireNonNull(downloader, "downloader");
         this.cache = Objects.requireNonNull(cache, "cache");
         this.lock = Objects.requireNonNull(lock, "lock");
-        this.minimumsFile = cache.directory().getParent().resolve(MINIMUMS_FILE);
+        this.minimumsFile = Objects.requireNonNull(cache.directory().getParent(), "cache folder has a parent").resolve(MINIMUMS_FILE);
     }
 
     @Override

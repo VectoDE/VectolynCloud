@@ -163,7 +163,7 @@ class AutoscalerTest {
         java.util.logging.Handler handler = new java.util.logging.Handler() {
             @Override
             public void publish(java.util.logging.LogRecord r) {
-                if (r.getLevel() == java.util.logging.Level.WARNING) {
+                if (java.util.logging.Level.WARNING.equals(r.getLevel())) {
                     warnings.add(java.text.MessageFormat.format(r.getMessage(), r.getParameters()));
                 }
             }
@@ -306,7 +306,7 @@ class AutoscalerTest {
         return new java.util.logging.Handler() {
             @Override
             public void publish(java.util.logging.LogRecord r) {
-                if (r.getLevel() == java.util.logging.Level.WARNING) {
+                if (java.util.logging.Level.WARNING.equals(r.getLevel())) {
                     warnings.add(java.text.MessageFormat.format(r.getMessage(), r.getParameters()));
                 }
             }

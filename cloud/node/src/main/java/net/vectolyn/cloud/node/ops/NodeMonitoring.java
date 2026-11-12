@@ -17,6 +17,7 @@ import net.vectolyn.cloud.node.service.ServiceListener;
 import net.vectolyn.cloud.node.service.ServiceManager;
 import net.vectolyn.cloud.node.service.ServiceState;
 import net.vectolyn.protocol.ServiceId;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The node seen by cloud-monitor ({@code docs/cloud/monitor.md#hooking-it-into-the-node}): the
@@ -27,7 +28,7 @@ public final class NodeMonitoring implements ServiceDirectory, ServiceListener {
 
     private final ServiceManager services;
     private final Supplier<ConfigSnapshot> config;
-    private volatile Monitor monitor;
+    private volatile @Nullable Monitor monitor;
 
     /**
      * Creates the adapter.
@@ -61,7 +62,7 @@ public final class NodeMonitoring implements ServiceDirectory, ServiceListener {
     }
 
     @Override
-    public void stateChanged(ServiceInfo service, ServiceState previous) {
+    public void stateChanged(ServiceInfo service, @Nullable ServiceState previous) {
         Monitor target = monitor;
         if (target != null) {
             target.serviceStateChanged(service.id(), phase(service.state()), previous == null ? null : phase(previous));
