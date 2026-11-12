@@ -154,7 +154,12 @@ final class NodeCommands {
             throw Values.invalid(file, path, PORT_RANGE_FORMAT);
         }
         int dash = value.indexOf('-');
-        return new PortRange(Integer.parseInt(value.substring(0, dash)), Integer.parseInt(value.substring(dash + 1)));
+        try {
+            return new PortRange(Integer.parseInt(value.substring(0, dash)),
+                    Integer.parseInt(value.substring(dash + 1)));
+        } catch (NumberFormatException e) {
+            throw Values.invalid(file, path, PORT_RANGE_FORMAT, e);
+        }
     }
 
     private static ConfigOperation requireNew(String id) {
