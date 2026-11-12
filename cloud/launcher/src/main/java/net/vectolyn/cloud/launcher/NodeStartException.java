@@ -3,6 +3,7 @@
 package net.vectolyn.cloud.launcher;
 
 import java.io.Serial;
+import org.jspecify.annotations.Nullable;
 
 /** The node could not be found or failed while starting. */
 public final class NodeStartException extends Exception {
@@ -29,7 +30,7 @@ public final class NodeStartException extends Exception {
      * @param message technical detail
      * @param cause   underlying exception, may be {@code null}
      */
-    public NodeStartException(Kind kind, String message, Throwable cause) {
+    public NodeStartException(Kind kind, String message, @Nullable Throwable cause) {
         super(message, cause);
         this.kind = kind;
     }
