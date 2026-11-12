@@ -1,4 +1,6 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: 2026 VectoDE
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Assembles the GitHub Pages site into build/pages/:
 #   /        start page (site/index.html, site/home.css)
 #   /brand/  brand guide and all assets from branding/ (without the generators in branding/tools/)

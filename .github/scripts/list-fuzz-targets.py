@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 VectoDE
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Lists every Jazzer @FuzzTest method in the repository as a GitHub Actions matrix.
 
 Output (stdout): JSON list of {"project", "test", "name"}:

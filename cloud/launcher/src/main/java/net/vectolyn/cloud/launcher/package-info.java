@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * Entry point of {@code VectolynCloud.jar}: Java version check (in {@code Bootstrap}), root/admin
  * check, argument parsing, unpacking and checking the embedded libraries, and startup of the node.

@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 package net.vectolyn.tools.releasebanner;
 
 /** Small string helpers that work on code points, as the title rules count characters, not chars. */

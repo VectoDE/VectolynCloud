@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * The software of a service: server jar, plugins and mods from the download catalog (verified and
  * pinned in {@code software.lock.yml}) and the bridge plugin of its platform. Entry point is

@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 package net.vectolyn.cloud.bridge.forwarding;
 
 /** Builds forwarded handshakes the way Velocity writes them in {@code bungeeguard} mode. */

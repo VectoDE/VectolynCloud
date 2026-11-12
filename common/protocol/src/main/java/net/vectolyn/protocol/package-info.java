@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * Wire format of the VectolynCloud channel: frames, the payload reader and writer, the protocol
  * version and the validated identifier types. Has no dependencies, so it can run inside every

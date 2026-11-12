@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * HTTPS client for the download APIs: host allowlist per source, checked redirects, size and time
  * limits, retries with backoff. The transport is an interface so tests run without a network.

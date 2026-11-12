@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Setup assistant of VectolynCloud: the questions on the first start, the same answers from a setup
 // file for Docker, Pterodactyl and CI, and the "setup" command to change them later. Every change
 // goes through cloud-config, the layer that the console commands, hand-edited files and later the

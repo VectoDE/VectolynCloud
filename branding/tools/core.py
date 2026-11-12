@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 VectoDE
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Shared helpers for the Vectolyn brand generators: colour maths, text set as outlined paths, the 8 x 8 mark.
 
 Text is shaped with HarfBuzz (kerning) and emitted as SVG paths, so every SVG looks the same without webfonts.

@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 VectoDE
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Exports banners (render + vector type), icons, mock-up PNGs, the video and page screenshots.
 Run from branding/tools/ (see README.md):
     uv run --no-project --with pillow==13.0.0 --with playwright==1.64.1 python export_v3.py [--shots-only]

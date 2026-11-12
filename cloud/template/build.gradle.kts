@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 plugins {
     id("vectolyn.java-conventions")
     // The placeholder renderer reads template files, which are untrusted input for the cloud.

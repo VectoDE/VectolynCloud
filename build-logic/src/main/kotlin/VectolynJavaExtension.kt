@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 import org.gradle.api.provider.Property
 
 /** Per-module switches of the `vectolyn.java-conventions` plugin. */

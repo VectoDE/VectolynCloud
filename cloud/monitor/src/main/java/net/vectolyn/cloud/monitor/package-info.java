@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * Monitoring of VectolynCloud: {@link net.vectolyn.cloud.monitor.Monitor} samples every service and
  * the node, keeps the history, evaluates the alert rules of {@code monitor.yml} and hands alerts to

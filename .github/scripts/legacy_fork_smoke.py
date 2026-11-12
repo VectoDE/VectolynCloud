@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 VectoDE
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Start a legacy (1.8.8) server jar, wait for startup, ping it, stop it.
 
 Usage: legacy_fork_smoke.py <java> <jar> <workdir> <port> [timeout_seconds]

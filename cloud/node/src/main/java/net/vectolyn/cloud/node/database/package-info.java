@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * The database of the network, run by the node: {@link net.vectolyn.cloud.node.database.NodeDatabase}
  * provisions it before the first service and shuts it down after the last one,

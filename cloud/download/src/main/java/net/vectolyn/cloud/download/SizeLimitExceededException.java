@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 package net.vectolyn.cloud.download;
 
 /** A response body or a download is larger than the configured limit. */

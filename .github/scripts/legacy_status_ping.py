@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 VectoDE
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Server List Ping against a Minecraft 1.8.x server (protocol 47).
 
 Sends a handshake with next state "status", requests the status JSON and

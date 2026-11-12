@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Console of VectolynCloud: terminal (JLine), command framework, built-in commands and the
 // question API that the setup assistant builds on. Changes go through cloud-config, the same layer
 // that files, the setup assistant and later the API use.

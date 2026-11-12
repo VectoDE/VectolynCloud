@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 pluginManagement {
     // Convention plugins shared by all Java modules (vectolyn.java-conventions and friends).
     includeBuild("build-logic")

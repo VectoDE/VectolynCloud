@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Release banner: renders the image at the top of every GitHub release (1280 x 320 and 2560 x 640)
 // from the pre-rendered background in branding/png/ and Pixelify Sans Bold from branding/fonts/.
 // Plain Java2D, no dependencies. The tool itself is not shipped; release.yml runs it in the build

@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Netty server of the cloud channel (services, later cluster nodes) and later the REST and
 // WebSocket API. Reads bytes from the network, so it has Jazzer fuzz tests.
 

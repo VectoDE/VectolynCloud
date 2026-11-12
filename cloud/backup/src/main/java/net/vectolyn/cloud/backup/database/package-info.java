@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * Database dumps: {@code mariadb-dump}/{@code mysqldump} for the managed and the external server
  * (password only in a temporary owner-only option file, never as a process argument), H2 through

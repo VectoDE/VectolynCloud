@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Java release target: 21 (project default, see build-logic/).
 //
 // paper-api 26.3 is compiled for Java 25 (class file version 69). The module still builds

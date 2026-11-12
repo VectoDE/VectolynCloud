@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Monitoring of VectolynCloud: metrics per service and node, history, alert rules with hysteresis,
 // notifications (webhook) and an optional Prometheus text endpoint. The node plugs it in through
 // ServiceDirectory and Monitor.statusReported/serviceStateChanged; it does not know cloud-node.

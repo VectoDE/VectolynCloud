@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Platform-neutral part of the bridges: send queue, proxy state, server registry, tick meter and
 // the BungeeGuard check for the 1.8.8 backends. No platform API, so everything here runs and is
 // tested on Java 21. The platform modules (velocity, paper, legacy) are thin adapters on top.

@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 VectoDE
+# SPDX-License-Identifier: GPL-3.0-or-later
 <#
 .SYNOPSIS
     Smoke test of cloud/dist/start.bat, start.ps1 and the windows archive (operations.yml).

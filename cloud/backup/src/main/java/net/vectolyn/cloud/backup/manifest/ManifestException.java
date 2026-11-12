@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 package net.vectolyn.cloud.backup.manifest;
 
 /** A manifest is broken or breaks a rule. The message names the rule, never the offending value. */

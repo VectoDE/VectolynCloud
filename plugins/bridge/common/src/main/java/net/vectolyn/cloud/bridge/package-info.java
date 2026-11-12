@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * Platform-neutral core of the VectolynCloud bridges. The Velocity, Paper and legacy bridges only
  * translate platform events into calls of these classes. Every call that may block on the network

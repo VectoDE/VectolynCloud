@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 VectoDE
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Vectolyn brand set, version 3: vector assets, in-game mockups, texts, tokens and the brand guide page.
 
 Run from this folder (see README.md):

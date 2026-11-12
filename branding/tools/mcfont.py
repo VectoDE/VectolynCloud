@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 VectoDE
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Own pixel redraw of the Minecraft default font (ASCII part) with the advance widths of the
 game font. Contains no Mojang files: every glyph is noted here by hand as a bitmap.
 

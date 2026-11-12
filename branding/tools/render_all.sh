@@ -1,4 +1,6 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: 2026 VectoDE
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Renders all stills and the turntable with Blender Cycles into branding/tools/renders/.
 # Usage: sh branding/tools/render_all.sh   (works from any directory)
 #   BLENDER                  path to the Blender 5.2 executable (default: "blender" from PATH),

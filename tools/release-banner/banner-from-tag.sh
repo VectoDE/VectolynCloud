@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 VectoDE
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Renders the release banner for a tag of the git repository in the current directory:
 #   version = the tag, title = first line of the annotated tag's message (an empty message or one
 #   that is only a PGP/SSH/X.509 signature gives no title), date = tagger date in UTC (commit date

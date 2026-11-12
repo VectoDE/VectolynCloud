@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 package net.vectolyn.lobby;
 
 /** Decides which creature spawns the lobby allows. Free of Paper types so it runs on any JDK. */

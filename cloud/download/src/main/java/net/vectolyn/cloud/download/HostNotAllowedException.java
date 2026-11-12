@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 package net.vectolyn.cloud.download;
 
 /** A request or a redirect pointed to a host outside the allowlist, or to a non-HTTPS URL. */

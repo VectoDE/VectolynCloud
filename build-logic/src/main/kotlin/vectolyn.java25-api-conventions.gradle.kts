@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 // For modules that compile against a server API published for Java 25
 // (paper-api 26.3, velocity-api 4.3: class file version 69).
 //

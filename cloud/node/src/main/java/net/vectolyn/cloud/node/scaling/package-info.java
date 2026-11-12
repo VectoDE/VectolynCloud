@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * Autoscaling of the tasks of a node: {@link net.vectolyn.cloud.node.scaling.ScalingPlanner} decides
  * without any I/O, {@link net.vectolyn.cloud.node.scaling.Autoscaler} runs the rounds and carries the

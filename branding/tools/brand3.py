@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 VectoDE
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Vectolyn brand set, version 3: mark, wordmark with optical spacing, lockup system, voxel mark,
 banners (social preview block, release banner block, README header). Everything as paths, no webfonts in the SVG."""
 import core as ga

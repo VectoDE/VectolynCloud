@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * Renders {@code <home>/<Server>/template/} into {@code runtime/}, with placeholders and secrets.
  *

@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * Messages of the VectolynCloud channel: the sealed {@link net.vectolyn.protocol.message.Message}
  * records, the {@link net.vectolyn.protocol.message.MessageRegistry} that maps them to wire ids, and

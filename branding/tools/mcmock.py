@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 VectoDE
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Pixel-exact reproductions of the game UI in GUI pixels (scale 1). Displayed only at whole-number
 multiples. No Mojang files: font (mcfont), heads and ping icon are our own drawings."""
 import mcfont as F

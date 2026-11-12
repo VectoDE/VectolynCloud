@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * Bridge between a PandaSpigot 1.8.8 server behind the legacy proxy and VectolynCloud: ready signal,
  * status, and the check of the proxy's {@code bungeeguard-token} on every login.

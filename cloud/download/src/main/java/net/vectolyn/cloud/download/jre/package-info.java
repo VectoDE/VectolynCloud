@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 VectoDE
+// SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * Java runtimes for the servers the cloud starts: which feature version a group needs
  * ({@link net.vectolyn.cloud.download.jre.JavaRequirement}), an installed system Java that fits

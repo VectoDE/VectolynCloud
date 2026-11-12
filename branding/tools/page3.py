@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 VectoDE
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Brand guide page (English), version 3. Editorial layout: section rail left, content right, full-bleed media."""
 import html
 import re

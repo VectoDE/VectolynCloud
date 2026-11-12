@@ -4,17 +4,17 @@ Ziel: Jede Datei im Repository trägt eine maschinenlesbare Lizenzangabe nach de
 
 ## Current state (2026-11-12)
 
-Von 976 getrackten Quelldateien hat keine einen `SPDX-License-Identifier`-Header:
+`reuse lint` besteht (REUSE 3.3). Alle 1627 Dateien tragen Copyright- und Lizenzangabe.
 
-| Type | Files | Without SPDX header |
+| Weg | Dateien | Lizenz |
 |---|---|---|
-| Java (`*.java`) | 947 | 947 |
-| Kotlin (`*.kt`) | 1 | 1 |
-| Gradle Kotlin DSL (`*.kts`) | 28 | 28 |
-| TypeScript/JavaScript | 0 | 0 |
-| **Total** | **976** | **976** |
+| `SPDX`-Header im Kopf (`*.java`, `*.kt`, `*.kts`, `*.sh`, `*.ps1`, `*.py`) | 1002 | GPL-3.0-or-later |
+| `REUSE.toml` (Markdown, YAML, JSON, Bilder, Testdaten, Lockfiles, Gradle Wrapper, Rest) | 625 | GPL-3.0-or-later |
+| `REUSE.toml`: `branding/**`, `resourcepack/**` | im Posten oben enthalten | CC-BY-SA-4.0 |
+| `REUSE.toml`: Schriften in `branding/fonts/*` | im Posten oben enthalten | OFL-1.1 |
+| `REUSE.toml`: `gradle/wrapper/gradle-wrapper.jar` | 1 | Apache-2.0 |
 
-Das Projekt hat bisher kein Web-Panel mit TypeScript. Kommt es dazu, gilt dieselbe Regel.
+Copyright-Zeile überall: `2026 VectoDE`. Lizenztexte liegen in `LICENSES/`.
 
 ## Plan
 
@@ -22,7 +22,7 @@ Das Projekt hat bisher kein Web-Panel mit TypeScript. Kommt es dazu, gilt diesel
 
    ```java
    // SPDX-License-Identifier: GPL-3.0-or-later
-   // SPDX-FileCopyrightText: 2026 VectolynCloud contributors
+   // SPDX-FileCopyrightText: 2026 VectoDE
    ```
 
    Das Einfügen läuft als eigener, mechanischer PR (Skript oder `reuse annotate`), getrennt von inhaltlichen Änderungen.
@@ -30,8 +30,3 @@ Das Projekt hat bisher kein Web-Panel mit TypeScript. Kommt es dazu, gilt diesel
 3. `LICENSES/` mit den Lizenztexten (`reuse download --all`): `GPL-3.0-or-later` sowie jede weitere im Repo vorkommende Lizenz.
 4. CI: Der Workflow `fsfe/reuse-action` läuft bei jedem PR. Der Check wird Pflicht, sobald er grün ist.
 5. Ergebnis ist eine Siegel-Anzeige: Das REUSE-Badge kommt erst in die README, wenn `reuse lint` wirklich besteht.
-
-## Open decisions
-
-- Copyright-Zeile (`SPDX-FileCopyrightText`): Wortlaut legt der Inhaber fest.
-- Branding und Ressourcenpaket (`branding/`, `resourcepack/`): Lizenz der Grafiken ist zu klären, bevor sie in `REUSE.toml` stehen.
