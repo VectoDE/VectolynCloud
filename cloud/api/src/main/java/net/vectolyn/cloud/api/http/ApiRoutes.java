@@ -439,14 +439,18 @@ public final class ApiRoutes {
         try {
             return call.run();
         } catch (TemplateFiles.RefusedException e) {
-            throw switch (e.reason()) {
-                case NOT_EDITABLE -> new ApiException(422, "file-not-editable", "Only text configuration (.yml, .yaml,"
-                        + " .toml, .json, .properties, .txt, .conf) outside plugins/, mods/, libraries/, versions/,"
-                        + " bundler/ and cache/ can be written.");
-                case NOT_TEXT -> new ApiException(422, "binary-content", "Only UTF-8 text without NUL can be written.");
-                case SECRET_PLACEHOLDER -> new ApiException(422, "secret-placeholder",
-                        "The content adds a secret placeholder the file did not have.");
+            String code = switch (e.reason()) {
+                case NOT_EDITABLE -> "file-not-editable";
+                case NOT_TEXT -> "binary-content";
+                case SECRET_PLACEHOLDER -> "secret-placeholder";
             };
+            String message = switch (e.reason()) {
+                case NOT_EDITABLE -> "Only text configuration (.yml, .yaml, .toml, .json, .properties, .txt, .conf)"
+                        + " outside plugins/, mods/, libraries/, versions/, bundler/ and cache/ can be written.";
+                case NOT_TEXT -> "Only UTF-8 text without NUL can be written.";
+                case SECRET_PLACEHOLDER -> "The content adds a secret placeholder the file did not have.";
+            };
+            throw new ApiException(422, code, message, e);
         } catch (IllegalArgumentException e) {
             throw ApiException.badRequest("invalid-path", path == null
                     ? "This is no template name."

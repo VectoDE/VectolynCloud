@@ -432,7 +432,7 @@ public final class TemplateFiles {
     }
 
     /** The content as text if it is valid UTF-8 without NUL, else null. */
-    private static String text(byte[] content) {
+    private static @Nullable String text(byte[] content) {
         for (byte b : content) {
             if (b == 0) {
                 return null;
