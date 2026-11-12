@@ -27,13 +27,17 @@ import net.vectolyn.cloud.config.model.HeapConfig;
 import net.vectolyn.cloud.config.model.JavaSelection;
 import net.vectolyn.cloud.config.model.MemorySize;
 import net.vectolyn.cloud.config.model.NodesConfig;
+import net.vectolyn.cloud.config.model.ScaleUpTriggers;
 import net.vectolyn.cloud.config.model.ScalingConfig;
+import net.vectolyn.cloud.config.model.ScalingSchedule;
 import net.vectolyn.cloud.config.model.ServerKind;
 import net.vectolyn.cloud.config.model.ServerSoftware;
 import net.vectolyn.cloud.config.model.TaskConfig;
 import net.vectolyn.cloud.config.model.TaskMode;
+import net.vectolyn.cloud.config.model.TimeOfDay;
 import net.vectolyn.cloud.config.model.TimeSpan;
 import net.vectolyn.cloud.config.model.WantedServers;
+import net.vectolyn.cloud.config.model.Weekday;
 import net.vectolyn.cloud.node.channel.ChannelBridge.DrainResult;
 import net.vectolyn.cloud.node.scaling.ScalingPlanner.Decision;
 import net.vectolyn.cloud.node.scaling.ScalingPlanner.Drain;
@@ -506,12 +510,94 @@ class AutoscalerTest {
                 "a hold is no decision: no cooldown");
     }
 
+    @Test
+    void everyDecisionIsHandedToTheListenersAsData() {
+        Fixture f = new Fixture().task("minigame", TaskMode.DYNAMIC, 1, 3);
+        List<ScalingEvent> events = new ArrayList<>();
+        f.scaler.addListener(event -> {
+            throw new IllegalStateException("a broken listener does not stop the others");
+        });
+        f.scaler.addListener(events::add);
+        f.target.add("minigame", 1, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.players.put(new ServiceId("minigame-1"), 50);
+
+        f.memory = Optional.empty();
+        f.scaler.tick();
+        f.scaler.tick();
+        assertEquals(List.of(new ScalingEvent(T0, "minigame", "minigame", ScalingEvent.Action.HOLD, "memory-unknown",
+                Optional.empty())), events, "a hold is reported once while it lasts");
+
+        f.memory = ROOMY;
+        f.scaler.tick();
+        assertEquals(new ScalingEvent(T0, "minigame", "minigame", ScalingEvent.Action.START, "load",
+                Optional.of(new ServiceId("minigame-2"))), events.getLast());
+
+        f.target.setState("minigame-2", ServiceState.RUNNING);
+        f.players.put(new ServiceId("minigame-1"), 10);
+        f.players.put(new ServiceId("minigame-2"), 0);
+        f.scaler.tick();
+        f.advance(Duration.ofMinutes(5));
+        f.scaler.tick();
+        Instant later = T0.plus(Duration.ofMinutes(5));
+        assertEquals(List.of(
+                new ScalingEvent(later, "minigame", "minigame", ScalingEvent.Action.DRAIN, "low-load",
+                        Optional.of(new ServiceId("minigame-2"))),
+                new ScalingEvent(later, "minigame", "minigame", ScalingEvent.Action.STOP, "low-load",
+                        Optional.of(new ServiceId("minigame-2")))), events.subList(2, 4));
+        assertEquals(4, events.size());
+    }
+
+    @Test
+    void aServiceThatKeepsRunningIsReportedWithTheCause() {
+        Fixture f = new Fixture().task("minigame", TaskMode.DYNAMIC, 1, 3);
+        List<ScalingEvent> events = new ArrayList<>();
+        f.scaler.addListener(events::add);
+        f.target.add("minigame", 1, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.target.add("minigame", 2, TaskMode.DYNAMIC, ServiceState.RUNNING);
+        f.players.put(new ServiceId("minigame-1"), 10);
+        f.players.put(new ServiceId("minigame-2"), 0);
+        f.target.drainResult = DrainResult.TIMEOUT;
+        f.scaler.tick();
+        f.advance(Duration.ofMinutes(5));
+        f.scaler.tick();
+        assertEquals(List.of(ScalingEvent.Action.DRAIN, ScalingEvent.Action.KEEP),
+                events.stream().map(ScalingEvent::action).toList());
+        assertEquals("timeout", events.getLast().reason());
+    }
+
+    @Test
+    void schedulesAndTriggersReachTheTargetThroughTheRounds() {
+        // T0 is a Thursday at 12:00 in the fixture's zone (UTC).
+        Fixture f = new Fixture().task("minigame", TaskMode.DYNAMIC, 1, 4);
+        List<ScalingEvent> events = new ArrayList<>();
+        f.scaler.addListener(events::add);
+        f.tasks.put("minigame", f.tasks.get("minigame").withScaling(f.tasks.get("minigame").scaling()
+                .withSchedules(List.of(new ScalingSchedule(List.of(Weekday.of(T0.atZone(ZoneOffset.UTC).getDayOfWeek())),
+                        TimeOfDay.of(12, 0), TimeOfDay.of(13, 0), 2)))));
+        assertEquals(List.of(new Start("minigame", OptionalInt.empty(), Reason.MIN_SERVICES),
+                new Start("minigame", OptionalInt.empty(), Reason.SCHEDULE)), f.scaler.tick());
+        assertEquals(List.of("min-services", "schedule"), events.stream().map(ScalingEvent::reason).toList());
+
+        f.target.setState("minigame-1", ServiceState.RUNNING);
+        f.target.setState("minigame-2", ServiceState.RUNNING);
+        f.players.put(new ServiceId("minigame-1"), 0);
+        f.players.put(new ServiceId("minigame-2"), 0);
+        f.usage.put(new ServiceId("minigame-1"), new ScalingPlanner.Usage(95, 20, 10));
+        f.usage.put(new ServiceId("minigame-2"), new ScalingPlanner.Usage(95, 20, 10));
+        f.tasks.put("minigame", f.tasks.get("minigame").withScaling(f.tasks.get("minigame").scaling()
+                .withScaleUpOn(new ScaleUpTriggers(90, null, null))));
+        f.advance(Duration.ofSeconds(60));
+        assertEquals(List.of(new Start("minigame", OptionalInt.empty(), Reason.CPU)), f.scaler.tick());
+        assertEquals("cpu", events.getLast().reason());
+    }
+
     // ---------------------------------------------------------------- fixture
 
     private static final class Fixture {
         final Map<String, GroupConfig> groups = new HashMap<>();
         final Map<String, TaskConfig> tasks = new HashMap<>();
         final Map<ServiceId, Integer> players = new HashMap<>();
+        final Map<ServiceId, ScalingPlanner.Usage> usage = new HashMap<>();
         final FakeTarget target = new FakeTarget();
         CloudConfig cloud = CloudConfig.defaults().withServers(WantedServers.all()).withEulaAccepted(true)
                 .withSetupComplete(true);
@@ -544,7 +630,7 @@ class AutoscalerTest {
         }
 
         ScalingPlanner.Signals signals() {
-            return new ScalingPlanner.Signals(players, memory);
+            return new ScalingPlanner.Signals(players, Map.of(), usage, memory);
         }
 
         void advance(Duration by) {

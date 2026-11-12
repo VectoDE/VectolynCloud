@@ -62,7 +62,7 @@ curl -X POST -H "Authorization: Bearer vcs_..." https://cloud.example.org:8443/a
 
 | Scope | Erlaubt |
 |---|---|
-| `services:read` | Dienste auflisten und lesen; Dienst- und Spieler-Events |
+| `services:read` | Dienste auflisten und lesen; Dienst-, Spieler- und Skalierungs-Events |
 | `services:write` | starten, stoppen, neu starten, Konsolenbefehl senden |
 | `config:read` | `cloud.yml`, Gruppen, Tasks, Server-Schalter, Warnungen und Setup-Status lesen |
 | `config:write` | Gruppen und Tasks schreiben und löschen, `wanted` setzen, `cloud.yml` außer `api` und `database` schreiben, neu laden |
@@ -156,10 +156,11 @@ Ein WebSocket mit Textframes. Filter sind optional: `?types=service-state,metric
 | `service-state` | `services:read` | ein Dienst hat seinen Zustand gewechselt |
 | `service-output` | `services:read` | eine Zeile, die ein Dienst ausgegeben hat (sein Log) |
 | `player` | `services:read` | ein Spieler kam, wechselte oder ging |
+| `scaling` | `services:read` | eine Entscheidung des Autoscalers ([scaling.de.md](scaling.de.md#entscheidungen-als-daten)) |
 | `metrics` | `node:read` | der Node-Status (wie `GET /node`) alle 10 s |
 | `node-log` | `admin` | eine Zeile aus dem Log des Nodes, ab INFO |
 
-Der Scope wird beim Handshake je Typ geprüft. Fragt `types` einen Typ an, den das Token nicht sehen darf, kommt `403 missing-scope`. Ohne `types` bekommt der Stream alle Typen, die das Token sehen darf; darf es keinen, kommt `403`. Unbekannte Typen sollte ein Client überspringen, innerhalb von `vectolyn.v1` können neue hinzukommen. Der Filter `services` gilt für Dienst- und Spieler-Events; `metrics` und `node-log` gehören zum Node und kommen immer durch.
+Der Scope wird beim Handshake je Typ geprüft. Fragt `types` einen Typ an, den das Token nicht sehen darf, kommt `403 missing-scope`. Ohne `types` bekommt der Stream alle Typen, die das Token sehen darf; darf es keinen, kommt `403`. Unbekannte Typen sollte ein Client überspringen, innerhalb von `vectolyn.v1` können neue hinzukommen. Der Filter `services` gilt für Dienst-, Spieler- und Skalierungs-Events (ein `hold` nennt keinen Dienst und kommt nur bei einem Stream ohne Filter an); `metrics` und `node-log` gehören zum Node und kommen immer durch.
 
 ```json
 {"type": "service-output", "time": "2026-10-29T10:00:00Z", "data": {"service": "lobby-1", "line": "Done (3.2s)!"}}

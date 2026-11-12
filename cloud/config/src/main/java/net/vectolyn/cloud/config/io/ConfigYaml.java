@@ -10,6 +10,7 @@ import net.vectolyn.cloud.config.error.ConfigException;
 import net.vectolyn.cloud.config.error.ErrorCode;
 import net.vectolyn.cloud.config.model.JavaSelection;
 import net.vectolyn.cloud.config.model.MemorySize;
+import net.vectolyn.cloud.config.model.TimeOfDay;
 import net.vectolyn.cloud.config.model.TimeSpan;
 import net.vectolyn.cloud.config.schema.ConfigSchema;
 import net.vectolyn.cloud.config.validation.ConfigNames;
@@ -270,6 +271,9 @@ public final class ConfigYaml {
         }
         if (type == JavaSelection.class) {
             return JavaSelection.FORMAT;
+        }
+        if (type == TimeOfDay.class) {
+            return TimeOfDay.FORMAT;
         }
         if (type.isEnum()) {
             StringBuilder values = new StringBuilder("one of ");

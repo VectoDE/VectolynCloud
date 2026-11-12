@@ -3,6 +3,9 @@
 package net.vectolyn.cloud.node.scaling;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -12,10 +15,12 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
+import java.util.function.ToDoubleFunction;
 import net.vectolyn.cloud.config.model.ConfigSnapshot;
 import net.vectolyn.cloud.config.model.GroupConfig;
 import net.vectolyn.cloud.config.model.MemoryReserve;
 import net.vectolyn.cloud.config.model.NodeConfig;
+import net.vectolyn.cloud.config.model.ScaleUpTriggers;
 import net.vectolyn.cloud.config.model.ScalingConfig;
 import net.vectolyn.cloud.config.model.ServerSoftware;
 import net.vectolyn.cloud.config.model.TaskConfig;
@@ -38,18 +43,22 @@ import org.jspecify.annotations.Nullable;
  *   <li><b>min-services</b>: fewer than {@code min-services} count, so every missing one starts in
  *       this round, without waiting for {@code cooldown}: static ones while the task has fewer
  *       static services than {@code static-services}, then dynamic ones. The memory budget does not
- *       apply here.</li>
+ *       apply here. An active entry of {@code schedules} raises the minimum
+ *       ({@link ScalingConfig#minServicesAt}); the starts above {@code min-services} itself
+ *       ({@link Reason#SCHEDULE}) do need the memory budget.</li>
  *   <li><b>above max-services</b> (a limit that was lowered): an empty dynamic service is emptied
  *       ({@link Drain}) and stopped.</li>
  *   <li><b>load</b>: the load of the group, the players of its running services divided by their
  *       slots ({@code players-per-service} of each service's task), has reached
  *       {@code scale-up-at}, no service of the group is starting and none was started for the group
  *       earlier in this round, the task may have dynamic services and {@code max-services} leaves
- *       room: one more dynamic service starts, if the memory budget allows it.</li>
- *   <li><b>low load</b>: the task has more than {@code min-services}, and without its emptiest
- *       running dynamic service the load of the group would stay below {@code scale-down-below};
- *       once that has held for {@code scale-down-after}, that service is emptied ({@link Drain})
- *       and stopped.</li>
+ *       room: one more dynamic service starts, if the memory budget allows it. The same holds when
+ *       a trigger of {@code scale-up-on} fires ({@link #trigger}), even while the load is not
+ *       known.</li>
+ *   <li><b>low load</b>: the task has more than its minimum, no trigger of {@code scale-up-on}
+ *       fires, and without its emptiest running dynamic service the load of the group would stay
+ *       below {@code scale-down-below}; once that has held for {@code scale-down-after}, that service
+ *       is emptied ({@link Drain}) and stopped.</li>
  * </ol>
  * Except for min-services, at most one decision per task and round, and none before
  * {@code cooldown} has passed since the last one. Every scale-down goes through {@link Drain}: the
@@ -70,8 +79,16 @@ public final class ScalingPlanner {
     public enum Reason {
         /** Fewer services than {@code min-services}. */
         MIN_SERVICES,
+        /** Fewer services than an active entry of {@code schedules} asks for. */
+        SCHEDULE,
         /** The load of the group reached {@code scale-up-at}. */
         LOAD,
+        /** The average CPU use of the task's services is above {@code scale-up-on.cpu-above}. */
+        CPU,
+        /** The average TPS of the task's services is below {@code scale-up-on.tps-below}. */
+        TPS,
+        /** The average heap use of the task's services is above {@code scale-up-on.ram-above}. */
+        RAM,
         /** With one service fewer the load would stay below {@code scale-down-below}. */
         LOW_LOAD,
         /** More services than {@code max-services}. */
@@ -147,25 +164,43 @@ public final class ScalingPlanner {
     }
 
     /**
+     * What a service uses, for the triggers of {@code scale-up-on}. A value that is not measured is
+     * NaN.
+     *
+     * @param cpu  CPU use of the process in percent of the machine
+     * @param tps  ticks per second
+     * @param heap used heap in percent of the maximum heap
+     */
+    public record Usage(double cpu, double tps, double heap) {
+    }
+
+    /**
      * What the services report.
      *
      * @param players players per service for the load: the lower of the bridge's and a watching
      *                proxy's count; a service without an entry has no known count
      * @param present players per service for "is it empty": the higher of the two counts; a
      *                service without an entry falls back to {@code players}
+     * @param usage   CPU, TPS and heap per service, from samples that are not outdated
      * @param memory  memory of the node, if measured
      */
     public record Signals(Map<ServiceId, Integer> players, Map<ServiceId, Integer> present,
-                          Optional<Memory> memory) {
+                          Map<ServiceId, Usage> usage, Optional<Memory> memory) {
 
         /** Copies the values. */
         public Signals {
             players = Map.copyOf(players);
             present = Map.copyOf(present);
+            usage = Map.copyOf(usage);
             Objects.requireNonNull(memory, "memory");
         }
 
-        /** One count per service for both uses. */
+        /** Without usage. */
+        public Signals(Map<ServiceId, Integer> players, Map<ServiceId, Integer> present, Optional<Memory> memory) {
+            this(players, present, Map.of(), memory);
+        }
+
+        /** One count per service for both uses, without usage. */
         public Signals(Map<ServiceId, Integer> players, Optional<Memory> memory) {
             this(players, Map.of(), memory);
         }
@@ -204,11 +239,12 @@ public final class ScalingPlanner {
      * @param released    static services that stopped because their group was switched off
      * @param draining    services whose players are being moved away
      * @param now         the time of the round
+     * @param zone        the time zone {@code schedules} are read in: the one of the node
      */
     public record Input(ConfigSnapshot snapshot, String node, List<ServiceInfo> services, Signals signals,
                         Map<String, Instant> lastAction, Map<String, Instant> pausedUntil,
                         Map<String, Instant> lowSince, Set<ServiceId> released, Set<ServiceId> draining,
-                        Instant now) {
+                        Instant now, ZoneId zone) {
 
         /** Copies the values. */
         public Input {
@@ -222,6 +258,25 @@ public final class ScalingPlanner {
             released = Set.copyOf(released);
             draining = Set.copyOf(draining);
             Objects.requireNonNull(now, "now");
+            Objects.requireNonNull(zone, "zone");
+        }
+
+        /** With schedules read in UTC. */
+        public Input(ConfigSnapshot snapshot, String node, List<ServiceInfo> services, Signals signals,
+                     Map<String, Instant> lastAction, Map<String, Instant> pausedUntil,
+                     Map<String, Instant> lowSince, Set<ServiceId> released, Set<ServiceId> draining,
+                     Instant now) {
+            this(snapshot, node, services, signals, lastAction, pausedUntil, lowSince, released, draining, now,
+                    ZoneOffset.UTC);
+        }
+
+        /**
+         * The local time of the round, for {@code schedules}.
+         *
+         * @return now in {@link #zone()}
+         */
+        public LocalDateTime localNow() {
+            return LocalDateTime.ofInstant(now, zone);
         }
     }
 
@@ -258,7 +313,7 @@ public final class ScalingPlanner {
                     || !ServicePlanner.runsOn(task, in.node())) {
                 continue;
             }
-            List<Decision> filling = fillToMinimum(in, name, task);
+            List<Decision> filling = fillToMinimum(in, name, task, group);
             if (filling != null) {
                 decisions.addAll(filling);
                 continue;
@@ -277,15 +332,18 @@ public final class ScalingPlanner {
     }
 
     /**
-     * The starts that bring a task up to {@code min-services}, all in this round and without
-     * {@code cooldown}; {@code null} if the task has its minimum, so the other rules apply.
+     * The starts that bring a task up to its minimum ({@code min-services}, raised by an active
+     * schedule), all in this round and without {@code cooldown}; {@code null} if the task has its
+     * minimum, so the other rules apply. A start above {@code min-services} itself needs the memory
+     * budget; without it the task gets a {@link Held} instead.
      */
-    private static @Nullable List<Decision> fillToMinimum(Input in, String name, TaskConfig task) {
+    private static @Nullable List<Decision> fillToMinimum(Input in, String name, TaskConfig task, GroupConfig group) {
         ScalingConfig scaling = task.scaling();
+        int minimum = scaling.minServicesAt(in.localNow());
         List<ServiceInfo> mine = in.services().stream().filter(s -> name.equals(s.task())).toList();
         Set<ServiceId> demoted = demoted(mine, scaling);
         long counted = mine.stream().filter(s -> counts(s, in.released(), in.draining(), demoted)).count();
-        if (counted >= scaling.minServices()) {
+        if (counted >= minimum) {
             return null;
         }
         long occupying = mine.stream().filter(ScalingPlanner::occupiesASlot).count();
@@ -309,9 +367,18 @@ public final class ScalingPlanner {
                 .map(ServiceInfo::index).sorted().toList();
         long statics = Math.min(staticCount(mine), scaling.staticServices());
         int nextReleased = 0;
-        for (long missing = scaling.minServices() - counted; missing > 0; missing--) {
+        long have = counted;
+        for (long missing = minimum - counted; missing > 0; missing--) {
             if (occupying >= scaling.maxServices()) {
                 break;
+            }
+            Reason reason = have < scaling.minServices() ? Reason.MIN_SERVICES : Reason.SCHEDULE;
+            if (reason == Reason.SCHEDULE) {
+                Optional<Hold> memory = memoryHold(in, group, starts.size());
+                if (memory.isPresent()) {
+                    starts.add(new Held(name, memory.get()));
+                    break;
+                }
             }
             OptionalInt index;
             if (nextReleased < released.size()) {
@@ -328,8 +395,9 @@ public final class ScalingPlanner {
             } else {
                 break;
             }
-            starts.add(new Start(name, index, Reason.MIN_SERVICES));
+            starts.add(new Start(name, index, reason));
             occupying++;
+            have++;
         }
         return starts;
     }
@@ -359,43 +427,88 @@ public final class ScalingPlanner {
         Optional<Load> load = groupLoad(in.snapshot(), task.group(), in.services(), in.signals(), in.draining(), null);
         boolean starting = groupGrown || in.services().stream().anyMatch(s -> task.group().equals(s.group())
                 && (s.state() == ServiceState.PREPARED || s.state() == ServiceState.STARTING));
-        if (scaling.allowsDynamic() && !starting && load.isPresent() && occupying < scaling.maxServices()
-                && load.get().reaches(scaling.scaleUpAt())) {
+        Optional<Reason> up = load.isPresent() && load.get().reaches(scaling.scaleUpAt()) ? Optional.of(Reason.LOAD)
+                : trigger(scaling.scaleUpOn(), name, in.services(), in.signals(), in.draining());
+        if (scaling.allowsDynamic() && !starting && up.isPresent() && occupying < scaling.maxServices()) {
             if (isPaused) {
                 return Optional.of(new Held(name, Hold.PAUSED));
             }
-            Optional<Hold> memory = memoryHold(in, group);
+            Optional<Hold> memory = memoryHold(in, group, 0);
             return Optional.of(memory.<Decision>map(hold -> new Held(name, hold))
-                    .orElseGet(() -> new Start(name, OptionalInt.empty(), Reason.LOAD)));
+                    .orElseGet(() -> new Start(name, OptionalInt.empty(), up.get())));
         }
 
         Instant since = in.lowSince().get(name);
         if (since != null && !in.now().isBefore(since.plus(scaling.scaleDownAfter().duration()))) {
-            return scaleDownCandidate(in.snapshot(), name, in.services(), in.signals(), in.released(), in.draining())
+            return scaleDownCandidate(in.snapshot(), name, in.services(), in.signals(), in.released(), in.draining(),
+                    in.localNow())
                     .map(candidate -> new Drain(name, candidate.id(), Reason.LOW_LOAD));
         }
         return Optional.empty();
     }
 
     /**
+     * The first trigger of {@code scale-up-on} that fires for a task: the average over its running
+     * services that are not being emptied and have the value, CPU above {@code cpu-above}, TPS below
+     * {@code tps-below} or heap above {@code ram-above}, checked in that order. A value no service
+     * has (not measured, or the samples are outdated) fires nothing.
+     *
+     * @param triggers {@code scale-up-on} of the task, may be null
+     * @param task     task name
+     * @param services every service of the node
+     * @param signals  the usage of the services
+     * @param draining services being emptied
+     * @return the reason, or empty if no trigger fires
+     */
+    public static Optional<Reason> trigger(ScaleUpTriggers triggers, String task, List<ServiceInfo> services,
+                                           Signals signals, Set<ServiceId> draining) {
+        if (triggers == null) {
+            return Optional.empty();
+        }
+        List<Usage> usage = services.stream()
+                .filter(s -> task.equals(s.task()) && s.state() == ServiceState.RUNNING && !draining.contains(s.id()))
+                .map(s -> signals.usage().get(s.id()))
+                .filter(Objects::nonNull)
+                .toList();
+        if (triggers.cpuAbove() != null && average(usage, Usage::cpu) > triggers.cpuAbove()) {
+            return Optional.of(Reason.CPU);
+        }
+        if (triggers.tpsBelow() != null && average(usage, Usage::tps) < triggers.tpsBelow()) {
+            return Optional.of(Reason.TPS);
+        }
+        if (triggers.ramAbove() != null && average(usage, Usage::heap) > triggers.ramAbove()) {
+            return Optional.of(Reason.RAM);
+        }
+        return Optional.empty();
+    }
+
+    /** The average of the measured values, NaN if none is measured (NaN compares false). */
+    private static double average(List<Usage> usage, ToDoubleFunction<Usage> value) {
+        return usage.stream().mapToDouble(value).filter(v -> !Double.isNaN(v)).average().orElse(Double.NaN);
+    }
+
+    /**
      * The dynamic service of a task that may go now because the load is low, without looking at
-     * {@code scale-down-after}: the task has more than {@code min-services}, and without its
-     * emptiest running dynamic service (of equal ones the highest index) the load of the group
-     * would stay below {@code scale-down-below}, with at least one other running service left. The
-     * players of the candidate are counted with the higher of the bridge's and the proxy's count.
-     * The autoscaler calls it every round to know since when the condition holds.
+     * {@code scale-down-after}: the task has more than its minimum ({@code min-services}, raised by
+     * an active schedule), no trigger of {@code scale-up-on} fires, and without its emptiest running
+     * dynamic service (of equal ones the highest index) the load of the group would stay below
+     * {@code scale-down-below}, with at least one other running service left. The players of the
+     * candidate are counted with the higher of the bridge's and the proxy's count. The autoscaler
+     * calls it every round to know since when the condition holds.
      *
      * @param snapshot the configuration
      * @param task     task name
      * @param services every service of the node
-     * @param signals  player counts
+     * @param signals  player counts and usage
      * @param released static services released by a switch
      * @param draining services being emptied
+     * @param at       the local time of the node, for {@code schedules}
      * @return the service, or empty if none may go
      */
     public static Optional<ServiceInfo> scaleDownCandidate(ConfigSnapshot snapshot, String task,
                                                            List<ServiceInfo> services, Signals signals,
-                                                           Set<ServiceId> released, Set<ServiceId> draining) {
+                                                           Set<ServiceId> released, Set<ServiceId> draining,
+                                                           LocalDateTime at) {
         TaskConfig config = snapshot.tasks().get(task);
         if (config == null || config.scaling() == null) {
             return Optional.empty();
@@ -408,7 +521,8 @@ public final class ScalingPlanner {
         List<ServiceInfo> mine = services.stream().filter(s -> task.equals(s.task())).toList();
         Set<ServiceId> demoted = demoted(mine, scaling);
         long counted = mine.stream().filter(s -> counts(s, released, draining, demoted)).count();
-        if (counted <= scaling.minServices()) {
+        if (counted <= scaling.minServicesAt(at)
+                || trigger(scaling.scaleUpOn(), task, services, signals, draining).isPresent()) {
             return Optional.empty();
         }
         Optional<ServiceInfo> candidate = mine.stream()
@@ -570,15 +684,16 @@ public final class ScalingPlanner {
 
     /**
      * The memory budget of the node for one more service of {@code group}: the maximum heaps of
-     * every service with a process (or about to get one) plus the new one must fit into
-     * {@link #budget}, and the new maximum heap must be free right now.
+     * every service with a process (or about to get one), of {@code planned} starts of the group
+     * earlier in this round, and of the new one must fit into {@link #budget}, and their heaps must
+     * be free right now.
      */
-    private static Optional<Hold> memoryHold(Input in, GroupConfig group) {
+    private static Optional<Hold> memoryHold(Input in, GroupConfig group, int planned) {
         if (in.signals().memory().isEmpty()) {
             return Optional.of(Hold.MEMORY_UNKNOWN);
         }
         Memory memory = in.signals().memory().get();
-        long heap = heapBytes(group);
+        long heap = heapBytes(group) * (planned + 1L);
         long declared = heap;
         for (ServiceInfo s : in.services()) {
             if (s.state() == ServiceState.PREPARED || s.state().hasProcess()) {

@@ -29,7 +29,7 @@ Das Token beginnt mit `vct_`, wird einmal angezeigt und nur als SHA-256-Hash ges
 
 | Scope | Erlaubt |
 |---|---|
-| `services:read` | Dienste auflisten und lesen; Dienst- und Spieler-Ereignisse |
+| `services:read` | Dienste auflisten und lesen; Dienst-, Spieler- und Skalierungs-Ereignisse |
 | `services:write` | starten, stoppen, neu starten, einen Konsolenbefehl senden |
 | `config:read` | Konfiguration lesen, Einrichtungsstand |
 | `config:write` | Gruppen, Tasks, Server-Schalter und `cloud.yml` ändern (nicht `api` und `database`), neu laden |
@@ -52,7 +52,7 @@ Alle Pfade beginnen mit `/api/v1`.
 | `GET/PUT /config`, `POST /config/reload`, `GET /config/warnings` | `cloud.yml` und Neuladen |
 | `GET /node`, `GET /setup` | Node-Status, Einrichtungsstand |
 | `GET/POST /backups` | Backups auflisten und anlegen |
-| `GET /events` (WebSocket) | Live-Ereignisse: Dienstzustand, Dienstausgabe, Spieler, Metriken (`node:read`), Node-Log (`admin`) |
+| `GET /events` (WebSocket) | Live-Ereignisse: Dienstzustand, Dienstausgabe, Spieler, Skalierungsentscheidungen, Metriken (`node:read`), Node-Log (`admin`) |
 | `POST /graphql`, `GET /graphql` (WebSocket) | GraphQL über alles oben, Subscriptions mit `graphql-transport-ws` |
 
 Schreibzugriffe werden als Ganzes geprüft, bevor etwas gespeichert wird. `DELETE` braucht `?confirm=<name>`. `GET` liefert einen `ETag`; schickst du ihn als `If-Match` zurück, überschreibst du keine fremde Änderung (sonst `412`). Fehler haben eine einheitliche Form mit `code`, Meldung und, bei Konfigurationsproblemen, Datei, Pfad und Zeile.

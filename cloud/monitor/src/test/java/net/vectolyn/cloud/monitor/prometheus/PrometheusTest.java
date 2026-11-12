@@ -14,6 +14,7 @@ import java.net.InetAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.List;
 import net.vectolyn.cloud.monitor.Fakes;
 import net.vectolyn.cloud.monitor.Monitor;
 import net.vectolyn.cloud.monitor.ServicePhase;
@@ -56,6 +57,25 @@ class PrometheusTest {
             assertTrue(text.endsWith("\n"));
             text.lines().forEach(line ->
                     assertTrue(line.startsWith("# ") || line.matches("[a-z_]+(\\{[^}]*\\})? [0-9.]+"), line));
+        }
+    }
+
+    @Test
+    void countsScalingStepsPerTask() throws Exception {
+        try (Monitor monitor = monitor(new Fakes.Directory())) {
+            assertFalse(PrometheusFormat.render(monitor).contains("vectolyn_scaling_"), "no step, no series");
+            monitor.scaled("lobby", "lobby", true);
+            monitor.scaled("lobby", "lobby", true);
+            monitor.scaled("lobby", "lobby", false);
+            monitor.scaled("bedwars", "minigame", true);
+            assertEquals(List.of(new Monitor.ScalingCount("bedwars", "minigame", 1, 0),
+                    new Monitor.ScalingCount("lobby", "lobby", 2, 1)), monitor.scalingCounts());
+            String text = PrometheusFormat.render(monitor);
+            assertTrue(text.contains("# TYPE vectolyn_scaling_ups_total counter\n"
+                    + "vectolyn_scaling_ups_total{task=\"bedwars\",group=\"minigame\"} 1\n"
+                    + "vectolyn_scaling_ups_total{task=\"lobby\",group=\"lobby\"} 2\n"), text);
+            assertTrue(text.contains("vectolyn_scaling_downs_total{task=\"lobby\",group=\"lobby\"} 1\n"), text);
+            assertTrue(text.contains("vectolyn_scaling_downs_total{task=\"bedwars\",group=\"minigame\"} 0\n"), text);
         }
     }
 

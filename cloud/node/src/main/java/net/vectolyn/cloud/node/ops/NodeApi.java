@@ -19,6 +19,8 @@ import net.vectolyn.cloud.api.backend.ServiceView;
 import net.vectolyn.cloud.api.event.ApiEvent;
 import net.vectolyn.cloud.node.channel.ChannelBridge;
 import net.vectolyn.cloud.node.channel.NetworkPlayers;
+import net.vectolyn.cloud.node.scaling.ScalingEvent;
+import net.vectolyn.cloud.node.scaling.ScalingListener;
 import net.vectolyn.cloud.node.service.ServiceException;
 import net.vectolyn.cloud.node.service.ServiceInfo;
 import net.vectolyn.cloud.node.service.ServiceListener;
@@ -36,7 +38,8 @@ import org.jspecify.annotations.Nullable;
  * setup not complete, already running) are passed on; anything else may carry a path or a tool's
  * output, so the client gets a short text and the node log the detail.
  */
-public final class NodeApi implements ApiBackend, ServiceAccess, NodeAccess, ServiceListener, ChannelBridge.PlayerListener {
+public final class NodeApi implements ApiBackend, ServiceAccess, NodeAccess, ServiceListener, ChannelBridge.PlayerListener,
+        ScalingListener {
 
     private static final System.Logger LOG = System.getLogger(NodeApi.class.getName());
 
@@ -196,6 +199,15 @@ public final class NodeApi implements ApiBackend, ServiceAccess, NodeAccess, Ser
         ApiServer target = server;
         if (target != null) {
             target.publish(new ApiEvent.Player(kind, player.uuid().toString(), player.name(), player.service().value()));
+        }
+    }
+
+    @Override
+    public void decided(ScalingEvent event) {
+        ApiServer target = server;
+        if (target != null) {
+            target.publish(new ApiEvent.Scaling(event.task(), event.group(), event.action().id(), event.reason(),
+                    event.service().map(ServiceId::value).orElse(null)));
         }
     }
 

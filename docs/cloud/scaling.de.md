@@ -1,6 +1,6 @@
 # VectolynCloud-Autoskalierung
 
-Paket `net.vectolyn.cloud.node.scaling` in `cloud/node`. Der Node hält von jedem Task `min-services` Dienste am Laufen, startet dynamische Dienste, wenn die Last einer Gruppe hoch ist, und leert und stoppt sie, wenn sie niedrig ist. Die ausführliche englische Seite ist [scaling.md](scaling.md).
+Paket `net.vectolyn.cloud.node.scaling` in `cloud/node`. Der Node hält von jedem Task `min-services` Dienste am Laufen (in einem [Zeitplan](#zeitpläne) mehr), startet dynamische Dienste, wenn die Last einer Gruppe hoch ist oder ein [Auslöser](#auslöser-neben-der-last) für CPU, TPS oder Heap greift, und leert und stoppt sie, wenn die Last niedrig ist. Jede Entscheidung gibt es auch [als Daten](#entscheidungen-als-daten): als API-Event und als Prometheus-Zähler. Die ausführliche englische Seite ist [scaling.md](scaling.md).
 
 ## Konfiguration
 
@@ -18,8 +18,19 @@ scaling:
   scale-down-below: 50       # Last in Prozent, unter der es mit einem Dienst weniger bleiben muss
   scale-down-after: 5m       # so lange muss die niedrige Last anhalten, bevor ein Dienst geht
   cooldown: 60s              # Mindestabstand zwischen zwei Entscheidungen des Tasks
+  scale-up-on:               # optional: weitere Gründe für einen Dienst mehr
+    cpu-above: 80            # mittlere CPU der Dienste des Tasks, Prozent der Maschine
+    tps-below: 18            # mittlere TPS
+    ram-above: 90            # mittlerer belegter Heap, Prozent von heap.max
+  schedules:                 # optional: höheres Minimum zu festen Zeiten
+    - days: [fri, sat]
+      from: "18:00"
+      to: "23:30"
+      min-services: 3
 nodes: []
 ```
+
+Die Grenzen gelten je Task, nicht je Gruppe: `min-services`, `max-services`, `cooldown` und die Auslöser gehören zum Task. Eine Gruppe mit einem Task (der Normalfall) verhält sich so, als gälten sie je Gruppe. Entscheidend bleibt die Last der ganzen Gruppe (unten).
 
 ### Statisch und dynamisch in einem Task
 
@@ -68,13 +79,13 @@ Unbekannt ist die Last, solange ein laufender Dienst der Gruppe keine bekannte S
 
 Alle 5 Sekunden prüft der Scaler jeden Task einmal. Nach einer Entscheidung nach Last (Regeln 3 und 4) wartet der Task `cooldown`, bevor die nächste kommt.
 
-1. **min-services.** Zählen weniger Dienste als `min-services`, starten alle fehlenden in derselben Runde, ohne `cooldown`, etwa nachdem die EULA wieder akzeptiert wurde.
+1. **min-services.** Zählen weniger Dienste als `min-services`, starten alle fehlenden in derselben Runde, ohne `cooldown`, etwa nachdem die EULA wieder akzeptiert wurde. Ein aktiver [Zeitplan](#zeitpläne) hebt dieses Minimum auf dieselbe Weise an.
    - Ein dynamischer Dienst zählt, solange er vorbereitet wird, startet, läuft oder nach einem Absturz auf seinen Neustart wartet.
    - Ein statischer Dienst innerhalb von `static-services` zählt immer, auch gestoppt oder nach aufgegebenen Neustarts. Ein mit `service stop` angehaltener Server bleibt deshalb aus. Nur ein statischer Dienst, der stoppte, weil seine Gruppe abgeschaltet wurde (oder `eula-accepted` bzw. `setup-complete` zurückgenommen wurde), kommt wieder, sobald der Schalter wieder an ist, mit seinem Index und in seinem Ordner. Ob ein Schalter den Stopp ausgelöst hat, entscheidet die Konfiguration im Moment des Stopps.
    - Ein neuer statischer Platz (neuer Task, höheres `static-services`) bekommt den kleinsten Index der Gruppe, den in diesem Lauf noch kein Dienst hatte. Der Ordner eines von Hand gestoppten Servers bleibt so unberührt.
 2. **Über max-services.** Hat ein Task mehr Dienste als `max-services` (das Limit wurde gesenkt), wird ein leerer dynamischer Dienst so entfernt wie in Regel 4: auf den Proxys geschlossen, noch einmal geprüft, dann gestoppt. Ein Dienst mit Spielern wird dafür nie entfernt.
-3. **Hochskalieren.** Ein weiterer dynamischer Dienst startet, wenn die Last der Gruppe `scale-up-at` erreicht hat, kein Dienst der Gruppe mehr startet, kein anderer Task der Gruppe in derselben Runde einen gestartet hat, der Task dynamische Dienste haben darf (`static-services < max-services`), `max-services` Platz lässt und das Speicherbudget reicht (unten). Bei 50 Plätzen pro Dienst und 75 %: 75 von 100 Spielern auf zwei Diensten.
-4. **Herunterskalieren.** Der Task hat mehr als `min-services` Dienste, und ohne seinen leersten laufenden dynamischen Dienst bliebe der Rest der Gruppe unter `scale-down-below`, die Spieler dieses Dienstes auf den Rest gerechnet. Hält das `scale-down-after` lang ohne Unterbrechung an, geht der Dienst:
+3. **Hochskalieren.** Ein weiterer dynamischer Dienst startet, wenn die Last der Gruppe `scale-up-at` erreicht hat (oder ein [Auslöser](#auslöser-neben-der-last) greift), kein Dienst der Gruppe mehr startet, kein anderer Task der Gruppe in derselben Runde einen gestartet hat, der Task dynamische Dienste haben darf (`static-services < max-services`), `max-services` Platz lässt und das Speicherbudget reicht (unten). Bei 50 Plätzen pro Dienst und 75 %: 75 von 100 Spielern auf zwei Diensten.
+4. **Herunterskalieren.** Der Task hat mehr Dienste als `min-services` (bzw. als ein aktiver [Zeitplan](#zeitpläne) verlangt), kein [Auslöser](#auslöser-neben-der-last) greift, und ohne seinen leersten laufenden dynamischen Dienst bliebe der Rest der Gruppe unter `scale-down-below`, die Spieler dieses Dienstes auf den Rest gerechnet. Hält das `scale-down-after` lang ohne Unterbrechung an, geht der Dienst:
    - er wird immer zuerst auf den Proxys **geschlossen**, damit kein neuer Spieler mehr hinkommt;
    - alle Spieler darauf werden auf die anderen Dienste der Gruppe umgezogen (statische eingeschlossen). Die Node liest die Spieler bei jeder Prüfung neu, also wird auch umgezogen, wer zwischendurch dazukam. Wer 2 Sekunden nach seinem Umzugsbefehl noch darauf ist, bekommt ihn noch einmal, dann nach 4 und danach alle 8 Sekunden, falls ein Proxy den ersten verloren oder abgelehnt hat. Der wiederholte Befehl nennt dasselbe Ziel, solange dieser Server offen ist und Platz hat, damit ein verspäteter Proxy den Spieler nicht noch ein zweites Mal weiterschickt. Jeder Spieler bekommt eine kurze Nachricht in der Sprache seines Clients (Deutsch bei `de`, sonst Englisch);
    - er stoppt erst, wenn er leer ist: Die Proxys führen niemanden mehr darauf **und** seine eigene Bridge meldet 0 Spieler. Hier entscheidet die höhere der beiden Zahlen, damit ein Proxy, der einen Beitritt noch nicht gesehen hat, keinen Server unter einem Spieler stoppen lässt;
@@ -123,6 +134,46 @@ Scaling: group survival is not scaled while survival-1 reports no player count: 
 
 Im ersten Fall liegt es am Server: Seine Bridge schweigt (ein Server, der kaum noch tickt, meldet seltener, siehe [monitor.md](monitor.md#what-the-bridges-report-and-what-the-monitor-expects)), oder sie hat seit dem Start nie gemeldet („has not reported since the server started“). Im zweiten liegt es am Node: Die Runden des Monitors stehen. Eine langsame Prozessabfrage (`tasklist` auf einem ausgelasteten Windows-Rechner) ist keins von beiden, weil sie in einem eigenen Thread läuft und die Runden nicht auf sie warten. Mit `enabled: false` in `monitor.yml` gibt es keine Messwerte. Der Scaler hält dann `min-services` und skaliert weder hoch noch herunter.
 
+## Auslöser neben der Last
+
+`scale-up-on` im Abschnitt `scaling` eines Tasks ergänzt Gründe, einen weiteren dynamischen Dienst zu starten. Jedes Feld ist optional; ein fehlendes wird nicht geprüft.
+
+| Feld | Bereich | Greift, wenn |
+|---|---|---|
+| `cpu-above` | 1 bis 100 | die mittlere CPU-Last der Dienste des Tasks in Prozent der Maschine **darüber** liegt |
+| `tps-below` | 1 bis 20 | die mittleren Ticks pro Sekunde **darunter** liegen |
+| `ram-above` | 1 bis 100 | der mittlere belegte Heap in Prozent von `heap.max` **darüber** liegt |
+
+- Gemittelt wird über die laufenden Dienste des Tasks, die nicht gerade geleert werden, aus dem neuesten Messwert des [Monitors](monitor.md), solange er nicht älter als `stale-after` ist. Ein Dienst ohne den Wert (ein Proxy hat keine TPS, ein Betriebssystem meldet die CPU eines fremden Prozesses nicht) bleibt außen vor; hat ihn kein Dienst, greift der Auslöser nicht. Genau auf der Grenze greift er nicht (80 % bei `cpu-above: 80`).
+- Ein Auslöser ist ein weiterer Weg in Regel 3: `max-services`, `cooldown`, ein noch startender Dienst der Gruppe, ein pausierter Task und das [Speicherbudget](#speicherbudget) halten ihn auf wie ein Hochskalieren nach Last. Die Last hat Vorrang; unter den Auslösern nennt zuerst CPU, dann TPS, dann Heap den Grund.
+- Anders als die Last greift ein Auslöser auch, solange die Spielerzahl eines Dienstes unbekannt ist: CPU, TPS und Heap stammen aus den Messwerten des Monitors, nicht aus der Spielerzahl.
+- Solange ein Auslöser greift, wird kein Dienst des Tasks herunterskaliert, und die Zeit für `scale-down-after` beginnt neu. Eine ausgelastete Gruppe mit wenigen Spielern verliert so den Dienst nicht gleich wieder.
+- Der Heap schwankt mit der Garbage Collection. `ram-above` nahe 100 greift selten; 85 bis 90 ist ein sinnvoller Anfang.
+
+## Zeitpläne
+
+`schedules` heben das Minimum eines Tasks zu festen Zeiten an, etwa für ein Event am Abend:
+
+```yaml
+schedules:
+  - days: [fri, sat]          # mon, tue, wed, thu, fri, sat, sun
+    from: "18:00"             # HH:mm, 24 Stunden
+    to: "02:00"               # vor from: das Fenster endet am nächsten Tag
+    min-services: 4
+```
+
+- Ein Fenster beginnt an jedem genannten Tag um `from` und endet um `to` (`from` gehört dazu, `to` nicht). Ein `to` vor `from` endet am nächsten Tag: Freitag 18:00 bis 02:00 reicht bis Samstag 02:00. `from` gleich `to` dauert ab `from` einen ganzen Tag.
+- Die Zeiten gelten in der **Zeitzone des Nodes**: der Standardzone seiner JVM (die Zone der Maschine; `-Duser.timezone=Europe/Berlin` in den JVM-Flags des Launchers oder `TZ` setzt eine andere). Jeder Node eines [Clusters](cluster.md) liest sie in seiner eigenen Zone. Bei der Umstellung zwischen Sommer- und Winterzeit folgt ein Fenster der Uhr vor Ort.
+- Solange Fenster aktiv sind, ist das Minimum das höchste aus `min-services` und ihren `min-services`, höchstens `max-services`. Ein Zeitplan senkt `min-services` nie. Ein Task kann bis zu 32 haben.
+- Die fehlenden Dienste starten in einer Runde wie bei Regel 1 und sind dynamisch, sobald die statischen da sind. Die über `min-services` selbst brauchen das [Speicherbudget](#speicherbudget); reicht es nicht, wartet der Task und das Log nennt den Grund. Endet das Fenster, werden die zusätzlichen Dienste nach Regel 4 wie jeder andere herunterskaliert, nach `scale-down-after` niedriger Last.
+
+## Entscheidungen als Daten
+
+Jede Entscheidung geht zusätzlich als Daten weiter (`ScalingEvent`, `ScalingListener`):
+
+- **API.** Der Event-Typ `scaling` auf [`/api/v1/events`](api.de.md) (Scope `services:read`), auch über GraphQL und gRPC: `task`, `group`, `action` (`start`, `drain`, `stop`, `keep`, `hold`), `reason` (`min-services`, `schedule`, `load`, `cpu`, `tps`, `ram`, `low-load`, `above-max`; bei `hold` `memory-unknown`, `memory-budget`, `memory-free`, `paused`; bei `keep` `no-target`, `timeout`, `interrupted`) und `service` (fehlt bei `hold`). Ein `hold` kommt einmal, bis sich der Grund ändert, wie seine Log-Zeile.
+- **Prometheus.** `vectolyn_scaling_ups_total{task,group}` zählt die Dienste, die der Scaler gestartet hat, `vectolyn_scaling_downs_total{task,group}` die, die er geleert und gestoppt hat, jeweils seit dem Start der Cloud (siehe [monitor.md](monitor.md#prometheus-optional)).
+
 ## Speicherbudget
 
 Hochskalieren (Regel 3) braucht außerdem:
@@ -146,7 +197,7 @@ Fehlt eins davon oder ist der Speicher des Nodes noch nicht gemessen, wartet der
 Scaling: task minigame needs another service (1G heap), but the maximum heaps of the services on this node would exceed its memory
 ```
 
-`min-services` hält das Budget nicht auf, genau wie beim Start des Nodes: Wer das Minimum setzt, verlangt diese Server. `service start` von Hand wird ebenfalls nicht geprüft.
+`min-services` hält das Budget nicht auf, genau wie beim Start des Nodes: Wer das Minimum setzt, verlangt diese Server. `service start` von Hand wird ebenfalls nicht geprüft. Die Dienste, die ein [Zeitplan](#zeitpläne) über `min-services` hinaus startet, prüft es wie ein Hochskalieren.
 
 ## Fehlgeschlagene Starts
 
@@ -158,6 +209,8 @@ Jeder Start, Stopp und Umzug steht mit Grund im Log:
 
 ```text
 Scaling: minigame-3 of task minigame is started (the load of the group has reached 75 %)
+Scaling: minigame-4 of task minigame is started (the average CPU of its services is above 80 %)
+Scaling: lobby-3 of task lobby is started (an active schedule raises the minimum above min-services 1)
 Scaling: minigame-3 of task minigame is stopped (with one service fewer the load stays below 50 %, for 5m)
 Scaling: the players of minigame-2 of task minigame are moved to other servers (with one service fewer the load stays below 50 %, for 5m)
 Scaling: minigame-2 keeps running: players are still on it after 30 s, a move did not work
@@ -175,5 +228,5 @@ Ein skalierter Dienst ist ein gewöhnlicher Dienst des Service-Kerns ([node.md](
 
 - Ein Node. Im [Cluster](cluster.md) skaliert jeder Node seine eigenen Tasks; ein Task auf mehreren Nodes wird noch nicht zwischen ihnen verteilt.
 - Die Proxys kennen die Plätze nur von Backends, die der Node angemeldet hat. Von Hand in `velocity.toml` eingetragene Server wählt der Proxy so, wie Velocity es täte.
-- Skaliert wird ab einem laufenden Dienst: Ein Task mit `min-services: 0` ohne Dienst hat keine Spielerzahl, nach der er skalieren könnte (noch keine Warteschlange).
+- Skaliert wird ab einem laufenden Dienst: Ein Task mit `min-services: 0` ohne Dienst hat keine Spielerzahl, nach der er skalieren könnte (noch keine Warteschlange). Ein Zeitplan kann so einen Task zu festen Zeiten starten.
 - Das Budget rechnet mit den maximalen Heaps, nicht mit dem, was eine JVM darüber hinaus braucht (Metaspace, Threads, nativer Speicher). In `heap.max` Luft lassen.

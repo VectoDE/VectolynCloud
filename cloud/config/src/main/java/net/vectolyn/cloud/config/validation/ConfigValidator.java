@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -30,10 +31,13 @@ import net.vectolyn.cloud.config.model.NodesConfig;
 import net.vectolyn.cloud.config.model.ProcessConfig;
 import net.vectolyn.cloud.config.model.ProxyConfig;
 import net.vectolyn.cloud.config.model.RestartConfig;
+import net.vectolyn.cloud.config.model.ScaleUpTriggers;
 import net.vectolyn.cloud.config.model.ScalingConfig;
+import net.vectolyn.cloud.config.model.ScalingSchedule;
 import net.vectolyn.cloud.config.model.ServerSoftware;
 import net.vectolyn.cloud.config.model.TaskConfig;
 import net.vectolyn.cloud.config.model.TimeSpan;
+import net.vectolyn.cloud.config.model.Weekday;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -54,6 +58,10 @@ public final class ConfigValidator {
     public static final int MAX_SERVICES = 1000;
     /** Upper limit for players per service. */
     public static final int MAX_PLAYERS_PER_SERVICE = 10_000;
+    /** Highest {@code scale-up-on.tps-below}: a Minecraft server ticks 20 times a second. */
+    public static final int MAX_TPS = 20;
+    /** Most entries in {@code scaling.schedules} of one task. */
+    public static final int MAX_SCHEDULES = 32;
     /** Lowest {@code max-memory} of a node in MiB: one proxy with its default heap. */
     public static final long MIN_NODE_MEMORY_MEGABYTES = 512;
     /** Only Minecraft version PandaSpigot runs. */
@@ -277,6 +285,54 @@ public final class ConfigValidator {
         }
     }
 
+    /** {@code scaling.scale-up-on}: each value that is set lies in its range. */
+    private static void validateTriggers(Checks c, String f, ScaleUpTriggers triggers) {
+        if (triggers == null) {
+            return;
+        }
+        if (triggers.cpuAbove() != null) {
+            c.range(f, "scaling.scale-up-on.cpu-above", triggers.cpuAbove(), 1, 100);
+        }
+        if (triggers.tpsBelow() != null) {
+            c.range(f, "scaling.scale-up-on.tps-below", triggers.tpsBelow(), 1, MAX_TPS);
+        }
+        if (triggers.ramAbove() != null) {
+            c.range(f, "scaling.scale-up-on.ram-above", triggers.ramAbove(), 1, 100);
+        }
+    }
+
+    /**
+     * {@code scaling.schedules}: at most {@link #MAX_SCHEDULES}, each with at least one day and no
+     * day twice, and a {@code min-services} from 0 to {@code max-services}.
+     */
+    private static void validateSchedules(Checks c, String f, ScalingConfig s, boolean maxValid) {
+        List<ScalingSchedule> schedules = s.schedulesOrEmpty();
+        c.range(f, "scaling.schedules", schedules.size(), 0, MAX_SCHEDULES);
+        for (int i = 0; i < schedules.size(); i++) {
+            ScalingSchedule schedule = schedules.get(i);
+            String p = "scaling.schedules[" + i + "]";
+            if (c.required(f, p + ".days", schedule.days())) {
+                if (schedule.days().isEmpty()) {
+                    c.add(ConfigError.of(f, p + ".days", ErrorCode.EMPTY));
+                }
+                Set<Weekday> days = new HashSet<>();
+                for (int d = 0; d < schedule.days().size(); d++) {
+                    Weekday day = schedule.days().get(d);
+                    if (!days.add(day)) {
+                        c.add(ConfigError.of(f, p + ".days[" + d + "]", ErrorCode.DUPLICATE_ENTRY,
+                                day.name().toLowerCase(Locale.ROOT)));
+                    }
+                }
+            }
+            c.required(f, p + ".from", schedule.from());
+            c.required(f, p + ".to", schedule.to());
+            if (c.range(f, p + ".min-services", schedule.minServices(), 0, MAX_SERVICES)
+                    && maxValid && schedule.minServices() > s.maxServices()) {
+                c.add(ConfigError.of(f, p + ".min-services", ErrorCode.MIN_GREATER_THAN_MAX, "scaling.max-services"));
+            }
+        }
+    }
+
     private static void validateTask(Checks c, String name, TaskConfig task, ConfigSnapshot snapshot) {
         String f = CloudHome.taskFileName(name);
         if (!ConfigNames.isValidName(name)) {
@@ -305,6 +361,8 @@ public final class ConfigValidator {
             }
             c.required(f, "scaling.scale-down-after", s.scaleDownAfter());
             c.required(f, "scaling.cooldown", s.cooldown());
+            validateTriggers(c, f, s.scaleUpOn());
+            validateSchedules(c, f, s, max);
         }
         Set<String> seen = new HashSet<>();
         for (int i = 0; i < task.nodes().size(); i++) {

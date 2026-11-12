@@ -14,16 +14,20 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.SSLContext;
@@ -33,6 +37,7 @@ import net.vectolyn.cloud.cluster.ClusterMessages.JoinReply;
 import net.vectolyn.cloud.cluster.ClusterMessages.JoinRequest;
 import net.vectolyn.cloud.cluster.ClusterMessages.NodeHello;
 import net.vectolyn.cloud.cluster.ClusterMessages.NodeWelcome;
+import net.vectolyn.cloud.cluster.PlacementMessages.NodeStatus;
 import net.vectolyn.cloud.config.ConfigListener;
 import net.vectolyn.cloud.config.ConfigService;
 import net.vectolyn.cloud.config.error.ConfigException;
@@ -76,6 +81,14 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
     private static final Pattern IP_LITERAL = Pattern.compile("[0-9.]{1,15}|[0-9A-Fa-f.]{0,40}:[0-9A-Fa-f:.]{1,44}");
     /** How often the head looks for changed templates. */
     static final Duration TEMPLATE_RESCAN = Duration.ofSeconds(60);
+    /** How often a member reports its {@link NodeStatus} to the head. */
+    static final Duration STATUS_INTERVAL = Duration.ofSeconds(10);
+    /** A status older than this does not count for the placement (three missed reports). */
+    static final Duration STATUS_STALE = Duration.ofSeconds(30);
+    /** A member without a session for this long is lost (on top of the 30 s idle timeout of its session). */
+    static final Duration LOSS_GRACE = Duration.ofSeconds(30);
+    /** How often the head looks for lost members. */
+    static final Duration LOSS_CHECK = Duration.ofSeconds(5);
 
     /** The role of this node. */
     public enum Role {
@@ -122,6 +135,30 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
          * @param head the head's version
          */
         void versionMismatch(String own, String head);
+
+        /**
+         * Head: a member has been without a session for {@link #LOSS_GRACE}. The plan says where
+         * its dynamic services would go and which static ones wait for it; nothing is started
+         * yet (remote start is a step of its own, docs/cloud/cluster.md#failover). The default
+         * logs the plan.
+         *
+         * @param plan what happens to the member's services
+         */
+        default void memberLost(FailoverPlanner.Plan plan) {
+            LOG.log(System.Logger.Level.WARNING, "Cluster: {0} is lost (no session for {1} s): {2} dynamic "
+                    + "service(s) planned on other nodes ({3} without room), {4} static service(s) wait for it",
+                    plan.lost(), LOSS_GRACE.toSeconds(), plan.moved().size() - plan.unplaced(), plan.unplaced(),
+                    plan.waiting().size());
+        }
+
+        /**
+         * Head: a lost member has a session again.
+         *
+         * @param member the member
+         */
+        default void memberBack(NodeId member) {
+            LOG.log(System.Logger.Level.INFO, "Cluster: {0} is back", member);
+        }
     }
 
     /**
@@ -167,8 +204,28 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
                                Optional<String> problem) {
     }
 
+    /**
+     * The last {@link NodeStatus} of a node, as the head knows it.
+     *
+     * @param status    what the node reported
+     * @param received  when the head got it (for the head itself: now)
+     * @param connected whether the node has a session with the head now (the head itself counts as
+     *                  connected)
+     */
+    public record NodeReport(NodeStatus status, Instant received, boolean connected) {
+    }
+
     private final ClusterPaths paths;
     private final NodeId self;
+    /** Head: the last status of every member that reported, kept after its session ended. */
+    private final Map<NodeId, NodeReport> reports = new ConcurrentHashMap<>();
+    private volatile Supplier<NodeStatus> statusSource = () -> NodeStatus.UNKNOWN;
+    private volatile Duration lossGrace = LOSS_GRACE;
+    private volatile Duration lossCheck = LOSS_CHECK;
+    /** Head: which members are lost; only touched on {@link #mirrorTimer}. */
+    private volatile MemberWatch watch;
+    /** Head: the plan for every member that is lost now. */
+    private final Map<NodeId, FailoverPlanner.Plan> plans = new ConcurrentHashMap<>();
     private final String version;
     private final ConfigService config;
     private final VersionPolicy versions;
@@ -226,6 +283,7 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
                 .request(MirrorMessages.TEMPLATE_LIST, (peer, payload) -> templateSource.list(payload))
                 .request(MirrorMessages.TEMPLATE_MANIFEST, (peer, payload) -> templateSource.manifest(payload))
                 .request(MirrorMessages.TEMPLATE_CHUNK, (peer, payload) -> templateSource.chunk(payload))
+                .push(PlacementMessages.NODE_STATUS, this::statusReceived)
                 .build();
         this.memberHandlers = ClusterHandlers.builder()
                 .push(MirrorMessages.CONFIG_CHANGED,
@@ -624,12 +682,19 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
         });
         long rescan = TEMPLATE_RESCAN.toMillis();
         scheduleRescans(rescan);
+        watch = new MemberWatch(lossGrace);
+        scheduleMemberChecks(lossCheck.toMillis());
     }
 
     @SuppressWarnings("FutureReturnValueIgnored") // the timer lives as long as the service; runMirror catches the task's failures
     private void scheduleRescans(long millis) {
         mirrorTimer.scheduleWithFixedDelay(() -> runMirror(() -> rescanTemplates(false)), millis, millis,
                 TimeUnit.MILLISECONDS);
+    }
+
+    @SuppressWarnings("FutureReturnValueIgnored") // the timer lives as long as the service; the check runs every period
+    private void scheduleMemberChecks(long millis) {
+        mirrorTimer.scheduleWithFixedDelay(this::checkMembers, millis, millis, TimeUnit.MILLISECONDS);
     }
 
     private void startLink() throws IOException {
@@ -662,6 +727,7 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
                         LOG.log(System.Logger.Level.INFO, "Cluster: connected to the head {0}", node);
                         // on the mirror's worker: this thread reads the answers
                         requestSyncInBackground();
+                        Thread.ofVirtual().name("vectolyn-cluster-status").start(ClusterService.this::reportStatus);
                     }
 
                     @Override
@@ -684,6 +750,184 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
                 }, memberHandlers);
         created.start();
         link = created;
+        long interval = STATUS_INTERVAL.toMillis();
+        mirrorTimer.scheduleWithFixedDelay(this::reportStatus, interval, interval, TimeUnit.MILLISECONDS);
+    }
+
+    // ---------------------------------------------------------------- placement
+
+    /**
+     * Sets where this node's {@link NodeStatus} comes from: a member reports it to the head every
+     * {@link #STATUS_INTERVAL} and right after its session starts, the head uses its own for the
+     * placement. Without a source a node reports {@link NodeStatus#UNKNOWN}, which no placement
+     * chooses.
+     *
+     * @param source called on a timer thread; must not block
+     */
+    public void statusSource(Supplier<NodeStatus> source) {
+        this.statusSource = Objects.requireNonNull(source, "source");
+    }
+
+    /** This node's status now; a source that fails counts as {@link NodeStatus#UNKNOWN}. */
+    private NodeStatus ownStatus() {
+        try {
+            return Objects.requireNonNull(statusSource.get(), "status");
+        } catch (RuntimeException e) {
+            LOG.log(System.Logger.Level.WARNING, "Cluster: the status of this node cannot be read", e);
+            return NodeStatus.UNKNOWN;
+        }
+    }
+
+    /** Member: sends the status to the head, if there is a session. */
+    private void reportStatus() {
+        ClusterLink running = link;
+        Optional<ClusterSession> session = running == null ? Optional.empty() : running.session();
+        if (closed || session.isEmpty()) {
+            return;
+        }
+        try {
+            session.get().push(PlacementMessages.NODE_STATUS, ownStatus().write());
+        } catch (RuntimeException e) {
+            // A failure must not end the timer: the next report tries again.
+            LOG.log(System.Logger.Level.WARNING, "Cluster: the status of this node cannot be sent", e);
+        }
+    }
+
+    /** Head: a member reported its status. */
+    private void statusReceived(NodeId peer, byte[] payload) throws ClusterRpcException {
+        NodeStatus status = ConfigMirrorSource.read(() -> NodeStatus.read(new PacketReader(payload)));
+        reports.put(peer, new NodeReport(status, clock.instant(), true));
+    }
+
+    /**
+     * The last status of every node, the head first (its own, now), then the members in the order
+     * of {@code cluster.yml}. A member that never reported since the head started is missing; one
+     * whose session ended keeps its last status with {@code connected} false.
+     *
+     * @return the reports by node, empty outside the head
+     */
+    public Map<NodeId, NodeReport> nodeReports() {
+        Map<NodeId, NodeReport> all = new LinkedHashMap<>();
+        ClusterConfig current = cluster;
+        if (role() != Role.HEAD || current == null) {
+            return all;
+        }
+        all.put(self, new NodeReport(ownStatus(), clock.instant(), true));
+        ClusterServer running = server;
+        Set<NodeId> connected = running == null ? Set.of() : running.connected();
+        for (ClusterConfig.Member member : current.members()) {
+            NodeId id = new NodeId(member.id());
+            NodeReport report = reports.get(id);
+            if (!id.equals(self) && report != null) {
+                all.put(id, new NodeReport(report.status(), report.received(), connected.contains(id)));
+            }
+        }
+        return all;
+    }
+
+    /**
+     * Head: chooses a node for one more service of {@code task} by the rules of
+     * {@link PlacementPlanner}, from the nodes that are connected and reported within
+     * {@link #STATUS_STALE}.
+     *
+     * @param task the task
+     * @return the node, or why none
+     * @throws ClusterException if this node is not the head or the task does not exist
+     */
+    public PlacementPlanner.Result place(String task) throws ClusterException {
+        requireHead();
+        try {
+            return PlacementPlanner.place(config.snapshot(), task, reachable(), Set.of());
+        } catch (IllegalArgumentException e) {
+            throw new ClusterException("The task cannot be placed: " + e.getMessage(),
+                    "Der Task lässt sich nicht platzieren: " + e.getMessage());
+        }
+    }
+
+    /** Head: the status of every node that counts for the placement now. */
+    Map<NodeId, NodeStatus> reachable() {
+        Instant oldest = clock.instant().minus(STATUS_STALE);
+        Map<NodeId, NodeStatus> reachable = new LinkedHashMap<>();
+        nodeReports().forEach((node, report) -> {
+            if (report.connected() && !report.received().isBefore(oldest)) {
+                reachable.put(node, report.status());
+            }
+        });
+        return reachable;
+    }
+
+    // ---------------------------------------------------------------- failover
+
+    /**
+     * Sets how long a member may be without a session before it is lost, and how often the head
+     * looks. For tests; takes effect at the next {@link #start}.
+     */
+    void failoverTimings(Duration grace, Duration check) {
+        if (grace.isNegative() || check.isNegative() || check.isZero()) {
+            throw new IllegalArgumentException("invalid failover timings");
+        }
+        lossGrace = grace;
+        lossCheck = check;
+    }
+
+    /**
+     * Head: the members that are lost now: they had a session since the head started and have
+     * been without one for {@link #LOSS_GRACE}.
+     *
+     * @return the lost members, empty outside the head
+     */
+    public Set<NodeId> lostMembers() {
+        return Set.copyOf(plans.keySet());
+    }
+
+    /**
+     * Head: what happens to the services of a lost member, as planned when it was lost.
+     *
+     * @param member the member
+     * @return the plan, empty if the member is not lost
+     */
+    public Optional<FailoverPlanner.Plan> failoverPlan(NodeId member) {
+        return Optional.ofNullable(plans.get(member));
+    }
+
+    /** Head, on the timer: marks lost members, plans their services, and notices members that are back. */
+    private void checkMembers() {
+        try {
+            MemberWatch current = watch;
+            ClusterConfig config = cluster;
+            ClusterServer running = server;
+            if (closed || current == null || config == null || running == null) {
+                return;
+            }
+            Set<NodeId> members = new java.util.HashSet<>();
+            for (ClusterConfig.Member member : config.members()) {
+                members.add(new NodeId(member.id()));
+            }
+            members.remove(self);
+            Set<NodeId> seen = new java.util.HashSet<>(reports.keySet());
+            seen.retainAll(members);
+            MemberWatch.Change change = current.update(clock.instant(), seen, running.connected());
+            for (NodeId node : change.back()) {
+                plans.remove(node);
+                events.memberBack(node);
+            }
+            plans.keySet().retainAll(members);
+            if (change.lost().isEmpty()) {
+                return;
+            }
+            Map<NodeId, NodeStatus> last = new LinkedHashMap<>();
+            for (NodeId node : change.lost()) {
+                NodeReport report = reports.get(node);
+                last.put(node, report == null ? NodeStatus.UNKNOWN : report.status());
+            }
+            for (FailoverPlanner.Plan plan : FailoverPlanner.planAll(this.config.snapshot(), last, reachable())) {
+                plans.put(plan.lost(), plan);
+                events.memberLost(plan);
+            }
+        } catch (RuntimeException e) {
+            // A failure must not end the timer: the next check tries again.
+            LOG.log(System.Logger.Level.WARNING, "Cluster: looking for lost members failed", e);
+        }
     }
 
     /** The state of the cluster. */
@@ -1159,6 +1403,7 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
         closed = true;
         config.removeListener(configListener);
         mirrorTimer.shutdownNow();
+        plans.clear();
         mirrorWorker.shutdownNow();
         ClusterServer runningServer = server;
         if (runningServer != null) {

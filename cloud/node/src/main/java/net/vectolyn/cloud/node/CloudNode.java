@@ -86,6 +86,7 @@ import net.vectolyn.cloud.node.database.NodeDatabase;
 import net.vectolyn.cloud.node.database.NodeDatabaseProcesses;
 import net.vectolyn.cloud.node.jre.ManagedJavaRuntimes;
 import net.vectolyn.cloud.node.scaling.Autoscaler;
+import net.vectolyn.cloud.node.scaling.ScalingEvent;
 import net.vectolyn.cloud.node.scaling.ScalingSignals;
 import net.vectolyn.cloud.node.scaling.ScalingTarget;
 import net.vectolyn.cloud.node.service.ServiceException;
@@ -474,15 +475,26 @@ public final class CloudNode implements AutoCloseable {
 
         // Player counts of the bridges and proxies, memory of the node from the monitor
         // (docs/cloud/scaling.md); the configuration is the same one the console and the API change.
-        Autoscaler scaler = Autoscaler.create(ScalingTarget.of(services, channel), config::snapshot,
-                ScalingSignals.of(monitoring.monitor(), channel.players(), channel::proxyWatches, Clock.systemUTC()));
+        ScalingSignals signals = ScalingSignals.of(monitoring.monitor(), channel.players(), channel::proxyWatches,
+                Clock.systemUTC());
+        Autoscaler scaler = Autoscaler.create(ScalingTarget.of(services, channel), config::snapshot, signals);
         services.addListener(scaler);
+        // Decisions as data: scaling events for the API, scale-ups and scale-downs for Prometheus.
+        scaler.addListener(api);
+        scaler.addListener(event -> {
+            if (event.action() == ScalingEvent.Action.START || event.action() == ScalingEvent.Action.STOP) {
+                monitoring.monitor().scaled(event.task(), event.group(), event.action() == ScalingEvent.Action.START);
+            }
+        });
         ApiCommands.TokenFile tokenFile = tokens.isPresent() ? tokens::get : () -> ApiTokens.open(home);
         // One version per cluster: the update system (#74) hooks in at ClusterService.Events. On a
         // member the service switches the config to the mirror mode: nodes.yml, groups and tasks
         // come from the head, and console, setup and API cannot change them here.
         ClusterService cluster = ClusterService.openOrStandalone(new ClusterPaths(home), new NodeId(nodeId),
                 settings.launcherVersion(), config, VersionPolicy.sameVersion(), Clock.systemUTC());
+        // What the head places services by: memory budget and services of this node (cluster.md#placement).
+        cluster.statusSource(() -> ClusterStatusReport.of(config.snapshot(), nodeId, services.services(),
+                signals.read().memory()));
         return new Ops(tokenFile, monitoring, privacy, backups, api, apiServer(home, config, secrets, api, tokens), scaler, cluster);
     }
 
