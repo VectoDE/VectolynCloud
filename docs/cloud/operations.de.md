@@ -12,7 +12,8 @@ Die Dateien liegen in [`cloud/dist/`](../../cloud/dist):
 | `start.bat`, `start.ps1` | Startskripte für Windows (Eingabeaufforderung, Windows PowerShell 5.1 oder PowerShell 7) |
 | `systemd/vectolyn-cloud.service` | systemd-Unit mit eigenem Benutzer und Härtung |
 | `docker/Dockerfile`, `docker/compose.yml`, `docker/setup.example.yml` | Container-Image und eine Compose-Datei mit MariaDB |
-| `pterodactyl/egg-vectolyn-cloud.json` | Pterodactyl-Egg |
+| `pterodactyl/egg-vectolyn-cloud.json` | Pterodactyl-Egg (PTDL_v2) |
+| `pelican/egg-vectolyn-cloud.json` | Pelican-Egg (PLCN_v3) |
 | `package.sh` | baut die Release-Archive (nutzt der Release-Workflow) |
 
 ## Was ein Release enthält
@@ -267,6 +268,16 @@ docker compose logs -f cloud
 - `stop_grace_period: 5m`, `pids_limit: 8192`, `no-new-privileges` und für die Cloud alle Capabilities entfernt.
 - `secrets/` und `setup.yml` in diesem Ordner stehen in `.gitignore`.
 
+## Pelican
+
+Pelican ist der aktiv weiterentwickelte Nachfolger des Pterodactyl-Panels. Es hat ein eigenes Egg, [`pelican/egg-vectolyn-cloud.json`](../../cloud/dist/pelican/egg-vectolyn-cloud.json) (Format PLCN_v3, mit `startup_commands`, `server.allocations.default.port` sowie den Images und dem Installer des Projekts `pelican-eggs`). Es tut genau dasselbe wie das Pterodactyl-Egg; die CI prüft, dass beide dasselbe sagen (Start, Variablen, Setup-Datei, Installer).
+
+1. Im Admin-Bereich unter Eggs Import wählen und die Datei auswählen (oder die Raw-URL angeben; das Egg hat eine `update_url`).
+2. Einen Server mit dem Egg anlegen und ihm je Port eine Allocation geben, wie unter Pterodactyl beschrieben.
+3. "Accept the Minecraft EULA" auf `true` setzen, wenn du sie akzeptierst, dann den Server starten.
+
+Alles unter Pterodactyl (Variablen, Datenbank, Speicher, PID-Limit) gilt auch für Pelican.
+
 ## Pterodactyl
 
 1. Im Admin-Bereich unter Nests [`egg-vectolyn-cloud.json`](../../cloud/dist/pterodactyl/egg-vectolyn-cloud.json) importieren (PTDL_v2).
@@ -383,7 +394,7 @@ Genau das, was das Release für einen lokal vorhandenen Tag zeigen wird, erzeugt
 | systemd-Unit | `systemd-analyze verify`, echter Start und Stopp unter Ubuntu | lang laufende Server und die verwaltete MariaDB unter der Härtung |
 | Image | aus den Quellen und über den Release-Weg, amd64 und arm64, Start als UID 1000, root abgelehnt, Healthcheck, sauberes `docker stop` | Push nach GHCR, cosign-Signatur, Attestierungen, die `latest`-Regel |
 | compose.yml | `docker compose config` | einen vollständigen Start mit MariaDB |
-| Egg | Struktur, Variablen, Regeln gegen ihre Standardwerte, die Setup-Datei, die Wings schreiben würde, ShellCheck des Installers | Import in ein Panel, den Download des Installers, einen Lauf unter Wings |
+| Eggs (Pterodactyl und Pelican) | Struktur, Variablen, Regeln gegen ihre Standardwerte, die Setup-Datei, die Wings schreiben würde, beide Eggs sagen dasselbe, ShellCheck des Installers; der Installer läuft im Installer-Image des Panels gegen das neueste Release (prüft SHA-256, lehnt eine nicht vorhandene Version ab), und der Startbefehl läuft im Java-Image des Panels, bis der Cloud-Kanal steht, und endet sauber | der Import in ein Panel, das Variablenformular des Panels, ein Lauf unter echtem Wings |
 | Release-Tag | Unit-Tests jeder Regel; `check-tag.sh` auf jeder erlaubten Form (Kanal und Vorab-Kennzeichen) und jeder abgelehnten Form (der Grund) | die Prüfung eines gepushten Tags, das Vorab-Kennzeichen und `latest` auf GitHub und GHCR |
 | Release-Banner | Unit-Tests (Badge je Zusatz, Kürzen des Titels, Größen, bytegleiche Ausgabe); das Release-Skript auf lokalen Tags (jedes Badge, mit Titel, leere Nachricht, nur Signatur, Lightweight, Tags, die die Regeln verletzen), zweimal erzeugt und verglichen | den Abruf des Tags von GitHub und das Bild in den veröffentlichten Notes |
 | Release-Workflow | actionlint | Signieren, Provenance und Veröffentlichen bei einem Tag |

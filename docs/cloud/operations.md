@@ -12,7 +12,8 @@ The files are in [`cloud/dist/`](../../cloud/dist):
 | `start.bat`, `start.ps1` | start scripts for Windows (Command Prompt, Windows PowerShell 5.1 or PowerShell 7) |
 | `systemd/vectolyn-cloud.service` | systemd unit with a dedicated user and hardening |
 | `docker/Dockerfile`, `docker/compose.yml`, `docker/setup.example.yml` | container image and a compose file with MariaDB |
-| `pterodactyl/egg-vectolyn-cloud.json` | Pterodactyl egg |
+| `pterodactyl/egg-vectolyn-cloud.json` | Pterodactyl egg (PTDL_v2) |
+| `pelican/egg-vectolyn-cloud.json` | Pelican egg (PLCN_v3) |
 | `package.sh` | builds the release archives (used by the release workflow) |
 
 ## What a release contains
@@ -267,6 +268,16 @@ docker compose logs -f cloud
 - `stop_grace_period: 5m`, `pids_limit: 8192`, `no-new-privileges`, and all capabilities dropped for the cloud.
 - `secrets/` and `setup.yml` in that folder are in `.gitignore`.
 
+## Pelican
+
+Pelican is the actively developed successor of the Pterodactyl panel. It has its own egg, [`pelican/egg-vectolyn-cloud.json`](../../cloud/dist/pelican/egg-vectolyn-cloud.json) (format PLCN_v3, with `startup_commands`, `server.allocations.default.port` and the images and installer of the `pelican-eggs` project). It does exactly what the Pterodactyl egg does; CI checks that both say the same (startup, variables, setup file, installer).
+
+1. In the admin area, under Eggs, choose Import and select the file (or give the raw URL; the egg has an `update_url`).
+2. Create a server with the egg. Give it one allocation per port, as described under Pterodactyl below.
+3. Set "Accept the Minecraft EULA" to `true` if you accept it, then start the server.
+
+Everything below under Pterodactyl (variables, database, memory, PID limit) applies to Pelican as well.
+
 ## Pterodactyl
 
 1. In the admin area, under Nests, import [`egg-vectolyn-cloud.json`](../../cloud/dist/pterodactyl/egg-vectolyn-cloud.json) (PTDL_v2).
@@ -383,7 +394,7 @@ To render exactly what the release will show for a tag that already exists local
 | systemd unit | `systemd-analyze verify`, real start and stop on Ubuntu | long-running servers and the managed MariaDB under the hardening |
 | Image | from source and through the release path, amd64 and arm64, start as UID 1000, root refused, health check, clean `docker stop` | push to GHCR, cosign signature, attestations, the `latest` rule |
 | compose.yml | `docker compose config` | a full start with MariaDB |
-| Egg | structure, variables, rules against their defaults, the setup file Wings would write, ShellCheck of the installer | import into a panel, the installer's download, a run under Wings |
+| Eggs (Pterodactyl and Pelican) | structure, variables, rules against their defaults, the setup file Wings would write, both eggs say the same, ShellCheck of the installer; the installer runs in the panel's installer image against the newest release (checks SHA-256, refuses a version that does not exist), and the startup command runs in the panel's Java image until the cloud channel is up and stops cleanly | the import into a panel, the panel's variables form, a run under a real Wings |
 | Release tag | unit tests of every rule; `check-tag.sh` on every allowed form (channel and pre-release flag) and on every rejected form (the reason) | the check on a pushed tag, the pre-release flag and `latest` on GitHub and GHCR |
 | Release banner | unit tests (badge per suffix, title shortening, sizes, byte-identical output); the release script on local tags (every badge, with title, empty message, signature only, lightweight, tags that break the rules), rendered twice and compared | the tag fetch from GitHub and the image in the published notes |
 | Release workflow | actionlint | signing, provenance and publishing on a tag |
