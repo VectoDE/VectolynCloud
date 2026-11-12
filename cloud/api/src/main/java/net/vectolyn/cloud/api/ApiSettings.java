@@ -17,9 +17,11 @@ import net.vectolyn.cloud.config.model.ApiConfig;
  * @param limits      limits
  * @param graphqlIntrospection whether the GraphQL endpoint answers introspection
  *                    ({@code api.graphql-introspection})
+ * @param grpcPort    port of the gRPC listener ({@code api.grpc-port}), 0 when it is off, -1 for
+ *                    any free port (tests)
  */
 public record ApiSettings(String bind, int port, Optional<ApiTls.Material> tls, List<String> corsOrigins,
-                          ApiLimits limits, boolean graphqlIntrospection) {
+                          ApiLimits limits, boolean graphqlIntrospection, int grpcPort) {
 
     /** Checks and copies the values. */
     public ApiSettings {
@@ -30,12 +32,21 @@ public record ApiSettings(String bind, int port, Optional<ApiTls.Material> tls, 
         if (port < 0 || port > 65535) {
             throw new IllegalArgumentException("port out of range");
         }
+        if (grpcPort < -1 || grpcPort > 65535) {
+            throw new IllegalArgumentException("gRPC port out of range");
+        }
     }
 
     /** Settings with GraphQL introspection off. */
     public ApiSettings(String bind, int port, Optional<ApiTls.Material> tls, List<String> corsOrigins,
                        ApiLimits limits) {
-        this(bind, port, tls, corsOrigins, limits, false);
+        this(bind, port, tls, corsOrigins, limits, false, 0);
+    }
+
+    /** Settings without gRPC. */
+    public ApiSettings(String bind, int port, Optional<ApiTls.Material> tls, List<String> corsOrigins,
+                       ApiLimits limits, boolean graphqlIntrospection) {
+        this(bind, port, tls, corsOrigins, limits, graphqlIntrospection, 0);
     }
 
     /**
@@ -57,7 +68,7 @@ public record ApiSettings(String bind, int port, Optional<ApiTls.Material> tls, 
             throw new IllegalArgumentException("key material was given, but api.tls.enabled is off in cloud.yml");
         }
         return new ApiSettings(api.bind(), api.port(), tls, api.corsOrigins(), ApiLimits.defaults(),
-                api.graphqlIntrospection());
+                api.graphqlIntrospection(), api.grpcPort());
     }
 
     /**
@@ -67,7 +78,7 @@ public record ApiSettings(String bind, int port, Optional<ApiTls.Material> tls, 
      * @return the copy
      */
     public ApiSettings withLimits(ApiLimits value) {
-        return new ApiSettings(bind, port, tls, corsOrigins, value, graphqlIntrospection);
+        return new ApiSettings(bind, port, tls, corsOrigins, value, graphqlIntrospection, grpcPort);
     }
 
     /**
@@ -77,6 +88,16 @@ public record ApiSettings(String bind, int port, Optional<ApiTls.Material> tls, 
      * @return the copy
      */
     public ApiSettings withGraphqlIntrospection(boolean value) {
-        return new ApiSettings(bind, port, tls, corsOrigins, limits, value);
+        return new ApiSettings(bind, port, tls, corsOrigins, limits, value, grpcPort);
+    }
+
+    /**
+     * A copy with another gRPC port.
+     *
+     * @param value the port, 0 for off, -1 for any free port
+     * @return the copy
+     */
+    public ApiSettings withGrpcPort(int value) {
+        return new ApiSettings(bind, port, tls, corsOrigins, limits, graphqlIntrospection, value);
     }
 }

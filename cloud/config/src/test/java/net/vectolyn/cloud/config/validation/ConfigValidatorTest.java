@@ -125,6 +125,17 @@ class ConfigValidatorTest {
     }
 
     @Test
+    void theGrpcPortIsCheckedOnlyWhenSet() {
+        ApiConfig api = new ApiConfig(true, "127.0.0.1", 8085, TlsConfig.disabled());
+        assertEquals(Set.of(), codes(withCloud(valid.cloud().withApi(api.withGrpcPort(0)))));
+        assertEquals(Set.of(), codes(withCloud(valid.cloud().withApi(api.withGrpcPort(8086)))));
+        assertEquals(Set.of("cloud.yml api.grpc-port PORT_CONFLICT"),
+                codes(withCloud(valid.cloud().withApi(api.withGrpcPort(8085)))));
+        assertEquals(Set.of("cloud.yml api.grpc-port OUT_OF_RANGE"),
+                codes(withCloud(valid.cloud().withApi(api.withGrpcPort(70000)))));
+    }
+
+    @Test
     void theNetherNetPortAfterTheBedrockPortIsAFixedPortToo() {
         // Geyser runs RakNet and NetherNet ("both"): NetherNet takes UDP bedrock-port + 1.
         ConfigSnapshot java = withCloud(valid.cloud().withProxy(new ProxyConfig("0.0.0.0", 25565, 25564)));

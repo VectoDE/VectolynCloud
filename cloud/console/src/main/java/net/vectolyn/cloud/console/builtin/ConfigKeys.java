@@ -120,6 +120,10 @@ final class ConfigKeys {
             ApiConfig a = api(s.cloud());
             return new SetApi(a.withPort(port));
         }, List.of());
+        add("api.grpc-port", c -> String.valueOf(api(c).grpcPort()), (s, v) -> {
+            int port = Values.integer(FILE, "api.grpc-port", v);
+            return new SetApi(api(s.cloud()).withGrpcPort(port));
+        }, List.of());
         add("api.tls.enabled", c -> String.valueOf(tls(c).enabled()), (s, v) -> {
             boolean value = Values.bool(FILE, "api.tls.enabled", v);
             ApiConfig a = api(s.cloud());

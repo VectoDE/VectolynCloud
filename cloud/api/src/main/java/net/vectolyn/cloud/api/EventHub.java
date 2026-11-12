@@ -19,8 +19,8 @@ import net.vectolyn.cloud.api.event.ApiEvent;
 import net.vectolyn.cloud.api.http.ApiJson;
 
 /**
- * The open event streams ({@code /api/v1/events}) and GraphQL WebSocket connections
- * ({@code /api/v1/graphql}), and the fan-out of {@link ApiEvent}s to them.
+ * The open event streams ({@code /api/v1/events}), GraphQL WebSocket connections
+ * ({@code /api/v1/graphql}) and gRPC {@code Events} calls, and the fan-out of {@link ApiEvent}s to them.
  *
  * <p>Each event is turned into JSON once and offered to every connection; the connection's
  * {@link Sink} filters and writes it. A stream whose socket buffer is full (a slow client) skips
@@ -60,6 +60,17 @@ final class EventHub {
          * @param delivery the event, redacted, with its JSON envelope
          */
         void offer(Delivery delivery);
+
+        /**
+         * Ends the connection: a WebSocket close frame, or for gRPC the trailers with a status.
+         *
+         * @param channel the channel the sink was added with
+         * @param status  1008 for a revoked or expired token, 1001 for shutdown
+         * @param reason  short reason
+         */
+        default void close(Channel channel, WebSocketCloseStatus status, String reason) {
+            channel.writeAndFlush(new CloseWebSocketFrame(status, reason)).addListener(f -> channel.close());
+        }
     }
 
     /**
@@ -149,7 +160,7 @@ final class EventHub {
     void closeToken(String tokenId) {
         streams.forEach((channel, entry) -> {
             if (entry.tokenId().equals(tokenId)) {
-                close(channel, WebSocketCloseStatus.POLICY_VIOLATION, "token revoked");
+                entry.sink().close(channel, WebSocketCloseStatus.POLICY_VIOLATION, "token revoked");
             }
         });
     }
@@ -158,18 +169,15 @@ final class EventHub {
     void closeTokensIf(Predicate<String> tokenIdMatches) {
         streams.forEach((channel, entry) -> {
             if (tokenIdMatches.test(entry.tokenId())) {
-                close(channel, WebSocketCloseStatus.POLICY_VIOLATION, "token expired");
+                entry.sink().close(channel, WebSocketCloseStatus.POLICY_VIOLATION, "token expired");
             }
         });
     }
 
     /** Closes every connection (1001, the node goes away). */
     void closeAll() {
-        streams.keySet().forEach(channel -> close(channel, WebSocketCloseStatus.ENDPOINT_UNAVAILABLE, "shutting down"));
-    }
-
-    private static void close(Channel channel, WebSocketCloseStatus status, String reason) {
-        channel.writeAndFlush(new CloseWebSocketFrame(status, reason)).addListener(f -> channel.close());
+        streams.forEach((channel, entry) -> entry.sink().close(channel, WebSocketCloseStatus.ENDPOINT_UNAVAILABLE,
+                "shutting down"));
     }
 
     static byte[] envelope(String type, Object data) {
