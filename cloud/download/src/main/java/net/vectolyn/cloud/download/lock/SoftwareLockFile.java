@@ -13,6 +13,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import net.vectolyn.cloud.download.hash.Checksum;
 import net.vectolyn.cloud.download.hash.HashAlgorithm;
@@ -91,7 +92,7 @@ public final class SoftwareLockFile {
      */
     public static void write(Path file, SoftwareLock lock) throws IOException {
         Path absolute = file.toAbsolutePath();
-        Path directory = absolute.getParent();
+        Path directory = Objects.requireNonNull(absolute.getParent(), "parent directory of " + absolute);
         Files.createDirectories(directory);
         Path temp = Files.createTempFile(directory, FILE_NAME + ".", ".tmp");
         try {

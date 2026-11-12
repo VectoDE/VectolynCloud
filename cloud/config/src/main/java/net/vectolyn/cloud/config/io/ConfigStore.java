@@ -177,7 +177,7 @@ public final class ConfigStore {
                 stream.forEach(entries::add);
             }
             for (Path entry : entries) {
-                String fileName = entry.getFileName().toString();
+                String fileName = Objects.requireNonNull(entry.getFileName(), "file name").toString();
                 String relative = folder + "/" + fileName;
                 boolean config = fileName.endsWith(".yml") || fileName.endsWith(".yaml");
                 if (!config || fileName.startsWith(".") || wanted.containsKey(relative)
@@ -266,7 +266,7 @@ public final class ConfigStore {
         }
         entries.sort(null);
         for (Path entry : entries) {
-            String fileName = entry.getFileName().toString();
+            String fileName = Objects.requireNonNull(entry.getFileName(), "file name").toString();
             if (fileName.startsWith(".") || Files.isDirectory(entry, LinkOption.NOFOLLOW_LINKS)) {
                 continue; // hidden files (editor swap files, our own temp files) and folders
             }

@@ -238,7 +238,7 @@ public final class JreInstaller {
         try (DirectoryStream<Path> entries
  = Files.newDirectoryStream(directory)) {
             for (Path entry : entries) {
-                String fileName = entry.getFileName().toString();
+                String fileName = Objects.requireNonNull(entry.getFileName(), "file name").toString();
                 if ((fileName.startsWith(STAGING_PREFIX) || fileName.startsWith(OLD_PREFIX)) && deleteTree(entry)) {
                     removed++;
                 }

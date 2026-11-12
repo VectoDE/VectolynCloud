@@ -120,7 +120,8 @@ public final class SystemJavaFinder {
         }
         try {
             Path real = executable.toRealPath();
-            Path home = real.getParent() == null ? null : real.getParent().getParent();
+            Path bin = real.getParent();
+            Path home = bin == null ? null : bin.getParent();
             if (home != null) {
                 Optional<JavaReleaseFile> release = JavaReleaseFile.read(home);
                 if (release.isPresent()) {

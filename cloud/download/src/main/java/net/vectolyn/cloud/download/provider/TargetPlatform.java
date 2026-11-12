@@ -109,7 +109,7 @@ public record TargetPlatform(Os os, Arch arch, Libc libc) {
 
     private static boolean hasMuslLoader() {
         try (var files = Files.list(Path.of("/lib"))) {
-            return files.anyMatch(p -> p.getFileName().toString().startsWith("ld-musl-"));
+            return files.anyMatch(p -> Objects.requireNonNull(p.getFileName(), "file name").toString().startsWith("ld-musl-"));
         } catch (Exception e) {
             return false;
         }

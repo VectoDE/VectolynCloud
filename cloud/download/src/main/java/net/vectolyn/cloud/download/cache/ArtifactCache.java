@@ -219,8 +219,10 @@ public final class ArtifactCache {
             throw new NoSuchFileException(source.toString(), null, "not in the artifact cache");
         }
         Path absolute = destination.toAbsolutePath();
-        Files.createDirectories(absolute.getParent());
-        Path temp = Files.createTempFile(absolute.getParent(), absolute.getFileName().toString() + ".", ".tmp");
+        Path directory = Objects.requireNonNull(absolute.getParent(), "parent directory of " + absolute);
+        Path fileName = Objects.requireNonNull(absolute.getFileName(), "file name of " + absolute);
+        Files.createDirectories(directory);
+        Path temp = Files.createTempFile(directory, fileName + ".", ".tmp");
         try {
             MultiDigest digest = new MultiDigest(List.of());
             try (InputStream in = Files.newInputStream(source, LinkOption.NOFOLLOW_LINKS);
