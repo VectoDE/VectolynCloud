@@ -18,6 +18,7 @@ import net.vectolyn.cloud.download.hash.HashAlgorithm;
 import net.vectolyn.cloud.download.hash.MultiDigest;
 import net.vectolyn.cloud.download.http.DownloadClient;
 import net.vectolyn.cloud.download.http.HostAllowlist;
+import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
 
 /**
@@ -85,14 +86,16 @@ public final class MojangProvider implements ArtifactProvider {
                 details.javaMajor(), Map.of());
     }
 
-    private VersionDetails details(String wanted) throws IOException, InterruptedException {
+    private VersionDetails details(@Nullable String wanted) throws IOException, InterruptedException {
         Manifest manifest = parseManifest(ApiSupport.fetchJson(client, MANIFEST, HOSTS, "Mojang version manifest"));
         String id = wanted == null ? manifest.latestRelease() : wanted;
         ManifestEntry entry = manifest.find(id).orElseThrow(() -> new ArtifactNotAvailableException(
                 "Mojang's manifest has no Minecraft version " + id));
         ApiSupport.checkDownloadUrl(entry.url(), HOSTS, "Mojang version " + id);
         byte[] body = ApiSupport.fetchJson(client, entry.url(), HOSTS, "Mojang version " + id);
-        Checksum actual = MultiDigest.of(body, Set.of(HashAlgorithm.SHA1)).get(HashAlgorithm.SHA1);
+        Checksum actual = Objects.requireNonNull(
+                MultiDigest.of(body, Set.of(HashAlgorithm.SHA1)).get(HashAlgorithm.SHA1), "SHA-1 digest");
+
         if (!actual.matches(entry.sha1())) {
             throw new ChecksumMismatchException("Mojang version JSON for " + id + ": manifest lists " + entry.sha1()
                     + ", received " + actual);

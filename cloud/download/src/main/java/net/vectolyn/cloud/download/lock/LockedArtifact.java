@@ -8,6 +8,7 @@ import java.util.Optional;
 import net.vectolyn.cloud.download.hash.Checksum;
 import net.vectolyn.cloud.download.hash.HashAlgorithm;
 import net.vectolyn.cloud.download.provider.ArtifactCoordinate;
+import org.jspecify.annotations.Nullable;
 
 /**
  * One entry of {@code software.lock.yml}: exactly which file a name stands for.
@@ -29,7 +30,7 @@ public record LockedArtifact(
         Checksum sha256,
         Trust trust,
         long size,
-        LockedArtifact previous) {
+        @Nullable LockedArtifact previous) {
 
     /**
      * Checks the values.
@@ -91,7 +92,7 @@ public record LockedArtifact(
      * @param value the replaced entry, or {@code null}
      * @return the copy
      */
-    public LockedArtifact withPrevious(LockedArtifact value) {
+    public LockedArtifact withPrevious(@Nullable LockedArtifact value) {
         return new LockedArtifact(coordinate, url, fileName, checksum, sha256, trust, size,
                 value == null ? null : value.withoutPrevious());
     }
@@ -102,7 +103,8 @@ public record LockedArtifact(
      * @param other the other entry
      * @return {@code true} if coordinate and SHA-256 are equal
      */
-    public boolean sameFileAs(LockedArtifact other) {
+    public boolean sameFileAs(@Nullable LockedArtifact other)
+ {
         return other != null && coordinate.equals(other.coordinate) && sha256.matches(other.sha256);
     }
 }

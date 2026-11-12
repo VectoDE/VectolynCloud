@@ -5,6 +5,7 @@ package net.vectolyn.cloud.download;
 import java.net.URI;
 import java.time.Duration;
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 
 /** The server answered with a status code other than 2xx (after following allowed redirects). */
 public final class HttpStatusException extends DownloadException {
@@ -12,7 +13,8 @@ public final class HttpStatusException extends DownloadException {
     private static final long serialVersionUID = 2L;
 
     private final int status;
-    private final Duration retryAfter;
+    private final @Nullable Duration retryAfter;
+
 
     /**
      * Creates the exception.

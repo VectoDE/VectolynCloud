@@ -74,7 +74,7 @@ final class ConfigKeys {
                 (s, v) -> snapshot -> snapshot.withCloud(snapshot.cloud().withNodeId(v)), List.of());
         add("fallback-group", CloudConfig::fallbackGroupOrDefault, (s, v) -> {
             String value = Values.optionalText(v);
-            return snapshot -> snapshot.withCloud(snapshot.cloud().withFallbackGroup(value));
+            return snapshot -> snapshot.withCloud(snapshot.cloud().withFallbackGroup(Values.unset(value)));
         }, List.of());
         for (ServerKind kind : ServerKind.values()) {
             String key = "servers." + kind.key();
@@ -105,7 +105,7 @@ final class ConfigKeys {
         add("database.user", c -> database(c).user(), (s, v) -> database(s, d ->
                 new DatabaseConfig(d.mode(), d.host(), d.port(), d.name(), v, d.dockerImage())), List.of());
         add("database.docker-image", c -> orEmpty(database(c).dockerImage()), (s, v) -> database(s, d ->
-                new DatabaseConfig(d.mode(), d.host(), d.port(), d.name(), d.user(), Values.optionalText(v))), List.of());
+                new DatabaseConfig(d.mode(), d.host(), d.port(), d.name(), d.user(), Values.unset(Values.optionalText(v)))), List.of());
         add("api.enabled", c -> String.valueOf(api(c).enabled()), (s, v) -> {
             boolean value = Values.bool(FILE, "api.enabled", v);
             ApiConfig a = api(s.cloud());
@@ -127,7 +127,8 @@ final class ConfigKeys {
         }, bool);
         add("api.tls.keystore", c -> orEmpty(tls(c).keystore()), (s, v) -> {
             ApiConfig a = api(s.cloud());
-            return new SetApi(a.withTls(new TlsConfig(tls(s.cloud()).enabled(), Values.optionalText(v))));
+            return new SetApi(a.withTls(new TlsConfig(tls(s.cloud()).enabled(), Values.unset(Values.optionalText(v)))
+));
         }, List.of());
         add("api.cors-origins", c -> String.join(",", api(c).corsOrigins()), (s, v) -> new SetApi(api(s.cloud())
                 .withCorsOrigins(v.isEmpty() ? List.of() : List.of(v.split(",", -1)))), List.of());

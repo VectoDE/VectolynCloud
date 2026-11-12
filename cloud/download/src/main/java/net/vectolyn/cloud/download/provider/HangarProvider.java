@@ -70,7 +70,7 @@ public final class HangarProvider implements ArtifactProvider {
 
         HangarVersion version;
         if (request.versionOpt().isPresent()) {
-            String v = ApiSupport.segment(request.version(), "version");
+            String v = ApiSupport.segment(request.versionOpt().get(), "version");
             version = parseVersion(ApiSupport.fetchJson(client, URI.create(API + slug + "/versions/" + v), HOSTS,
                     what + " " + request.version()));
         } else {

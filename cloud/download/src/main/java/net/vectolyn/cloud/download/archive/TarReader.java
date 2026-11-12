@@ -9,6 +9,7 @@ import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Minimal, strict reader for TAR streams in the formats the cloud meets: POSIX ustar, pax
@@ -51,7 +52,7 @@ public final class TarReader {
      * @throws ArchiveException if the archive is malformed
      * @throws IOException if reading fails
      */
-    public TarEntry next() throws IOException {
+    public @Nullable TarEntry next() throws IOException {
         if (finished) {
             return null;
         }
@@ -317,8 +318,9 @@ public final class TarReader {
     /** The pax keys this reader uses. */
     private static final class PaxHeaders {
 
-        String path;
-        String linkPath;
+        @Nullable String path;
+        @Nullable String linkPath;
+
         long size = -1;
 
         /** Parses records of the form {@code "<length> <key>=<value>\n"}. */

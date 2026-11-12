@@ -69,8 +69,17 @@ class ArtifactCatalogTest {
         // The proxy software is pinned to the release line the Velocity bridge is compiled against.
         ArtifactRequest velocity = ArtifactCatalog.builtIn().get("velocity").orElseThrow().toRequest("26.3");
         assertEquals("4.3.1", velocity.version());
-        ArtifactCatalog parsed = ArtifactCatalog.parse("schema-version: 1\nartifacts:\n  - id: a\n    kind: plugin\n"
-                + "    type: standard\n    provider: modrinth\n    project: a\n    game-version: none\n    version: \"1.2\"\n");
+        ArtifactCatalog parsed = ArtifactCatalog.parse("""
+                schema-version: 1
+                artifacts:
+                  - id: a
+                    kind: plugin
+                    type: standard
+                    provider: modrinth
+                    project: a
+                    game-version: none
+                    version: "1.2"
+                """);
         assertEquals("1.2", parsed.get("a").orElseThrow().versionOpt().orElseThrow());
         assertEquals("1.2", parsed.get("a").orElseThrow().toRequest(null).version());
         // Counter-check: without the pin, the newest release is asked for.
@@ -80,18 +89,44 @@ class ArtifactCatalogTest {
     @Test
     void aPinnedVersionOnlyFitsEntriesThatIgnoreTheGameVersion() {
         // A pin next to "game-version: version" would contradict the group's Minecraft version.
-        IOException e = assertThrows(IOException.class, () -> ArtifactCatalog.parse("schema-version: 1\nartifacts:\n"
-                + "  - id: a\n    kind: server\n    type: standard\n    provider: papermc\n    project: paper\n"
-                + "    game-version: version\n    version: \"26.3\"\n"));
+        IOException e = assertThrows(IOException.class, () -> ArtifactCatalog.parse("""
+                schema-version: 1
+                artifacts:
+                  - id: a
+                    kind: server
+                    type: standard
+                    provider: papermc
+                    project: paper
+                    game-version: version
+                    version: "26.3"
+                """));
         assertTrue(e.getMessage().contains("version"), e.getMessage());
     }
 
     @Test
     void rejectsInvalidCatalogs() {
-        assertThrows(IOException.class, () -> ArtifactCatalog.parse("schema-version: 1\nartifacts:\n  - id: a\n    kind: plugin\n"
-                + "    type: transitional\n    provider: modrinth\n    project: a\n    game-version: none\n"));
-        assertThrows(IOException.class, () -> ArtifactCatalog.parse("schema-version: 1\nartifacts:\n  - id: a\n    kind: plugin\n"
-                + "    type: standard\n    provider: modrinth\n    project: a\n    game-version: none\n    extra: x\n"));
+        assertThrows(IOException.class, () -> ArtifactCatalog.parse("""
+                schema-version: 1
+                artifacts:
+                  - id: a
+                    kind: plugin
+                    type: transitional
+                    provider: modrinth
+                    project: a
+                    game-version: none
+                """));
+        assertThrows(IOException.class, () -> ArtifactCatalog.parse("""
+                schema-version: 1
+                artifacts:
+                  - id: a
+                    kind: plugin
+                    type: standard
+                    provider: modrinth
+                    project: a
+                    game-version: none
+                    extra: x
+                """));
+
         assertThrows(IOException.class, () -> ArtifactCatalog.parse("schema-version: 2\nartifacts: []\n"));
     }
 }

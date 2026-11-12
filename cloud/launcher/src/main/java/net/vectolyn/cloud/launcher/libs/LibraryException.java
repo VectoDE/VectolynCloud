@@ -3,6 +3,7 @@
 package net.vectolyn.cloud.launcher.libs;
 
 import java.io.Serial;
+import org.jspecify.annotations.Nullable;
 
 /** The embedded libraries cannot be used. The launcher stops before loading any node code. */
 public final class LibraryException extends Exception {
@@ -35,7 +36,7 @@ public final class LibraryException extends Exception {
      * @param detail  technical detail for the log
      * @param cause   underlying exception, may be {@code null}
      */
-    public LibraryException(Kind kind, String subject, String detail, Throwable cause) {
+    public LibraryException(Kind kind, String subject, String detail, @Nullable Throwable cause) {
         super(kind + " " + subject + ": " + detail, cause);
         this.kind = kind;
         this.subject = subject;

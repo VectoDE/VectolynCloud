@@ -7,6 +7,7 @@ import net.vectolyn.protocol.ServiceId;
 import net.vectolyn.protocol.message.Disconnect;
 import net.vectolyn.protocol.message.Message;
 import net.vectolyn.protocol.message.ServiceStatus;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Something a service did or that happened to its connection, as passed to
@@ -32,7 +33,7 @@ public sealed interface ServiceEvent {
      * @param service the service
      * @param remote the address it connected from, {@code null} if the transport has none
      */
-    record Connected(ServiceId service, InetSocketAddress remote) implements ServiceEvent {
+    record Connected(ServiceId service, @Nullable InetSocketAddress remote) implements ServiceEvent {
     }
 
     /**
@@ -77,6 +78,6 @@ public sealed interface ServiceEvent {
      * @param reason the reason the service gave or the cloud closed with, {@code null} if the
      *     connection simply broke
      */
-    record Disconnected(ServiceId service, Disconnect.Reason reason) implements ServiceEvent {
+    record Disconnected(ServiceId service, Disconnect.@Nullable Reason reason) implements ServiceEvent {
     }
 }

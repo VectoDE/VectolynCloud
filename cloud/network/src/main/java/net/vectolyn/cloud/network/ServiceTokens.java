@@ -103,8 +103,9 @@ public final class ServiceTokens implements ServiceAuthenticator {
         ServiceId service = peer instanceof ServiceId id ? id : null;
         Credential credential = service == null ? null : tokens.get(service);
         boolean matches = (credential == null ? decoy : credential.current()).matches(token);
-        if (credential == null) {
+        if (service == null || credential == null) {
             return Admission.refused(AuthResult.Outcome.UNKNOWN_PEER);
+
         }
         if (!matches) {
             // The start token once more, after it was used: somebody has a copy of the

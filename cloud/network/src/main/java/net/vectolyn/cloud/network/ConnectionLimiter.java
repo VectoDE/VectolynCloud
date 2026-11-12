@@ -5,6 +5,7 @@ package net.vectolyn.cloud.network;
 import java.net.InetAddress;
 import java.util.HashMap;
 import java.util.Map;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Counts open connections in total and per {@link AddressKey} (IPv4 address, or /64 of IPv6),
@@ -48,7 +49,7 @@ public final class ConnectionLimiter {
      *
      * @return the slot, or {@code null} if a limit is reached
      */
-    public synchronized Slot tryAcquire(InetAddress address) {
+    public synchronized @Nullable Slot tryAcquire(InetAddress address) {
         AddressKey key = AddressKey.of(address);
         if (total >= maxTotal || perAddress.getOrDefault(key, 0) >= maxPerAddress
                 || unauthenticated >= maxUnauthenticated

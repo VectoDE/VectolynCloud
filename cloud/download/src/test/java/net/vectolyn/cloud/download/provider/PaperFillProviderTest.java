@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.OptionalInt;
 import net.vectolyn.cloud.download.ArtifactNotAvailableException;
 import net.vectolyn.cloud.download.HostNotAllowedException;
@@ -103,10 +104,10 @@ class PaperFillProviderTest {
 
     @Test
     void reportsBrokenJson() {
-        assertThrows(MalformedResponseException.class, () -> PaperFillProvider.parseBuilds("{\"not\":\"a list\"}".getBytes()));
-        assertThrows(MalformedResponseException.class, () -> PaperFillProvider.parseVersion("[".getBytes()));
+        assertThrows(MalformedResponseException.class, () -> PaperFillProvider.parseBuilds("{\"not\":\"a list\"}".getBytes(StandardCharsets.UTF_8)));
+        assertThrows(MalformedResponseException.class, () -> PaperFillProvider.parseVersion("[".getBytes(StandardCharsets.UTF_8)));
         assertThrows(MalformedResponseException.class, () -> PaperFillProvider.parseBuild(
                 "{\"id\":1,\"channel\":\"STABLE\",\"downloads\":{\"server:default\":{\"name\":\"a\",\"checksums\":{\"sha256\":\"xyz\"},\"url\":\"https://fill-data.papermc.io/a\"}}}"
-                        .getBytes()));
+                        .getBytes(StandardCharsets.UTF_8)));
     }
 }

@@ -22,6 +22,7 @@ import tools.jackson.core.StreamReadFeature;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.JsonNodeFactory;
 import tools.jackson.databind.node.ObjectNode;
+import org.jspecify.annotations.Nullable;
 import tools.jackson.dataformat.yaml.YAMLMapper;
 import tools.jackson.dataformat.yaml.YAMLWriteFeature;
 
@@ -40,8 +41,10 @@ public final class SoftwareLockFile {
     /** Folder of the file below the cloud home (the same as {@code CloudHome.CONFIG_DIR}). */
     public static final String CONFIG_DIR = "config";
 
-    static final String HEADER = "# Written by VectolynCloud. Pins every downloaded artifact to one file and its hash.\n"
-            + "# Format: docs/cloud/download.md. Do not edit while the cloud is running.\n";
+    static final String HEADER = """
+            # Written by VectolynCloud. Pins every downloaded artifact to one file and its hash.
+            # Format: docs/cloud/download.md. Do not edit while the cloud is running.
+            """;
 
     private static final Set<String> ROOT_KEYS = Set.of("schema-version", "artifacts");
     private static final Set<String> ENTRY_KEYS = Set.of("provider", "project", "version", "build", "url",
@@ -212,7 +215,7 @@ public final class SoftwareLockFile {
         if (!"https".equalsIgnoreCase(url.getScheme()) || url.getHost() == null) {
             throw new LockFileException(context + ".url: must be an https URL");
         }
-        LockedArtifact previous = null;
+        @Nullable LockedArtifact previous = null;
         JsonNode previousNode = node.get("previous");
         if (previousNode != null && !previousNode.isNull()) {
             if (!allowPrevious) {
@@ -221,7 +224,8 @@ public final class SoftwareLockFile {
             previous = toEntry(previousNode, context + ".previous", false);
         }
         try {
-            String build = node.has("build") && !node.get("build").isNull() ? string(node, "build", context) : null;
+            @Nullable String build = node.has("build")
+ && !node.get("build").isNull() ? string(node, "build", context) : null;
             ArtifactCoordinate coordinate = new ArtifactCoordinate(string(node, "provider", context),
                     string(node, "project", context), string(node, "version", context), build);
             return new LockedArtifact(coordinate, url, string(node, "file-name", context), checksum, sha256, trust,
