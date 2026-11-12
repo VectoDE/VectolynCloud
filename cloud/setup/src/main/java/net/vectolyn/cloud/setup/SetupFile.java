@@ -44,6 +44,11 @@ import net.vectolyn.cloud.console.Text;
  * @param language      {@code de} or {@code en}
  * @param eula          must be {@code true}
  * @param networkName   display name
+ * @param minecraftVersion Minecraft version of the groups the setup creates (all but the 1.8.8
+ *                      server), for example {@code "26.3"}; quote it. Missing: the newest stable
+ *                      version the bridges support ({@link MinecraftVersions})
+ * @param adminName     name of the first administrator, the name of the admin API token the
+ *                      one-time setup token is exchanged for; missing: {@code admin}
  * @param servers       wanted switches
  * @param minigames     the own switch of existing minigame groups, by group name
  * @param network       bind address and ports
@@ -57,7 +62,8 @@ import net.vectolyn.cloud.console.Text;
  *                      assistant asks for them under "advanced settings"
  * @param database      database settings
  */
-public record SetupFile(int schemaVersion, Language language, Boolean eula, String networkName, Servers servers,
+public record SetupFile(int schemaVersion, Language language, Boolean eula, String networkName,
+                        String minecraftVersion, String adminName, Servers servers,
                         Map<String, Boolean> minigames, Network network, Map<String, MemorySize> memory,
                         Map<String, Services> services, Map<String, TimeSpan> drainTimeout, Node node,
                         Database database) {
@@ -219,6 +225,12 @@ public record SetupFile(int schemaVersion, Language language, Boolean eula, Stri
         }
         if (networkName != null) {
             answers = answers.withNetworkName(networkName);
+        }
+        if (minecraftVersion != null) {
+            answers = answers.withMinecraftVersion(minecraftVersion);
+        }
+        if (adminName != null) {
+            answers = answers.withAdminName(adminName);
         }
         if (servers != null) {
             for (NetworkServer server : NetworkServer.values()) {

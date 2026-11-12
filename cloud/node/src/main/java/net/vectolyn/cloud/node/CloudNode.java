@@ -67,6 +67,7 @@ import net.vectolyn.cloud.download.jre.JreInstaller;
 import net.vectolyn.cloud.download.jre.JreManager;
 import net.vectolyn.cloud.download.lock.SoftwareLockStore;
 import net.vectolyn.cloud.download.provider.MariaDbProvider;
+import net.vectolyn.cloud.download.provider.PaperFillProvider;
 import net.vectolyn.cloud.download.provider.ProviderRegistry;
 import net.vectolyn.cloud.download.provider.TargetPlatform;
 import net.vectolyn.cloud.network.CloudNetworkServer;
@@ -87,6 +88,8 @@ import net.vectolyn.cloud.node.software.ArtifactSource;
 import net.vectolyn.cloud.node.software.BridgePlugins;
 import net.vectolyn.cloud.node.software.LockedDownloads;
 import net.vectolyn.cloud.node.software.SoftwareInstaller;
+import net.vectolyn.cloud.setup.MinecraftVersions;
+import net.vectolyn.cloud.setup.NetworkServer;
 import net.vectolyn.cloud.setup.SetupEnvironment;
 import net.vectolyn.cloud.setup.SetupException;
 import net.vectolyn.cloud.setup.SetupResult;
@@ -191,6 +194,7 @@ public final class CloudNode implements AutoCloseable {
         private Console console;
         private boolean noConsole;
         private Map<String, String> environment = System.getenv();
+        private java.util.function.Supplier<List<String>> minecraftVersions;
 
         private Options(ServiceManager.Builder services, NodeDatabase.Factory database) {
             this.services = services;
@@ -264,6 +268,19 @@ public final class CloudNode implements AutoCloseable {
          */
         public Options environment(Map<String, String> value) {
             this.environment = Map.copyOf(value);
+            return this;
+        }
+
+        /**
+         * Replaces where the setup assistant learns the Minecraft versions with a stable Paper build
+         * (default: PaperMC's Fill API, asked only while the setup is not complete; offline the
+         * assistant offers the compiled-in version), for tests.
+         *
+         * @param value the versions, newest first
+         * @return these options
+         */
+        public Options minecraftVersions(java.util.function.Supplier<List<String>> value) {
+            this.minecraftVersions = Objects.requireNonNull(value, "value");
             return this;
         }
     }
@@ -357,6 +374,11 @@ public final class CloudNode implements AutoCloseable {
                             .historyFilter(line -> !containsSecret(secrets, line))
                             .build();
             SetupEnvironment setup = SetupEnvironment.of(settings.toMap(), options.environment);
+            if (!configService.snapshot().cloud().setupComplete()) {
+                // Only the first setup asks for the version, so only then does the node ask Paper.
+                setup = setup.withMinecraftVersions(options.minecraftVersions != null ? options.minecraftVersions.get()
+                        : stableMinecraftVersions(downloads));
+            }
             return new CloudNode(settings, lock, config, secrets, services, database, network, channel, console, setup,
                     ops, builtIn, fileLog);
         } catch (IOException | ConfigException | EnvFormatException | RuntimeException e) {
@@ -433,6 +455,24 @@ public final class CloudNode implements AutoCloseable {
         ClusterService cluster = ClusterService.openOrStandalone(new ClusterPaths(home), new NodeId(nodeId),
                 settings.launcherVersion(), config, VersionPolicy.sameVersion(), Clock.systemUTC());
         return new Ops(tokenFile, monitoring, backups, api, apiServer(home, config, secrets, api, tokens), scaler, cluster);
+    }
+
+    /**
+     * The Minecraft versions the bridges support that have a stable Paper build, from PaperMC's Fill
+     * API; empty if it cannot be reached, so the assistant offers the compiled-in version.
+     */
+    private static List<String> stableMinecraftVersions(Downloads downloads) {
+        try {
+            if (downloads.providers().get(PaperFillProvider.ID) instanceof PaperFillProvider fill) {
+                return fill.stableVersions("paper", MinecraftVersions::supported);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (IOException | RuntimeException e) {
+            LOG.log(System.Logger.Level.WARNING, "The Minecraft versions cannot be read from PaperMC ({0}); the setup"
+                    + " offers {1}.", e.getMessage(), NetworkServer.MINECRAFT_VERSION);
+        }
+        return List.of();
     }
 
     /**
@@ -808,6 +848,11 @@ public final class CloudNode implements AutoCloseable {
         }
 
         @Override
+        public void completed(SetupResult result) {
+            result.firstAdmin().ifPresent(CloudNode.this::issueSetupToken);
+        }
+
+        @Override
         public void finished() {
             setupRunning = false;
             ConfigSnapshot before = beforeSetup;
@@ -843,6 +888,7 @@ public final class CloudNode implements AutoCloseable {
         try {
             SetupResult result = SetupWizard.ensureComplete(console, config, setupEnvironment);
             setupStatus = result.status();
+            result.firstAdmin().ifPresent(this::issueSetupToken);
             if (result.status() != SetupResult.Status.ALREADY_COMPLETE) {
                 LOG.log(System.Logger.Level.INFO, "Setup assistant: {0}",
                         result.status().name().toLowerCase(java.util.Locale.ROOT));
@@ -856,6 +902,25 @@ public final class CloudNode implements AutoCloseable {
             setupStatus = null;
             LOG.log(System.Logger.Level.ERROR, "The setup could not be saved: {0}", e.getMessage());
             return false;
+        }
+    }
+
+    /**
+     * Makes the one-time setup token for the first administrator and shows it once on the console
+     * (docs/cloud/setup.md#first-administrator). Without a console nothing could show it, so none is
+     * made; {@code api token setup} makes one later. A failure never stops the node.
+     */
+    private void issueSetupToken(String admin) {
+        if (console == null) {
+            LOG.log(System.Logger.Level.INFO, "The setup is complete; without a console no setup token is shown."
+                    + " \"api token setup\" makes one.");
+            return;
+        }
+        try {
+            ApiCommands.printSetupToken(console.output(),
+                    ops.tokens().open().issueSetupToken(admin, ApiTokens.SETUP_TOKEN_TTL));
+        } catch (IOException | RuntimeException e) {
+            console.output().error(ApiCommands.SETUP_TOKEN_FAILED, String.valueOf(e.getMessage()));
         }
     }
 

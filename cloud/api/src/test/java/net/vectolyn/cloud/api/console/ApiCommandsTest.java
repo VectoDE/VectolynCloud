@@ -82,6 +82,25 @@ class ApiCommandsTest {
     }
 
     @Test
+    void setupMakesANewSetupTokenAndShowsItOnce() {
+        assertEquals(Outcome.DONE, console.dispatcher().execute("api token setup owner"));
+        String shown = output();
+        Matcher matcher = Pattern.compile("vcs_[A-Za-z0-9_-]{43}").matcher(shown);
+        assertTrue(matcher.find(), shown);
+        String token = matcher.group();
+        assertFalse(matcher.find(), "shown exactly once");
+        assertTrue(shown.contains("administrator owner") && shown.contains("2026-10-30T10:00:00Z"), shown);
+        assertTrue(shown.contains("POST /api/v1/setup/claim"), shown);
+        assertEquals("owner", tokens.setupAdmin(token).orElseThrow());
+        assertTrue(console.commands().isSensitive("api token setup owner"));
+
+        assertEquals(Outcome.DONE, console.dispatcher().execute("api token setup"));
+        assertTrue(output().contains("administrator admin"), "admin by default");
+        assertTrue(tokens.setupAdmin(token).isEmpty(), "the new one replaced the old one");
+        assertEquals(Outcome.FAILED, console.dispatcher().execute("api token setup Not-Valid"));
+    }
+
+    @Test
     void noApiLineReachesTheHistory() {
         assertTrue(console.commands().isSensitive("api token create x admin"));
         assertTrue(console.commands().isSensitive("api token list"));

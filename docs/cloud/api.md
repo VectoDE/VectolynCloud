@@ -19,7 +19,7 @@ Changes to `api:` take effect at the next start of the node; the running server 
 
 ## Tokens
 
-Every request needs a token. Without one, with a wrong one or with a revoked one the answer is `401` with `WWW-Authenticate: Bearer`. There is no anonymous endpoint.
+Every request needs a token. Without one, with a wrong one or with a revoked one the answer is `401` with `WWW-Authenticate: Bearer`. There is no anonymous endpoint and no default password; the first token comes from the console or from the one-time [setup token](#first-administrator).
 
 Tokens are managed at the node console. The whole `api` command is sensitive, so none of its lines is written to the console history.
 
@@ -30,6 +30,7 @@ Token dashboard (3f9a01c2) created with services:read, config:read, node:read.
 Copy it now: it is shown only this once and is not stored. Lost tokens are revoked and created again.
 vectolyn> api token list
 vectolyn> api token revoke dashboard          # or the id; aliases: delete, remove
+vectolyn> api token setup owner               # new one-time setup token for the first administrator
 vectolyn> api scopes
 ```
 
@@ -42,6 +43,20 @@ vectolyn> api scopes
 - Where the printed token ends up: the command writes to the console, not to the log, so the log files and the journal do not get it. Under systemd the cloud has no console at all; create tokens in a `tmux` or `screen` session ([operations](operations.md)). In Docker, the console of an attached container (`docker attach`) is the container's standard output, so `docker logs` keeps the token. Clear or rotate those logs, or revoke the token and create a new one if the logs are shared.
 
 Send the token as `Authorization: Bearer vct_...`. Browsers cannot set headers on a WebSocket, so the event stream also takes it as the subprotocol `vectolyn.bearer.<token>` next to `vectolyn.v1`; the server answers with `vectolyn.v1` only and never echoes the token. An upgrade that offers subprotocols but not `vectolyn.v1` is refused with `400 subprotocol-required`.
+
+### First administrator
+
+At the end of the first setup the console shows a one-time setup token for the administrator named there ([setup](setup.md#first-administrator)); `api token setup [name]` makes a new one (default name `admin`). It is `vcs_` and 43 characters from 32 bytes of `SecureRandom`, valid for 24 hours and exactly once; only its SHA-256, the name and the expiry are stored, in `<home>/secrets/setup-token.json` (owner-only, atomic, no links). A new setup token replaces the old one.
+
+```sh
+curl -X POST -H "Authorization: Bearer vcs_..." https://cloud.example.org:8443/api/v1/setup/claim
+# 201 {"id":"a1b2c3d4","name":"owner","scopes":["admin"],"created-at":"...","token":"vct_..."}
+```
+
+- The setup token is accepted for this one request and nowhere else: on any other endpoint, or with a query string, it is a wrong token (`401`, counted by the limit for wrong tokens). An API token on this endpoint gets `403 setup-token-required`.
+- The exchange removes the setup token before it writes the API token, so it can never be used twice; a second try gets `401`. The API token gets the scope `admin` and the administrator's name, with `-2`, `-3`, … if a token of that name exists.
+- The answer is the only time the API token leaves the node (`Cache-Control: no-store`). Lost: revoke it at the console and make a new setup token.
+- The web panel (stage 8) will use the same request for its first login.
 
 ### Scopes
 
@@ -92,6 +107,7 @@ All paths start with `/api/v1`. Bodies are `application/json` in UTF-8, with the
 | `GET /backups` | backups:read | every backup |
 | `POST /backups` `{"services": ["lobby-1"], "database": true, "note": "before update"}` | backups:write | `201` the backup |
 | `GET /tokens/self` | any | the calling token |
+| `POST /setup/claim` | the setup token only | `201` a new `admin` token with its value, see [first administrator](#first-administrator) |
 | `GET /events` (WebSocket) | services:read | live events |
 
 Every write goes through `ConfigService.apply`: the whole configuration is validated (ports, EULA before `setup-complete`, TLS for a public API, the JVM flag allowlist), written atomically, and the listeners of the node see the change as if it was typed at the console. On an error nothing is written and the answer is `422 invalid-config` with the list of errors.

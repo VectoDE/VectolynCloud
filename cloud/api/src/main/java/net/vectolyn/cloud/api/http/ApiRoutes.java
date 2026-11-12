@@ -54,6 +54,11 @@ public final class ApiRoutes {
 
     /** Prefix of every endpoint. */
     public static final String PREFIX = "/api/v1";
+    /**
+     * Exchanges the one-time setup token for the first administrator's API token. Only the setup
+     * token itself is accepted as bearer here ({@code ApiHttpHandler}); an API token gets 403.
+     */
+    public static final String SETUP_CLAIM = PREFIX + "/setup/claim";
     /** Path of the WebSocket. */
     public static final String EVENTS = PREFIX + "/events";
     /** Longest console command sent to a service. */
@@ -198,6 +203,11 @@ public final class ApiRoutes {
         });
 
         r.add("GET", PREFIX + "/tokens/self", null, q -> ApiResponse.ok(describe(q.token())));
+        // Reached with an API token only; the setup token is answered by ApiHttpHandler before routing.
+        r.add("POST", SETUP_CLAIM, null, q -> {
+            throw new ApiException(403, "setup-token-required",
+                    "This endpoint takes the one-time setup token (vcs_...), not an API token.");
+        });
         // The WebSocket is answered by ApiHttpHandler before routing; the route carries its scope.
         r.add("GET", EVENTS, Scope.SERVICES_READ, q -> {
             throw new ApiException(426, "upgrade-required", "This endpoint is a WebSocket.");
@@ -493,6 +503,19 @@ public final class ApiRoutes {
             list.add(item);
         }
         return list;
+    }
+
+    /**
+     * The answer to a successful {@value #SETUP_CLAIM}: the new API token with its description. The
+     * only place the token leaves the node.
+     *
+     * @param created the new token
+     * @return 201 with id, name, scopes, created-at and token
+     */
+    public static ApiResponse claimed(net.vectolyn.cloud.api.auth.ApiTokens.Created created) {
+        Map<String, Object> body = describe(created.info());
+        body.put("token", created.token().reveal());
+        return ApiResponse.of(201, body);
     }
 
     private static Map<String, Object> describe(ApiToken token) {

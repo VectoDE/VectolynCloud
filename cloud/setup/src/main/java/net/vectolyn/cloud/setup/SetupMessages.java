@@ -141,6 +141,36 @@ public final class SetupMessages {
     public static final Text RESERVE_DATABASE_OF = Text.of(
             "Memory node %1$s keeps for the database it runs (1M to 64G)",
             "Speicher, den Node %1$s für die eigene Datenbank freihält (1M bis 64G)");
+    /** Minecraft version heading. */
+    public static final Text MINECRAFT = Text.of("Minecraft version", "Minecraft-Version");
+    /** Minecraft version explanation. */
+    public static final Text MINECRAFT_HELP = Text.of(
+            "The servers the setup creates run this version; the 1.8.8 server keeps 1.8.8 and existing servers keep"
+                    + " theirs. The list holds the stable versions the bridges of this release support, newest first.",
+            "Die Server, die die Einrichtung anlegt, laufen mit dieser Version; der 1.8.8-Server bleibt bei 1.8.8 und"
+                    + " bestehende Server behalten ihre. Die Liste enthält die stabilen Versionen, die die Bridges dieses"
+                    + " Release unterstützen, die neueste zuerst.");
+    /** Minecraft version question. */
+    public static final Text MINECRAFT_VERSION = Text.of("Which Minecraft version?", "Welche Minecraft-Version?");
+    /** The newest option; %1$s the version. */
+    public static final Text MINECRAFT_NEWEST = Text.of("%1$s (newest stable)", "%1$s (neueste stabile)");
+    /** An older option; %1$s the version. */
+    public static final Text MINECRAFT_OLDER = Text.of("%1$s", "%1$s");
+    /** Only one version is known; %1$s the version. */
+    public static final Text MINECRAFT_ONLY = Text.of(
+            "Minecraft version of the new servers: %1$s (the newest stable version this release supports).",
+            "Minecraft-Version der neuen Server: %1$s (die neueste stabile Version, die dieses Release unterstützt).");
+    /** Administrator heading. */
+    public static final Text ADMIN = Text.of("First administrator", "Erster Administrator");
+    /** Administrator explanation. */
+    public static final Text ADMIN_HELP = Text.of(
+            "At the end the console shows a one-time setup token. It is exchanged once for this administrator's"
+                    + " API token with full rights; the web panel will use the same step. There is no default password.",
+            "Am Ende zeigt die Konsole einen einmaligen Einrichtungs-Token. Er wird einmal gegen das API-Token dieses"
+                    + " Administrators mit allen Rechten getauscht; das Web-Panel nutzt später denselben Schritt."
+                    + " Ein Standardpasswort gibt es nicht.");
+    /** Administrator question. */
+    public static final Text ADMIN_NAME = Text.of("Name of the administrator", "Name des Administrators");
     /** Database heading. */
     public static final Text DATABASE = Text.of("Database (LuckPerms, later the Vectolyn plugin)",
             "Datenbank (LuckPerms, später das Vectolyn-Plugin)");
@@ -218,6 +248,10 @@ public final class SetupMessages {
     public static final Text S_ACCEPTED = Text.of("accepted", "akzeptiert");
     /** Label. */
     public static final Text S_NETWORK = Text.of("Network name", "Netzwerkname");
+    /** Label. */
+    public static final Text S_MINECRAFT = Text.of("Minecraft version", "Minecraft-Version");
+    /** Label. */
+    public static final Text S_ADMIN = Text.of("Administrator", "Administrator");
     /** Label. */
     public static final Text S_WANTED = Text.of("Servers", "Server");
     /** Label. */
@@ -442,6 +476,16 @@ public final class SetupMessages {
             "The password must be one line without spaces at either end.",
             "Das Passwort muss eine Zeile ohne Leerzeichen am Anfang oder Ende sein.");
 
+    /** Minecraft version rule; %1$s the oldest, %2$s the newest supported release. */
+    public static final Text CHECK_MINECRAFT_VERSION = Text.of(
+            "Choose a Minecraft version from %1$s to %2$s (patch releases included), written like 26.3; the bridges"
+                    + " of this release support only these.",
+            "Wähle eine Minecraft-Version von %1$s bis %2$s (Patch-Releases eingeschlossen), geschrieben wie 26.3; nur"
+                    + " diese unterstützen die Bridges dieses Release.");
+    /** Administrator name rule. */
+    public static final Text CHECK_ADMIN_NAME = Text.of(
+            "Use 1 to 32 lower-case letters, digits, _ or -, starting with a letter or digit.",
+            "Erlaubt sind 1 bis 32 Kleinbuchstaben, Ziffern, _ oder -, am Anfang ein Buchstabe oder eine Ziffer.");
     /** Drain timeout rule. */
     public static final Text CHECK_DRAIN_TIMEOUT = Text.of(
             "Between 5s and 10m, written like 45s or 2m.", "Zwischen 5s und 10m, geschrieben wie 45s oder 2m.");

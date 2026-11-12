@@ -28,6 +28,7 @@ import net.vectolyn.cloud.config.model.NodeConfig;
 import net.vectolyn.cloud.config.model.ProxyConfig;
 import net.vectolyn.cloud.config.model.ScalingConfig;
 import net.vectolyn.cloud.config.model.ServerKind;
+import net.vectolyn.cloud.config.model.ServerSoftware;
 import net.vectolyn.cloud.config.model.TaskConfig;
 import net.vectolyn.cloud.config.model.TimeSpan;
 import net.vectolyn.cloud.config.operation.AcceptEula;
@@ -64,6 +65,8 @@ public final class SetupPlan {
     static final MemorySize MAX_INITIAL_HEAP = MemorySize.ofMegabytes(512);
     /** Port of an external MariaDB or MySQL server unless the operator says otherwise. */
     public static final int EXTERNAL_DATABASE_PORT = 3306;
+    /** Suggested name of the first administrator. */
+    public static final String DEFAULT_ADMIN = "admin";
     /** Players one minigame service is meant for. */
     static final int MINIGAME_PLAYERS = 16;
 
@@ -135,7 +138,8 @@ public final class SetupPlan {
         }
         Language language = first ? env.language() : cloud.language();
         return new SetupAnswers(language == null ? env.language() : language, cloud.eulaAccepted(),
-                cloud.networkName() == null ? CloudConfig.defaults().networkName() : cloud.networkName(), servers, switches,
+                cloud.networkName() == null ? CloudConfig.defaults().networkName() : cloud.networkName(),
+                minecraftVersion(snapshot, env), DEFAULT_ADMIN, servers, switches,
                 proxy.bind() == null ? ProxyConfig.defaults().bind() : proxy.bind(), javaPort, proxy.bedrockPort(),
                 legacy.port(), heap, services, drainTimeouts, local.map(NodeConfig::maxMemory).orElse(null),
                 local.map(NodeConfig::reserve).orElse(null), database, Optional.empty());
@@ -195,10 +199,45 @@ public final class SetupPlan {
                 pick(answered.system(), before.system(), now.system(), true),
                 pick(answered.nodeOverhead(), before.nodeOverhead(), now.nodeOverhead(), true),
                 pick(answered.database(), before.database(), now.database(), true));
-        return new SetupAnswers(answers.language(), answers.eulaAccepted(), answers.networkName(), answers.servers(),
+        return new SetupAnswers(answers.language(), answers.eulaAccepted(), answers.networkName(),
+                answers.minecraftVersion(), answers.adminName(), answers.servers(),
                 answers.groupSwitches(), answers.bind(), answers.javaPort(), answers.bedrockPort(), answers.legacyPort(),
                 heap, services, drainTimeouts, maxMemory, reserve.noneSet() ? null : reserve, answers.database(),
                 answers.databasePassword());
+    }
+
+    /**
+     * The Minecraft version the assistant suggests for the groups it creates: the version of an
+     * existing default group (lobby first) once there is one, so a server switched on later matches
+     * the others; otherwise the newest version {@link MinecraftVersions#offered} lists.
+     */
+    static String minecraftVersion(ConfigSnapshot snapshot, SetupEnvironment env) {
+        for (NetworkServer server : NetworkServer.values()) {
+            if (server.software() == ServerSoftware.PANDASPIGOT || server.isProxy()) {
+                continue;
+            }
+            for (String group : groupsOf(snapshot, server)) {
+                String version = snapshot.groups().get(group).minecraftVersion();
+                if (MinecraftVersions.supported(version)) {
+                    return version;
+                }
+            }
+        }
+        return MinecraftVersions.newest(env.minecraftVersions());
+    }
+
+    /**
+     * Whether the answers create at least one group that runs {@link SetupAnswers#minecraftVersion}:
+     * a wanted server other than the 1.8.8 server without a group yet. Only then does the assistant
+     * ask for the version.
+     */
+    public static boolean createsVersionedGroup(ConfigSnapshot snapshot, SetupAnswers answers) {
+        for (NetworkServer server : NetworkServer.values()) {
+            if (server != NetworkServer.LEGACY_SERVER && answers.wants(server) && groupsOf(snapshot, server).isEmpty()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** {@code answer} if the operator changed it from {@code shown}, else {@code fresh} if there is one. */
@@ -301,7 +340,8 @@ public final class SetupPlan {
                 if (answers.wants(server)) {
                     String name = newGroupName(taken, server);
                     taken.add(name);
-                    ops.add(new PutGroup(name, newGroup(server, answers.heap().getOrDefault(name, server.defaultHeap()))
+                    ops.add(new PutGroup(name, newGroup(server, answers.heap().getOrDefault(name, server.defaultHeap()),
+                            answers.minecraftVersion())
                             .withDrainTimeout(answers.drainTimeouts().get(name))));
                     ops.add(new PutTask(name, newTask(server, name,
                             server.isProxy() ? server.defaultCounts() : answers.services().getOrDefault(name, server.defaultCounts()))));
@@ -435,9 +475,19 @@ public final class SetupPlan {
         }
     }
 
-    /** The group the assistant creates for {@code server}. */
+    /** The group the assistant creates for {@code server}, on the compiled-in Minecraft version. */
     static GroupConfig newGroup(NetworkServer server, MemorySize max) {
-        return new GroupConfig(GroupConfig.SCHEMA_VERSION, server.template(), server.software(), server.minecraftVersion(),
+        return newGroup(server, max, NetworkServer.MINECRAFT_VERSION);
+    }
+
+    /**
+     * The group the assistant creates for {@code server}: {@code version} for every server except the
+     * 1.8.8 server, which always runs {@link NetworkServer#LEGACY_MINECRAFT_VERSION}.
+     */
+    static GroupConfig newGroup(NetworkServer server, MemorySize max, String version) {
+        String minecraft = server.software() == ServerSoftware.PANDASPIGOT
+                ? NetworkServer.LEGACY_MINECRAFT_VERSION : version;
+        return new GroupConfig(GroupConfig.SCHEMA_VERSION, server.template(), server.software(), minecraft,
                 JavaSelection.AUTO, new HeapConfig(initialHeap(max), max), List.of(), server.combat());
     }
 

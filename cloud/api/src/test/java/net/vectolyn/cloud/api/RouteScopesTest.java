@@ -48,6 +48,8 @@ class RouteScopesTest {
                 }
             }
         }
-        assertEquals(List.of("GET /api/v1/tokens/self"), unscoped, "only a token describing itself needs no scope");
+        // A token describing itself, and the setup claim: an API token gets 403 there, only the setup token passes.
+        assertEquals(List.of("GET /api/v1/tokens/self", "POST /api/v1/setup/claim"), unscoped,
+                "only these two need no scope");
     }
 }
