@@ -27,3 +27,17 @@ dependencies {
     implementation(libs.netty.handler)
     implementation(libs.netty.codec.http)
 }
+
+dependencies {
+    // OpenApiContractTest reads docs/cloud/api.openapi.yaml (already a runtime library of cloud/config).
+    testImplementation(platform(libs.jackson.bom))
+    testImplementation(libs.jackson.dataformat.yaml)
+}
+
+// The OpenAPI file is part of the contract: OpenApiContractTest compares it with the routing table,
+// so a route without its entry (or an entry without its route) fails the build.
+tasks.test {
+    val openApi = layout.settingsDirectory.file("docs/cloud/api.openapi.yaml")
+    inputs.file(openApi).withPropertyName("openApi")
+    systemProperty("vectolyn.openapi", openApi.asFile.absolutePath)
+}

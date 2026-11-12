@@ -1,6 +1,6 @@
 # VectolynCloud REST API
 
-Module `cloud/api`. A JSON API over HTTP/1.1 plus a WebSocket for live events, for the dashboard (stage 8) and for scripts. The machine-readable description is [`api.openapi.yaml`](api.openapi.yaml). German: [api.de.md](api.de.md).
+Module `cloud/api`. A JSON API over HTTP/1.1 plus a WebSocket for live events, for the dashboard (stage 8) and for scripts. The machine-readable description is [`api.openapi.yaml`](api.openapi.yaml), also published at <https://vectode.github.io/VectolynCloud/api/openapi.yaml>. `OpenApiContractTest` compares it with the routing table of the server in every build: a route without its entry, an entry without its route or a wrong scope fails the build. German: [api.de.md](api.de.md).
 
 The API is off by default. It starts with the node when `api.enabled: true` is set in `config/cloud.yml`:
 
@@ -116,6 +116,15 @@ Every write goes through `ConfigService.apply`: the whole configuration is valid
 
 **Backups.** `BackupAccess` (list, create) is implemented by `BackupServiceAccess` over the `BackupService` of cloud-backup. Backups made through the API have the reason `manual`, like `backup create` at the console. A busy backup gives `409`, an unknown service `422`. Answers carry the backup id, never a path. Other failures (files, database dump, a broken archive) answer `503 unavailable` with the reason only, for example `(io)`; the details go to the node log. Until the node passes the adapter in, both endpoints answer `501 not-available`.
 
+### Paging
+
+The list endpoints (`GET /services`, `/groups`, `/tasks`, `/nodes`, `/backups`) are ordered by their key: service id, group, task or node name, backup id (which sorts by time). Without `limit` the answer holds the whole list. With `?limit=n` (1 to 500) it holds at most `n` entries, and `?after=<key>` starts after that key. The body keeps its shape (an array, or an object by name for groups and tasks), so a client that does not page sees no difference. Two headers carry the paging state:
+
+- `X-Total-Count`: entries in the whole list.
+- `Link: </api/v1/services?limit=50&after=lobby-50>; rel="next"` (RFC 8288) while more follow; the last page has none.
+
+The cursor is a key, not a position: an entry that exists through both requests is neither skipped nor repeated when others are added or removed in between. A bad `limit` or `after` answers `400 invalid-query`.
+
 ### Errors
 
 Every error has the same body:
@@ -187,7 +196,7 @@ The default bind is `127.0.0.1`. Any address that is not loopback, including `0.
 With TLS the server speaks TLS 1.3 and 1.2 only, and sends `Strict-Transport-Security`. The keystore (`api.tls.keystore`, PKCS#12, relative to the home):
 
 - **Own certificate.** Put the PKCS#12 file at that path and its password into `secrets/vectolyn.env` as `VECTOLYN_API_KEYSTORE_PASSWORD`. Without the password the node does not start the API and says which key is missing.
-- **Generated.** If the file does not exist, the node creates a self-signed certificate with the JDK's `keytool`: EC P-256, valid for 825 days, subject names `localhost`, `127.0.0.1`, `::1` and the bind address (unless it is a wildcard). The keystore password is random and is kept in `secrets/api-keystore.password` (owner only); it is passed to `keytool` through an environment variable, never on the command line. The node logs the SHA-256 fingerprint at every start, so a client can pin it.
+- **Generated.** If the file does not exist, the node creates a self-signed certificate with the JDK's `keytool`: EC P-256, valid for 825 days, subject names `localhost`, `127.0.0.1`, `::1` and the bind address (unless it is a wildcard). The keystore password is random and is kept in `secrets/api-keystore.password` (owner only); it is passed to `keytool` through an environment variable, never on the command line. `keytool` writes into a new owner-only folder next to the keystore, and the finished file is moved into place in one step: no other user can open the file while it is written, and a crash leaves either no keystore (generated again at the next start) or a complete one. The node logs the SHA-256 fingerprint at every start, so a client can pin it.
 
 ### CORS
 
@@ -207,7 +216,11 @@ Off by default: no `Access-Control-*` header is sent and browsers on other origi
 | Idle connection | closed after 120 s |
 | Request line / headers | 4 KiB / 8 KiB |
 
-Limits answer `429 rate-limited` with `Retry-After` in seconds.
+Limits answer `429 rate-limited` with `Retry-After` in seconds. Every answer to a request that passed the token check carries `X-RateLimit-Limit` (the size of the token's bucket) and `X-RateLimit-Remaining` (what the bucket holds now), so a script can slow down before it gets `429`.
+
+Each limiter tracks up to 10,000 keys (addresses, tokens) in order of last use. A new key beyond that evicts the one used longest ago, in constant time: a flood of new addresses neither locks out new clients nor makes a request walk the whole table. An evicted key starts again with a full bucket; a client gains nothing by that unless it controls more than 10,000 addresses, and then each of them has its own bucket anyway.
+
+Addresses are counted per IPv4 address and per IPv6 /64. A client behind NAT64 (`64:ff9b::/96`, RFC 6052) is counted under the IPv4 address in the last 32 bits, so the clients behind one NAT64 gateway do not share one /64 and one client counts the same over IPv4 and NAT64.
 
 ### Response headers
 
@@ -249,9 +262,9 @@ Groups can be written through the API, so `process.jvm-flags` has an allowlist: 
 
 ## Tests
 
-`ApiServerTest`, `EventStreamTest`, `ApiTlsTest`, `ApiTokensTest`, `RateLimiterTest`, `RouterTest` and `ApiCommandsTest` run against a real server on `127.0.0.1` with a random port. `ApiServerTest.aPortInUseLeavesNoEventLoopThreadBehind` binds to a taken port and checks that no `vectolyn-api` thread is left; `ApiCommandsTest.aBrokenTokenFileIsReportedUntilItIsRepaired` covers the commands on a broken file. `NodeRobustnessTest` in `cloud/node` checks the same on the whole node: a broken token file with the API off and on, and a taken API port. Fuzz targets (Jazzer, see [architecture](architecture.md#fuzz-tests)):
+`ApiServerTest`, `PagingTest`, `EventStreamTest`, `ApiTlsTest`, `ApiTokensTest`, `RateLimiterTest`, `ClientAddressTest`, `RouterTest` and `ApiCommandsTest` run against a real server on `127.0.0.1` with a random port. `ApiServerTest.aPortInUseLeavesNoEventLoopThreadBehind` binds to a taken port and checks that no `vectolyn-api` thread is left; `ApiCommandsTest.aBrokenTokenFileIsReportedUntilItIsRepaired` covers the commands on a broken file. `NodeRobustnessTest` in `cloud/node` checks the same on the whole node: a broken token file with the API off and on, and a taken API port. Fuzz targets (Jazzer, see [architecture](architecture.md#fuzz-tests)):
 
-- `RouterFuzzTest.resolveNeverThrowsAndOnlyPassesCleanValues`: any request target resolves without an exception, and a found route only carries parameters and query values from the strict alphabets.
+- `RouterFuzzTest.resolveNeverThrowsAndOnlyPassesCleanValues`: against the real table of `ApiRoutes.router()`, any request target resolves without an exception, and a found route only carries parameters and query values from the strict alphabets.
 - `ApiJsonFuzzTest.readFailsOnlyWithBadRequest`: any body becomes a value or fails with a `400` whose message has no control characters.
 
 ```sh

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: VectolynCloud API
-  version: 1.0.0
+  version: 1.1.0
   summary: REST API and live events of a VectolynCloud node.
   description: |
     JSON over HTTP/1.1. Every request needs a bearer token (`vct_...`) created at the node console
@@ -42,9 +42,13 @@ paths:
       summary: List the services of this node
       description: "Scope: services:read"
       operationId: listServices
+      parameters: [{$ref: "#/components/parameters/Limit"}, {$ref: "#/components/parameters/After"}]
       responses:
         "200":
           description: Every service
+          headers:
+            X-Total-Count: {$ref: "#/components/headers/X-Total-Count"}
+            Link: {$ref: "#/components/headers/Link"}
           content:
             application/json:
               schema:
@@ -154,9 +158,13 @@ paths:
       summary: Every group
       description: "Scope: config:read"
       operationId: listGroups
+      parameters: [{$ref: "#/components/parameters/Limit"}, {$ref: "#/components/parameters/After"}]
       responses:
         "200":
           description: Groups by name
+          headers:
+            X-Total-Count: {$ref: "#/components/headers/X-Total-Count"}
+            Link: {$ref: "#/components/headers/Link"}
           content:
             application/json:
               schema:
@@ -236,9 +244,13 @@ paths:
       summary: Every task
       description: "Scope: config:read"
       operationId: listTasks
+      parameters: [{$ref: "#/components/parameters/Limit"}, {$ref: "#/components/parameters/After"}]
       responses:
         "200":
           description: Tasks by name
+          headers:
+            X-Total-Count: {$ref: "#/components/headers/X-Total-Count"}
+            Link: {$ref: "#/components/headers/Link"}
           content:
             application/json:
               schema:
@@ -314,9 +326,13 @@ paths:
       summary: Every node of nodes.yml
       description: "Scope: config:read"
       operationId: listNodes
+      parameters: [{$ref: "#/components/parameters/Limit"}, {$ref: "#/components/parameters/After"}]
       responses:
         "200":
-          description: The nodes in file order
+          description: The nodes, ordered by id
+          headers:
+            X-Total-Count: {$ref: "#/components/headers/X-Total-Count"}
+            Link: {$ref: "#/components/headers/Link"}
           content:
             application/json:
               schema:
@@ -500,9 +516,13 @@ paths:
       summary: Every backup
       description: "Scope: backups:read. 501 not-available until the node provides backups."
       operationId: listBackups
+      parameters: [{$ref: "#/components/parameters/Limit"}, {$ref: "#/components/parameters/After"}]
       responses:
         "200":
           description: Backups
+          headers:
+            X-Total-Count: {$ref: "#/components/headers/X-Total-Count"}
+            Link: {$ref: "#/components/headers/Link"}
           content:
             application/json:
               schema:
@@ -607,6 +627,20 @@ components:
       required: true
       description: The name again.
       schema: {$ref: "#/components/schemas/Name"}
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: |
+        Page size, 1 to 500. Without it the answer holds the whole list. Lists are ordered by their
+        key (id or name).
+      schema: {type: integer, minimum: 1, maximum: 500}
+    After:
+      name: after
+      in: query
+      required: false
+      description: Starts after this key (the last key of the previous page, see the `Link` header).
+      schema: {type: string, pattern: "^[a-z0-9][a-z0-9_.-]{0,127}$"}
     IfMatch:
       name: If-Match
       in: header
@@ -617,6 +651,20 @@ components:
     ETag:
       description: Version of the document, for If-Match.
       schema: {type: string}
+    X-Total-Count:
+      description: Number of entries in the whole list, on every page.
+      schema: {type: integer, minimum: 0}
+    Link:
+      description: |
+        `<...?limit=n&after=key>; rel="next"` (RFC 8288) while more entries follow; missing on the
+        last page and without `limit`.
+      schema: {type: string}
+    X-RateLimit-Limit:
+      description: Size of the request bucket of the token (requests at once).
+      schema: {type: integer}
+    X-RateLimit-Remaining:
+      description: Requests the bucket of the token holds after this one; 0 means the next may get 429.
+      schema: {type: integer}
   requestBodies:
     Wanted:
       required: true

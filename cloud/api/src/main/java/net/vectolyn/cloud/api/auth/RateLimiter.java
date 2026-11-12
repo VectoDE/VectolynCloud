@@ -2,17 +2,20 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package net.vectolyn.cloud.api.auth;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.LongSupplier;
 
 /**
  * Token buckets per key (an IP address or a token id). A bucket holds up to {@code burst}
  * requests and refills at {@code perMinute} requests a minute.
  *
- * <p>Thread-safe. The map is bounded: once it holds {@link #MAX_KEYS} keys, full (idle) buckets
- * are dropped; if every bucket is in use, new keys are refused until some refill, so a flood of
- * new addresses cannot grow the memory of the node.
+ * <p>Thread-safe. The map is bounded: it holds at most {@link #MAX_KEYS} keys (or the number given
+ * to the constructor) in order of last use. A new key beyond that evicts the bucket that was used
+ * longest ago, in constant time. A flood of new addresses therefore never locks out a new
+ * client, and no request walks the whole map. An evicted key starts again with a full bucket; to
+ * profit from that, a client would need more addresses than the map holds keys, and each of them
+ * gets its own bucket anyway.
  *
  * @param <K> the key type
  */
@@ -26,22 +29,43 @@ public final class RateLimiter<K> {
     private final int burst;
     private final int perMinute;
     private final LongSupplier nanoTime;
-    private final Map<K, Bucket> buckets = new ConcurrentHashMap<>();
+    /** Access order: the eldest entry is the bucket used longest ago. Guarded by itself. */
+    private final LinkedHashMap<K, Bucket> buckets;
 
     /**
-     * Creates a limiter.
+     * Creates a limiter that tracks up to {@link #MAX_KEYS} keys.
      *
      * @param burst     requests allowed at once, at least 1
      * @param perMinute refill per minute, at least 1
      * @param nanoTime  monotonic clock in nanoseconds ({@code System::nanoTime}; tests pass their own)
      */
     public RateLimiter(int burst, int perMinute, LongSupplier nanoTime) {
-        if (burst < 1 || perMinute < 1) {
-            throw new IllegalArgumentException("burst and perMinute must be at least 1");
+        this(burst, perMinute, nanoTime, MAX_KEYS);
+    }
+
+    /**
+     * Creates a limiter.
+     *
+     * @param burst     requests allowed at once, at least 1
+     * @param perMinute refill per minute, at least 1
+     * @param nanoTime  monotonic clock in nanoseconds
+     * @param maxKeys   largest number of keys tracked at once, at least 1
+     */
+    public RateLimiter(int burst, int perMinute, LongSupplier nanoTime, int maxKeys) {
+        if (burst < 1 || perMinute < 1 || maxKeys < 1) {
+            throw new IllegalArgumentException("burst, perMinute and maxKeys must be at least 1");
         }
         this.burst = burst;
         this.perMinute = perMinute;
         this.nanoTime = nanoTime;
+        this.buckets = new LinkedHashMap<>(16, 0.75f, true) {
+            private static final long serialVersionUID = 1L;
+
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<K, Bucket> eldest) {
+                return size() > maxKeys;
+            }
+        };
     }
 
     /**
@@ -52,15 +76,13 @@ public final class RateLimiter<K> {
      */
     public long tryAcquire(K key) {
         long now = nanoTime.getAsLong();
-        Bucket bucket = buckets.get(key);
-        if (bucket == null) {
-            if (buckets.size() >= MAX_KEYS) {
-                prune(now);
-                if (buckets.size() >= MAX_KEYS) {
-                    return 1;
-                }
+        Bucket bucket;
+        synchronized (buckets) {
+            bucket = buckets.get(key);
+            if (bucket == null) {
+                bucket = new Bucket(burst, now);
+                buckets.put(key, bucket); // evicts the eldest bucket if the map is full
             }
-            bucket = buckets.computeIfAbsent(key, k -> new Bucket(burst, now));
         }
         return bucket.take(now);
     }
@@ -72,17 +94,58 @@ public final class RateLimiter<K> {
      * @return the seconds until the next request may go ahead, or 0 if one may now
      */
     public long peek(K key) {
-        Bucket bucket = buckets.get(key);
+        Bucket bucket;
+        synchronized (buckets) {
+            bucket = buckets.get(key);
+        }
         return bucket == null ? 0 : bucket.peek(nanoTime.getAsLong());
+    }
+
+    /**
+     * How many requests the bucket of {@code key} holds now, for the {@code X-RateLimit-Remaining}
+     * header. Takes nothing.
+     *
+     * @param key the key
+     * @return the requests left now (rounded down)
+     */
+    public int remaining(K key) {
+        Bucket bucket;
+        synchronized (buckets) {
+            bucket = buckets.get(key);
+        }
+        return bucket == null ? burst : bucket.remaining(nanoTime.getAsLong());
+    }
+
+    /**
+     * Size of a bucket.
+     *
+     * @return the burst
+     */
+    public int burst() {
+        return burst;
+    }
+
+    /**
+     * Refill per minute.
+     *
+     * @return the requests per minute
+     */
+    public int perMinute() {
+        return perMinute;
     }
 
     /** Number of tracked keys (tests). */
     int size() {
-        return buckets.size();
+        synchronized (buckets) {
+            return buckets.size();
+        }
     }
 
-    private void prune(long now) {
-        buckets.entrySet().removeIf(e -> e.getValue().isFull(now));
+    /** Whether a key is tracked (tests). */
+    boolean tracks(K key) {
+        synchronized (buckets) {
+            return buckets.containsKey(key);
+        }
     }
 
     private final class Bucket {
@@ -109,9 +172,9 @@ public final class RateLimiter<K> {
             return tokens >= 1 ? 0 : waitSeconds();
         }
 
-        synchronized boolean isFull(long now) {
+        synchronized int remaining(long now) {
             refill(now);
-            return tokens >= burst;
+            return (int) Math.floor(tokens);
         }
 
         private void refill(long now) {
