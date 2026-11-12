@@ -60,6 +60,9 @@ Leert den Bildschirm, wenn das Terminal ANSI kann.
 | `config set <Schlüssel> <Wert>` | Ändert ihn. Geprüft wird wie bei einer Änderung von Hand: Typen, Muster, Bereiche und die Regeln über die ganze Konfiguration (Ports, EULA vor `setup-complete`, TLS für eine öffentliche API). Bei einem Fehler wird nichts geschrieben. |
 | `config list` | Alle Schlüssel mit Wert. |
 | `config reload` | Liest alle Konfigurationsdateien neu. Eine fehlerhafte Datei lässt die aktuelle Konfiguration aktiv und zeigt die Fehler. |
+| `config set <Schlüssel> <Wert> --dry-run` | Prüft die Änderung wie `config set` und zeigt den Zeilen-Diff von `cloud.yml`, schreibt aber nichts ([Vorschau](config.md#preview-of-a-change)). |
+| `config export <datei.zip>` | Schreibt die ganze Konfiguration (`cloud.yml`, `nodes.yml`, Gruppen, Tasks, `monitor.yml`, `backup.yml`) in eine neue Zip-Datei, nie Secrets. Ein relativer Pfad beginnt im Cloud-Home; eine vorhandene Datei wird nie überschrieben ([Import und Export](config.md#import-and-export)). |
+| `config import <datei.zip> [--dry-run]` | Prüft jede Datei des Archivs, zeigt den Diff jeder Datei, die sich ändert, und übernimmt dann alles; mit `--dry-run` endet der Befehl nach dem Diff. Auf einem Cluster-Mitglied wird ein Archiv abgelehnt, das Dateien des Heads ändert. |
 
 Schlüssel: `network-name`, `language`, `eula-accepted`, `setup-complete`, `node-id`, `fallback-group`, `servers.<proxy|lobby|survival|creative|mod|end|database|minigame|legacy-server>`, `proxy.bind`, `proxy.port`, `proxy.bedrock-port`, `legacy-proxy.enabled`, `legacy-proxy.port`, `database.mode`, `database.host`, `database.port`, `database.name`, `database.user`, `database.docker-image`, `api.enabled`, `api.bind`, `api.port`, `api.tls.enabled`, `api.tls.keystore`, `api.cors-origins`, `branding.powered-by`.
 

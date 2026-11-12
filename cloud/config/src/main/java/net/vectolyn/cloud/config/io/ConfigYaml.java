@@ -11,6 +11,7 @@ import net.vectolyn.cloud.config.error.ErrorCode;
 import net.vectolyn.cloud.config.model.JavaSelection;
 import net.vectolyn.cloud.config.model.MemorySize;
 import net.vectolyn.cloud.config.model.TimeSpan;
+import net.vectolyn.cloud.config.schema.ConfigSchema;
 import net.vectolyn.cloud.config.validation.ConfigNames;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.JsonParser;
@@ -36,6 +37,9 @@ public final class ConfigYaml {
             # Written by VectolynCloud. You may edit this file while the cloud runs; it reloads it.
             # Comments are not kept when the cloud saves the file. Reference: docs/cloud/config.md
             """;
+
+    /** Start of the line that names the file's JSON Schema for the yaml-language-server. */
+    public static final String SCHEMA_PREFIX = "# yaml-language-server: $schema=";
 
     private ConfigYaml() {
     }
@@ -117,6 +121,24 @@ public final class ConfigYaml {
     public static byte[] write(Object value) {
         String body = ConfigMappers.yaml().writeValueAsString(value);
         return (HEADER + body).getBytes(StandardCharsets.UTF_8);
+    }
+
+    /**
+     * Serializes the model object of a configuration file as UTF-8 YAML, with {@link #HEADER} and
+     * a {@code # yaml-language-server: $schema=...} line in front, so editors with YAML support
+     * find the file's JSON Schema in {@code config/schema/} ({@link ConfigSchema}).
+     *
+     * @param file  file name relative to {@code config/}, for example {@code groups/lobby.yml}
+     * @param value the model object
+     * @return the content
+     */
+    public static byte[] write(String file, Object value) {
+        String reference = ConfigSchema.reference(file);
+        if (reference == null) {
+            return write(value);
+        }
+        String body = ConfigMappers.yaml().writeValueAsString(value);
+        return (HEADER + SCHEMA_PREFIX + reference + "\n" + body).getBytes(StandardCharsets.UTF_8);
     }
 
     private static int schemaVersion(String file, JsonNode tree, ConfigFormat<?> format) throws ConfigException {

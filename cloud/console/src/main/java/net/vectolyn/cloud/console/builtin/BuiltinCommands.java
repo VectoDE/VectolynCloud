@@ -2,17 +2,25 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package net.vectolyn.cloud.console.builtin;
 
+import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import net.vectolyn.cloud.config.ConfigChanged;
+import net.vectolyn.cloud.config.ConfigPreview;
 import net.vectolyn.cloud.config.ConfigService;
+import net.vectolyn.cloud.config.operation.ConfigOperation;
+import net.vectolyn.cloud.config.transfer.ConfigArchive;
 import net.vectolyn.cloud.console.Console;
 import net.vectolyn.cloud.console.ConsoleOutput;
 import net.vectolyn.cloud.console.Messages;
 import net.vectolyn.cloud.console.Text;
 import net.vectolyn.cloud.console.command.Argument;
 import net.vectolyn.cloud.console.command.Command;
+import net.vectolyn.cloud.console.command.CommandContext;
 import net.vectolyn.cloud.console.command.CommandDispatcher;
 import net.vectolyn.cloud.console.command.CommandException;
 import net.vectolyn.cloud.console.command.CommandRegistry;
@@ -24,6 +32,8 @@ import net.vectolyn.cloud.console.terminal.ConsoleTerminal;
  */
 public final class BuiltinCommands {
 
+    private static final String DRY_RUN = "--dry-run";
+
     private BuiltinCommands() {
     }
 
@@ -34,6 +44,20 @@ public final class BuiltinCommands {
      *                 The console stops reading afterwards.
      */
     public static void register(Console console, ConfigService config, Runnable shutdown) {
+        register(console, config, shutdown, List.of());
+    }
+
+    /**
+     * Registers every basic command.
+     *
+     * @param shutdown stops the cloud; runs for {@code shutdown}, {@code exit}, Ctrl+C and Ctrl+D.
+     *                 The console stops reading afterwards.
+     * @param extras   the other files of {@code config/} that {@code config export} and
+     *                 {@code config import} carry, with their checks (on a node {@code monitor.yml}
+     *                 and {@code backup.yml})
+     */
+    public static void register(Console console, ConfigService config, Runnable shutdown,
+                                List<ConfigArchive.ExtraFile> extras) {
         Objects.requireNonNull(config, "config");
         Objects.requireNonNull(shutdown, "shutdown");
         CommandRegistry registry = console.commands();
@@ -43,7 +67,7 @@ public final class BuiltinCommands {
             console.stop();
         }));
         registry.register(clear(console.terminal()));
-        registry.register(config(config));
+        registry.register(config(config, new ConfigArchive(config, extras)));
         registry.register(GroupCommands.group(config));
         registry.register(GroupCommands.task(config));
         registry.register(NodeCommands.node(config));
@@ -136,8 +160,13 @@ public final class BuiltinCommands {
                 .build();
     }
 
-    /** {@code config get|set|list|reload}. */
+    /** {@code config get|set|list|reload|export|import} without extra files. */
     public static Command config(ConfigService config) {
+        return config(config, new ConfigArchive(config, List.of()));
+    }
+
+    /** {@code config get|set|list|reload|export|import}. */
+    public static Command config(ConfigService config, ConfigArchive archive) {
         Argument key = Argument.required("key", Text.of("Field in cloud.yml, for example proxy.port",
                 "Feld in cloud.yml, zum Beispiel proxy.port")).suggest(ConfigKeys.names());
         return Command.builder("config")
@@ -156,9 +185,15 @@ public final class BuiltinCommands {
                         .argument(Argument.required("value", Text.of("New value; \"\" clears an optional text",
                                 "Neuer Wert; \"\" leert einen optionalen Text")).suggest(previous ->
                                 previous.size() >= 3 ? ConfigKeys.find(previous.get(2)).map(ConfigKeys.Key::values).orElse(List.of()) : List.of()))
+                        .argument(dryRun())
                         .executes(context -> {
                             ConfigKeys.Key k = key(context.argument("key"));
-                            ConfigChanged change = config.apply(k.setter().operation(config.snapshot(), context.argument("value")));
+                            ConfigOperation operation = k.setter().operation(config.snapshot(), context.argument("value"));
+                            if (isDryRun(context)) {
+                                printPreview(context.out(), config.preview(operation).files());
+                                return;
+                            }
+                            ConfigChanged change = config.apply(operation);
                             report(context.out(), change, k.name() + " = " + k.getter().apply(config.snapshot().cloud()));
                         }))
                 .subcommand(Command.builder("list")
@@ -180,7 +215,81 @@ public final class BuiltinCommands {
                                         String.join(", ", new java.util.TreeSet<>(change.get().files())));
                             }
                         }))
+                .subcommand(Command.builder("export")
+                        .description(Text.of("Writes the whole configuration into a new zip file (no secrets).",
+                                "Schreibt die ganze Konfiguration in eine neue Zip-Datei (ohne Secrets)."))
+                        .argument(Argument.required("file", Text.of("New zip file; relative paths start at the cloud home",
+                                "Neue Zip-Datei; relative Pfade beginnen im Cloud-Home")))
+                        .executes(context -> {
+                            Path file = file(config, context.argument("file"));
+                            try {
+                                List<String> entries = archive.export(file);
+                                context.out().success(Text.of("Exported %1$s files to %2$s", "%1$s Dateien nach %2$s exportiert"),
+                                        entries.size(), file);
+                            } catch (FileAlreadyExistsException e) {
+                                throw new CommandException(Text.of("%1$s exists already; choose a new file name.",
+                                        "%1$s gibt es schon; einen neuen Dateinamen wählen."), file);
+                            }
+                        }))
+                .subcommand(Command.builder("import")
+                        .description(Text.of("Checks a zip file from \"config export\", shows the diff and applies it.",
+                                "Prüft eine Zip-Datei aus \u201econfig export\u201c, zeigt die Änderungen und übernimmt sie."))
+                        .argument(Argument.required("file", Text.of("Zip file; relative paths start at the cloud home",
+                                "Zip-Datei; relative Pfade beginnen im Cloud-Home")))
+                        .argument(dryRun())
+                        .executes(context -> {
+                            ConfigArchive.Plan plan = archive.read(file(config, context.argument("file")));
+                            boolean dryRun = isDryRun(context);
+                            printPreview(context.out(), plan.changes());
+                            if (dryRun || plan.isEmpty()) {
+                                return;
+                            }
+                            Set<String> written = archive.apply(plan);
+                            context.out().success(Text.of("Imported: %1$s", "Importiert: %1$s"),
+                                    String.join(", ", new java.util.TreeSet<>(written)));
+                        }))
                 .build();
+    }
+
+    /** The optional {@code --dry-run} switch: show what would change, write nothing. */
+    private static Argument dryRun() {
+        return Argument.optional("option", Text.of("--dry-run: only show the diff, change nothing",
+                "--dry-run: nur die Änderungen zeigen, nichts ändern")).suggest(List.of(DRY_RUN));
+    }
+
+    private static boolean isDryRun(CommandContext context) throws CommandException {
+        Optional<String> option = context.optional("option");
+        if (option.isEmpty()) {
+            return false;
+        }
+        if (!option.get().equals(DRY_RUN)) {
+            throw new CommandException(Text.of("Unknown option; only --dry-run is allowed.",
+                    "Unbekannte Option; nur --dry-run ist erlaubt."));
+        }
+        return true;
+    }
+
+    /** Prints the diff of a change, or that nothing would change. */
+    private static void printPreview(ConsoleOutput out, List<ConfigPreview.FileChange> changes) {
+        if (changes.isEmpty()) {
+            out.println(Text.of("No changes.", "Keine Änderungen."));
+            return;
+        }
+        for (ConfigPreview.FileChange change : changes) {
+            for (String line : change.diff().split("\n")) {
+                out.println(line);
+            }
+        }
+        out.println(Text.of("%1$s file(s) change.", "%1$s Datei(en) ändern sich."), changes.size());
+    }
+
+    /** A path from the console: relative paths start at the cloud home. */
+    private static Path file(ConfigService config, String name) throws CommandException {
+        try {
+            return config.home().root().resolve(name).toAbsolutePath().normalize();
+        } catch (InvalidPathException e) {
+            throw new CommandException(Text.of("Not a valid path.", "Kein gültiger Pfad."));
+        }
     }
 
     private static ConfigKeys.Key key(String name) throws CommandException {

@@ -17,7 +17,7 @@ These modules run inside proxies and servers. They stay free of Netty, Jackson a
 
 | Module | Package | Entry types | Project dependencies | Reference |
 |---|---|---|---|---|
-| `cloud/config` | `net.vectolyn.cloud.config` | `ConfigService` (the one write path), `CloudHome`, `ConfigStore`, `ConfigMigration`; model in `model` (`CloudConfig`, `GroupConfig`, `TaskConfig`, `NodesConfig`), changes in `operation` (`PutGroup`, `SetLanguage`, `CompleteSetup` and more) | none | [config](../cloud/config.md) |
+| `cloud/config` | `net.vectolyn.cloud.config` | `ConfigService` (the one write path), `CloudHome`, `ConfigStore`, `ConfigMigration`; model in `model` (`CloudConfig`, `GroupConfig`, `TaskConfig`, `NodesConfig`), changes in `operation` (`PutGroup`, `SetLanguage`, `CompleteSetup`, `ReplaceConfig` and more), `ConfigPreview`, `schema.ConfigSchema`, `transfer.ConfigArchive` | none | [config](../cloud/config.md) |
 | `cloud/template` | `net.vectolyn.cloud.template` | `TemplateRenderer`, `TemplateInstaller`, `PlaceholderRenderer`, `PlaceholderValues`, `RenderReport` | none | [template](../cloud/template.md) |
 | `cloud/download` | `net.vectolyn.cloud.download` | `ArtifactDownloader`, `ArtifactCatalog`, `SoftwareLockStore`, `SafeExtractor`, `HostAllowlist`, `JreManager` (in `jre`) | none | [download](../cloud/download.md) |
 | `cloud/console` | `net.vectolyn.cloud.console` | `Console`, `CommandRegistry`, `Command`, `CommandDispatcher`, `Prompter` and `Question` (question API), `BuiltinCommands` | `cloud/config` | [console](../cloud/console.md) |
