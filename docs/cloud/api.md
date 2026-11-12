@@ -56,7 +56,7 @@ curl -X POST -H "Authorization: Bearer vcs_..." https://cloud.example.org:8443/a
 ```
 
 - The setup token is accepted for this one request and nowhere else: on any other endpoint, or with a query string, it is a wrong token (`401`, counted by the limit for wrong tokens). An API token on this endpoint gets `403 setup-token-required`.
-- The exchange removes the setup token before it writes the API token, so it can never be used twice; a second try gets `401`. The API token gets the scope `admin` and the administrator's name, with `-2`, `-3`, … if a token of that name exists.
+- The exchange writes the API token first. If that fails (`500 io-error`), the setup token stays valid and the claim can be repeated. Once the API token exists, the setup token stops working at once, so it can never be used twice; a second try gets `401`. Its file is deleted after that; if the deletion fails, the claim still succeeds and the node logs an error, because the file would make the setup token valid again after a restart (delete the file or replace the token with `api token setup`). The API token gets the scope `admin` and the administrator's name, with `-2`, `-3`, … if a token of that name exists.
 - The answer is the only time the API token leaves the node (`Cache-Control: no-store`). Lost: revoke it at the console and make a new setup token.
 - The web panel (stage 8) will use the same request for its first login.
 

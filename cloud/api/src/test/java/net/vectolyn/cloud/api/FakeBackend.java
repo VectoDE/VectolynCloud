@@ -30,6 +30,10 @@ final class FakeBackend implements ApiBackend, ServiceAccess, NodeAccess {
     volatile boolean backupsAvailable;
     volatile RedactingFilter filter = RedactingFilter.none();
     volatile String failureMessage;
+    /** Runs at the start of {@link #list()}, on the request's thread; tests break a request with it. */
+    volatile Runnable onList;
+    /** Makes {@link #redact} throw, so the error answer of a request fails as well. */
+    volatile boolean redactFails;
 
     FakeBackend() {
         services.put("lobby-1", view("lobby-1", "running"));
@@ -74,11 +78,18 @@ final class FakeBackend implements ApiBackend, ServiceAccess, NodeAccess {
 
     @Override
     public String redact(String text) {
+        if (redactFails) {
+            throw new IllegalStateException("redact failed (test)");
+        }
         return filter.redact(text);
     }
 
     @Override
     public List<ServiceView> list() {
+        Runnable hook = onList;
+        if (hook != null) {
+            hook.run();
+        }
         return new ArrayList<>(services.values());
     }
 
