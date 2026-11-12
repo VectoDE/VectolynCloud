@@ -13,6 +13,7 @@ import net.vectolyn.cloud.api.auth.ApiToken;
 import net.vectolyn.cloud.api.http.ApiException;
 import net.vectolyn.cloud.api.http.ApiJson;
 import net.vectolyn.cloud.api.http.ApiResponse;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The unary methods of {@code vectolyn.api.v1.CloudService}. Each one builds the REST request
@@ -66,7 +67,7 @@ final class GrpcCalls {
             try {
                 body = ApiJson.mapper().readValue(text(q, "json"), Object.class);
             } catch (RuntimeException e) {
-                throw invalid("\"json\" is not valid JSON.");
+                throw invalid("\"json\" is not valid JSON."); // NOPMD - the Jackson message can quote the request body
             }
             return document(routes.call(k, "PUT", documentPath(q), body, RouteCaller.ifMatch(text(q, "if_match"))));
         });
@@ -236,7 +237,7 @@ final class GrpcCalls {
         return value;
     }
 
-    static String write(Object value) {
+    static String write(@Nullable Object value) {
         return new String(ApiJson.write(value), StandardCharsets.UTF_8);
     }
 

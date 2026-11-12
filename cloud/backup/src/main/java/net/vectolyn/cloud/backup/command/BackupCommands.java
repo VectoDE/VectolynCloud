@@ -161,8 +161,9 @@ public final class BackupCommands {
             for (BackupManifest.ServiceEntry entry : manifest.services()) {
                 services.add(entry.hasFiles() ? entry.id() : entry.id() + " (" + entry.consistency() + ")");
             }
-            if (manifest.database() != null) {
-                services.add("db:" + manifest.database().status());
+            BackupManifest.DatabaseEntry database = manifest.database();
+            if (database != null) {
+                services.add("db:" + database.status());
             }
             context.out().println(String.format(Locale.ROOT, "%-21s %-16s %-11s %10s  %s", info.id(),
                     TIME.format(ZonedDateTime.ofInstant(manifest.created(), service.zone())), manifest.reason(),
@@ -199,7 +200,7 @@ public final class BackupCommands {
         }
         run(() -> {
             service.delete(backup);
-            return null;
+            return backup;
         });
         context.out().success(Text.of("Deleted backup %1$s.", "Sicherung %1$s gelöscht."), backup);
     }
@@ -229,7 +230,7 @@ public final class BackupCommands {
         try {
             return call.run();
         } catch (BackupException e) {
-            throw new CommandException(Text.of("Backup: %1$s", "Sicherung: %1$s"), e.getMessage());
+            throw new CommandException(e, Text.of("Backup: %1$s", "Sicherung: %1$s"), e.getMessage());
         }
     }
 

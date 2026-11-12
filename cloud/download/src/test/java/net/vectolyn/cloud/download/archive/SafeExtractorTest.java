@@ -65,7 +65,7 @@ class SafeExtractorTest {
     @Test
     void absoluteAndBackslashNamesAreRejected() throws Exception {
         for (String name : new String[] {"/etc/passwd", "..\\evil.txt", "C:/Windows/evil.txt", "a/../../evil.txt"}) {
-            Path target = temp.resolve("out-" + Math.abs(name.hashCode()));
+            Path target = temp.resolve("out-" + Integer.toHexString(name.hashCode()));
             Path archive = zip(name, "x");
             assertThrows(ArchiveException.class, () -> EXTRACTOR.extractZip(archive, target), name);
         }
@@ -119,7 +119,7 @@ class SafeExtractorTest {
 
     @Test
     void extractsATarGzWithHardlink() throws Exception {
-        byte[] gz = new TarBuilder().gnu().directory("mariadb/").file("mariadb/bin/mariadbd", "ELF".getBytes(), 0755)
+        byte[] gz = new TarBuilder().gnu().directory("mariadb/").file("mariadb/bin/mariadbd", "ELF".getBytes(StandardCharsets.UTF_8), 0755)
                 .hardlink("mariadb/bin/mysqld", "mariadb/bin/mariadbd").buildGzip();
         Path archive = temp.resolve("m.tar.gz");
         Files.write(archive, gz);
@@ -143,7 +143,7 @@ class SafeExtractorTest {
     void symlinkOutsideIsRejected() {
         for (String link : new String[] {"../../etc", "/etc/passwd", "a/../../../x"}) {
             byte[] tar = new TarBuilder().directory("a/").symlink("a/link", link).build();
-            Path target = temp.resolve("out-" + Math.abs(link.hashCode()));
+            Path target = temp.resolve("out-" + Integer.toHexString(link.hashCode()));
             assertThrows(ArchiveException.class, () -> extractTar(tar, target), link);
             assertFalse(Files.exists(target));
         }
@@ -213,7 +213,7 @@ class SafeExtractorTest {
     @Test
     @DisabledOnOs(value = OS.WINDOWS, disabledReason = "POSIX permissions")
     void appliesExecutableBitWithoutSetuid() throws Exception {
-        byte[] tar = new TarBuilder().file("run", "x".getBytes(), 04755).build();
+        byte[] tar = new TarBuilder().file("run", "x".getBytes(StandardCharsets.UTF_8), 04755).build();
         Path target = temp.resolve("out");
         extractTar(tar, target);
         assertTrue(Files.isExecutable(target.resolve("run")));

@@ -14,3 +14,13 @@
 plugins {
     `kotlin-dsl`
 }
+
+repositories {
+    gradlePluginPortal()
+}
+
+dependencies {
+    // Static analysis plugins applied by vectolyn.java-conventions (issue #223).
+    implementation("com.github.spotbugs.snom:spotbugs-gradle-plugin:6.5.13")
+    implementation("net.ltgt.gradle:gradle-errorprone-plugin:5.2.0")
+}

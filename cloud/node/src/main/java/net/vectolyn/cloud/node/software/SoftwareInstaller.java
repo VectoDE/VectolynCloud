@@ -219,7 +219,9 @@ public final class SoftwareInstaller implements ServerSoftwareProvider, ManagedJ
                 return files.fetch(name, entry, group.minecraftVersion());
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                throw new InterruptedIOException("interrupted while downloading " + entry.id());
+                InterruptedIOException failure = new InterruptedIOException("interrupted while downloading " + entry.id());
+                failure.initCause(e);
+                throw failure;
             }
         }
     }

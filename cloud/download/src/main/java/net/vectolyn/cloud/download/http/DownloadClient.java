@@ -24,6 +24,7 @@ import net.vectolyn.cloud.download.DownloadException;
 import net.vectolyn.cloud.download.HostNotAllowedException;
 import net.vectolyn.cloud.download.HttpStatusException;
 import net.vectolyn.cloud.download.SizeLimitExceededException;
+import org.jspecify.annotations.Nullable;
 
 /**
  * HTTPS-only GET client for the download APIs.
@@ -246,7 +247,8 @@ public final class DownloadClient {
      * @param clock the current time, for a date
      * @return the wait, never negative; empty if missing or not valid
      */
-    static Optional<Duration> parseRetryAfter(String value, Clock clock) {
+    static Optional<Duration> parseRetryAfter(@Nullable String value, Clock clock)
+ {
         if (value == null) {
             return Optional.empty();
         }

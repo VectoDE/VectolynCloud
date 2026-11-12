@@ -138,6 +138,7 @@ public final class ClusterMessages {
      * @param version VectolynCloud version of the joining node
      * @param request PKCS#10 certification request for the node's key (DER)
      */
+    @SuppressWarnings("ArrayRecordComponent") // raw bytes of the wire format; a List<Byte> would only cost memory
     public record JoinRequest(NodeId node, String tokenId, Secret secret, String version, byte[] request) {
 
         /** Checks the values. */
@@ -171,7 +172,7 @@ public final class ClusterMessages {
             try {
                 return new JoinRequest(node, id, Secret.of(secret), version, request);
             } catch (IllegalArgumentException e) {
-                throw new ProtocolException(e.getMessage(), e);
+                throw new ProtocolException(String.valueOf(e.getMessage()), e);
             }
         }
 
@@ -213,6 +214,7 @@ public final class ClusterMessages {
      * @param certificate the signed node certificate (DER), empty unless accepted
      * @param ca          the CA certificate (DER), empty unless accepted
      */
+    @SuppressWarnings("ArrayRecordComponent") // raw bytes of the wire format; a List<Byte> would only cost memory
     public record JoinReply(JoinOutcome outcome, String headVersion, NodeId head, byte[] certificate, byte[] ca) {
 
         /** Checks the values. */
@@ -257,7 +259,7 @@ public final class ClusterMessages {
             try {
                 return new JoinReply(outcome, version, head, certificate, ca);
             } catch (IllegalArgumentException e) {
-                throw new ProtocolException(e.getMessage(), e);
+                throw new ProtocolException(String.valueOf(e.getMessage()), e);
             }
         }
 
@@ -311,7 +313,7 @@ public final class ClusterMessages {
             try {
                 return new NodeHello(node, version);
             } catch (IllegalArgumentException e) {
-                throw new ProtocolException(e.getMessage(), e);
+                throw new ProtocolException(String.valueOf(e.getMessage()), e);
             }
         }
 
@@ -347,7 +349,7 @@ public final class ClusterMessages {
             try {
                 return new NodeWelcome(outcome, head, version);
             } catch (IllegalArgumentException e) {
-                throw new ProtocolException(e.getMessage(), e);
+                throw new ProtocolException(String.valueOf(e.getMessage()), e);
             }
         }
 

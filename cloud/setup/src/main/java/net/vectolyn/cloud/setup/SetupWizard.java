@@ -14,6 +14,7 @@ import net.vectolyn.cloud.console.ConsoleOutput;
 import net.vectolyn.cloud.console.Text;
 import net.vectolyn.cloud.console.command.Command;
 import net.vectolyn.cloud.console.command.CommandException;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The setup assistant. Three ways in, one way to write:
@@ -74,7 +75,7 @@ public final class SetupWizard {
      * @throws SetupException if the file is missing, unreadable or has problems
      * @throws IOException    if saving fails
      */
-    public static SetupResult nonInteractive(ConfigService config, SetupEnvironment env, ConsoleOutput out)
+    public static SetupResult nonInteractive(ConfigService config, SetupEnvironment env, @Nullable ConsoleOutput out)
             throws SetupException, IOException {
         if (!needed(config)) {
             return SetupResult.of(SetupResult.Status.ALREADY_COMPLETE);
@@ -121,7 +122,7 @@ public final class SetupWizard {
      *
      * @param console the console, or null if there is none
      */
-    public static SetupResult ensureComplete(Console console, ConfigService config, SetupEnvironment env)
+    public static SetupResult ensureComplete(@Nullable Console console, ConfigService config, SetupEnvironment env)
             throws SetupException, IOException {
         if (!needed(config)) {
             return SetupResult.of(SetupResult.Status.ALREADY_COMPLETE);
@@ -203,7 +204,7 @@ public final class SetupWizard {
                     try {
                         result = run(console, config, env.withLanguage(context.language()));
                     } catch (IOException e) {
-                        throw new CommandException(SetupMessages.WRITE_FAILED, String.valueOf(e.getMessage()));
+                        throw new CommandException(e, SetupMessages.WRITE_FAILED, String.valueOf(e.getMessage()));
                     } finally {
                         hooks.finished();
                     }

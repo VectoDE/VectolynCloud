@@ -15,8 +15,10 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import net.vectolyn.cloud.api.http.ApiJson;
 import net.vectolyn.cloud.config.io.RegularPaths;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The panel's audit log: one JSON object per line in {@code logs/panel-audit.jsonl}, for every
@@ -59,7 +61,8 @@ public final class AuditLog {
      * @param address the client address key, or null
      * @param details further plain values, or an empty map
      */
-    public synchronized void record(String event, String actor, String target, String address, Map<String, ?> details) {
+    public synchronized void record(String event, @Nullable String actor, @Nullable String target,
+                                    @Nullable String address, Map<String, ?> details) {
         Map<String, Object> entry = new LinkedHashMap<>();
         entry.put("time", clock.instant().toString());
         entry.put("event", event);
@@ -77,8 +80,9 @@ public final class AuditLog {
         }
         byte[] line = (new String(ApiJson.write(entry), StandardCharsets.UTF_8) + "\n").getBytes(StandardCharsets.UTF_8);
         try {
-            RegularPaths.requireDirectoryOrMissing(file.getParent());
-            Files.createDirectories(file.getParent());
+            Path dir = Objects.requireNonNull(file.getParent(), "parent");
+            RegularPaths.requireDirectoryOrMissing(dir);
+            Files.createDirectories(dir);
             RegularPaths.requireFileOrMissing(file);
             if (Files.exists(file) && Files.size(file) + line.length > MAX_BYTES) {
                 Files.move(file, file.resolveSibling("panel-audit.1.jsonl"), StandardCopyOption.REPLACE_EXISTING);
@@ -124,7 +128,7 @@ public final class AuditLog {
             byte[] buffer = new byte[(int) (length - start)];
             raf.seek(start);
             raf.readFully(buffer);
-            String[] all = new String(buffer, StandardCharsets.UTF_8).split("\n");
+            String[] all = new String(buffer, StandardCharsets.UTF_8).lines().toArray(String[]::new);
             int from = start > 0 ? 1 : 0; // the first line may be cut
             List<String> lines = new ArrayList<>();
             for (int i = Math.max(from, all.length - count); i < all.length; i++) {

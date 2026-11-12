@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import net.vectolyn.cloud.download.provider.ArtifactRequest;
+import org.jspecify.annotations.Nullable;
 
 /**
  * One artifact of the catalog.
@@ -31,12 +32,12 @@ public record CatalogEntry(
         Type type,
         String provider,
         String project,
-        String platform,
+        @Nullable String platform,
         GameVersionUse gameVersion,
         List<String> targets,
-        String replacedBy,
-        String alternative,
-        String version) {
+        @Nullable String replacedBy,
+        @Nullable String alternative,
+        @Nullable String version) {
 
     /** What an artifact is. */
     public enum Kind {
@@ -113,8 +114,10 @@ public record CatalogEntry(
      * @param replacedBy the replacement or {@code null}
      * @param alternative the alternative source or {@code null}
      */
-    public CatalogEntry(String id, Kind kind, Type type, String provider, String project, String platform,
-                        GameVersionUse gameVersion, List<String> targets, String replacedBy, String alternative) {
+    public CatalogEntry(String id, Kind kind, Type type, String provider, String project, @Nullable String platform,
+                        GameVersionUse gameVersion, List<String> targets, @Nullable String replacedBy,
+                        @Nullable String alternative) {
+
         this(id, kind, type, provider, project, platform, gameVersion, targets, replacedBy, alternative, null);
     }
 

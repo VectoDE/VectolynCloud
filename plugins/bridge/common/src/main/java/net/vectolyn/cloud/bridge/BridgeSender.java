@@ -12,6 +12,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import net.vectolyn.protocol.message.Message;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The only way a bridge talks to the cloud. {@code CloudClient} writes to a blocking socket, and a
@@ -46,12 +47,12 @@ public final class BridgeSender implements AutoCloseable {
 
     private final CloudLink link;
     private final BlockingQueue<Consumer<CloudLink>> queue;
-    private final AtomicReference<StatusSnapshot> pendingStatus = new AtomicReference<>();
+    private final AtomicReference<@Nullable StatusSnapshot> pendingStatus = new AtomicReference<>();
     private final AtomicLong dropped = new AtomicLong();
     private final Consumer<CloudLink> sendStatus = this::sendPendingStatus;
     private final Consumer<CloudLink> closeLink = CloudLink::close;
     private final Object lifecycle = new Object();
-    private Thread worker;
+    private final Thread worker;
     private volatile boolean closed;
 
     private BridgeSender(CloudLink link, int capacity) {
@@ -60,6 +61,8 @@ public final class BridgeSender implements AutoCloseable {
             throw new IllegalArgumentException("capacity must be at least 1");
         }
         this.queue = new ArrayBlockingQueue<>(capacity);
+        this.worker = new Thread(this::run, THREAD_NAME);
+        this.worker.setDaemon(true);
     }
 
     /** Starts a sender for {@code link} with {@link #DEFAULT_CAPACITY}. */
@@ -70,12 +73,7 @@ public final class BridgeSender implements AutoCloseable {
     /** Starts a sender for {@code link} whose queue holds {@code capacity} actions. */
     public static BridgeSender start(CloudLink link, int capacity) {
         BridgeSender sender = new BridgeSender(link, capacity);
-        Thread thread = new Thread(sender::run, THREAD_NAME);
-        thread.setDaemon(true);
-        synchronized (sender.lifecycle) {
-            sender.worker = thread;
-        }
-        thread.start();
+        sender.worker.start();
         return sender;
     }
 
@@ -97,6 +95,7 @@ public final class BridgeSender implements AutoCloseable {
      * @param payload request payload
      * @return the answer's payload
      */
+    @SuppressWarnings("FutureReturnValueIgnored")
     public java.util.concurrent.CompletableFuture<byte[]> request(String channel, byte[] payload) {
         Objects.requireNonNull(channel, "channel");
         Objects.requireNonNull(payload, "payload");
@@ -220,6 +219,8 @@ public final class BridgeSender implements AutoCloseable {
         }
     }
 
+    // closeLink is one shared instance; identity tells the loop which action is the close.
+    @SuppressWarnings("ReferenceEquality")
     private void run() {
         while (true) {
             Consumer<CloudLink> action;

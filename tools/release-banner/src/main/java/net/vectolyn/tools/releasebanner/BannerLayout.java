@@ -193,8 +193,9 @@ public final class BannerLayout {
         int start = 0;
         Color current = versionColor(tag, 0, version.coreLength());
         for (int i = 1; i <= tag.length(); i++) {
-            Color next = i < tag.length() ? versionColor(tag, i, version.coreLength()) : null;
-            if (!current.equals(next)) {
+            boolean end = i == tag.length();
+            Color next = end ? current : versionColor(tag, i, version.coreLength());
+            if (end || !current.equals(next)) {
                 layers.add(new Layer(font.outline(tag, start, i, x, y, u), current));
                 start = i;
                 current = next;

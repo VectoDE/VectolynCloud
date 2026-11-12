@@ -16,6 +16,7 @@ import net.vectolyn.cloud.database.sql.ConnectionTarget;
 import net.vectolyn.cloud.database.sql.PostgresConnector;
 import net.vectolyn.cloud.database.sql.PostgresQuoting;
 import net.vectolyn.cloud.database.sql.SqlSession;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Mode {@code postgresql}: a PostgreSQL server the operator runs. Like {@link ExternalProvisioner},
@@ -134,20 +135,20 @@ public final class PostgresProvisioner implements DatabaseProvisioner {
     /**
      * The major version from {@code server_version_num} ({@code 160004} is 16).
      *
-     * @param number the setting
+     * @param number the setting, or {@code null} if the server did not tell it
      * @return the major version, or 0 if the text is no version number
      */
-    static int major(String number) {
+    static int major(@Nullable String number) {
         return number != null && number.matches("[1-9][0-9]{4,6}") ? Integer.parseInt(number) / 10000 : 0;
     }
 
     /**
      * {@code server_version_num} as text: {@code 160004} is {@code PostgreSQL 16.4}.
      *
-     * @param number the setting
+     * @param number the setting, or {@code null} if the server did not tell it
      * @return the text, {@code PostgreSQL (unknown version)} for anything else
      */
-    static String versionText(String number) {
+    static String versionText(@Nullable String number) {
         int major = major(number);
         if (major == 0) {
             return "PostgreSQL (unknown version)";

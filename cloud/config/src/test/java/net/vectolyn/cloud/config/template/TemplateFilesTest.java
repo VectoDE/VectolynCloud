@@ -186,9 +186,17 @@ class TemplateFilesTest {
                 edited, etag), "an edit that keeps the placeholder is fine");
         String next = TemplateFiles.etag(edited);
 
-        for (String content : new String[] {"a: 2\nsecret: \"{{VECTOLYN_FORWARDING_SECRET}}\"\nmotd: "
-                + "\"{{VECTOLYN_FORWARDING_SECRET}}\"\n", "a: 2\nsecret: \"{{VECTOLYN_FORWARDING_SECRET}}\"\n"
-                + "db: {{VECTOLYN_DB_PASSWORD}}\n"}) {
+        String secondCopy = """
+                a: 2
+                secret: "{{VECTOLYN_FORWARDING_SECRET}}"
+                motd: "{{VECTOLYN_FORWARDING_SECRET}}"
+                """;
+        String otherSecret = """
+                a: 2
+                secret: "{{VECTOLYN_FORWARDING_SECRET}}"
+                db: {{VECTOLYN_DB_PASSWORD}}
+                """;
+        for (String content : new String[] {secondCopy, otherSecret}) {
             assertEquals(TemplateFiles.RefusedException.Reason.SECRET_PLACEHOLDER,
                     refused("default/config/paper-global.yml", utf8(content), next).reason(), content);
         }

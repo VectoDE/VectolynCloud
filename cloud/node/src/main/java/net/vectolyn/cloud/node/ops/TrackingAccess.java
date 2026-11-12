@@ -40,7 +40,7 @@ public final class TrackingAccess implements PrivacyAccess {
             return store.revoke(player);
         } catch (IOException e) {
             throw new ApiBackendException(ApiBackendException.Reason.UNAVAILABLE,
-                    "The tracking data could not be changed.");
+                    "The tracking data could not be changed.", e);
         }
     }
 

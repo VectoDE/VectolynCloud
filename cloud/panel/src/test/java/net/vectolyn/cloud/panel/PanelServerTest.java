@@ -12,6 +12,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URI;
@@ -151,7 +152,8 @@ class PanelServerTest {
 
     /** Raw HTTP, because HttpClient neither sends a foreign Host nor a target with dot segments. */
     private String raw(String requestLine, String host) throws IOException {
-        try (Socket socket = new Socket("127.0.0.1", Integer.parseInt(base.substring(base.lastIndexOf(':') + 1)))) {
+        InetAddress loopback = InetAddress.getByAddress(new byte[] {127, 0, 0, 1});
+        try (Socket socket = new Socket(loopback, Integer.parseInt(base.substring(base.lastIndexOf(':') + 1)))) {
             OutputStream out = socket.getOutputStream();
             out.write((requestLine + "\r\nHost: " + host + "\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
             out.flush();

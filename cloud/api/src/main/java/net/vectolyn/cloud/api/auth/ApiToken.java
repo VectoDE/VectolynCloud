@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.util.EnumSet;
 import java.util.Objects;
 import java.util.Set;
+import org.jspecify.annotations.Nullable;
 
 /**
  * What the cloud knows about a token: never the token itself, only its id, name and scopes. The
@@ -17,7 +18,8 @@ import java.util.Set;
  * @param createdAt when it was created
  * @param expiresAt when it stops working, or null if it works until it is revoked
  */
-public record ApiToken(String id, String name, Set<Scope> scopes, Instant createdAt, Instant expiresAt) {
+public record ApiToken(String id, String name, Set<Scope> scopes, Instant createdAt,
+        @Nullable Instant expiresAt) {
 
     /** Checks and copies the values. */
     public ApiToken {

@@ -85,7 +85,7 @@ class ServiceLifecycleIntegrationTest {
             java.util.logging.Handler handler = new java.util.logging.Handler() {
                 @Override
                 public void publish(java.util.logging.LogRecord r) {
-                    if (r.getLevel() == java.util.logging.Level.INFO) {
+                    if (java.util.logging.Level.INFO.equals(r.getLevel())) {
                         infos.add(java.text.MessageFormat.format(r.getMessage(), r.getParameters()));
                     }
                 }

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package net.vectolyn.cloud.cluster;
 
+import java.util.Objects;
 import net.vectolyn.cloud.config.model.Language;
 
 /** A cluster action that cannot be done, with the reason in English and German. */
@@ -36,6 +37,6 @@ public final class ClusterException extends Exception {
 
     /** The reason in {@code language}. */
     public String message(Language language) {
-        return language == Language.DE ? german : getMessage();
+        return language == Language.DE ? german : Objects.requireNonNull(getMessage(), "english");
     }
 }

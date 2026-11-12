@@ -5,6 +5,7 @@ package net.vectolyn.cloud.node.channel;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -65,7 +66,7 @@ class ChannelBridgeReconnectTest {
 
     private void reconnect() {
         channel.connected = true;
-        bridge.onEvent(new ServiceEvent.Connected(PROXY, new InetSocketAddress("127.0.0.1", 40000)));
+        bridge.onEvent(new ServiceEvent.Connected(PROXY, new InetSocketAddress(InetAddress.getLoopbackAddress(), 40000)));
     }
 
     private List<ServiceId> withdrawn() {

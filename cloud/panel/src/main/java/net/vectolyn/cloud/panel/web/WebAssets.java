@@ -21,6 +21,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.GZIPOutputStream;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The files of the panel frontend, read once from the jar.
@@ -74,8 +75,10 @@ public final class WebAssets {
      * @param cacheControl the {@code Cache-Control} value
      * @param csp          the {@code Content-Security-Policy} for an HTML page, or null
      */
-    public record Asset(String path, byte[] body, byte[] gzip, String contentType, String etag, String cacheControl,
-                        String csp) {
+    // The bodies are sent as they are on every request; a List<Byte> would only cost memory.
+    @SuppressWarnings("ArrayRecordComponent")
+    public record Asset(String path, byte[] body, byte @Nullable [] gzip, String contentType, String etag,
+                        String cacheControl, @Nullable String csp) {
     }
 
     /**
@@ -90,7 +93,7 @@ public final class WebAssets {
         Map<String, byte[]> content = new HashMap<>();
         try {
             byte[] index = read(loader, ROOT + INDEX);
-            for (String line : new String(index, StandardCharsets.UTF_8).split("\n")) {
+            for (String line : new String(index, StandardCharsets.UTF_8).split("\n", -1)) {
                 String path = line.strip();
                 if (path.isEmpty()) {
                     continue;
@@ -151,11 +154,11 @@ public final class WebAssets {
         String type = contentType(path);
         String etag = "\"" + base64Url(sha256(body), 22) + "\"";
         String cache = path.startsWith("_next/static/") ? "public, max-age=31536000, immutable" : "no-cache";
-        byte[] gzip = isText(type) ? gzip(body) : null;
+        byte @Nullable [] gzip = isText(type) ? gzip(body) : null;
         if (gzip != null && gzip.length >= body.length) {
             gzip = null;
         }
-        String csp = type.startsWith("text/html") ? htmlPolicy(new String(body, StandardCharsets.UTF_8), secure) : null;
+        @Nullable String csp = type.startsWith("text/html") ? htmlPolicy(new String(body, StandardCharsets.UTF_8), secure) : null;
         return new Asset(path, body, gzip, type, etag, cache, csp);
     }
 

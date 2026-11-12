@@ -29,6 +29,7 @@ import net.vectolyn.cloud.config.model.TimeSpan;
 import net.vectolyn.cloud.monitor.alert.AlertRule;
 import net.vectolyn.cloud.monitor.alert.RuleParser;
 import net.vectolyn.cloud.monitor.alert.RuleSyntaxException;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Reads and checks {@code monitor.yml}. Uses the same strict YAML reader as the other configuration
@@ -90,7 +91,7 @@ public final class MonitorConfigLoader {
         } catch (NoSuchFileException e) {
             return check(MonitorConfig.defaults());
         } catch (IOException e) {
-            throw new ConfigException(ConfigError.of(FILE, "", ErrorCode.FILE_ACCESS));
+            throw new ConfigException(ConfigError.of(FILE, "", ErrorCode.FILE_ACCESS), e);
         }
         return parse(content);
     }
@@ -157,7 +158,7 @@ public final class MonitorConfigLoader {
                     rules.add(new AlertRule(rule.name(), condition, rule.severity(), Set.copyOf(rule.groups())));
                 }
             } catch (RuleSyntaxException e) {
-                errors.add(ConfigError.of(FILE, at + ".when", ErrorCode.INVALID_VALUE, e.getMessage()));
+                errors.add(ConfigError.of(FILE, at + ".when", ErrorCode.INVALID_VALUE, String.valueOf(e.getMessage())));
             }
         }
 
@@ -185,7 +186,7 @@ public final class MonitorConfigLoader {
     }
 
     /** The address if {@code text} is {@code localhost} or a loopback IP literal; null otherwise. No DNS lookups. */
-    static InetAddress loopback(String text) {
+    static @Nullable InetAddress loopback(@Nullable String text) {
         if (text == null) {
             return null;
         }
@@ -194,7 +195,7 @@ public final class MonitorConfigLoader {
         }
         boolean ipv4 = IPV4.matcher(text).matches();
         if (ipv4) {
-            for (String part : text.split("\\.")) {
+            for (String part : text.split("\\.", -1)) {
                 int octet;
                 try {
                     octet = Integer.parseInt(part);

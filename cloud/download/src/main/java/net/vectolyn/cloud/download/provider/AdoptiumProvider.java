@@ -21,6 +21,7 @@ import net.vectolyn.cloud.download.hash.Checksum;
 import net.vectolyn.cloud.download.hash.HashAlgorithm;
 import net.vectolyn.cloud.download.http.DownloadClient;
 import net.vectolyn.cloud.download.http.HostAllowlist;
+import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
 
 /**
@@ -128,7 +129,7 @@ public final class AdoptiumProvider implements ArtifactProvider {
                 + release.orElse(Integer.toString(feature)) + " for " + request.system());
     }
 
-    private Optional<Asset> find(int feature, String os, String arch, String imageType, String release)
+    private Optional<Asset> find(int feature, String os, String arch, String imageType, @Nullable String release)
             throws IOException, InterruptedException {
         Map<String, String> query = new LinkedHashMap<>();
         query.put("architecture", arch);
@@ -177,7 +178,7 @@ public final class AdoptiumProvider implements ArtifactProvider {
                 asset.size() > 0 ? OptionalLong.of(asset.size()) : OptionalLong.empty(), OptionalInt.empty(), metadata);
     }
 
-    static int feature(String version) {
+    static int feature(@Nullable String version) {
         if (version == null || !FEATURE.matcher(version).matches() || Integer.parseInt(version) < MIN_FEATURE) {
             throw new IllegalArgumentException("Adoptium version must be a Java feature version from 8 to 99: " + version);
         }

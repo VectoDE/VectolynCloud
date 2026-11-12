@@ -30,6 +30,7 @@ import net.vectolyn.cloud.config.operation.ConfigOperation;
 import net.vectolyn.cloud.config.schema.ConfigSchema;
 import net.vectolyn.cloud.config.validation.ConfigValidator;
 import net.vectolyn.cloud.config.validation.JvmFlagPolicy;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The one configuration layer that console, setup assistant, files and later the REST API and
@@ -62,7 +63,7 @@ public final class ConfigService implements AutoCloseable {
     private volatile ConfigSnapshot current;
     /** Mirror mode of a cluster member, see {@link #mirrorMode(boolean)}. */
     private volatile boolean mirrored;
-    private ConfigWatcher watcher;
+    private @Nullable ConfigWatcher watcher;
     private boolean closed;
 
     private ConfigService(ConfigStore store, ConfigSnapshot initial) {

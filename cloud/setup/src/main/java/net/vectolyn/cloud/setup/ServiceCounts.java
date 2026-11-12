@@ -7,6 +7,7 @@ import java.util.regex.Pattern;
 import net.vectolyn.cloud.config.model.ScalingConfig;
 import net.vectolyn.cloud.config.validation.ConfigValidator;
 import net.vectolyn.cloud.console.Text;
+import org.jspecify.annotations.Nullable;
 
 /**
  * How many services of one server the assistant sets up: {@code static-services},
@@ -32,7 +33,7 @@ public record ServiceCounts(int staticServices, int minServices, int maxServices
      * @param text for example {@code 1/1/4}
      * @return the counts, or null if the text has another form
      */
-    public static ServiceCounts parse(String text) {
+    public static @Nullable ServiceCounts parse(@Nullable String text) {
         Matcher m = TEXT.matcher(text == null ? "" : text);
         if (!m.matches()) {
             return null;
@@ -60,7 +61,7 @@ public record ServiceCounts(int staticServices, int minServices, int maxServices
      *
      * @return the problem, or null if the counts are valid
      */
-    public Text problem() {
+    public @Nullable Text problem() {
         boolean valid = staticServices >= 0 && staticServices <= minServices && minServices <= maxServices
                 && maxServices >= 1 && maxServices <= ConfigValidator.MAX_SERVICES;
         return valid ? null : SetupMessages.CHECK_SERVICES;

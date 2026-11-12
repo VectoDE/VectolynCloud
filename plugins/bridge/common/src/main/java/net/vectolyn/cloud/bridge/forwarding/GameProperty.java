@@ -3,6 +3,7 @@
 package net.vectolyn.cloud.bridge.forwarding;
 
 import java.util.Objects;
+import org.jspecify.annotations.Nullable;
 
 /**
  * One profile property as Velocity forwards it, for example the skin ({@code textures}).
@@ -11,7 +12,7 @@ import java.util.Objects;
  * @param value property value
  * @param signature Mojang's signature, or {@code null} if the property has none
  */
-public record GameProperty(String name, String value, String signature) {
+public record GameProperty(String name, String value, @Nullable String signature) {
 
     /** Creates the property. */
     public GameProperty {

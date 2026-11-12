@@ -121,7 +121,9 @@ public final class OwnerOnlyPermissions {
         } catch (InterruptedException e) {
             process.destroyForcibly();
             Thread.currentThread().interrupt();
-            throw new InterruptedIOException("interrupted while protecting " + path);
+            InterruptedIOException failure = new InterruptedIOException("interrupted while protecting " + path);
+            failure.initCause(e);
+            throw failure;
         }
         if (process.exitValue() != 0) {
             throw new IOException("icacls could not protect the access list of " + path + " (exit code " + process.exitValue() + ")");

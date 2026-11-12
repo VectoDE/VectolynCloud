@@ -562,8 +562,12 @@ class NodeWiringTest {
                         .withMinecraftVersion("1.8.8")),
                 NodeFixture.task("legacy", "legacy", TaskMode.STATIC, 1, 1)));
         fixture.file("local/templates/Legacy-Proxy/default/velocity.toml",
-                "bind = \"0.0.0.0:{{VECTOLYN_LEGACY_PROXY_PORT}}\"\n"
-                + "[servers]\n{{VECTOLYN_PROXY_SERVERS}}\ntry = [ {{VECTOLYN_PROXY_TRY}} ]\n");
+                """
+                bind = "0.0.0.0:{{VECTOLYN_LEGACY_PROXY_PORT}}"
+                [servers]
+                {{VECTOLYN_PROXY_SERVERS}}
+                try = [ {{VECTOLYN_PROXY_TRY}} ]
+                """);
         fixture.file("local/templates/Legacy-Server/default/server.properties", "server-port={{VECTOLYN_SERVER_PORT}}\n");
         ServiceId legacy = new ServiceId("legacy-proxy-1");
         ServiceId panda = new ServiceId("legacy-1");

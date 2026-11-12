@@ -16,4 +16,8 @@ final class MirrorException extends IOException {
     MirrorException(String message) {
         super(message);
     }
+
+    MirrorException(String message, Throwable cause) {
+        super(message, cause);
+    }
 }

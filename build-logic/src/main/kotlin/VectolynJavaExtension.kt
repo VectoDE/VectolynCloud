@@ -17,4 +17,11 @@ interface VectolynJavaExtension {
      * plugins keep their file names.
      */
     val artifactName: Property<String>
+
+    /**
+     * Minimum line coverage (0.0 to 1.0) of the module's unit tests; `check` fails below it. The
+     * default applies to every module; a module with less coverage than that sets its own lower
+     * value and says why in its build file.
+     */
+    val minimumLineCoverage: Property<Double>
 }

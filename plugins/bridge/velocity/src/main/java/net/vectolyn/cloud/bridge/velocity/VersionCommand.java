@@ -9,6 +9,7 @@ import java.util.Locale;
 import java.util.Objects;
 import net.kyori.adventure.text.Component;
 import net.vectolyn.cloud.bridge.PoweredBy;
+import org.jspecify.annotations.Nullable;
 
 /**
  * {@code /version} on the proxy while {@code branding.powered-by} is on: the cloud's version and
@@ -31,7 +32,7 @@ final class VersionCommand implements SimpleCommand {
     @Override
     public void execute(Invocation invocation) {
         CommandSource source = invocation.source();
-        Locale locale = source instanceof Player player ? player.getEffectiveLocale() : null;
+        @Nullable Locale locale = source instanceof Player player ? player.getEffectiveLocale() : null;
         for (Component line : VersionMessage.of(version, locale)) {
             source.sendMessage(line);
         }

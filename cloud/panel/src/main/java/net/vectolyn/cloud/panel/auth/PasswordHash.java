@@ -9,6 +9,7 @@ import java.util.Base64;
 import java.util.Optional;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Password hashes of panel accounts: PBKDF2 with HMAC-SHA-256 from the JDK, 600,000 iterations
@@ -44,6 +45,8 @@ public final class PasswordHash {
     }
 
     /** A parsed hash. */
+    // Salt and key go to the key derivation and MessageDigest.isEqual as they are.
+    @SuppressWarnings("ArrayRecordComponent")
     record Parsed(int iterations, byte[] salt, byte[] key) {
     }
 
@@ -73,7 +76,7 @@ public final class PasswordHash {
      * @param stored   the stored hash, or null when the account does not exist
      * @return whether it matches
      */
-    public static boolean verify(char[] password, String stored) {
+    public static boolean verify(char[] password, @Nullable String stored) {
         Optional<Parsed> parsed = parse(stored);
         Parsed target = parsed.orElseGet(() -> parse(DUMMY).orElseThrow());
         byte[] key = derive(password, target.salt(), target.iterations());
@@ -97,7 +100,7 @@ public final class PasswordHash {
      * @param stored the text
      * @return the parts, or empty if it is not a hash of this format
      */
-    static Optional<Parsed> parse(String stored) {
+    static Optional<Parsed> parse(@Nullable String stored) {
         if (stored == null || stored.length() > 200) {
             return Optional.empty();
         }
@@ -129,8 +132,11 @@ public final class PasswordHash {
      * @return a code ({@code password-too-short}, {@code password-too-long}, {@code password-is-name}),
      *         or empty if it is allowed
      */
-    public static Optional<String> problem(String password, String account) {
-        int length = password == null ? 0 : password.codePointCount(0, password.length());
+    public static Optional<String> problem(@Nullable String password, String account) {
+        if (password == null) {
+            return Optional.of("password-too-short");
+        }
+        int length = password.codePointCount(0, password.length());
         if (length < MIN_LENGTH) {
             return Optional.of("password-too-short");
         }

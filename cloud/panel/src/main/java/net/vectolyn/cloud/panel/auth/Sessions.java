@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Sign-in state of the panel, in memory only (a restart signs everybody out):
@@ -78,7 +79,7 @@ public final class Sessions {
     record Ticket<T>(String kind, T value, Instant expires) {
     }
 
-    private record Failures(int count, Instant lockedUntil, Instant last) {
+    private record Failures(int count, @Nullable Instant lockedUntil, Instant last) {
     }
 
     /**
@@ -116,7 +117,7 @@ public final class Sessions {
      * @param id the cookie value
      * @return the session, or empty if unknown or ended
      */
-    public Optional<Session> touch(String id) {
+    public Optional<Session> touch(@Nullable String id) {
         if (id == null || !ID.matcher(id).matches()) {
             return Optional.empty();
         }
@@ -163,7 +164,7 @@ public final class Sessions {
      * @param token   the header value
      * @return true if equal
      */
-    public static boolean csrfMatches(Session session, String token) {
+    public static boolean csrfMatches(Session session, @Nullable String token) {
         return token != null && MessageDigest.isEqual(session.csrf().getBytes(java.nio.charset.StandardCharsets.US_ASCII),
                 token.getBytes(java.nio.charset.StandardCharsets.US_ASCII));
     }
@@ -173,7 +174,7 @@ public final class Sessions {
      *
      * @param id the session id
      */
-    public void end(String id) {
+    public void end(@Nullable String id) {
         if (id != null) {
             sessions.remove(id);
         }
@@ -185,7 +186,7 @@ public final class Sessions {
      * @param user   the user name
      * @param except a session id to keep, or null
      */
-    public void endAll(String user, String except) {
+    public void endAll(String user, @Nullable String except) {
         sessions.values().removeIf(s -> s.user().equalsIgnoreCase(user) && !s.id().equals(except));
     }
 
@@ -216,7 +217,7 @@ public final class Sessions {
      * @param <T>   its type
      * @return the data, or empty if unknown, of another kind or expired
      */
-    public <T> Optional<T> take(String id, String kind, Class<T> type) {
+    public <T> Optional<T> take(@Nullable String id, String kind, Class<T> type) {
         if (id == null || !ID.matcher(id).matches()) {
             return Optional.empty();
         }
@@ -237,10 +238,11 @@ public final class Sessions {
     public long lockedSeconds(String user) {
         Failures f = failures.get(key(user));
         Instant now = clock.instant();
-        if (f == null || f.lockedUntil() == null || !now.isBefore(f.lockedUntil())) {
+        Instant until = f == null ? null : f.lockedUntil();
+        if (until == null || !now.isBefore(until)) {
             return 0;
         }
-        return Math.max(1, Duration.between(now, f.lockedUntil()).toSeconds());
+        return Math.max(1, Duration.between(now, until).toSeconds());
     }
 
     /**
@@ -286,7 +288,7 @@ public final class Sessions {
         tickets.values().removeIf(t -> !now.isBefore(t.expires()));
     }
 
-    private static String key(String user) {
+    private static String key(@Nullable String user) {
         return user == null ? "" : user.toLowerCase(Locale.ROOT);
     }
 

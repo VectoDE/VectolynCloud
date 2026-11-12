@@ -277,6 +277,7 @@ class CloudJarEndToEndTest {
      * port free, and the given {@code servers} and {@code memory} sections. The servers see exactly a
      * Java 21 and a Java 25 on the {@code PATH}.
      */
+    @SuppressWarnings("FutureReturnValueIgnored") // the exit callback only removes the cleanup hook
     private Process launch(Path home, Path output, String serversAndMemory) throws IOException {
         Path jar = Path.of(property("vectolyn.e2e.cloudJar"));
         Path java25 = Path.of(property("vectolyn.e2e.java25"));

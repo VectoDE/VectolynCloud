@@ -19,4 +19,14 @@ public final class ApiStartException extends IOException {
     public ApiStartException(String message) {
         super(message);
     }
+
+    /**
+     * Creates the exception with the failure behind it.
+     *
+     * @param message what is wrong and how to fix it, without secrets
+     * @param cause   the failure behind it
+     */
+    public ApiStartException(String message, Throwable cause) {
+        super(message, cause);
+    }
 }

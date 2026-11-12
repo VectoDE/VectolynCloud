@@ -18,6 +18,7 @@ import net.vectolyn.cloud.download.hash.Checksum;
 import net.vectolyn.cloud.download.hash.HashAlgorithm;
 import net.vectolyn.cloud.download.http.DownloadClient;
 import net.vectolyn.cloud.download.http.HostAllowlist;
+import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
 
 /**
@@ -40,10 +41,10 @@ public final class BibliothekProvider implements ArtifactProvider {
     private final String id;
     private final String api;
     private final HostAllowlist hosts;
-    private final String defaultDownload;
+    private final @Nullable String defaultDownload;
     private final DownloadClient client;
 
-    private BibliothekProvider(String id, String api, HostAllowlist hosts, String defaultDownload,
+    private BibliothekProvider(String id, String api, HostAllowlist hosts, @Nullable String defaultDownload,
             DownloadClient client) {
         this.id = id;
         this.api = api;
@@ -110,7 +111,7 @@ public final class BibliothekProvider implements ArtifactProvider {
 
         long build;
         if (request.buildOpt().isPresent()) {
-            build = parseBuildNumber(request.build());
+            build = parseBuildNumber(request.buildOpt().get());
         } else {
             List<Long> builds = parseVersionBuilds(ApiSupport.fetchJson(client, URI.create(versionBase), hosts,
                     id + " " + project + " " + version));

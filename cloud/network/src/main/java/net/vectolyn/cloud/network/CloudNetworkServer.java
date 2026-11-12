@@ -45,6 +45,7 @@ import net.vectolyn.protocol.message.MessageRegistry;
 import net.vectolyn.protocol.message.Request;
 import net.vectolyn.protocol.message.Response;
 import net.vectolyn.protocol.message.ServiceStatus;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Netty server of the cloud channel: the services the node starts connect here with their token.
@@ -92,8 +93,8 @@ public final class CloudNetworkServer implements AutoCloseable {
 
     private final NetworkSettings settings;
     private final ServiceAuthenticator authenticator;
-    private final ChannelListener listener;
-    private final PipelineCustomizer customizer;
+    private final @Nullable ChannelListener listener;
+    private final @Nullable PipelineCustomizer customizer;
     private final MessageCodec codec = MessageCodec.standard();
     private final EnvelopeEncoder encoder = new EnvelopeEncoder(codec);
     private final ConnectionLimiter limiter;
@@ -104,9 +105,9 @@ public final class CloudNetworkServer implements AutoCloseable {
     private final AtomicLong refusedConnections = new AtomicLong();
     private final AtomicLong refusedHellos = new AtomicLong();
 
-    private EventLoopGroup bossGroup;
-    private EventLoopGroup workerGroup;
-    private Channel serverChannel;
+    private @Nullable EventLoopGroup bossGroup;
+    private @Nullable EventLoopGroup workerGroup;
+    private @Nullable Channel serverChannel;
     private boolean closed;
 
     private CloudNetworkServer(Builder builder) {
@@ -174,7 +175,7 @@ public final class CloudNetworkServer implements AutoCloseable {
     }
 
     /** Returns the address the server listens on, or {@code null} before {@link #start()}. */
-    public synchronized InetSocketAddress localAddress() {
+    public synchronized @Nullable InetSocketAddress localAddress() {
         return serverChannel == null ? null : (InetSocketAddress) serverChannel.localAddress();
     }
 
@@ -260,7 +261,7 @@ public final class CloudNetworkServer implements AutoCloseable {
                     message.getClass().getSimpleName(), service.value(), session.version());
             return false;
         }
-        session.channel().writeAndFlush(Envelope.of(message));
+        ServiceSession.observe(session.channel().writeAndFlush(Envelope.of(message)));
         return true;
     }
 
@@ -317,7 +318,7 @@ public final class CloudNetworkServer implements AutoCloseable {
     public void disconnect(ServiceId service, Disconnect.Reason reason) {
         ServiceSession session = sessions.get(service);
         if (session != null) {
-            session.disconnect(reason);
+            ServiceSession.observe(session.disconnect(reason));
         }
     }
 
@@ -338,7 +339,7 @@ public final class CloudNetworkServer implements AutoCloseable {
                 LOG.log(Level.WARNING, "Refused {0} connection(s) so far: connection limit reached",
                         String.valueOf(refused));
             }
-            channel.close();
+            ServiceSession.observe(channel.close());
             return;
         }
         channel.closeFuture().addListener(closed -> slot.release());
@@ -350,7 +351,7 @@ public final class CloudNetworkServer implements AutoCloseable {
         initPipeline(channel, null);
     }
 
-    private void initPipeline(Channel channel, ConnectionLimiter.Slot slot) {
+    private void initPipeline(Channel channel, ConnectionLimiter.@Nullable Slot slot) {
         if (customizer != null) {
             customizer.customize(channel);
         }
@@ -395,7 +396,7 @@ public final class CloudNetworkServer implements AutoCloseable {
             previous.markReplaced();
             LOG.log(Level.INFO, "Service {0} reconnected, closing its older connection",
                     session.service().value());
-            previous.disconnect(Disconnect.Reason.REPLACED);
+            ServiceSession.observe(previous.disconnect(Disconnect.Reason.REPLACED));
         }
     }
 
@@ -404,9 +405,9 @@ public final class CloudNetworkServer implements AutoCloseable {
         notifyListener(new ServiceEvent.Connected(session.service(), session.remoteAddress()));
     }
 
-    void sessionClosed(ServiceSession session, Disconnect.Reason handlerReason) {
+    void sessionClosed(ServiceSession session, Disconnect.@Nullable Reason handlerReason) {
         session.failAll();
-        Disconnect.Reason reason = handlerReason != null ? handlerReason : session.closedByCloud();
+        Disconnect.@Nullable Reason reason = handlerReason != null ? handlerReason : session.closedByCloud();
         boolean current = sessions.remove(session.service(), session);
         if (current && !session.isReplaced()) {
             LOG.log(Level.INFO, "Service {0} disconnected ({1})", session.service().value(),
@@ -443,13 +444,15 @@ public final class CloudNetworkServer implements AutoCloseable {
 
     void incomingRequest(ServiceSession session, int requestId, Request request) {
         if (!session.tryStartIncoming()) {
-            session.channel().writeAndFlush(new Envelope(requestId, new Response(Response.Status.DENIED, EMPTY)));
+            ServiceSession.observe(session.channel()
+                    .writeAndFlush(new Envelope(requestId, new Response(Response.Status.DENIED, EMPTY))));
             return;
         }
         RequestHandler handler = requestHandlers.get(request.channel());
         if (handler == null) {
             session.endIncoming();
-            session.channel().writeAndFlush(new Envelope(requestId, new Response(Response.Status.NO_HANDLER, EMPTY)));
+            ServiceSession.observe(session.channel()
+                    .writeAndFlush(new Envelope(requestId, new Response(Response.Status.NO_HANDLER, EMPTY))));
             return;
         }
         CompletableFuture<Response> result = new CompletableFuture<>();
@@ -469,7 +472,7 @@ public final class CloudNetworkServer implements AutoCloseable {
         } catch (RuntimeException e) {
             result.completeExceptionally(e);
         }
-        result.orTimeout(settings.requestTimeout().toMillis(), TimeUnit.MILLISECONDS)
+        ServiceSession.detach(result.orTimeout(settings.requestTimeout().toMillis(), TimeUnit.MILLISECONDS)
                 .whenComplete((response, error) -> {
                     session.endIncoming();
                     Response answer = response;
@@ -479,12 +482,12 @@ public final class CloudNetworkServer implements AutoCloseable {
                         answer = new Response(Response.Status.ERROR, EMPTY);
                     }
                     if (session.channel().isActive()) {
-                        session.channel().writeAndFlush(new Envelope(requestId, answer));
+                        ServiceSession.observe(session.channel().writeAndFlush(new Envelope(requestId, answer)));
                     }
-                });
+                }));
     }
 
-    private void fanOut(ServiceSession from, ChannelMessage message) {
+    private void fanOut(@Nullable ServiceSession from, ChannelMessage message) {
         byte[] frame = codec.encode(Envelope.of(message));
         for (ServiceSession target : sessions.values()) {
             if (target == from) {
@@ -498,7 +501,7 @@ public final class CloudNetworkServer implements AutoCloseable {
                 continue;
             }
             // Encoded once; each write gets its own buffer that shares the array.
-            channel.writeAndFlush(Unpooled.wrappedBuffer(frame));
+            ServiceSession.observe(channel.writeAndFlush(Unpooled.wrappedBuffer(frame)));
         }
     }
 
@@ -515,7 +518,7 @@ public final class CloudNetworkServer implements AutoCloseable {
 
     private void shutDownGroups() {
         if (bossGroup != null) {
-            bossGroup.shutdownGracefully(0, 2, TimeUnit.SECONDS);
+            ServiceSession.observe(bossGroup.shutdownGracefully(0, 2, TimeUnit.SECONDS));
         }
         if (workerGroup != null) {
             workerGroup.shutdownGracefully(0, 2, TimeUnit.SECONDS).awaitUninterruptibly(5, TimeUnit.SECONDS);
@@ -536,8 +539,9 @@ public final class CloudNetworkServer implements AutoCloseable {
 
         private final NetworkSettings settings;
         private final ServiceAuthenticator authenticator;
-        private ChannelListener listener;
-        private PipelineCustomizer customizer;
+        private @Nullable ChannelListener listener;
+        private @Nullable PipelineCustomizer customizer;
+
 
         private Builder(NetworkSettings settings, ServiceAuthenticator authenticator) {
             this.settings = Objects.requireNonNull(settings, "settings");

@@ -4,6 +4,7 @@ package net.vectolyn.cloud.config.model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
+import org.jspecify.annotations.Nullable;
 
 /**
  * One node of the cluster.
@@ -19,14 +20,15 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
  *                     them in
  */
 @JsonPropertyOrder({"id", "host", "port", "service-ports", "max-memory", "memory-reserve"})
-public record NodeConfig(String id, String host, int port, PortRange servicePorts, MemorySize maxMemory,
-                         @JsonProperty("memory-reserve") MemoryReserve reserve) {
+public record NodeConfig(String id, String host, int port, PortRange servicePorts,
+                         @Nullable MemorySize maxMemory,
+                         @JsonProperty("memory-reserve") @Nullable MemoryReserve reserve) {
 
     /** Id of the first node. */
     public static final String DEFAULT_ID = "node-1";
 
     /** A node without a {@code memory-reserve} section (defaults). */
-    public NodeConfig(String id, String host, int port, PortRange servicePorts, MemorySize maxMemory) {
+    public NodeConfig(String id, String host, int port, PortRange servicePorts, @Nullable MemorySize maxMemory) {
         this(id, host, port, servicePorts, maxMemory, null);
     }
 
@@ -51,7 +53,7 @@ public record NodeConfig(String id, String host, int port, PortRange servicePort
     }
 
     /** A copy with another {@code max-memory}; null means automatic. */
-    public NodeConfig withMaxMemory(MemorySize value) {
+    public NodeConfig withMaxMemory(@Nullable MemorySize value) {
         return new NodeConfig(id, host, port, servicePorts, value, reserve);
     }
 
@@ -59,7 +61,7 @@ public record NodeConfig(String id, String host, int port, PortRange servicePort
      * A copy with another {@code memory-reserve} section. Null or a reserve without any field
      * removes the section, so every field has its default.
      */
-    public NodeConfig withMemoryReserve(MemoryReserve value) {
+    public NodeConfig withMemoryReserve(@Nullable MemoryReserve value) {
         return new NodeConfig(id, host, port, servicePorts, maxMemory, value == null || value.noneSet() ? null : value);
     }
 }

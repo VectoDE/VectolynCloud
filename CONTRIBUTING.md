@@ -60,6 +60,17 @@ tests (`test-secret-0000`), never a real key, token or password, not even an exp
 dummy value is still flagged, run `gitleaks detect --no-banner` locally and add an entry to
 `.gitleaks.toml` that names the file and the exact value. Whole folders are not allowed.
 
+## Static analysis in the build
+
+`./gradlew check` runs, for every Java module: Error Prone and NullAway at compile time (a null that
+can reach a non-null place does not compile; mark intended nulls with `org.jspecify.annotations.Nullable`),
+SpotBugs with FindSecBugs, Checkstyle, PMD and JaCoCo with a minimum line coverage per module
+(`vectolyn.minimumLineCoverage`, default 0.70). Warnings are errors. The rule sets are curated and
+live in `gradle/checkstyle/checkstyle.xml`, `gradle/pmd/ruleset.xml` and
+`gradle/spotbugs/exclude.xml`; every excluded SpotBugs pattern has its reason there. Do not weaken a
+rule to get green: fix the finding, or add a narrow suppression with a reason next to the code.
+`-PerrorproneOnly=:cloud:backup` runs Error Prone only in the named modules while you fix one.
+
 ## Parsers need a fuzz test
 
 Code that parses text or bytes from outside (files an operator edits, network input, command

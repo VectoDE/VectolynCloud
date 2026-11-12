@@ -129,7 +129,7 @@ Nobody gives more than they hold: a role or a user can only be given rights the 
 
 ### Audit log
 
-`logs/panel-audit.jsonl` gets one JSON line for every setup, sign-in, failed sign-in, lock, sign-out, password change, TOTP and passkey change, single sign-on link, and every change of users and roles: time, event, acting user, affected user or role, client address. Never a password, code or key. At 10 MiB the file moves to `panel-audit.1.jsonl`. Users with `audit:read` read it through `GET /api/panel/audit?limit=100`.
+`logs/panel-audit.jsonl` gets one JSON line for every setup, sign-in, failed sign-in, lock, sign-out, password change, TOTP and passkey change, single sign-on link, and every change of users and roles: time, event, acting user, affected user or role, client address. Never a password, code or key. At 10 MiB the file moves to `panel-audit.1.jsonl`. Users with `audit:read` read it through `GET /api/panel/audit?limit=100`. The event `user.updated` lists in `details` what was changed: `roles`, `disabled` and `reset`. `reset` is a list of what was reset for that user: `password` (a new password was set) and `factors` (requested with `reset-factors`: TOTP, passkeys and single sign-on links were removed so the user can set them up again; the user's sessions end); it is left out when nothing was reset.
 
 ## Services, console and files
 

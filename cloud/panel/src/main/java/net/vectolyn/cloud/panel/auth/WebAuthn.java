@@ -22,6 +22,7 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.Map;
 import net.vectolyn.cloud.api.http.ApiJson;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Server side of passkeys (W3C Web Authentication Level 3), verified with the JDK only.
@@ -64,6 +65,10 @@ public final class WebAuthn {
         WebAuthnException(String message) {
             super(message);
         }
+
+        WebAuthnException(String message, Throwable cause) {
+            super(message, cause);
+        }
     }
 
     /**
@@ -73,6 +78,8 @@ public final class WebAuthn {
      * @param origin    the panel's origin, for example {@code https://panel.example.org}
      * @param rpId      the RP ID, the host of the origin
      */
+    // Raw bytes of the ceremony, compared and verified as they are; a List<Byte> would only cost memory.
+    @SuppressWarnings("ArrayRecordComponent")
     public record Expected(byte[] challenge, String origin, String rpId) {
     }
 
@@ -84,6 +91,8 @@ public final class WebAuthn {
      * @param algorithm COSE algorithm
      * @param signCount the counter at registration
      */
+    // Raw credential bytes, used as they are; a List<Byte> would only cost memory.
+    @SuppressWarnings("ArrayRecordComponent")
     public record Credential(byte[] id, byte[] publicKey, int algorithm, long signCount) {
     }
 
@@ -96,7 +105,10 @@ public final class WebAuthn {
      * @param credentialId the attested credential id, or null
      * @param publicKey    the attested COSE key bytes, or null
      */
-    public record AuthenticatorData(byte[] rpIdHash, int flags, long signCount, byte[] credentialId, byte[] publicKey) {
+    // Slices of the authenticator data, used as they are; a List<Byte> would only cost memory.
+    @SuppressWarnings("ArrayRecordComponent")
+    public record AuthenticatorData(byte[] rpIdHash, int flags, long signCount, byte @Nullable [] credentialId,
+                                    byte @Nullable [] publicKey) {
     }
 
     /**
@@ -118,7 +130,7 @@ public final class WebAuthn {
         try {
             decoded = Cbor.decode(attestationObject);
         } catch (Cbor.CborException e) {
-            throw new WebAuthnException("attestation object is not valid CBOR");
+            throw new WebAuthnException("attestation object is not valid CBOR", e);
         }
         if (!(decoded instanceof Map<?, ?> map) || !(map.get("authData") instanceof byte[] authData)
                 || !(map.get("fmt") instanceof String)) {
@@ -126,12 +138,14 @@ public final class WebAuthn {
         }
         AuthenticatorData data = parseAuthenticatorData(authData);
         checkAuthenticatorData(data, expected.rpId());
-        if ((data.flags() & FLAG_AT) == 0 || data.credentialId() == null) {
+        byte[] id = data.credentialId();
+        byte[] key = data.publicKey();
+        if ((data.flags() & FLAG_AT) == 0 || id == null || key == null) {
             throw new WebAuthnException("no attested credential");
         }
-        int algorithm = algorithm(data.publicKey());
-        publicKey(data.publicKey()); // refuses keys the JDK cannot use
-        return new Credential(data.credentialId(), data.publicKey(), algorithm, data.signCount());
+        int algorithm = algorithm(key);
+        publicKey(key); // refuses keys the JDK cannot use
+        return new Credential(id, key, algorithm, data.signCount());
     }
 
     /**
@@ -167,7 +181,7 @@ public final class WebAuthn {
                 throw new WebAuthnException("signature does not verify");
             }
         } catch (GeneralSecurityException e) {
-            throw new WebAuthnException("signature does not verify");
+            throw new WebAuthnException("signature does not verify", e);
         }
         if ((data.signCount() != 0 || credential.signCount() != 0) && data.signCount() <= credential.signCount()) {
             throw new WebAuthnException("signature counter did not grow");
@@ -183,7 +197,7 @@ public final class WebAuthn {
         try {
             client = ApiJson.mapper().readValue(json, Map.class);
         } catch (RuntimeException e) {
-            throw new WebAuthnException("client data is not JSON");
+            throw new WebAuthnException("client data is not JSON", e);
         }
         if (client == null || !type.equals(client.get("type"))) {
             throw new WebAuthnException("wrong ceremony type");
@@ -250,7 +264,7 @@ public final class WebAuthn {
         try {
             key = Cbor.decodeFirst(data, idStart + idLength);
         } catch (Cbor.CborException e) {
-            throw new WebAuthnException("credential public key is not valid CBOR");
+            throw new WebAuthnException("credential public key is not valid CBOR", e);
         }
         byte[] keyBytes = Arrays.copyOfRange(data, idStart + idLength, key.end());
         return new AuthenticatorData(rpIdHash, flags, count, id, keyBytes);
@@ -282,46 +296,52 @@ public final class WebAuthn {
         Map<?, ?> key = coseMap(cose);
         int algorithm = algorithm(cose);
         try {
-            switch (algorithm) {
-                case ES256 -> {
-                    if (!Long.valueOf(2).equals(key.get(1L)) || !Long.valueOf(1).equals(key.get(-1L))
-                            || !(key.get(-2L) instanceof byte[] x) || !(key.get(-3L) instanceof byte[] y)
-                            || x.length != 32 || y.length != 32) {
-                        throw new WebAuthnException("invalid P-256 key");
-                    }
-                    AlgorithmParameters params = AlgorithmParameters.getInstance("EC");
-                    params.init(new ECGenParameterSpec("secp256r1"));
-                    ECParameterSpec spec = params.getParameterSpec(ECParameterSpec.class);
-                    ECPoint point = new ECPoint(new BigInteger(1, x), new BigInteger(1, y));
-                    return KeyFactory.getInstance("EC").generatePublic(new ECPublicKeySpec(point, spec));
-                }
-                case RS256 -> {
-                    if (!Long.valueOf(3).equals(key.get(1L)) || !(key.get(-1L) instanceof byte[] n)
-                            || !(key.get(-2L) instanceof byte[] e) || n.length < 256 || n.length > 512 || e.length > 8) {
-                        throw new WebAuthnException("invalid RSA key");
-                    }
-                    return KeyFactory.getInstance("RSA").generatePublic(
-                            new RSAPublicKeySpec(new BigInteger(1, n), new BigInteger(1, e)));
-                }
-                default -> {
-                    if (!Long.valueOf(1).equals(key.get(1L)) || !Long.valueOf(6).equals(key.get(-1L))
-                            || !(key.get(-2L) instanceof byte[] x) || x.length != 32) {
-                        throw new WebAuthnException("invalid Ed25519 key");
-                    }
-                    byte[] reversed = new byte[32];
-                    for (int i = 0; i < 32; i++) {
-                        reversed[i] = x[31 - i];
-                    }
-                    boolean odd = (reversed[0] & 0x80) != 0;
-                    reversed[0] &= 0x7f;
-                    EdECPoint point = new EdECPoint(odd, new BigInteger(1, reversed));
-                    return KeyFactory.getInstance("Ed25519").generatePublic(
-                            new EdECPublicKeySpec(NamedParameterSpec.ED25519, point));
-                }
-            }
+            return switch (algorithm) {
+                case ES256 -> es256(key);
+                case RS256 -> rs256(key);
+                default -> ed25519(key);
+            };
         } catch (GeneralSecurityException e) {
-            throw new WebAuthnException("the key cannot be used");
+            throw new WebAuthnException("the key cannot be used", e);
         }
+    }
+
+    private static PublicKey es256(Map<?, ?> key) throws GeneralSecurityException, WebAuthnException {
+        if (!Long.valueOf(2).equals(key.get(1L)) || !Long.valueOf(1).equals(key.get(-1L))
+                || !(key.get(-2L) instanceof byte[] x) || !(key.get(-3L) instanceof byte[] y)
+                || x.length != 32 || y.length != 32) {
+            throw new WebAuthnException("invalid P-256 key");
+        }
+        AlgorithmParameters params = AlgorithmParameters.getInstance("EC");
+        params.init(new ECGenParameterSpec("secp256r1"));
+        ECParameterSpec spec = params.getParameterSpec(ECParameterSpec.class);
+        ECPoint point = new ECPoint(new BigInteger(1, x), new BigInteger(1, y));
+        return KeyFactory.getInstance("EC").generatePublic(new ECPublicKeySpec(point, spec));
+    }
+
+    private static PublicKey rs256(Map<?, ?> key) throws GeneralSecurityException, WebAuthnException {
+        if (!Long.valueOf(3).equals(key.get(1L)) || !(key.get(-1L) instanceof byte[] n)
+                || !(key.get(-2L) instanceof byte[] e) || n.length < 256 || n.length > 512 || e.length > 8) {
+            throw new WebAuthnException("invalid RSA key");
+        }
+        return KeyFactory.getInstance("RSA").generatePublic(
+                new RSAPublicKeySpec(new BigInteger(1, n), new BigInteger(1, e)));
+    }
+
+    private static PublicKey ed25519(Map<?, ?> key) throws GeneralSecurityException, WebAuthnException {
+        if (!Long.valueOf(1).equals(key.get(1L)) || !Long.valueOf(6).equals(key.get(-1L))
+                || !(key.get(-2L) instanceof byte[] x) || x.length != 32) {
+            throw new WebAuthnException("invalid Ed25519 key");
+        }
+        byte[] reversed = new byte[32];
+        for (int i = 0; i < 32; i++) {
+            reversed[i] = x[31 - i];
+        }
+        boolean odd = (reversed[0] & 0x80) != 0;
+        reversed[0] &= 0x7f;
+        EdECPoint point = new EdECPoint(odd, new BigInteger(1, reversed));
+        return KeyFactory.getInstance("Ed25519").generatePublic(
+                new EdECPublicKeySpec(NamedParameterSpec.ED25519, point));
     }
 
     private static Map<?, ?> coseMap(byte[] cose) throws WebAuthnException {

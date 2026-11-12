@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
@@ -40,7 +41,7 @@ public class OidcClientTest {
             KeyPairGenerator generator = KeyPairGenerator.getInstance("EC");
             generator.initialize(new ECGenParameterSpec("secp256r1"));
             keys = generator.generateKeyPair();
-            http = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+            http = HttpServer.create(new InetSocketAddress(InetAddress.getByAddress(new byte[] {127, 0, 0, 1}), 0), 0);
             issuer = "http://127.0.0.1:" + http.getAddress().getPort();
             http.createContext("/.well-known/openid-configuration", ex -> reply(ex, "{\"issuer\":\"" + issuer
                     + "\",\"authorization_endpoint\":\"" + issuer + "/authorize\",\"token_endpoint\":\"" + issuer

@@ -734,7 +734,7 @@ class ApiServerTest {
     }
 
     private static int rawStatus(TestApi api, String method, String target, String token) throws Exception {
-        try (Socket socket = new Socket("127.0.0.1", api.address.getPort())) {
+        try (Socket socket = new Socket(java.net.InetAddress.getAllByName("127.0.0.1")[0], api.address.getPort())) {
             socket.setSoTimeout(10_000);
             String request = method + " " + target + " HTTP/1.1\r\nHost: 127.0.0.1\r\n"
                     + (token == null ? "" : "Authorization: Bearer " + token + "\r\n") + "Connection: close\r\n\r\n";
@@ -771,7 +771,7 @@ class ApiServerTest {
         java.util.Set<Thread> before = apiThreads();
         try (var config = net.vectolyn.cloud.config.ConfigService.open(CloudHome.of(home));
              java.net.ServerSocket taken = new java.net.ServerSocket(0, 1,
-                     java.net.InetAddress.getByName("127.0.0.1"))) {
+                     java.net.InetAddress.getAllByName("127.0.0.1")[0])) {
             var tokens = net.vectolyn.cloud.api.auth.ApiTokens.open(CloudHome.of(home));
             ApiServer server = ApiServer.builder(config, new FakeBackend(), tokens)
                     .settings(new ApiSettings("127.0.0.1", taken.getLocalPort(), java.util.Optional.empty(), List.of(),

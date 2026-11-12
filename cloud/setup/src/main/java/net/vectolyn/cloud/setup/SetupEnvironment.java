@@ -13,6 +13,7 @@ import java.util.OptionalLong;
 import net.vectolyn.cloud.config.model.Language;
 import net.vectolyn.cloud.database.managed.ManagedPlatform;
 import net.vectolyn.cloud.download.provider.TargetPlatform;
+import org.jspecify.annotations.Nullable;
 
 /**
  * What the assistant knows about the machine and the start: the launcher settings (see
@@ -92,10 +93,8 @@ public record SetupEnvironment(Language language, boolean interactive, Optional<
 
     /** The launcher's Pterodactyl rule on {@code env}. */
     public static boolean isPterodactyl(Map<String, String> env) {
-        if (present(env.get("P_SERVER_UUID"))) {
-            return true;
-        }
-        return present(env.get("STARTUP")) && present(env.get("SERVER_MEMORY")) && present(env.get("SERVER_PORT"));
+        return present(env.get("P_SERVER_UUID"))
+                || (present(env.get("STARTUP")) && present(env.get("SERVER_MEMORY")) && present(env.get("SERVER_PORT")));
     }
 
     /** A copy with another language (tests, and the language the operator picked). */
@@ -110,11 +109,11 @@ public record SetupEnvironment(Language language, boolean interactive, Optional<
                 serverMemory, serverPort, totalMemory, value);
     }
 
-    private static boolean present(String value) {
+    private static boolean present(@Nullable String value) {
         return value != null && !value.isBlank();
     }
 
-    private static OptionalLong positiveLong(String value) {
+    private static OptionalLong positiveLong(@Nullable String value) {
         if (value == null || !value.matches("[0-9]{1,9}")) {
             return OptionalLong.empty();
         }
@@ -126,7 +125,7 @@ public record SetupEnvironment(Language language, boolean interactive, Optional<
         }
     }
 
-    private static OptionalInt port(String value) {
+    private static OptionalInt port(@Nullable String value) {
         if (value == null || !value.matches("[0-9]{1,5}")) {
             return OptionalInt.empty();
         }

@@ -4,6 +4,7 @@ package net.vectolyn.cloud.api.backend;
 
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import java.util.Objects;
+import org.jspecify.annotations.Nullable;
 
 /**
  * One service as the API shows it. cloud-node builds it from its {@code ServiceInfo} and the last
@@ -27,8 +28,8 @@ import java.util.Objects;
 @JsonPropertyOrder({"id", "group", "task", "index", "mode", "state", "port", "pid", "started-at", "exit-code",
         "restart-attempts", "players-online", "max-players"})
 public record ServiceView(String id, String group, String task, int index, String mode, String state, int port,
-                          Long pid, String startedAt, Integer exitCode, int restartAttempts, Integer playersOnline,
-                          Integer maxPlayers) {
+                          @Nullable Long pid, @Nullable String startedAt, @Nullable Integer exitCode, int restartAttempts,
+                          @Nullable Integer playersOnline, @Nullable Integer maxPlayers) {
 
     /** Checks the required values. */
     public ServiceView {

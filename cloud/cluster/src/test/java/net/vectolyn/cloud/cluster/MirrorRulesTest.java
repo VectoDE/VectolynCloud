@@ -78,7 +78,7 @@ class MirrorRulesTest {
     void unsafePathsAreRefused() {
         for (String path : List.of("../evil", "a/../../evil", "/etc/passwd", "a\\b", "C:/x", "a/./b", "a//b", "",
                 "CON", "nul.txt", "a/LPT1", "trailing.", "trailing ", "tab\there", "nul\0byte", "a|b", "x".repeat(121),
-                "a/".repeat(16) + "b", "ü".repeat(121), "bidi‮txt.exe", "zero​width", "isolate⁦x",
+                "a/".repeat(16) + "b", "ü".repeat(121), "bidi\u202etxt.exe", "zero​width", "isolate\u2066x",
                 "c1\u009Bcontrol", "del\u007f", "privateuse", "nbsp x", "line break", "bom﻿",
                 "broken\uD800surrogate")) {
             assertFalse(MirrorPaths.isSafePath(path), path);

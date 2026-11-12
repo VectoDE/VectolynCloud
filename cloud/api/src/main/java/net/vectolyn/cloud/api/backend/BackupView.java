@@ -5,6 +5,7 @@ package net.vectolyn.cloud.api.backend;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import java.util.List;
 import java.util.Objects;
+import org.jspecify.annotations.Nullable;
 
 /**
  * One backup as the API shows it, built by {@link BackupServiceAccess} from {@code BackupInfo} of
@@ -22,8 +23,9 @@ import java.util.Objects;
  */
 @JsonPropertyOrder({"id", "created-at", "reason", "services", "database", "size-bytes", "readable", "problem",
         "warnings"})
-public record BackupView(String id, String createdAt, String reason, List<String> services, boolean database,
-                         long sizeBytes, boolean readable, String problem, List<String> warnings) {
+public record BackupView(String id, @Nullable String createdAt, @Nullable String reason, List<String> services,
+                         boolean database, long sizeBytes, boolean readable, @Nullable String problem,
+                         List<String> warnings) {
 
     /** Copies the lists. */
     public BackupView {

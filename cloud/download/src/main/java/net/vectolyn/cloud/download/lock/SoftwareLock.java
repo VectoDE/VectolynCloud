@@ -109,11 +109,12 @@ public final class SoftwareLock {
      */
     public SoftwareLock rollback(String name) {
         LockedArtifact current = entries.get(name);
-        if (current == null || current.previous() == null) {
+        LockedArtifact previous = current == null ? null : current.previous();
+        if (current == null || previous == null) {
             throw new IllegalStateException("nothing to roll back for " + name);
         }
         Map<String, LockedArtifact> copy = new TreeMap<>(entries);
-        copy.put(name, current.previous().withPrevious(current));
+        copy.put(name, previous.withPrevious(current));
         return new SoftwareLock(copy);
     }
 

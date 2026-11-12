@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import net.vectolyn.cloud.config.io.AtomicFileWriter;
+import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -100,7 +101,7 @@ public final class IpBanStore {
      * @return the entry
      * @throws IOException if the list cannot be written
      */
-    public synchronized IpBan ban(String address, String reason, Duration duration) throws IOException {
+    public synchronized IpBan ban(String address, String reason, @Nullable Duration duration) throws IOException {
         Instant now = clock.instant();
         IpBan ban = new IpBan(address, reason, now, duration == null ? null : now.plus(duration));
         if (bans.size() >= MAX_ENTRIES && !bans.containsKey(ban.address())) {
@@ -195,8 +196,9 @@ public final class IpBanStore {
             node.put("address", ban.address());
             node.put("reason", ban.reason());
             node.put("created", ban.createdAt().getEpochSecond());
-            if (ban.expiresAt() != null) {
-                node.put("expires", ban.expiresAt().getEpochSecond());
+            Instant expires = ban.expiresAt();
+            if (expires != null) {
+                node.put("expires", expires.getEpochSecond());
             }
         }
         return JSON.writeValueAsBytes(root);

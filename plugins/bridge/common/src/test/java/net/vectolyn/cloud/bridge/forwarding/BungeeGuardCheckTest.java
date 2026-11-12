@@ -94,7 +94,7 @@ class BungeeGuardCheckTest {
 
     @Test
     void aTokenWithJsonEscapesAsVelocityWritesItIsAccepted() {
-        // Velocity's Gson escapes '=' as \u003d (HTML-safe mode) and adds an empty signature.
+        // Velocity's Gson escapes '=' as a JSON unicode escape (HTML-safe mode) and adds an empty signature.
         String escaped = Handshakes.SECRET.replace("=", "\\u003d");
         String handshake = Handshakes.forwarded("[{\"name\":\"bungeeguard-token\",\"value\":\"" + escaped
                 + "\",\"signature\":\"\"}]");

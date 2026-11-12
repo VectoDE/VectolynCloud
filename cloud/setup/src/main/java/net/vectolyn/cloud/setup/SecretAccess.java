@@ -14,6 +14,7 @@ import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 import net.vectolyn.cloud.config.secret.OwnerOnlyPermissions;
 import net.vectolyn.cloud.console.Text;
 
@@ -37,6 +38,8 @@ public final class SecretAccess {
     static final long WHOAMI_TIMEOUT_MILLIS = 10_000;
     /** Most output read from {@code whoami}; the group list is a few kilobytes. */
     static final int WHOAMI_MAX_OUTPUT = 256 * 1024;
+
+    private static final Pattern LINE_BREAK = Pattern.compile("\\R");
 
     private SecretAccess() {
     }
@@ -76,7 +79,7 @@ public final class SecretAccess {
     public static String administratorsGroup(Optional<String> groupList) {
         String name = ADMINISTRATORS_FALLBACK;
         if (groupList.isPresent()) {
-            for (String line : groupList.get().split("\\R")) {
+            for (String line : LINE_BREAK.splitAsStream(groupList.get()).toList()) {
                 List<String> fields = csv(line);
                 if (fields.size() >= 3 && fields.get(2).equals(ADMINISTRATORS_SID) && isPrintable(fields.get(0))) {
                     name = fields.get(0);
@@ -157,7 +160,8 @@ public final class SecretAccess {
         java.util.ArrayList<String> fields = new java.util.ArrayList<>();
         StringBuilder field = new StringBuilder();
         boolean quoted = false;
-        for (int i = 0; i < line.length(); i++) {
+        int i = 0;
+        while (i < line.length()) {
             char c = line.charAt(i);
             if (quoted) {
                 if (c == '"' && i + 1 < line.length() && line.charAt(i + 1) == '"') {
@@ -176,6 +180,7 @@ public final class SecretAccess {
             } else {
                 field.append(c);
             }
+            i++;
         }
         fields.add(field.toString());
         return fields;

@@ -261,7 +261,7 @@ final class HomeLayoutMigration {
         List<String> names = new ArrayList<>();
         try (DirectoryStream<Path> children = Files.newDirectoryStream(home)) {
             for (Path child : children) {
-                String name = child.getFileName().toString();
+                String name = Objects.requireNonNull(child.getFileName(), "file name").toString();
                 if (pattern.matcher(name).matches() && Files.isRegularFile(child, LinkOption.NOFOLLOW_LINKS)) {
                     names.add(name);
                 }
@@ -276,7 +276,7 @@ final class HomeLayoutMigration {
         List<String> servers = new ArrayList<>();
         try (DirectoryStream<Path> children = Files.newDirectoryStream(home)) {
             for (Path child : children) {
-                String name = child.getFileName().toString();
+                String name = Objects.requireNonNull(child.getFileName(), "file name").toString();
                 if (RESERVED.contains(name) || name.startsWith(".")
                         || !Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)
                         || !name.matches(net.vectolyn.cloud.config.validation.ConfigNames.TEMPLATE)) {
@@ -300,7 +300,7 @@ final class HomeLayoutMigration {
         Map<Integer, Path> result = new TreeMap<>();
         try (DirectoryStream<Path> children = Files.newDirectoryStream(server)) {
             for (Path child : children) {
-                Matcher m = RUNTIME.matcher(child.getFileName().toString());
+                Matcher m = RUNTIME.matcher(Objects.requireNonNull(child.getFileName(), "file name").toString());
                 if (m.matches() && Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)) {
                     result.put(m.group(1) == null ? 1 : runtimeIndex(m.group(1)), child);
                 }
@@ -363,7 +363,7 @@ final class HomeLayoutMigration {
         }
         String name = CloudHome.BACKUPS_DIR + "/" + BACKUP_PREFIX + stamp.apply(Instant.now());
         Path target = home.resolve(name);
-        Path partial = target.resolveSibling(target.getFileName() + PARTIAL);
+        Path partial = target.resolveSibling(Objects.requireNonNull(target.getFileName(), "file name") + PARTIAL);
         deleteTree(partial);
         Files.createDirectories(partial);
         OwnerOnlyPermissions.restrictDirectory(partial);
@@ -393,7 +393,7 @@ final class HomeLayoutMigration {
             copyTree(states, partial.resolve(CloudHome.STATE_DIR).resolve(ServiceStateStore.FILE_NAME));
         }
         Files.move(partial, target, StandardCopyOption.ATOMIC_MOVE);
-        Files.createDirectories(progress.getParent());
+        Files.createDirectories(Objects.requireNonNull(progress.getParent(), "progress directory"));
         Files.writeString(progress, name + "\n", StandardCharsets.UTF_8);
         return name;
     }
@@ -438,7 +438,7 @@ final class HomeLayoutMigration {
             }
         }
         for (Map.Entry<Integer, Path> runtime : runtimes(folder).entrySet()) {
-            String name = runtime.getValue().getFileName().toString();
+            String name = Objects.requireNonNull(runtime.getValue().getFileName(), "file name").toString();
             if (database && runtime.getKey() == 1) {
                 move(runtime.getValue(), home.resolve(CloudHome.DATABASE_DIR));
             } else if (groups != null && groups.size() == 1 && !database) {
@@ -490,11 +490,11 @@ final class HomeLayoutMigration {
         }
         String from = relative(source);
         String to = relative(target);
-        Path partial = target.resolveSibling(target.getFileName() + PARTIAL);
+        Path partial = target.resolveSibling(Objects.requireNonNull(target.getFileName(), "file name") + PARTIAL);
         deleteTree(partial);
         boolean sourceDir = Files.isDirectory(source, LinkOption.NOFOLLOW_LINKS);
         if (!Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
-            Files.createDirectories(target.getParent());
+            Files.createDirectories(Objects.requireNonNull(target.getParent(), "target directory"));
             try {
                 Files.move(source, target, StandardCopyOption.ATOMIC_MOVE);
             } catch (AtomicMoveNotSupportedException e) {
@@ -514,7 +514,7 @@ final class HomeLayoutMigration {
             }
             children.sort(null);
             for (Path child : children) {
-                move(child, target.resolve(child.getFileName().toString()));
+                move(child, target.resolve(Objects.requireNonNull(child.getFileName(), "file name").toString()));
             }
             Files.delete(source);
             return;
@@ -535,7 +535,7 @@ final class HomeLayoutMigration {
         List<String> left = new ArrayList<>();
         try (DirectoryStream<Path> children = Files.newDirectoryStream(folder)) {
             for (Path child : children) {
-                left.add(child.getFileName().toString());
+                left.add(Objects.requireNonNull(child.getFileName(), "file name").toString());
             }
         }
         left.remove(BuiltInTemplates.STAGING);
@@ -553,14 +553,14 @@ final class HomeLayoutMigration {
 
     private void writeMarker() throws IOException {
         Path marker = home.resolve(MARKER);
-        Files.createDirectories(marker.getParent());
+        Files.createDirectories(Objects.requireNonNull(marker.getParent(), "marker directory"));
         Files.writeString(marker, LAYOUT_VERSION + "\n", StandardCharsets.UTF_8);
     }
 
     /** Copies a file or folder; links are copied as links, never followed. */
     private static void copyTree(Path source, Path target) throws IOException {
         if (!Files.isDirectory(source, LinkOption.NOFOLLOW_LINKS)) {
-            Files.createDirectories(target.getParent());
+            Files.createDirectories(Objects.requireNonNull(target.getParent(), "target directory"));
             Files.copy(source, target, LinkOption.NOFOLLOW_LINKS, StandardCopyOption.COPY_ATTRIBUTES);
             return;
         }

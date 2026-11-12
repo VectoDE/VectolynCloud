@@ -70,10 +70,8 @@ public final class GroupRules {
             return false;
         }
         Optional<ServerKind> kind = switchOf(group);
-        if (kind.isEmpty()) {
-            return true;
-        }
-        return kind.get() != ServerKind.DATABASE && (wanted == null || wanted.isWanted(kind.get()));
+        return kind.isEmpty()
+                || (kind.get() != ServerKind.DATABASE && (wanted == null || wanted.isWanted(kind.get())));
     }
 
     /**

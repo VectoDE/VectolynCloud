@@ -166,7 +166,7 @@ public final class ApiTls {
                     + " in secrets/vectolyn.env.");
         }
         Path target = keystore.toAbsolutePath();
-        Path parent = target.getParent();
+        Path parent = Objects.requireNonNull(target.getParent(), "keystore parent folder");
         Files.createDirectories(parent);
         List<String> san = new ArrayList<>();
         for (String name : names) {

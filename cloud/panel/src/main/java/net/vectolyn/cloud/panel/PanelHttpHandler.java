@@ -28,10 +28,12 @@ import net.vectolyn.cloud.api.http.ApiException;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import net.vectolyn.cloud.panel.http.RequestTarget;
 import net.vectolyn.cloud.panel.http.Responses;
 import net.vectolyn.cloud.panel.web.WebAssets;
+import org.jspecify.annotations.Nullable;
 
 /**
  * One connection of the panel server. Every request is checked in this order: decodable (400),
@@ -75,11 +77,12 @@ final class PanelHttpHandler extends SimpleChannelInboundHandler<FullHttpRequest
             send(ctx, Responses.text(400, "The request target breaks a rule of the panel.", server.secure()), false);
             return;
         }
-        if (target.get().path().equals(PanelApi.EVENTS) && server.api() != null) {
+        PanelApi api = server.api();
+        if (target.get().path().equals(PanelApi.EVENTS) && api != null) {
             upgrade(ctx, request, target.get());
             return;
         }
-        if (target.get().path().startsWith("/api/") && server.api() != null) {
+        if (target.get().path().startsWith("/api/") && api != null) {
             // Password hashing, file writes and calls to a sign-on provider block: they run on a
             // virtual thread, and the connection reads nothing else until the answer is out.
             int q = request.uri().indexOf('?');
@@ -93,7 +96,7 @@ final class PanelHttpHandler extends SimpleChannelInboundHandler<FullHttpRequest
                 server.executor().execute(() -> {
                     FullHttpResponse response;
                     try {
-                        response = server.api().handle(call);
+                        response = api.handle(call);
                     } catch (RuntimeException e) {
                         LOG.log(System.Logger.Level.ERROR, "Panel endpoint failed: {0}", e.getClass().getName());
                         response = Responses.error(500, "internal", "The panel failed.", server.secure());
@@ -116,6 +119,7 @@ final class PanelHttpHandler extends SimpleChannelInboundHandler<FullHttpRequest
      * before the handshake, the subscription right after it. A refused subscription closes the
      * stream with {@code 1008} (rights) or {@code 1013} (too many streams).
      */
+    @SuppressWarnings("FutureReturnValueIgnored")
     private void upgrade(ChannelHandlerContext ctx, FullHttpRequest request, RequestTarget target) {
         if (!request.method().equals(HttpMethod.GET)
                 || !"websocket".equalsIgnoreCase(request.headers().get(HttpHeaderNames.UPGRADE))) {
@@ -127,11 +131,12 @@ final class PanelHttpHandler extends SimpleChannelInboundHandler<FullHttpRequest
         PanelApi.Call call = new PanelApi.Call("GET", target.path(), target.query(),
                 q < 0 ? "" : request.uri().substring(q + 1), new byte[0], request.headers().copy(),
                 PanelServer.clientKey(ctx.channel().remoteAddress()));
+        PanelApi events = Objects.requireNonNull(server.api(), "api");
         PanelApi.StreamGrant grant;
         try {
-            grant = server.api().openStream(call);
+            grant = events.openStream(call);
         } catch (PanelApi.Refusal r) {
-            send(ctx, server.api().refusal(r), false);
+            send(ctx, events.refusal(r), false);
             return;
         }
         String host = request.headers().get(HttpHeaderNames.HOST);
@@ -151,7 +156,7 @@ final class PanelHttpHandler extends SimpleChannelInboundHandler<FullHttpRequest
                 return;
             }
             try {
-                server.api().subscribe(ctx.channel(), grant);
+                events.subscribe(ctx.channel(), grant);
             } catch (ApiException e) {
                 ctx.writeAndFlush(new CloseWebSocketFrame(e.status() == 503 ? WebSocketCloseStatus.TRY_AGAIN_LATER
                         : WebSocketCloseStatus.POLICY_VIOLATION, e.code())).addListener(ChannelFutureListener.CLOSE);
@@ -213,8 +218,13 @@ final class PanelHttpHandler extends SimpleChannelInboundHandler<FullHttpRequest
             return notModified;
         }
         String accept = requestHeaders.get(HttpHeaderNames.ACCEPT_ENCODING, "");
-        boolean gzip = file.gzip() != null && accept.toLowerCase(Locale.ROOT).contains("gzip");
-        byte[] body = gzip ? file.gzip() : file.body();
+        byte @Nullable [] compressed = file.gzip();
+        byte[] body = file.body();
+        boolean gzip = false;
+        if (compressed != null && accept.toLowerCase(Locale.ROOT).contains("gzip")) {
+            body = compressed;
+            gzip = true;
+        }
         FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.valueOf(status),
                 head ? Unpooled.EMPTY_BUFFER : Unpooled.wrappedBuffer(body));
         HttpHeaders h = response.headers();
@@ -237,15 +247,15 @@ final class PanelHttpHandler extends SimpleChannelInboundHandler<FullHttpRequest
         if (file.gzip() != null) {
             h.set(HttpHeaderNames.VARY, "Accept-Encoding");
         }
-        h.set("Content-Security-Policy", file.csp() != null ? file.csp()
-                : "default-src 'none'; frame-ancestors 'none'");
+        String csp = file.csp();
+        h.set("Content-Security-Policy", csp != null ? csp : "default-src 'none'; frame-ancestors 'none'");
         Responses.common(h, server.secure());
     }
 
     /** Whether an {@code If-None-Match} list names the ETag (weak comparison, as RFC 9110 asks). */
     static boolean matches(String ifNoneMatch, String etag) {
         String strong = etag.startsWith("W/") ? etag.substring(2) : etag;
-        for (String candidate : ifNoneMatch.split(",")) {
+        for (String candidate : ifNoneMatch.split(",", -1)) {
             String value = candidate.strip();
             if (value.equals("*")) {
                 return true;
@@ -278,7 +288,9 @@ final class PanelHttpHandler extends SimpleChannelInboundHandler<FullHttpRequest
         }
     }
 
+    // Netty closes are fire-and-forget; the channel's close future reports the end to the pipeline.
     @Override
+    @SuppressWarnings("FutureReturnValueIgnored")
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
         if (evt instanceof IdleStateEvent) {
             ctx.close();
@@ -288,6 +300,7 @@ final class PanelHttpHandler extends SimpleChannelInboundHandler<FullHttpRequest
     }
 
     @Override
+    @SuppressWarnings("FutureReturnValueIgnored")
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         LOG.log(System.Logger.Level.DEBUG, "Panel connection failed: {0}", cause.getClass().getSimpleName());
         ctx.close();

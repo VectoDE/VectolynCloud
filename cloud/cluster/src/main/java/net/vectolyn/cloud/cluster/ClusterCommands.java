@@ -144,7 +144,7 @@ public final class ClusterCommands {
             try {
                 ttl = TimeSpan.parse(lifetime.get()).duration();
             } catch (IllegalArgumentException e) {
-                throw new CommandException(Text.of("The lifetime must be 1m to 24h, for example 30m.",
+                throw new CommandException(e, Text.of("The lifetime must be 1m to 24h, for example 30m.",
                         "Die Laufzeit muss 1m bis 24h sein, zum Beispiel 30m."));
             }
         }
@@ -164,13 +164,13 @@ public final class ClusterCommands {
     }
 
     private void listTokens(ConsoleOutput out) throws Exception {
-        List<JoinTokens.Info> all = call(cluster::tokens);
+        List<JoinTokens.TokenInfo> all = call(cluster::tokens);
         if (all.isEmpty()) {
             out.println(Text.of("No open join tokens.", "Keine offenen Beitritts-Tokens."));
             return;
         }
         out.heading(Text.of("Join tokens", "Beitritts-Tokens").get(out.language()));
-        for (JoinTokens.Info token : all) {
+        for (JoinTokens.TokenInfo token : all) {
             out.println("  " + token.id() + "  " + token.node() + "  " + token.expiresAt());
         }
     }
@@ -197,10 +197,7 @@ public final class ClusterCommands {
         int port = port(head.substring(colon + 1));
         String target = host;
         out.println(Text.of("Joining %1$s ...", "Trete %1$s bei ..."), head);
-        call(() -> {
-            cluster.join(target, port, headNode, token, pin);
-            return null;
-        });
+        run(() -> cluster.join(target, port, headNode, token, pin));
         out.success(Text.of("Joined the cluster of %1$s.", "Dem Cluster von %1$s beigetreten."),
                 cluster.status().head().map(NodeId::value).orElse("?"));
     }
@@ -240,7 +237,7 @@ public final class ClusterCommands {
         });
         if (status.role() == ClusterService.Role.HEAD) {
             out.println(Text.of("  Revoked:     %1$s", "  Widerrufen:  %1$s"), status.revoked());
-            java.util.Set<net.vectolyn.protocol.NodeId> lost = cluster.lostMembers();
+            java.util.Set<NodeId> lost = cluster.lostMembers();
             for (ClusterService.MemberStatus member : status.members()) {
                 String state = member.connected() ? "connected" : lost.contains(member.id()) ? "lost" : "offline";
                 out.println("  - " + member.id() + "  " + state + "  " + member.joinedAt());
@@ -258,8 +255,9 @@ public final class ClusterCommands {
                     "Der Abgleich läuft im Hintergrund weiter; „cluster status“ zeigt, wann er fertig ist."));
             return;
         } catch (ExecutionException e) {
-            throw new CommandException(Text.of("Sync failed: %1$s", "Abgleich fehlgeschlagen: %1$s"),
-                    String.valueOf(e.getCause().getMessage()));
+            Throwable cause = e.getCause() == null ? e : e.getCause();
+            throw new CommandException(e, Text.of("Sync failed: %1$s", "Abgleich fehlgeschlagen: %1$s"),
+                    String.valueOf(cause.getMessage()));
         }
         ClusterService.MirrorStatus mirror = cluster.status().mirror().orElseThrow();
         if (head) {
@@ -275,10 +273,7 @@ public final class ClusterCommands {
 
     private void remove(ConsoleOutput out, String nodeId) throws Exception {
         NodeId node = nodeId(nodeId);
-        call(() -> {
-            cluster.remove(node);
-            return null;
-        });
+        run(() -> cluster.remove(node));
         out.success(Text.of("%1$s removed; its certificate is revoked.", "%1$s entfernt; sein Zertifikat ist widerrufen."),
                 node);
     }
@@ -287,7 +282,7 @@ public final class ClusterCommands {
         try {
             return new NodeId(text);
         } catch (IllegalArgumentException e) {
-            throw new CommandException(Text.of("Not a valid node id.", "Keine gültige Node-ID."));
+            throw new CommandException(e, Text.of("Not a valid node id.", "Keine gültige Node-ID."));
         }
     }
 
@@ -308,11 +303,24 @@ public final class ClusterCommands {
         try {
             return action.run();
         } catch (ClusterException e) {
-            throw new CommandException(Text.of("%1$s", "%2$s"), e.message(net.vectolyn.cloud.config.model.Language.EN),
+            throw new CommandException(e, Text.of("%1$s", "%2$s"), e.message(net.vectolyn.cloud.config.model.Language.EN),
                     e.message(net.vectolyn.cloud.config.model.Language.DE));
         } catch (IOException e) {
-            throw new CommandException(Text.of("Cluster: %1$s", "Cluster: %1$s"), String.valueOf(e.getMessage()));
+            throw new CommandException(e, Text.of("Cluster: %1$s", "Cluster: %1$s"), String.valueOf(e.getMessage()));
         }
+    }
+
+    /** Like {@link #call}, for an action without a result. */
+    private static void run(VoidAction action) throws CommandException {
+        call(() -> {
+            action.run();
+            return Boolean.TRUE;
+        });
+    }
+
+    @FunctionalInterface
+    private interface VoidAction {
+        void run() throws ClusterException, IOException;
     }
 
     @FunctionalInterface

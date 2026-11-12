@@ -38,6 +38,7 @@ import net.vectolyn.cloud.node.service.ServiceManager;
 import net.vectolyn.cloud.node.service.ServicePlanner;
 import net.vectolyn.cloud.node.service.ServiceState;
 import net.vectolyn.protocol.ServiceId;
+import org.jspecify.annotations.Nullable;
 
 /**
  * What cloud-backup needs from the node ({@code docs/cloud/backup.md#what-cloud-node-provides}):
@@ -121,7 +122,7 @@ public final class NodeBackups implements BackupTargets, ServiceControl, Databas
         CountDownLatch confirmed = new CountDownLatch(1);
         ServiceListener listener = new ServiceListener() {
             @Override
-            public void stateChanged(ServiceInfo service, ServiceState previous) {
+            public void stateChanged(ServiceInfo service, @Nullable ServiceState previous) {
             }
 
             @Override
@@ -153,7 +154,7 @@ public final class NodeBackups implements BackupTargets, ServiceControl, Databas
             ServiceManager.Hold hold = services.holdStopped(id);
             return hold::close;
         } catch (ServiceException e) {
-            throw new BackupException(BackupException.Reason.SERVICE_RUNNING, e.getMessage());
+            throw new BackupException(BackupException.Reason.SERVICE_RUNNING, String.valueOf(e.getMessage()), e);
         }
     }
 

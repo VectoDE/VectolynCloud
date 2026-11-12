@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.util.Map;
 import net.vectolyn.cloud.config.error.ConfigException;
 import net.vectolyn.cloud.config.secret.EnvFormatException;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Entry point of the node. {@code cloud-launcher} loads this class by name once the Java version,
@@ -18,7 +19,7 @@ import net.vectolyn.cloud.config.secret.EnvFormatException;
  */
 public final class NodeMain {
 
-    private static volatile CloudNode current;
+    private static volatile @Nullable CloudNode current;
 
     private NodeMain() {
     }
@@ -106,7 +107,7 @@ public final class NodeMain {
      *
      * @return the node, or {@code null} before the start
      */
-    public static CloudNode current() {
+    public static @Nullable CloudNode current() {
         return current;
     }
 }

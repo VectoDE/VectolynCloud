@@ -27,7 +27,7 @@ public record TimeSpan(Duration duration) {
     /** Checks the range. */
     public TimeSpan {
         Objects.requireNonNull(duration, "duration");
-        if (duration.isNegative() || duration.compareTo(MAX) > 0 || duration.getNano() != 0) {
+        if (duration.isNegative() || duration.compareTo(MAX) > 0 || duration.toNanosPart() != 0) {
             throw new IllegalArgumentException("time span out of range");
         }
     }
@@ -56,7 +56,7 @@ public record TimeSpan(Duration duration) {
     @JsonValue
     @Override
     public String toString() {
-        long seconds = duration.getSeconds();
+        long seconds = duration.toSeconds();
         if (seconds != 0 && seconds % 3600 == 0) {
             return seconds / 3600 + "h";
         }

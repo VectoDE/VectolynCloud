@@ -178,12 +178,12 @@ class ServiceCoreUnitTest {
         RestartConfig restart = new RestartConfig(true, 10, TimeSpan.parse("5s"), TimeSpan.parse("1m"));
         List<Long> seconds = new ArrayList<>();
         for (int attempt = 1; attempt <= 6; attempt++) {
-            seconds.add(ServicePlanner.backoff(restart, attempt).getSeconds());
+            seconds.add(ServicePlanner.backoff(restart, attempt).toSeconds());
         }
         assertEquals(List.of(5L, 10L, 20L, 40L, 60L, 60L), seconds);
         assertEquals(Duration.ZERO, ServicePlanner.backoff(
                 new RestartConfig(true, 3, TimeSpan.parse("0s"), TimeSpan.parse("0s")), 3));
-        assertEquals(Duration.ofSeconds(300), ServicePlanner.backoff(RestartConfig.defaults(), 1000));
+        assertEquals(Duration.ofMinutes(5), ServicePlanner.backoff(RestartConfig.defaults(), 1000));
     }
 
     @Test

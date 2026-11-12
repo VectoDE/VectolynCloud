@@ -30,6 +30,7 @@ import net.vectolyn.cloud.node.service.ServiceInfo;
 import net.vectolyn.cloud.node.service.ServicePlanner;
 import net.vectolyn.cloud.node.service.ServiceState;
 import net.vectolyn.protocol.ServiceId;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The pure decisions of the autoscaler, without any I/O or clock of its own: which task gets
@@ -336,7 +337,7 @@ public final class ScalingPlanner {
      * minimum, so the other rules apply. A start above {@code min-services} itself needs the memory
      * budget; without it the task gets a {@link Held} instead.
      */
-    private static List<Decision> fillToMinimum(Input in, String name, TaskConfig task, GroupConfig group) {
+    private static @Nullable List<Decision> fillToMinimum(Input in, String name, TaskConfig task, GroupConfig group) {
         ScalingConfig scaling = task.scaling();
         int minimum = scaling.minServicesAt(in.localNow());
         List<ServiceInfo> mine = in.services().stream().filter(s -> name.equals(s.task())).toList();
@@ -459,7 +460,7 @@ public final class ScalingPlanner {
      * @param draining services being emptied
      * @return the reason, or empty if no trigger fires
      */
-    public static Optional<Reason> trigger(ScaleUpTriggers triggers, String task, List<ServiceInfo> services,
+    public static Optional<Reason> trigger(@Nullable ScaleUpTriggers triggers, String task, List<ServiceInfo> services,
                                            Signals signals, Set<ServiceId> draining) {
         if (triggers == null) {
             return Optional.empty();
@@ -555,7 +556,7 @@ public final class ScalingPlanner {
      * @return the load
      */
     public static Optional<Load> groupLoad(ConfigSnapshot snapshot, String group, List<ServiceInfo> services,
-                                           Signals signals, Set<ServiceId> draining, ServiceId leaveOut) {
+                                           Signals signals, Set<ServiceId> draining, @Nullable ServiceId leaveOut) {
         long players = 0;
         long slots = 0;
         for (ServiceInfo s : services) {
@@ -658,7 +659,7 @@ public final class ScalingPlanner {
     public static long budget(ConfigSnapshot snapshot, String node, Memory memory) {
         Optional<NodeConfig> config = snapshot.nodes().find(node);
         if (config.isPresent() && config.get().maxMemory() != null) {
-            return Math.min(config.get().maxMemory().megabytes() * 1024L * 1024L, memory.total());
+            return Math.min(Objects.requireNonNull(config.get().maxMemory(), "maxMemory").megabytes() * 1024L * 1024L, memory.total());
         }
         return Math.max(0, memory.total() - reserve(snapshot, node, memory.nodeHeap()));
     }

@@ -122,78 +122,84 @@ public final class CommandLineParser {
                 i++;
                 continue;
             }
-            if (c == ' ' || c == '\t') {
-                if (inWord) {
-                    addWord(words, current, lenient);
-                    inWord = false;
-                }
-                i++;
-            } else if (c == '\'') {
-                inWord = true;
-                int end = line.indexOf('\'', i + 1);
-                if (end < 0) {
-                    if (!lenient) {
-                        throw new CommandSyntaxException(CommandSyntaxException.Reason.UNCLOSED_QUOTE, i);
+            switch (c) {
+                case ' ', '\t' -> {
+                    if (inWord) {
+                        addWord(words, current, lenient);
+                        inWord = false;
                     }
-                    appendAllowed(current, line, i + 1, n);
-                    i = n;
-                } else {
-                    appendChecked(current, line, i + 1, end, lenient);
-                    i = end + 1;
+                    i++;
                 }
-            } else if (c == '"') {
-                inWord = true;
-                int start = i;
-                i++;
-                boolean closed = false;
-                while (i < n) {
-                    char d = line.charAt(i);
-                    if (d == '"') {
-                        closed = true;
-                        i++;
-                        break;
-                    }
-                    if (isForbidden(d)) {
+                case '\'' -> {
+                    inWord = true;
+                    int end = line.indexOf('\'', i + 1);
+                    if (end < 0) {
                         if (!lenient) {
-                            throw new CommandSyntaxException(CommandSyntaxException.Reason.CONTROL_CHARACTER, i);
+                            throw new CommandSyntaxException(CommandSyntaxException.Reason.UNCLOSED_QUOTE, i);
+                        }
+                        appendAllowed(current, line, i + 1, n);
+                        i = n;
+                    } else {
+                        appendChecked(current, line, i + 1, end, lenient);
+                        i = end + 1;
+                    }
+                }
+                case '"' -> {
+                    inWord = true;
+                    int start = i;
+                    i++;
+                    boolean closed = false;
+                    while (i < n) {
+                        char d = line.charAt(i);
+                        if (d == '"') {
+                            closed = true;
+                            i++;
+                            break;
+                        }
+                        if (isForbidden(d)) {
+                            if (!lenient) {
+                                throw new CommandSyntaxException(CommandSyntaxException.Reason.CONTROL_CHARACTER, i);
+                            }
+                            i++;
+                            continue;
+                        }
+                        if (d == '\\' && i + 1 < n && (line.charAt(i + 1) == '"' || line.charAt(i + 1) == '\\')) {
+                            current.append(line.charAt(i + 1));
+                            i += 2;
+                        } else {
+                            current.append(d);
+                            i++;
+                        }
+                    }
+                    if (!closed && !lenient) {
+                        throw new CommandSyntaxException(CommandSyntaxException.Reason.UNCLOSED_QUOTE, start);
+                    }
+                }
+                case '\\' -> {
+                    if (i + 1 >= n) {
+                        if (!lenient) {
+                            throw new CommandSyntaxException(CommandSyntaxException.Reason.DANGLING_ESCAPE, i);
                         }
                         i++;
                         continue;
                     }
-                    if (d == '\\' && i + 1 < n && (line.charAt(i + 1) == '"' || line.charAt(i + 1) == '\\')) {
-                        current.append(line.charAt(i + 1));
+                    char next = line.charAt(i + 1);
+                    if (isForbidden(next)) {
+                        if (!lenient) {
+                            throw new CommandSyntaxException(CommandSyntaxException.Reason.CONTROL_CHARACTER, i + 1);
+                        }
                         i += 2;
-                    } else {
-                        current.append(d);
-                        i++;
+                        continue;
                     }
-                }
-                if (!closed && !lenient) {
-                    throw new CommandSyntaxException(CommandSyntaxException.Reason.UNCLOSED_QUOTE, start);
-                }
-            } else if (c == '\\') {
-                if (i + 1 >= n) {
-                    if (!lenient) {
-                        throw new CommandSyntaxException(CommandSyntaxException.Reason.DANGLING_ESCAPE, i);
-                    }
-                    i++;
-                    continue;
-                }
-                char next = line.charAt(i + 1);
-                if (isForbidden(next)) {
-                    if (!lenient) {
-                        throw new CommandSyntaxException(CommandSyntaxException.Reason.CONTROL_CHARACTER, i + 1);
-                    }
+                    inWord = true;
+                    current.append(next);
                     i += 2;
-                    continue;
                 }
-                inWord = true;
-                current.append(next);
-                i += 2;
-            } else {
-                inWord = true;
-                current.append(c);
-                i++;
+                default -> {
+                    inWord = true;
+                    current.append(c);
+                    i++;
+                }
             }
         }
         boolean open = inWord;

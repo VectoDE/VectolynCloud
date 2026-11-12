@@ -53,6 +53,7 @@ import net.vectolyn.protocol.message.Response;
 import net.vectolyn.protocol.message.ServiceReady;
 import net.vectolyn.protocol.message.ServiceStatus;
 import net.vectolyn.protocol.message.SessionTicket;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Connects a proxy or server to VectolynCloud. Uses only the JDK (a blocking socket and three
@@ -103,24 +104,24 @@ public final class CloudClient implements AutoCloseable {
     private final Object lifecycle = new Object();
 
     /** The connection being opened or open, authenticated or not; closed by {@link #close()}. */
-    private volatile Connection current;
+    private volatile @Nullable Connection current;
     /** The authenticated connection, or {@code null}. */
-    private volatile Connection connection;
+    private volatile @Nullable Connection connection;
     private volatile boolean ready;
-    private volatile ServiceStatus lastStatus;
+    private volatile @Nullable ServiceStatus lastStatus;
     /** The token for the next connection, from the last accepted one; null before the first. */
-    private volatile AuthToken ticket;
+    private volatile @Nullable AuthToken ticket;
     /**
      * The token presented for the last accepted connection. If that connection broke before our
      * first frame reached the cloud, the cloud rolled back to it, so it is tried once after the
      * ticket was refused.
      */
-    private volatile AuthToken previousTicket;
+    private volatile @Nullable AuthToken previousTicket;
     private volatile boolean useFallback;
     private volatile boolean lastWasFallback;
     private volatile boolean closed;
-    private Thread connector;
-    private Thread shutdownHook;
+    private @Nullable Thread connector;
+    private @Nullable Thread shutdownHook;
 
     private CloudClient(CloudClientSettings settings, SocketFactory socketFactory) {
         this.settings = Objects.requireNonNull(settings, "settings");
@@ -157,6 +158,8 @@ public final class CloudClient implements AutoCloseable {
      *
      * @throws IllegalStateException if the client was closed
      */
+    // ping() handles its own failures; the schedule and the cleanup callbacks need no watching.
+    @SuppressWarnings("FutureReturnValueIgnored")
     public void start() {
         synchronized (lifecycle) {
             if (closed) {
@@ -279,6 +282,8 @@ public final class CloudClient implements AutoCloseable {
      *
      * @throws IllegalArgumentException if the payload exceeds 64 KiB
      */
+    // The callback only cleans up; there is nothing to report from the derived future.
+    @SuppressWarnings("FutureReturnValueIgnored")
     public CompletableFuture<Response> request(ChannelName channel, byte[] payload) {
         Request request = new Request(channel, payload);
         CompletableFuture<Response> future = new CompletableFuture<>();
@@ -354,7 +359,7 @@ public final class CloudClient implements AutoCloseable {
             reader = connector;
         }
         Connection open = connection;
-        boolean saidGoodbye = false;
+        Connection goodbyeTo = null;
         if (open != null) {
             // A cloud that stopped reading leaves a writer blocked in write() with the write lock
             // held; the goodbye would wait for it forever. The watchdog closes the socket after a
@@ -369,17 +374,19 @@ public final class CloudClient implements AutoCloseable {
             }, "vectolyn-cloud-client-close-watchdog");
             watchdog.setDaemon(true);
             watchdog.start();
-            saidGoodbye = send(open, Envelope.of(new Disconnect(Disconnect.Reason.SHUTDOWN)));
+            if (send(open, Envelope.of(new Disconnect(Disconnect.Reason.SHUTDOWN)))) {
+                goodbyeTo = open;
+            }
             watchdog.interrupt();
         }
         if (reader != null) {
             reader.interrupt(); // ends a backoff sleep; a blocking socket read is not interrupted
         }
-        if (saidGoodbye) {
+        if (goodbyeTo != null) {
             // Closing a socket with frames still unread (a Pong, a late message) sends RST instead
             // of FIN, and Windows drops data the cloud has received but not yet read: the goodbye
             // would be lost. So: half-close, and let the reader drain until the cloud closes too.
-            open.shutdownOutput();
+            goodbyeTo.shutdownOutput();
             if (reader != null && reader != Thread.currentThread()) {
                 try {
                     reader.join(GOODBYE_GRACE_MILLIS);
@@ -423,8 +430,8 @@ public final class CloudClient implements AutoCloseable {
         int failures = 0;
         while (!closed) {
             boolean accepted = false;
-            Disconnect.Reason reason = null;
-            Connection attempt = null;
+            Disconnect.@Nullable Reason reason = null;
+            @Nullable Connection attempt = null;
             try {
                 attempt = new Connection(socketFactory.createSocket());
                 current = attempt;
@@ -499,17 +506,20 @@ public final class CloudClient implements AutoCloseable {
         // The start token works for the first connection only; every later one needs the ticket
         // the cloud sent over the connection before (docs/cloud/network.md#security-model).
         lastWasFallback = useFallback && previousTicket != null;
-        AuthToken presented = lastWasFallback ? previousTicket : ticket != null ? ticket : settings.token();
+        AuthToken fallbackTicket = previousTicket;
+        AuthToken currentTicket = ticket;
+        AuthToken presented = lastWasFallback && fallbackTicket != null ? fallbackTicket
+                : currentTicket != null ? currentTicket : settings.token();
         useFallback = false;
         send(attempt, Envelope.of(new Hello(Protocol.PROTOCOL_VERSION, serviceId(), presented)));
-        Message first = attempt.reader.read().message();
+        Message first = attempt.reader().read().message();
         if (!(first instanceof AuthResult result)) {
             throw new ProtocolException("expected AuthResult, got " + first.getClass().getSimpleName());
         }
         if (result.outcome() == AuthResult.Outcome.ACCEPTED) {
             if (result.version().isCompatibleWith(Protocol.PROTOCOL_VERSION) && MessageRegistry.standard()
                     .typeOf(SessionTicket.class).availableIn(Protocol.PROTOCOL_VERSION.negotiate(result.version()))) {
-                Message second = attempt.reader.read().message();
+                Message second = attempt.reader().read().message();
                 if (!(second instanceof SessionTicket next)) {
                     throw new ProtocolException("expected SessionTicket, got " + second.getClass().getSimpleName());
                 }
@@ -519,7 +529,7 @@ public final class CloudClient implements AutoCloseable {
                 ticket = next.ticket();
                 send(attempt, Envelope.of(new Ping(0)));
             }
-            attempt.reader.authenticated();
+            attempt.reader().authenticated();
             attempt.socket.setSoTimeout((int) settings.idleTimeout().toMillis());
         }
         return result;
@@ -539,7 +549,7 @@ public final class CloudClient implements AutoCloseable {
     /** Reads until the cloud sends {@code Disconnect} (returns its reason) or the connection fails. */
     private Disconnect.Reason readLoop(Connection open) throws IOException {
         while (true) {
-            Envelope envelope = open.reader.read();
+            Envelope envelope = open.reader().read();
             switch (envelope.message()) {
                 case Ping ping -> send(open, Envelope.of(new Pong(ping.nonce())));
                 case Disconnect disconnect -> {
@@ -603,7 +613,8 @@ public final class CloudClient implements AutoCloseable {
             } catch (RuntimeException e) {
                 result.completeExceptionally(e);
             }
-            result.orTimeout(settings.requestTimeout().toMillis(), TimeUnit.MILLISECONDS)
+            // The callback logs its own failures and answers the peer; the derived future carries nothing more.
+            var unused = result.orTimeout(settings.requestTimeout().toMillis(), TimeUnit.MILLISECONDS)
                     .whenComplete((response, error) -> {
                         Response answer = response;
                         if (error != null || response == null) {
@@ -642,7 +653,7 @@ public final class CloudClient implements AutoCloseable {
         }
     }
 
-    private void sendQuietly(Connection target, Disconnect.Reason reason) {
+    private void sendQuietly(@Nullable Connection target, Disconnect.Reason reason) {
         if (target != null && !target.socket.isClosed()) {
             send(target, Envelope.of(new Disconnect(reason)));
         }
@@ -723,8 +734,8 @@ public final class CloudClient implements AutoCloseable {
 
         private final Socket socket;
         private final Object writeLock = new Object();
-        private OutputStream out;
-        private FrameReader reader;
+        private @Nullable OutputStream out;
+        private @Nullable FrameReader reader;
 
         Connection(Socket socket) {
             this.socket = socket;
@@ -738,6 +749,14 @@ public final class CloudClient implements AutoCloseable {
             synchronized (writeLock) {
                 out = new BufferedOutputStream(socket.getOutputStream());
             }
+        }
+
+        FrameReader reader() {
+            FrameReader open = reader;
+            if (open == null) {
+                throw new IllegalStateException("connection is not open");
+            }
+            return open;
         }
 
         void write(byte[] frame) throws IOException {

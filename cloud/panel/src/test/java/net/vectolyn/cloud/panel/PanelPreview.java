@@ -29,6 +29,7 @@ import net.vectolyn.cloud.panel.config.PanelConfigLoader;
  * REST API of a node is not there: {@code /api/v1/...} answers with an empty list. Runs until the
  * process is stopped.
  */
+@SuppressWarnings("FutureReturnValueIgnored")
 public final class PanelPreview {
 
     private PanelPreview() {

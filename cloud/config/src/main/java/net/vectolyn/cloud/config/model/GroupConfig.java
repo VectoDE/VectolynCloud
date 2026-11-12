@@ -4,6 +4,7 @@ package net.vectolyn.cloud.config.model;
 
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Content of {@code <home>/groups/<name>.yml}: what a service of the group runs. The group name is
@@ -31,7 +32,7 @@ import java.util.List;
         "drain-timeout", "catalog", "process"})
 public record GroupConfig(int schemaVersion, String template, ServerSoftware software, String minecraftVersion,
                           JavaSelection java, HeapConfig heap, List<CatalogReference> catalog, CombatSystem combat,
-                          ProcessConfig process, Boolean wanted, TimeSpan drainTimeout) {
+                          @Nullable ProcessConfig process, @Nullable Boolean wanted, @Nullable TimeSpan drainTimeout) {
 
     /** Current version of the group file format. */
     public static final int SCHEMA_VERSION = 1;
@@ -63,7 +64,7 @@ public record GroupConfig(int schemaVersion, String template, ServerSoftware sof
     /** A group without its own drain timeout. */
     public GroupConfig(int schemaVersion, String template, ServerSoftware software, String minecraftVersion,
                        JavaSelection java, HeapConfig heap, List<CatalogReference> catalog, CombatSystem combat,
-                       ProcessConfig process, Boolean wanted) {
+                       ProcessConfig process, @Nullable Boolean wanted) {
         this(schemaVersion, template, software, minecraftVersion, java, heap, catalog, combat, process, wanted, null);
     }
 
@@ -83,7 +84,7 @@ public record GroupConfig(int schemaVersion, String template, ServerSoftware sof
     }
 
     /** A copy with another {@code process} section; null removes it. */
-    public GroupConfig withProcess(ProcessConfig value) {
+    public GroupConfig withProcess(@Nullable ProcessConfig value) {
         return new GroupConfig(schemaVersion, template, software, minecraftVersion, java, heap, catalog, combat, value, wanted,
                 drainTimeout);
     }
@@ -131,7 +132,7 @@ public record GroupConfig(int schemaVersion, String template, ServerSoftware sof
     }
 
     /** A copy with another {@code drain-timeout}; null removes it (the default applies). */
-    public GroupConfig withDrainTimeout(TimeSpan value) {
+    public GroupConfig withDrainTimeout(@Nullable TimeSpan value) {
         return new GroupConfig(schemaVersion, template, software, minecraftVersion, java, heap, catalog, combat, process, wanted,
                 value);
     }

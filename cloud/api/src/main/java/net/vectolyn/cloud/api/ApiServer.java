@@ -55,6 +55,7 @@ import net.vectolyn.cloud.api.http.ApiResponse;
 import net.vectolyn.cloud.api.http.ApiRoutes;
 import net.vectolyn.cloud.api.http.Router;
 import net.vectolyn.cloud.config.ConfigService;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The REST and WebSocket API of the node (Netty, HTTP/1.1, JSON).
@@ -120,17 +121,17 @@ public final class ApiServer implements AutoCloseable {
     private final long metricsMillis;
     private final ApiLogHandler logHandler;
     private volatile boolean shuttingDown;
-    private EventLoopGroup bossGroup;
-    private EventLoopGroup workerGroup;
-    private Channel serverChannel;
-    private Channel grpcChannel;
-    private SslContext sslContext;
-    private SslContext grpcSslContext;
+    private @Nullable EventLoopGroup bossGroup;
+    private @Nullable EventLoopGroup workerGroup;
+    private @Nullable Channel serverChannel;
+    private @Nullable Channel grpcChannel;
+    private volatile @Nullable SslContext sslContext;
+    private volatile @Nullable SslContext grpcSslContext;
     private int openConnections;
     private boolean closed;
 
     private ApiServer(Builder builder) {
-        this.settings = builder.settings;
+        this.settings = Objects.requireNonNull(builder.settings, "settings");
         this.tokens = builder.tokens;
         this.backend = builder.backend;
         this.nanoTime = builder.nanoTime;
@@ -172,6 +173,8 @@ public final class ApiServer implements AutoCloseable {
      * @throws IOException       if the address cannot be bound, for example because the port is in use;
      *                           both event loop groups have ended by then
      */
+    // The periodic checks run until close() ends the event loop group; their futures are never needed.
+    @SuppressWarnings("FutureReturnValueIgnored")
     public synchronized InetSocketAddress start() throws IOException {
         if (closed || serverChannel != null) {
             throw new IllegalStateException("the API server can be started only once");
@@ -197,7 +200,7 @@ public final class ApiServer implements AutoCloseable {
                             .build();
                 }
             } catch (IOException e) {
-                throw new ApiStartException(e.getMessage());
+                throw new ApiStartException(Objects.requireNonNullElse(e.getMessage(), e.toString()), e);
             }
         }
         bossGroup = new MultiThreadIoEventLoopGroup(1, new DefaultThreadFactory("vectolyn-api-accept"),
@@ -298,7 +301,7 @@ public final class ApiServer implements AutoCloseable {
         try {
             address = InetAddress.getByName(settings.bind());
         } catch (UnknownHostException e) {
-            throw new ApiStartException("api.bind cannot be resolved.");
+            throw new ApiStartException("api.bind cannot be resolved.", e);
         }
         if (settings.tls().isEmpty() && !address.isLoopbackAddress()) {
             throw new ApiStartException("The API listens on a non-loopback address (api.bind) and therefore needs TLS: "
@@ -307,6 +310,8 @@ public final class ApiServer implements AutoCloseable {
         return address;
     }
 
+    // Closing a refused connection is fire-and-forget; there is nobody to report a failure to.
+    @SuppressWarnings("FutureReturnValueIgnored")
     private void initConnection(SocketChannel ch) {
         String client = ClientAddress.key(ch.remoteAddress());
         if (!acquireConnection(client)) {
@@ -315,8 +320,9 @@ public final class ApiServer implements AutoCloseable {
         }
         ch.closeFuture().addListener(f -> releaseConnection(client));
         ChannelPipeline p = ch.pipeline();
-        if (sslContext != null) {
-            p.addLast("vectolyn-api-tls", sslContext.newHandler(ch.alloc()));
+        SslContext tls = sslContext;
+        if (tls != null) {
+            p.addLast("vectolyn-api-tls", tls.newHandler(ch.alloc()));
         }
         p.addLast("vectolyn-api-http", new HttpServerCodec(new HttpDecoderConfig()
                 .setMaxInitialLineLength(4096)
@@ -336,6 +342,8 @@ public final class ApiServer implements AutoCloseable {
      * at most {@value #GRPC_MAX_STREAMS} calls at once, 8 KiB of headers. {@link GrpcConnection}
      * closes the connection when no authenticated call was open for the idle timeout.
      */
+    // Closing a refused connection is fire-and-forget; there is nobody to report a failure to.
+    @SuppressWarnings("FutureReturnValueIgnored")
     private void initGrpcConnection(SocketChannel ch) {
         String client = ClientAddress.key(ch.remoteAddress());
         if (!acquireConnection(client)) {
@@ -344,8 +352,9 @@ public final class ApiServer implements AutoCloseable {
         }
         ch.closeFuture().addListener(f -> releaseConnection(client));
         ChannelPipeline p = ch.pipeline();
-        if (grpcSslContext != null) {
-            p.addLast("vectolyn-grpc-tls", grpcSslContext.newHandler(ch.alloc()));
+        SslContext tls = grpcSslContext;
+        if (tls != null) {
+            p.addLast("vectolyn-grpc-tls", tls.newHandler(ch.alloc()));
         }
         p.addLast("vectolyn-grpc-h2", Http2FrameCodecBuilder.forServer()
                 .initialSettings(Http2Settings.defaultSettings()
@@ -520,7 +529,7 @@ public final class ApiServer implements AutoCloseable {
      * @return the answer
      * @throws ApiException the error REST would answer (400, 403, 404, 405, 422, ...)
      */
-    public ApiResponse call(ApiToken principal, String method, String target, byte[] body, String ifMatch)
+    public ApiResponse call(ApiToken principal, String method, String target, byte[] body, @Nullable String ifMatch)
             throws ApiException {
         Objects.requireNonNull(principal, "principal");
         if (!principal.id().startsWith(LOCAL_PREFIX)) {
@@ -589,10 +598,10 @@ public final class ApiServer implements AutoCloseable {
      * @param use       the work
      * @param <T>       its result
      * @return the result, or empty for a wrong, used or expired token
-     * @throws java.io.IOException if the work fails; the token stays valid
+     * @throws IOException if the work fails; the token stays valid
      */
     public <T> java.util.Optional<T> useSetupToken(String presented, ApiTokens.SetupUse<T> use)
-            throws java.io.IOException {
+            throws IOException {
         return tokens.useSetupToken(presented, use);
     }
 
@@ -675,7 +684,7 @@ public final class ApiServer implements AutoCloseable {
         private final ConfigService config;
         private final ApiBackend backend;
         private final ApiTokens tokens;
-        private ApiSettings settings;
+        private @Nullable ApiSettings settings;
         private LongSupplier nanoTime = System::nanoTime;
         private long expiryCheckMillis = EXPIRY_CHECK_SECONDS * 1000L;
         private long metricsMillis = METRICS_SECONDS * 1000L;

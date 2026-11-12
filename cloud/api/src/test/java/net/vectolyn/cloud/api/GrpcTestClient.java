@@ -77,6 +77,7 @@ final class GrpcTestClient implements AutoCloseable {
     }
 
     /** Opens a stream; with {@code end} false the client never finishes sending. */
+    @SuppressWarnings("FutureReturnValueIgnored") // the writes complete with the flush; the test reads the answer
     Call open(Http2Headers headers, byte[] body, boolean end) throws InterruptedException {
         Call call = new Call();
         Http2StreamChannel stream = new Http2StreamChannelBootstrap(connection).handler(call).open().sync().getNow();

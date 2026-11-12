@@ -51,7 +51,7 @@ class AuthPrimitivesTest {
         assertEquals(81_804, Totp.code(key, 1_111_111_109L / 30)); // 07081804
         String secret = Totp.base32(key);
         assertEquals("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", secret);
-        assertArrayEquals(key, Totp.decodeBase32(secret.toLowerCase()).orElseThrow());
+        assertArrayEquals(key, Totp.decodeBase32(secret.toLowerCase(java.util.Locale.ROOT)).orElseThrow());
         OptionalLong step = Totp.verify(secret, "287 082", 59, -1);
         assertEquals(1, step.orElseThrow());
         assertTrue(Totp.verify(secret, "287082", 59, 1).isEmpty(), "a used code does not work twice");

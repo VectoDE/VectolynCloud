@@ -10,6 +10,7 @@ import net.vectolyn.cloud.config.model.DatabaseMode;
 import net.vectolyn.cloud.config.secret.EnvFile;
 import net.vectolyn.cloud.config.secret.GeneratedSecret;
 import net.vectolyn.cloud.config.secret.Secret;
+import org.jspecify.annotations.Nullable;
 
 /**
  * How to reach the database for a dump.
@@ -32,8 +33,8 @@ import net.vectolyn.cloud.config.secret.Secret;
  * @param password password; empty for docker and h2. Its {@code toString} is masked.
  * @param managedBase folder of the installed MariaDB server (managed mode), or null
  */
-public record DatabaseAccess(DatabaseMode mode, String host, int port, String database, String user, Secret password,
-                             Path managedBase) {
+public record DatabaseAccess(DatabaseMode mode, String host, int port, String database, String user, @Nullable Secret password,
+                             @Nullable Path managedBase) {
 
     /** User for the managed mode. */
     public static final String ROOT = "root";
@@ -55,7 +56,7 @@ public record DatabaseAccess(DatabaseMode mode, String host, int port, String da
      * @param managedBase the installed MariaDB server, or null when unknown or not managed
      * @return the access data
      */
-    public static DatabaseAccess of(DatabaseConfig config, EnvFile secrets, Path managedBase) {
+    public static DatabaseAccess of(DatabaseConfig config, EnvFile secrets, @Nullable Path managedBase) {
         Objects.requireNonNull(config, "config");
         Objects.requireNonNull(secrets, "secrets");
         return switch (config.mode()) {

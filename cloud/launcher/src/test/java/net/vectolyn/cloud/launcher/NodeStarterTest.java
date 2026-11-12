@@ -48,8 +48,11 @@ class NodeStarterTest {
         private FailingNode() {
         }
 
+        // Called reflectively by NodeStarter; it has to throw, and @DoNotCall would forbid the call.
+        @SuppressWarnings("DoNotCallSuggester")
         public static void start(Map<String, String> settings) {
             throw new IllegalStateException("database unreachable");
+
         }
     }
 

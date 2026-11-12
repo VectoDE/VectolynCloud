@@ -20,6 +20,7 @@ import net.vectolyn.cloud.console.ConsoleOutput;
 import net.vectolyn.cloud.console.Text;
 import net.vectolyn.cloud.console.command.Argument;
 import net.vectolyn.cloud.console.command.Command;
+import org.jspecify.annotations.Nullable;
 
 /**
  * {@code node list|info|set}: the nodes of {@code nodes.yml} and their memory settings. Only the
@@ -78,18 +79,27 @@ final class NodeCommands {
         int index = index(nodes, id);
         NodeConfig node = nodes.nodes().get(index);
         String path = "nodes[" + index + "]." + field;
-        MemoryReserve reserve = node.reserve() == null ? new MemoryReserve(null, null, null) : node.reserve();
+        MemoryReserve reserve = node.reserve() == null ? noReserve() : node.reserve();
         return switch (field) {
-            case "max-memory" -> node.withMaxMemory(AUTO.equals(value) ? null : size(path, value, AUTO));
-            case "memory-reserve.system" -> node.withMemoryReserve(reserve.withSystem(reserveSize(path, value)));
-            case "memory-reserve.node-overhead" -> node.withMemoryReserve(reserve.withNodeOverhead(reserveSize(path, value)));
-            case "memory-reserve.database" -> node.withMemoryReserve(reserve.withDatabase(reserveSize(path, value)));
+            case "max-memory" -> node.withMaxMemory(Values.unset(AUTO.equals(value) ? null : size(path, value, AUTO)));
+            case "memory-reserve.system" ->
+                    node.withMemoryReserve(reserve.withSystem(Values.unset(reserveSize(path, value))));
+            case "memory-reserve.node-overhead" ->
+                    node.withMemoryReserve(reserve.withNodeOverhead(Values.unset(reserveSize(path, value))));
+            case "memory-reserve.database" ->
+                    node.withMemoryReserve(reserve.withDatabase(Values.unset(reserveSize(path, value))));
             default -> throw new ConfigException(ConfigError.of(CloudHome.NODES_FILE, "", ErrorCode.INVALID_VALUE,
                     String.join(", ", FIELDS)));
         };
     }
 
-    private static MemorySize reserveSize(String path, String value) throws ConfigException {
+    /** A reserve with nothing set. */
+    private static MemoryReserve noReserve() {
+        return new MemoryReserve(Values.unset(null), Values.unset(null), Values.unset(null));
+    }
+
+    private static @Nullable MemorySize reserveSize(
+String path, String value) throws ConfigException {
         return DEFAULT_VALUE.equals(value) ? null : size(path, value, DEFAULT_VALUE);
     }
 
@@ -97,7 +107,7 @@ final class NodeCommands {
         try {
             return MemorySize.parse(value);
         } catch (IllegalArgumentException e) {
-            throw Values.invalid(CloudHome.NODES_FILE, path, MemorySize.FORMAT + ", or " + keyword);
+            throw Values.invalid(CloudHome.NODES_FILE, path, MemorySize.FORMAT + ", or " + keyword, e);
         }
     }
 
@@ -123,7 +133,8 @@ final class NodeCommands {
 
     private static void info(ConsoleOutput out, ConfigSnapshot snapshot, String id) throws ConfigException {
         NodeConfig n = snapshot.nodes().nodes().get(index(snapshot.nodes(), id));
-        MemoryReserve raw = n.reserve() == null ? new MemoryReserve(null, null, null) : n.reserve();
+        MemoryReserve reserve = n.reserve();
+        MemoryReserve raw = reserve == null ? noReserve() : reserve;
         MemoryReserve full = n.memoryReserve();
         out.heading(CloudHome.NODES_FILE + " " + n.id());
         out.println("  host                         = " + n.host());
@@ -136,10 +147,11 @@ final class NodeCommands {
     }
 
     private static String maxMemory(NodeConfig n) {
-        return n.maxMemory() == null ? AUTO : n.maxMemory().toString();
+        MemorySize max = n.maxMemory();
+        return max == null ? AUTO : max.toString();
     }
 
-    private static String marker(MemorySize raw) {
+    private static String marker(@Nullable MemorySize raw) {
         return raw == null ? " (default)" : "";
     }
 }
