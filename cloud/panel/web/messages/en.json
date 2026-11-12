@@ -315,5 +315,6 @@
   "activity.search-send": "Search",
   "activity.search-invalid": "Enter 2 to 200 characters without line breaks.",
   "activity.hits": "{count} matching lines",
-  "activity.hits-truncated": "{count} matching lines, more exist. Narrow the search to see the rest."
+  "activity.hits-truncated": "{count} matching lines, more exist. Narrow the search to see the rest.",
+  "activity.audit-entries": "Audit log entries"
 }

@@ -240,6 +240,16 @@ npm run build        # static export to out/
 
 The panel aims at WCAG 2.2 AA and AAA where it is reachable: a skip link to the content, one visible focus style on everything focusable (3 px, offset), targets of at least 44 × 44 px, the page language set from the chosen language, live regions for state that changes, and no motion when the system asks for reduced motion. Colours come from the brand tokens, which meet AA contrast in both schemes.
 
+| Level | State | Checked by |
+|---|---|---|
+| WCAG 2.2 A and AA | met on every page, in English and German | axe-core in the end-to-end tests (fails the build), Lighthouse accessibility 100 |
+| AAA contrast (1.4.6, 7:1) | met in the dark scheme; in the light scheme the brand primary `#00707F` reaches 5.3:1 | axe-core AAA rules, reported as notes in the Playwright report, not failing |
+| Other AAA rules axe knows | reported with the contrast | as above |
+
+Darkening the light primary to reach 7:1 would change the brand for every surface, so it is left to a brand decision ([#150](https://github.com/VectoDE/VectolynCloud/issues/150)).
+
+The navigation has its own row, whose height is kept from the first paint on every signed-in page, so the content does not move when the session has loaded (Lighthouse layout shift under 0.1 is a test).
+
 ## Tests
 
 - `PanelServerTest` runs the server on `127.0.0.1` with a random port: CSP with the page's hash and no `unsafe-inline`, the security headers, `ETag` and `304`, immutable caching of hashed files, gzip, the redirect of a folder without slash, the 404 page, `405`, the info endpoint, refused `Host` names, refused targets (`..`, `.`, `%2e`, backslash, empty segments), and that a public address without TLS does not start.
@@ -247,3 +257,12 @@ The panel aims at WCAG 2.2 AA and AAA where it is reachable: a skip link to the 
 - Fuzz targets (Jazzer, see [architecture](architecture.md#fuzz-tests)) in `PanelInputFuzzTest`: request targets are clean or refused, `panel.yml` is settings or configuration errors, public URLs are origins or refused.
 - `ServiceFilesTest`: path rules, atomic writes, listing order, the 8 MiB read limit, links never followed. `PanelApiTest`: rights of the file endpoints, CSRF on uploads, refused paths (`..`, `%2E%2E`, backslash, drive letter, device name), audit entries, and the checks of the event stream (session, origin, end with the session). `BodyLimitHandlerTest`: the body limits and the upload limit. `PanelApiTest` also covers players (rights, the console lines, refused line breaks and odd names) and the import that runs only after its preview; `NodePanelBridgeTest` exports, previews and imports through a real `ConfigService`. `PanelStreamTest`: a real WebSocket against the running server, refused for another origin and without a session, 20 events each within a second (the worst delay is printed, about 10 ms on a desktop), closed with `1008` after sign-out. Fuzz target `filePathsStayInsideTheServiceFolder`.
 - The **Panel frontend** job of `ci.yml` checks that both languages have the same keys, type-checks the TypeScript and builds the static export.
+- **Browser tests** (`cloud/panel/e2e`, job **Panel end-to-end and accessibility** in `ci.yml`): Playwright starts the panel preview with a fixed setup token (`VECTOLYN_PREVIEW_SETUP_TOKEN`) and drives Chrome through setup (a wrong token is refused), every page in English and German, the refused sign-in, the redirect of a signed-out visitor, the live console over the WebSocket, editing and saving a service file, the log search and its audit entry, the language switch and the skip link. axe-core checks WCAG 2.2 AA on each page. Lighthouse then loads every signed-in page in the same Chrome and requires accessibility 100, best practices 100 and a cumulative layout shift under 0.1; a Lighthouse run that fails to trace counts as a failure. The Playwright report and one Lighthouse report per page are artifacts of the run.
+
+Run them locally (needs Chrome; the preview is built and started by the tests):
+
+```sh
+cd cloud/panel/e2e
+npm ci --ignore-scripts
+npx playwright test
+```

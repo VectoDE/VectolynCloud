@@ -99,7 +99,10 @@ public final class PanelPreview {
         Path home = Files.createTempDirectory("vectolyn-panel-preview");
         byte[] random = new byte[16];
         new SecureRandom().nextBytes(random);
-        String token = "vcs_preview" + HexFormat.of().formatHex(random);
+        // The end-to-end tests set the token themselves, so it never has to be read from the output.
+        String fixed = System.getenv("VECTOLYN_PREVIEW_SETUP_TOKEN");
+        String token = fixed != null && fixed.matches("vcs_[A-Za-z0-9]{16,64}")
+                ? fixed : "vcs_preview" + HexFormat.of().formatHex(random);
         PanelApi api = new PanelApi(PanelUsers.load(home.resolve("secrets").resolve(PanelUsers.FILE_NAME)),
                 new AuditLog(home.resolve("logs").resolve(AuditLog.FILE_NAME), Clock.systemUTC()),
                 new PreviewNode(token), null, Clock.systemUTC(), System::nanoTime,
@@ -152,7 +155,8 @@ public final class PanelPreview {
         PanelServer server = PanelServer.builder(settings).version("preview").api(api).build();
         InetSocketAddress address = server.start();
         System.out.println("Panel preview on http://localhost:" + address.getPort() + "/");
-        System.out.println("Setup token (preview only): " + token);
+        System.out.println(fixed != null ? "Setup token: the one from VECTOLYN_PREVIEW_SETUP_TOKEN"
+                : "Setup token (preview only): " + token);
         Runtime.getRuntime().addShutdownHook(new Thread(server::close));
         new CountDownLatch(1).await();
     }

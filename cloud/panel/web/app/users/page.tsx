@@ -53,6 +53,7 @@ export default function UsersPage() {
   const [rights, setRights] = useState<string[]>([]);
   const [message, setMessage] = useState<Message>(null);
   const [busy, setBusy] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const allowed = can("users:manage");
 
   const load = useCallback(async () => {
@@ -63,10 +64,14 @@ export default function UsersPage() {
     setUsers(u.users);
     setRoles(r.roles);
     setRights(r.rights);
+    setLoaded(true);
   }, []);
 
   useEffect(() => {
-    if (session && allowed) load().catch((failure) => setMessage({ kind: "error", text: errorText(failure) }));
+    if (session && allowed) load().catch((failure) => {
+      setLoaded(true);
+      setMessage({ kind: "error", text: errorText(failure) });
+    });
   }, [session, allowed, load, errorText]);
 
   async function run(work: () => Promise<unknown>, ok: string) {
@@ -116,6 +121,8 @@ export default function UsersPage() {
     <div className="flex flex-col gap-8">
       <h1 className="font-display text-4xl">{t("users.title")}</h1>
       {message && <Notice kind={message.kind}>{message.text}</Notice>}
+      {/* Everything below appears at once after the first load, so nothing moves while it arrives. */}
+      {!loaded ? <p role="status" className="text-muted">{t("start.loading")}</p> : <>
 
       <Panel id="user-list" title={t("users.list")}>
         <div className="overflow-x-auto">
@@ -238,6 +245,7 @@ export default function UsersPage() {
           <Button type="submit" disabled={busy} className="self-start">{t("users.role-save")}</Button>
         </form>
       </Panel>
+      </>}
     </div>
   );
 }

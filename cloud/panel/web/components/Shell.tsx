@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { useAuth } from "@/lib/auth";
 import { useI18n, type Locale } from "@/lib/i18n";
@@ -49,6 +50,10 @@ export function Shell({ children }: { children: ReactNode }) {
   const { session, can, signOut } = useAuth();
   const [path, setPath] = useState("/");
   useEffect(() => setPath(window.location.pathname), []);
+  // Known when the page is built: every page but sign-in and setup has the navigation row. Its
+  // height is kept free from the first paint, so nothing moves once the session has loaded.
+  const route = (usePathname() ?? "/").replace(/\/+$/, "");
+  const publicPage = route === "/login" || route === "/setup";
   return (
     <div className="flex min-h-screen flex-col">
       <a
@@ -65,25 +70,33 @@ export function Shell({ children }: { children: ReactNode }) {
               {t("app.name")} <span className="text-primary">{t("app.panel")}</span>
             </span>
           </a>
-          <nav aria-label={t("nav.label")} className="flex flex-wrap items-center gap-4">
+          <div className="flex flex-wrap items-center gap-4">
             {session && (
-              <>
-                <NavLink href="/" path={path}>{t("nav.overview")}</NavLink>
-                {can("services:read") && <NavLink href="/services/" path={path}>{t("nav.services")}</NavLink>}
-                {can("services:read") && <NavLink href="/players/" path={path}>{t("nav.players")}</NavLink>}
-                {(can("config:read") || can("templates:read")) && <NavLink href="/config/" path={path}>{t("nav.config")}</NavLink>}
-                {(can("node:read") || can("audit:read") || can("admin")) && <NavLink href="/activity/" path={path}>{t("nav.activity")}</NavLink>}
-                {can("users:manage") && <NavLink href="/users/" path={path}>{t("nav.users")}</NavLink>}
-                <NavLink href="/account/" path={path}>{t("nav.account")}</NavLink>
-                <button type="button" onClick={() => void signOut()}
-                  className="min-h-11 border-2 border-line bg-raised px-3 font-bold text-ink">
-                  {t("nav.sign-out")}
-                </button>
-              </>
+              <button type="button" onClick={() => void signOut()}
+                className="min-h-11 border-2 border-line bg-raised px-3 font-bold text-ink">
+                {t("nav.sign-out")}
+              </button>
             )}
             <LanguageSwitch />
-          </nav>
+          </div>
         </div>
+        {!publicPage && (
+          <nav aria-label={t("nav.label")} className="mx-auto max-w-6xl px-4 pb-2">
+            <ul className="flex min-h-11 items-center gap-x-6 overflow-x-auto whitespace-nowrap">
+              {session && (
+                <>
+                  <li><NavLink href="/" path={path}>{t("nav.overview")}</NavLink></li>
+                  {can("services:read") && <li><NavLink href="/services/" path={path}>{t("nav.services")}</NavLink></li>}
+                  {can("services:read") && <li><NavLink href="/players/" path={path}>{t("nav.players")}</NavLink></li>}
+                  {(can("config:read") || can("templates:read")) && <li><NavLink href="/config/" path={path}>{t("nav.config")}</NavLink></li>}
+                  {(can("node:read") || can("audit:read") || can("admin")) && <li><NavLink href="/activity/" path={path}>{t("nav.activity")}</NavLink></li>}
+                  {can("users:manage") && <li><NavLink href="/users/" path={path}>{t("nav.users")}</NavLink></li>}
+                  <li><NavLink href="/account/" path={path}>{t("nav.account")}</NavLink></li>
+                </>
+              )}
+            </ul>
+          </nav>
+        )}
       </header>
       <main id="content" tabIndex={-1} className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
         {children}

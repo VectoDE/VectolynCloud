@@ -1,0 +1,20 @@
+{
+  "name": "vectolyn-panel-e2e",
+  "private": true,
+  "version": "0.0.0",
+  "description": "End-to-end, accessibility and Lighthouse checks of the VectolynCloud web panel against the preview server. Not shipped.",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "test": "playwright test",
+    "lighthouse": "lhci autorun"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
+    "@playwright/test": "1.64.1",
+    "lighthouse": "13.5.0"
+  }
+}

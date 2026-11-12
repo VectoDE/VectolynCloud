@@ -122,3 +122,18 @@ updates:
     groups:
       panel-web:
         update-types: [minor, patch]
+
+  # The panel's browser tests (cloud/panel/e2e): Playwright, axe-core and Lighthouse. Not shipped.
+  - package-ecosystem: npm
+    directory: /cloud/panel/e2e
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: build(deps)
+    labels: [type:chore, area:infra]
+    groups:
+      panel-e2e:
+        update-types: [minor, patch]

@@ -315,5 +315,6 @@
   "activity.search-send": "Suchen",
   "activity.search-invalid": "Bitte 2 bis 200 Zeichen ohne Zeilenumbruch eingeben.",
   "activity.hits": "{count} passende Zeilen",
-  "activity.hits-truncated": "{count} passende Zeilen, es gibt weitere. Grenzen Sie die Suche ein."
+  "activity.hits-truncated": "{count} passende Zeilen, es gibt weitere. Grenzen Sie die Suche ein.",
+  "activity.audit-entries": "Einträge des Audit-Logs"
 }

@@ -120,7 +120,7 @@ function Audit() {
         <>
           <p role="status" className="text-sm text-muted">{t("activity.shown", { shown: shown.length, total: entries.length })}</p>
           {shown.length > 0 && (
-            <div className="max-h-[32rem] overflow-auto border border-line" tabIndex={0} role="region" aria-label={t("activity.audit")}>
+            <div className="max-h-[32rem] overflow-auto border border-line" tabIndex={0} role="region" aria-label={t("activity.audit-entries")}>
               <table className="w-full border-collapse text-left text-sm">
                 <thead className="sticky top-0 bg-raised">
                   <tr>

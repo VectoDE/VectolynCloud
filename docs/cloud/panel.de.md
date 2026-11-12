@@ -84,6 +84,8 @@ Braucht Node.js 20.9 oder neuer. Gradle führt `npm ci --ignore-scripts` (exakte
 
 Ziel ist WCAG 2.2 AA, AAA wo erreichbar: Sprunglink zum Inhalt, sichtbarer Fokus (3 px), Ziele von mindestens 44 × 44 px, Seitensprache nach Wahl, Live-Regionen, keine Bewegung bei reduzierter Bewegung.
 
+WCAG 2.2 AA ist auf jeder Seite in beiden Sprachen erfüllt und wird von axe-core in den Browser-Tests geprüft (bricht den Build) sowie von Lighthouse (Barrierefreiheit 100). AAA-Kontrast (7:1) erreicht das dunkle Schema; im hellen Schema hat die Markenfarbe Primär `#00707F` 5,3:1. Die AAA-Treffer stehen als Hinweis im Playwright-Bericht. Einzelheiten in [panel.md](panel.md#accessibility).
+
 ## Tests
 
-`PanelServerTest`, `PanelConfigLoaderTest`, `ServiceFilesTest`, `BodyLimitHandlerTest`, `PanelStreamTest` (echter WebSocket, Ereignisse unter einer Sekunde) und die Fuzz-Ziele in `PanelInputFuzzTest` (Anfrageziele, `panel.yml`, öffentliche URLs, Dateipfade). Der Job **Panel frontend** in `ci.yml` prüft die Sprachkataloge, die Typen und den statischen Export.
+`PanelServerTest`, `PanelConfigLoaderTest`, `ServiceFilesTest`, `BodyLimitHandlerTest`, `PanelStreamTest` (echter WebSocket, Ereignisse unter einer Sekunde) und die Fuzz-Ziele in `PanelInputFuzzTest` (Anfrageziele, `panel.yml`, öffentliche URLs, Dateipfade). Der Job **Panel frontend** in `ci.yml` prüft die Sprachkataloge, die Typen und den statischen Export. Die **Browser-Tests** in `cloud/panel/e2e` (Job **Panel end-to-end and accessibility**) führen Chrome mit Playwright durch Einrichtung, alle Seiten auf Deutsch und Englisch, Konsole, Dateien, Log-Suche, Sprachwechsel und Sprunglink, prüfen jede Seite mit axe-core (WCAG 2.2 AA) und verlangen in Lighthouse Barrierefreiheit 100, Best Practices 100 und eine Layoutverschiebung unter 0,1. Lokal: `cd cloud/panel/e2e && npm ci --ignore-scripts && npx playwright test`.
