@@ -20,6 +20,7 @@ import net.vectolyn.cloud.panel.PanelServer;
 import net.vectolyn.cloud.panel.auth.AuditLog;
 import net.vectolyn.cloud.panel.auth.OidcClient;
 import net.vectolyn.cloud.panel.auth.PanelUsers;
+import net.vectolyn.cloud.panel.config.PanelConfig;
 import net.vectolyn.cloud.panel.config.PanelConfigLoader;
 import org.jspecify.annotations.Nullable;
 
@@ -86,21 +87,23 @@ public final class NodePanel {
         }
     }
 
-    private static OidcClient oidc(PanelConfigLoader.Settings settings, SecretStore secrets) throws IOException {
-        if (settings.config().oidc() == null) {
+    private static @Nullable OidcClient oidc(PanelConfigLoader.Settings settings, SecretStore secrets)
+            throws IOException {
+        PanelConfig.Oidc config = settings.config().oidc();
+        if (config == null) {
             return null;
         }
         Optional<Secret> secret;
         try {
             secret = secrets.load().get(OIDC_SECRET);
         } catch (EnvFormatException e) {
-            throw new IOException("secrets/vectolyn.env is malformed");
+            throw new IOException("secrets/vectolyn.env is malformed", e);
         }
         if (secret.isEmpty() || secret.get().isEmpty()) {
             throw new IOException("single sign-on is configured in panel.yml, but " + OIDC_SECRET
                     + " is missing in secrets/vectolyn.env");
         }
-        return new OidcClient(settings.config().oidc(), secret.get(), settings.publicUrl().orElseThrow(), Clock.systemUTC());
+        return new OidcClient(config, secret.get(), settings.publicUrl().orElseThrow(), Clock.systemUTC());
     }
 
     /** Key of the single sign-on client secret in {@code secrets/vectolyn.env}. */

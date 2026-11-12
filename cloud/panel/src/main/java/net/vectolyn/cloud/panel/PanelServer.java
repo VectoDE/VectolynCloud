@@ -80,7 +80,7 @@ public final class PanelServer implements AutoCloseable {
     private final Optional<ApiTls.Material> tls;
     private final String version;
     private final WebAssets assets;
-    private final PanelApi api;
+    private final @Nullable PanelApi api;
     private final RateLimiter<String> addressLimiter;
     private final Set<String> allowedHosts;
     private final ExecutorService executor = Executors.newThreadPerTaskExecutor(
@@ -346,7 +346,7 @@ public final class PanelServer implements AutoCloseable {
     /**
      * The signed-in endpoints, or null when the panel runs without accounts (tests of the files).
      */
-    PanelApi api() {
+    @Nullable PanelApi api() {
         return api;
     }
 

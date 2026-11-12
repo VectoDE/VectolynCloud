@@ -66,7 +66,8 @@ final class PanelHttpHandler extends SimpleChannelInboundHandler<FullHttpRequest
             send(ctx, Responses.text(400, "The request target breaks a rule of the panel.", server.secure()), false);
             return;
         }
-        if (target.get().path().startsWith("/api/") && server.api() != null) {
+        PanelApi api = server.api();
+        if (target.get().path().startsWith("/api/") && api != null) {
             // Password hashing, file writes and calls to a sign-on provider block: they run on a
             // virtual thread, and the connection reads nothing else until the answer is out.
             int q = request.uri().indexOf('?');
@@ -80,7 +81,7 @@ final class PanelHttpHandler extends SimpleChannelInboundHandler<FullHttpRequest
                 server.executor().execute(() -> {
                     FullHttpResponse response;
                     try {
-                        response = server.api().handle(call);
+                        response = api.handle(call);
                     } catch (RuntimeException e) {
                         LOG.log(System.Logger.Level.ERROR, "Panel endpoint failed: {0}", e.getClass().getName());
                         response = Responses.error(500, "internal", "The panel failed.", server.secure());

@@ -39,6 +39,7 @@ import net.vectolyn.cloud.panel.auth.Sessions;
 import net.vectolyn.cloud.panel.auth.Totp;
 import net.vectolyn.cloud.panel.auth.WebAuthn;
 import net.vectolyn.cloud.panel.http.Responses;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The panel's signed-in endpoints: setup of the first account, sign-in with password, TOTP,
@@ -69,11 +70,12 @@ public final class PanelApi {
     private final PanelUsers users;
     private final Sessions sessions;
     private final AuditLog audit;
-    private final NodeAccess api;
-    private final OidcClient oidc;
+    private final @Nullable NodeAccess api;
+    private final @Nullable OidcClient oidc;
     private final Clock clock;
     private final RateLimiter<String> signInLimiter;
-    private PanelServer server;
+    private final java.security.SecureRandom random = new java.security.SecureRandom();
+    private @Nullable PanelServer server;
 
     /**
      * Creates the endpoints.
@@ -85,7 +87,8 @@ public final class PanelApi {
      * @param clock    the clock
      * @param nanoTime the monotonic clock of the rate limits
      */
-    public PanelApi(PanelUsers users, AuditLog audit, NodeAccess api, OidcClient oidc, Clock clock, LongSupplier nanoTime) {
+    public PanelApi(PanelUsers users, AuditLog audit, @Nullable NodeAccess api, @Nullable OidcClient oidc, Clock clock,
+                    LongSupplier nanoTime) {
         this.users = Objects.requireNonNull(users, "users");
         this.audit = Objects.requireNonNull(audit, "audit");
         this.api = api;
@@ -109,10 +112,12 @@ public final class PanelApi {
     }
 
     /** One request as the endpoints see it. */
+    // The body is the received bytes; copying it into a List would cost every request, so the array stays.
+    @SuppressWarnings("ArrayRecordComponent")
     record Call(String method, String path, Map<String, String> query, String rawQuery, byte[] body,
                 io.netty.handler.codec.http.HttpHeaders headers, String client) {
 
-        String header(CharSequence name) {
+        @Nullable String header(CharSequence name) {
             return headers.get(name);
         }
     }
@@ -124,11 +129,17 @@ public final class PanelApi {
 
         private final int status;
         private final String code;
+        private final String text;
 
         Refusal(int status, String code, String message) {
-            super(message, null, false, false);
+            this(status, code, message, null);
+        }
+
+        Refusal(int status, String code, String message, @Nullable Throwable cause) {
+            super(message, cause, false, false);
             this.status = status;
             this.code = code;
+            this.text = message;
         }
     }
 
@@ -136,14 +147,18 @@ public final class PanelApi {
         try {
             return route(call);
         } catch (Refusal r) {
-            return Responses.error(r.status, r.code, r.getMessage(), secure());
+            return Responses.error(r.status, r.code, r.text, secure());
         } catch (IOException e) {
             return Responses.error(500, "storage-failed", "The panel could not save the change.", secure());
         }
     }
 
+    private PanelServer server() {
+        return Objects.requireNonNull(server, "the panel server is not attached");
+    }
+
     private boolean secure() {
-        return server.secure();
+        return server().secure();
     }
 
     private FullHttpResponse route(Call call) throws Refusal, IOException {
@@ -291,8 +306,8 @@ public final class PanelApi {
     private FullHttpResponse info() {
         Map<String, Object> info = new LinkedHashMap<>();
         info.put("name", "VectolynCloud");
-        info.put("version", server.version());
-        info.put("frontend", !server.assets().placeholder());
+        info.put("version", server().version());
+        info.put("frontend", !server().assets().placeholder());
         info.put("setup-required", users.empty());
         info.put("oidc", oidc == null ? null : oidc.name());
         return Responses.json(200, info, secure());
@@ -369,12 +384,12 @@ public final class PanelApi {
                     users.add(new PanelUsers.User(name, hash, List.of(PanelUsers.OWNER), null, -1, List.of(), List.of(),
                             false, now()));
                 } catch (PanelUsers.RefusedException e) {
-                    throw new IOException(e.getMessage());
+                    throw new IOException(e.getMessage(), e);
                 }
                 return name;
             });
         } catch (IOException e) {
-            throw new Refusal(409, "setup-failed", "The first account could not be created.");
+            throw new Refusal(409, "setup-failed", "The first account could not be created.", e);
         }
         if (created.isEmpty()) {
             audit.record("setup.failed", null, null, call.client(), Map.of());
@@ -440,7 +455,7 @@ public final class PanelApi {
             throw lockedRefusal(locked);
         }
         PanelUsers.User user = users.find(name).filter(u -> !u.disabled() && u.totp()).orElseThrow(PanelApi::invalidCredentials);
-        OptionalLong step = Totp.verify(user.totpSecret(), code, clock.instant().getEpochSecond(), user.totpLastStep());
+        OptionalLong step = Totp.verify(Objects.requireNonNull(user.totpSecret(), "totpSecret"), code, clock.instant().getEpochSecond(), user.totpLastStep());
         if (step.isEmpty()) {
             failed(call, name, "totp");
             // a new ticket, so a typo does not need the password again
@@ -453,7 +468,7 @@ public final class PanelApi {
         try {
             users.update(name, u -> withTotp(u, u.totpSecret(), step.getAsLong()));
         } catch (PanelUsers.RefusedException e) {
-            throw invalidCredentials();
+            throw invalidCredentials(e);
         }
         audit.record("login.ok", user.name(), null, call.client(), Map.of("method", "totp"));
         return signedIn(call, user.name(), "totp");
@@ -469,7 +484,11 @@ public final class PanelApi {
     }
 
     private static Refusal invalidCredentials() {
-        return new Refusal(401, "invalid-credentials", "Name or password is wrong.");
+        return invalidCredentials(null);
+    }
+
+    private static Refusal invalidCredentials(@Nullable Throwable cause) {
+        return new Refusal(401, "invalid-credentials", "Name or password is wrong.", cause);
     }
 
     private static Refusal lockedRefusal(long seconds) {
@@ -501,7 +520,9 @@ public final class PanelApi {
     // ---- passkeys --------------------------------------------------------------------------
 
     /** A pending passkey ceremony. */
-    record Challenge(byte[] bytes, String user) {
+    // The challenge is compared as raw bytes; a List<Byte> would only cost memory.
+    @SuppressWarnings("ArrayRecordComponent")
+    record Challenge(byte[] bytes, @Nullable String user) {
     }
 
     private WebAuthn.Expected expected(Call call, byte[] challenge) throws Refusal {
@@ -516,7 +537,7 @@ public final class PanelApi {
 
     private FullHttpResponse passkeyLoginOptions(Call call) throws Refusal {
         byte[] challenge = new byte[32];
-        new java.security.SecureRandom().nextBytes(challenge);
+        random.nextBytes(challenge);
         WebAuthn.Expected expected = expected(call, challenge);
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("ticket", sessions.issue("passkey-login", new Challenge(challenge, null)));
@@ -546,7 +567,7 @@ public final class PanelApi {
                     expected(call, challenge.bytes()));
         } catch (WebAuthn.WebAuthnException e) {
             sessions.fail(user.name());
-            throw passkeyRefused(call, user.name());
+            throw passkeyRefused(call, user.name(), e);
         }
         try {
             users.update(user.name(), u -> withPasskeys(u, u.passkeys().stream()
@@ -554,15 +575,19 @@ public final class PanelApi {
                             ? new PanelUsers.Passkey(p.id(), p.publicKey(), p.algorithm(), count, p.label(), p.createdAt())
                             : p).toList()));
         } catch (PanelUsers.RefusedException e) {
-            throw passkeyRefused(call, user.name());
+            throw passkeyRefused(call, user.name(), e);
         }
         audit.record("login.ok", user.name(), null, call.client(), Map.of("method", "passkey"));
         return signedIn(call, user.name(), "passkey");
     }
 
-    private Refusal passkeyRefused(Call call, String user) {
+    private Refusal passkeyRefused(Call call, @Nullable String user) {
+        return passkeyRefused(call, user, null);
+    }
+
+    private Refusal passkeyRefused(Call call, @Nullable String user, @Nullable Throwable cause) {
         audit.record("login.failed", null, user, call.client(), Map.of("factor", "passkey"));
-        return new Refusal(401, "passkey-refused", "This passkey was not accepted.");
+        return new Refusal(401, "passkey-refused", "This passkey was not accepted.", cause);
     }
 
     private FullHttpResponse passkeyCreateOptions(Call call, Sessions.Session session) throws Refusal {
@@ -571,7 +596,7 @@ public final class PanelApi {
             throw new Refusal(409, "too-many-passkeys", "An account can have at most 16 passkeys.");
         }
         byte[] challenge = new byte[32];
-        new java.security.SecureRandom().nextBytes(challenge);
+        random.nextBytes(challenge);
         WebAuthn.Expected expected = expected(call, challenge);
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("ticket", sessions.issue("passkey-create", new Challenge(challenge, user.name())));
@@ -588,7 +613,7 @@ public final class PanelApi {
     private FullHttpResponse passkeyAdd(Call call, Sessions.Session session, Map<String, Object> body)
             throws Refusal, IOException {
         Challenge challenge = sessions.take(text(body, "ticket", 64), "passkey-create", Challenge.class)
-                .filter(c -> c.user().equalsIgnoreCase(session.user()))
+                .filter(c -> session.user().equalsIgnoreCase(c.user()))
                 .orElseThrow(() -> new Refusal(400, "ticket-expired", "That took too long. Start again."));
         String label = label(optionalText(body, "label", 64), "Passkey");
         WebAuthn.Credential credential;
@@ -596,7 +621,7 @@ public final class PanelApi {
             credential = WebAuthn.register(bytes(body, "client-data-json"), bytes(body, "attestation-object"),
                     expected(call, challenge.bytes()));
         } catch (WebAuthn.WebAuthnException e) {
-            throw new Refusal(400, "passkey-refused", "The passkey could not be verified.");
+            throw new Refusal(400, "passkey-refused", "The passkey could not be verified.", e);
         }
         String id = b64(credential.id());
         if (users.findByPasskey(id).isPresent()) {
@@ -686,10 +711,10 @@ public final class PanelApi {
     // ---- single sign-on --------------------------------------------------------------------
 
     /** A pending single sign-on attempt and, for linking, the signed-in user. */
-    record OidcPending(OidcClient.Attempt attempt, String linkUser) {
+    record OidcPending(OidcClient.Attempt attempt, @Nullable String linkUser) {
     }
 
-    private FullHttpResponse oidcStart(Call call, Sessions.Session session) throws Refusal {
+    private FullHttpResponse oidcStart(Call call, Sessions.@Nullable Session session) throws Refusal {
         if (oidc == null) {
             throw new Refusal(404, "oidc-off", "Single sign-on is not configured.");
         }
@@ -700,7 +725,7 @@ public final class PanelApi {
         try {
             attempt = oidc.start();
         } catch (OidcClient.OidcException e) {
-            throw new Refusal(502, "oidc-unavailable", "The single sign-on provider cannot be reached.");
+            throw new Refusal(502, "oidc-unavailable", "The single sign-on provider cannot be reached.", e);
         }
         String ticket = sessions.issue("oidc", new OidcPending(attempt, session == null ? null : session.user()));
         String cookie = OIDC_COOKIE + "=" + ticket + "; Path=/; Max-Age=" + Sessions.TICKET.toSeconds()
@@ -728,17 +753,17 @@ public final class PanelApi {
         } else if (call.query().containsKey("error")) {
             response = redirect(pending.get().linkUser() != null ? "/account/?error=oidc-denied" : "/login/?error=oidc-denied");
         } else {
-            response = oidcFinish(call, pending.get());
+            response = oidcFinish(call, oidc, pending.get());
         }
         response.headers().add(HttpHeaderNames.SET_COOKIE, OIDC_COOKIE + "=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax");
         return response;
     }
 
-    private FullHttpResponse oidcFinish(Call call, OidcPending pending) throws IOException {
+    private FullHttpResponse oidcFinish(Call call, OidcClient client, OidcPending pending) throws IOException {
         String code = decode(call.query().get("code"));
         OidcClient.Identity identity;
         try {
-            identity = oidc.finish(pending.attempt(), code);
+            identity = client.finish(pending.attempt(), code);
         } catch (OidcClient.OidcException e) {
             audit.record("login.failed", null, null, call.client(), Map.of("factor", "oidc"));
             return redirect(pending.linkUser() != null ? "/account/?error=oidc-failed" : "/login/?error=oidc-failed");
@@ -790,7 +815,7 @@ public final class PanelApi {
         return response;
     }
 
-    private static String decode(String value) {
+    private static @Nullable String decode(@Nullable String value) {
         if (value == null) {
             return null;
         }
@@ -901,11 +926,15 @@ public final class PanelApi {
         if (disabled != null) {
             details.put("disabled", disabled);
         }
+        List<String> reset = new ArrayList<>();
         if (hash != null) {
-            details.put("password", "reset");
+            reset.add("password");
         }
         if (resetFactors) {
-            details.put("factors", "reset");
+            reset.add("factors");
+        }
+        if (!reset.isEmpty()) {
+            details.put("reset", reset);
         }
         audit.record("user.updated", session.user(), target.name(), call.client(), details);
         return listUsers();
@@ -998,7 +1027,9 @@ public final class PanelApi {
         try {
             ApiResponse answer = api.call(principal, call.method(), target, call.body(),
                     call.header(HttpHeaderNames.IF_MATCH));
-            FullHttpResponse response = Responses.jsonBytes(answer.status(), answer.body(), secure());
+            byte[] answerBody = answer.body();
+            FullHttpResponse response = Responses.jsonBytes(answer.status(),
+                    answerBody == null ? new byte[0] : answerBody, secure());
             answer.headers().forEach((k, v) -> {
                 if (!k.equalsIgnoreCase("content-type") && !k.equalsIgnoreCase("content-length")) {
                     response.headers().set(k, v);
@@ -1020,7 +1051,7 @@ public final class PanelApi {
     String origin(Call call) {
         String host = call.header(HttpHeaderNames.HOST);
         String hostName = PanelServer.hostOf(host == null ? "" : host.strip());
-        Optional<String> publicUrl = server.publicUrl();
+        Optional<String> publicUrl = server().publicUrl();
         if (publicUrl.isPresent()
                 && PanelServer.hostOf(publicUrl.get().substring(publicUrl.get().indexOf("://") + 3)).equals(hostName)) {
             return publicUrl.get();
@@ -1046,7 +1077,7 @@ public final class PanelApi {
         }
     }
 
-    private static String cookie(Call call, String name) {
+    private static @Nullable String cookie(Call call, String name) {
         String header = call.header(HttpHeaderNames.COOKIE);
         if (header == null || header.length() > 4096) {
             return null;
@@ -1083,7 +1114,7 @@ public final class PanelApi {
         return value;
     }
 
-    private static String optionalText(Map<String, Object> body, String key, int max) throws Refusal {
+    private static @Nullable String optionalText(Map<String, Object> body, String key, int max) throws Refusal {
         Object value = body.get(key);
         if (value == null) {
             return null;
@@ -1113,11 +1144,11 @@ public final class PanelApi {
         try {
             return Base64.getUrlDecoder().decode(text);
         } catch (IllegalArgumentException e) {
-            throw new Refusal(400, "invalid-field", "\"" + key + "\" must be Base64url.");
+            throw new Refusal(400, "invalid-field", "\"" + key + "\" must be Base64url.", e);
         }
     }
 
-    private static String label(String value, String fallback) throws Refusal {
+    private static String label(@Nullable String value, String fallback) throws Refusal {
         if (value == null || value.isBlank()) {
             return fallback;
         }
@@ -1161,7 +1192,7 @@ public final class PanelApi {
         try {
             change.run();
         } catch (PanelUsers.RefusedException e) {
-            throw new Refusal(409, e.code(), e.getMessage());
+            throw new Refusal(409, e.code(), Objects.requireNonNullElse(e.getMessage(), "The change was refused."), e);
         }
     }
 
@@ -1170,7 +1201,7 @@ public final class PanelApi {
                 u.disabled(), u.createdAt());
     }
 
-    private static PanelUsers.User withTotp(PanelUsers.User u, String secret, long step) {
+    private static PanelUsers.User withTotp(PanelUsers.User u, @Nullable String secret, long step) {
         return new PanelUsers.User(u.name(), u.passwordHash(), u.roles(), secret, step, u.passkeys(), u.oidc(),
                 u.disabled(), u.createdAt());
     }
