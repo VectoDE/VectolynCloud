@@ -128,11 +128,7 @@ public final class PanelPreview {
             @Override
             public ImportPlan planImport(byte[] archive) {
                 return new ImportPlan(java.util.List.of(new FileChange("cloud.yml", "changed"),
-                        new FileChange("groups/lobby.yml", "added")), "--- cloud.yml
-+++ cloud.yml
--language: en
-+language: de
-");
+                        new FileChange("groups/lobby.yml", "added")), "--- cloud.yml\n+++ cloud.yml\n-language: en\n+language: de\n");
             }
 
             @Override
