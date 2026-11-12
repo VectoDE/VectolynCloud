@@ -11,7 +11,7 @@ import java.util.Set;
 import net.vectolyn.cloud.api.auth.Scope;
 
 /**
- * What a panel user may do. The first eight are the scopes of the REST API ({@link Scope}); the
+ * What a panel user may do. The first ten are the scopes of the REST API ({@link Scope}); the
  * panel passes them on when it calls the API for the user. The others guard the panel's own pages.
  */
 public enum PanelRight {
@@ -30,6 +30,10 @@ public enum PanelRight {
     BACKUPS_WRITE("backups:write", Scope.BACKUPS_WRITE),
     /** Read node and cluster state. */
     NODE_READ("node:read", Scope.NODE_READ),
+    /** Read template files. */
+    TEMPLATES_READ("templates:read", Scope.TEMPLATES_READ),
+    /** Change template files. */
+    TEMPLATES_WRITE("templates:write", Scope.TEMPLATES_WRITE),
     /** Everything the API allows, including tokens. */
     ADMIN("admin", Scope.ADMIN),
     /** Read files of services and templates. */

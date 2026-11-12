@@ -322,10 +322,10 @@ public final class PanelUsers {
         Map<String, Set<PanelRight>> roles = new LinkedHashMap<>();
         roles.put(OWNER, Set.copyOf(EnumSet.allOf(PanelRight.class)));
         roles.put("operator", Set.copyOf(EnumSet.of(PanelRight.SERVICES_READ, PanelRight.SERVICES_WRITE,
-                PanelRight.CONFIG_READ, PanelRight.BACKUPS_READ, PanelRight.NODE_READ, PanelRight.FILES_READ,
-                PanelRight.FILES_WRITE, PanelRight.PLAYERS_MANAGE)));
+                PanelRight.CONFIG_READ, PanelRight.BACKUPS_READ, PanelRight.NODE_READ, PanelRight.TEMPLATES_READ,
+                PanelRight.TEMPLATES_WRITE, PanelRight.FILES_READ, PanelRight.FILES_WRITE, PanelRight.PLAYERS_MANAGE)));
         roles.put("viewer", Set.copyOf(EnumSet.of(PanelRight.SERVICES_READ, PanelRight.CONFIG_READ,
-                PanelRight.BACKUPS_READ, PanelRight.NODE_READ)));
+                PanelRight.BACKUPS_READ, PanelRight.NODE_READ, PanelRight.TEMPLATES_READ)));
         return java.util.Collections.unmodifiableMap(roles);
     }
 
