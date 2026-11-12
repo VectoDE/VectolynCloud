@@ -79,6 +79,7 @@ public final class PanelServer implements AutoCloseable {
     private final Optional<ApiTls.Material> tls;
     private final String version;
     private final WebAssets assets;
+    private final PanelApi api;
     private final RateLimiter<String> addressLimiter;
     private final Set<String> allowedHosts;
     private final ExecutorService executor = Executors.newThreadPerTaskExecutor(
@@ -99,6 +100,10 @@ public final class PanelServer implements AutoCloseable {
         this.assets = builder.assets != null ? builder.assets
                 : WebAssets.load(PanelServer.class.getClassLoader(), builder.tls.isPresent());
         this.addressLimiter = new RateLimiter<>(120, 600, builder.nanoTime);
+        this.api = builder.api;
+        if (api != null) {
+            api.attach(this);
+        }
         this.allowedHosts = allowedHosts(settings);
     }
 
@@ -333,6 +338,17 @@ public final class PanelServer implements AutoCloseable {
         return assets;
     }
 
+    /**
+     * The signed-in endpoints, or null when the panel runs without accounts (tests of the files).
+     */
+    PanelApi api() {
+        return api;
+    }
+
+    Optional<String> publicUrl() {
+        return settings.publicUrl();
+    }
+
     RateLimiter<String> addressLimiter() {
         return addressLimiter;
     }
@@ -352,6 +368,7 @@ public final class PanelServer implements AutoCloseable {
         private Optional<ApiTls.Material> tls = Optional.empty();
         private String version = "dev";
         private WebAssets assets;
+        private PanelApi api;
         private LongSupplier nanoTime = System::nanoTime;
 
         private Builder(PanelConfigLoader.Settings settings) {
@@ -388,6 +405,18 @@ public final class PanelServer implements AutoCloseable {
          */
         public Builder assets(WebAssets value) {
             this.assets = Objects.requireNonNull(value, "assets");
+            return this;
+        }
+
+        /**
+         * The accounts, sign-in and API endpoints. Without them only {@code /api/panel/info} and the
+         * frontend files are served.
+         *
+         * @param value the endpoints
+         * @return this builder
+         */
+        public Builder api(PanelApi value) {
+            this.api = Objects.requireNonNull(value, "api");
             return this;
         }
 
