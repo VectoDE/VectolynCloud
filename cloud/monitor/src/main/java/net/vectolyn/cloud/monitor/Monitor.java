@@ -366,13 +366,13 @@ public final class Monitor implements AutoCloseable {
                                  Map<Long, MetricSource.ProcessMetrics> processes) {
         ServiceStatus status = track.status;
         Instant at = track.statusAt;
-        boolean fresh = status != null && at != null
+        boolean fresh = at != null
                 && !Duration.between(at, now).minus(config.staleAfter().duration()).isPositive()
                 && (service.phase() == ServicePhase.RUNNING || service.phase() == ServicePhase.STARTING);
         MetricSource.ProcessMetrics process = service.pid().isPresent() && hasProcess(service.phase())
                 ? processes.getOrDefault(service.pid().getAsLong(), MetricSource.ProcessMetrics.UNKNOWN)
                 : MetricSource.ProcessMetrics.UNKNOWN;
-        if (!fresh || status == null) {
+        if (status == null || !fresh) {
             return new ServiceSample(now, ServiceSample.UNKNOWN, ServiceSample.UNKNOWN, Double.NaN, Double.NaN,
                     ServiceSample.UNKNOWN, ServiceSample.UNKNOWN, process.cpu(), process.rss());
         }

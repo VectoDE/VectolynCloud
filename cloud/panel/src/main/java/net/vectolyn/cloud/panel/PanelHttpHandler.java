@@ -219,8 +219,12 @@ final class PanelHttpHandler extends SimpleChannelInboundHandler<FullHttpRequest
         }
         String accept = requestHeaders.get(HttpHeaderNames.ACCEPT_ENCODING, "");
         byte @Nullable [] compressed = file.gzip();
-        boolean gzip = compressed != null && accept.toLowerCase(Locale.ROOT).contains("gzip");
-        byte[] body = gzip && compressed != null ? compressed : file.body();
+        byte[] body = file.body();
+        boolean gzip = false;
+        if (compressed != null && accept.toLowerCase(Locale.ROOT).contains("gzip")) {
+            body = compressed;
+            gzip = true;
+        }
         FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.valueOf(status),
                 head ? Unpooled.EMPTY_BUFFER : Unpooled.wrappedBuffer(body));
         HttpHeaders h = response.headers();

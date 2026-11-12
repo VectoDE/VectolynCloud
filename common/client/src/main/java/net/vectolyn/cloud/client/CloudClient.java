@@ -359,7 +359,7 @@ public final class CloudClient implements AutoCloseable {
             reader = connector;
         }
         Connection open = connection;
-        boolean saidGoodbye = false;
+        Connection goodbyeTo = null;
         if (open != null) {
             // A cloud that stopped reading leaves a writer blocked in write() with the write lock
             // held; the goodbye would wait for it forever. The watchdog closes the socket after a
@@ -374,17 +374,19 @@ public final class CloudClient implements AutoCloseable {
             }, "vectolyn-cloud-client-close-watchdog");
             watchdog.setDaemon(true);
             watchdog.start();
-            saidGoodbye = send(open, Envelope.of(new Disconnect(Disconnect.Reason.SHUTDOWN)));
+            if (send(open, Envelope.of(new Disconnect(Disconnect.Reason.SHUTDOWN)))) {
+                goodbyeTo = open;
+            }
             watchdog.interrupt();
         }
         if (reader != null) {
             reader.interrupt(); // ends a backoff sleep; a blocking socket read is not interrupted
         }
-        if (saidGoodbye && open != null) {
+        if (goodbyeTo != null) {
             // Closing a socket with frames still unread (a Pong, a late message) sends RST instead
             // of FIN, and Windows drops data the cloud has received but not yet read: the goodbye
             // would be lost. So: half-close, and let the reader drain until the cloud closes too.
-            open.shutdownOutput();
+            goodbyeTo.shutdownOutput();
             if (reader != null && reader != Thread.currentThread()) {
                 try {
                     reader.join(GOODBYE_GRACE_MILLIS);
