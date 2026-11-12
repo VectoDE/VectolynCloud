@@ -1,6 +1,6 @@
 # VectolynCloud-REST-API
 
-Modul `cloud/api`. Eine JSON-API über HTTP/1.1 und ein WebSocket für Live-Events, gedacht für das Dashboard (Etappe 8) und für Skripte. Die maschinenlesbare Beschreibung steht in [`api.openapi.yaml`](api.openapi.yaml), die ausführliche englische Seite in [api.md](api.md).
+Modul `cloud/api`. Eine JSON-API über HTTP/1.1 und ein WebSocket für Live-Events, gedacht für das Dashboard (Etappe 8) und für Skripte. Die maschinenlesbare Beschreibung steht in [`api.openapi.yaml`](api.openapi.yaml) und ist unter <https://vectode.github.io/VectolynCloud/api/openapi.yaml> veröffentlicht. `OpenApiContractTest` vergleicht sie in jedem Build mit der Routing-Tabelle des Servers: Eine Route ohne Eintrag, ein Eintrag ohne Route oder ein falscher Scope lässt den Build scheitern. Die ausführliche englische Seite ist [api.md](api.md).
 
 Die API ist standardmäßig aus. Sie startet mit dem Node, wenn in `config/cloud.yml` `api.enabled: true` steht:
 
@@ -19,12 +19,13 @@ api:
 
 ## Tokens
 
-Jede Anfrage braucht ein Token. Ohne Token, mit einem falschen oder einem widerrufenen kommt `401` mit `WWW-Authenticate: Bearer`. Einen Endpunkt ohne Anmeldung gibt es nicht.
+Jede Anfrage braucht ein Token. Ohne Token, mit einem falschen, widerrufenen oder abgelaufenen kommt `401` mit `WWW-Authenticate: Bearer`. Einen Endpunkt ohne Anmeldung gibt es nicht.
 
-Tokens verwaltet man an der Konsole des Nodes. Der ganze Befehl `api` gilt als sensibel, keine seiner Zeilen landet in der History.
+Tokens verwaltet man an der Konsole des Nodes oder mit einem `admin`-Token über `/api/v1/admin/tokens` (`GET` listet, `POST` erstellt, `DELETE /admin/tokens/{id}` widerruft). Der ganze Befehl `api` gilt als sensibel, keine seiner Zeilen landet in der History.
 
 ```text
 vectolyn> api token create dashboard services:read,config:read,node:read
+vectolyn> api token create ci services:read 90d    # gilt 90 Tage
 vectolyn> api token list
 vectolyn> api token revoke dashboard          # oder die ID; Aliase: delete, remove
 vectolyn> api scopes
@@ -35,6 +36,8 @@ vectolyn> api scopes
 - Eine Token-Datei, die sich nicht lesen lässt (fehlerhaft, ein Link, zu groß), hält den Node nicht auf. Mit `api.enabled: false` schreibt er eine Warnung ins Log, bei eingeschalteter API einen Fehler, und läuft dann ohne API weiter, so wie bei unbrauchbarem TLS-Material. `api token create`, `list` und `revoke` scheitern dann mit dem Grund (`secrets/api-tokens.json kann nicht gelesen werden (…)`) und versuchen es bei jedem Aufruf neu. Sobald die Datei repariert ist oder gelöscht wurde (dann ohne Tokens), funktionieren sie wieder. Die API selbst kommt mit dem nächsten Start des Nodes zurück.
 - Die Prüfung vergleicht den Hash in konstanter Zeit (`MessageDigest.isEqual`) mit allen gespeicherten Hashes und bricht beim ersten Treffer nicht ab.
 - Ein Widerruf wirkt sofort. Die nächste Anfrage scheitert, offene WebSockets dieses Tokens werden mit Code `1008` geschlossen.
+- **Laufzeit:** Ein Token kann eine Laufzeit von 1h bis 3650d bekommen (`12h`, `90d`). Ab `expires-at` scheitert es mit `401` wie ein widerrufenes, offene WebSockets schließen sich innerhalb von 15 Sekunden mit `1008`. In `list` bleibt es (als abgelaufen markiert), bis es widerrufen wird, damit sein Name nicht versehentlich neu vergeben wird. Ohne Laufzeit gilt ein Token, bis es widerrufen wird.
+- **Über die API:** `POST /api/v1/admin/tokens` mit `{"name": "ci", "scopes": ["services:read"], "expires-in": "90d"}` erstellt ein Token. Die Antwort ist die einzige Stelle, an der die API je ein Token zeigt. Ein vergebener Name oder das 101. Token ergibt `409 conflict`. Ein `admin`-Token kann weitere `admin`-Tokens erstellen. `admin` bekommt also nur, wer auch an die Konsole des Nodes darf.
 - Höchstens 100 Tokens. Namen folgen der Regel für Gruppennamen `[a-z0-9][a-z0-9_-]{0,31}`.
 - Wo das angezeigte Token landet: Der Befehl schreibt auf die Konsole, nicht ins Log. Logdateien und Journal bekommen es also nicht. Unter systemd hat die Cloud gar keine Konsole, lege Tokens dann in einer `tmux`- oder `screen`-Sitzung an ([Betrieb](operations.de.md)). In Docker ist die Konsole eines angehängten Containers (`docker attach`) seine Standardausgabe, `docker logs` behält das Token also. Leere oder rotiere diese Logs, oder widerrufe das Token und lege ein neues an, wenn die Logs geteilt werden.
 
@@ -51,11 +54,13 @@ Das Token geht als `Authorization: Bearer vct_...` mit. Browser können am WebSo
 | `backups:read` | Backups auflisten |
 | `backups:write` | Backup erstellen |
 | `node:read` | Node-Status |
-| `admin` | alles oben |
+| `admin` | alles oben und die Token-Verwaltung unter `/admin/tokens` |
 
 Ein Schreib-Scope schließt den Lese-Scope nicht ein. Fehlt der Scope, kommt `403 missing-scope`. Für Änderungen an `api` oder `database` in `cloud.yml` braucht es `admin`. Diese Abschnitte bestimmen, wer den Node erreicht und welches Image `docker compose` mit dem Root-Passwort der Datenbank startet.
 
-**Was die Schreib-Scopes erreichen.** `config:write` ist keine Shell auf dem Node: Die JVM-Flags begrenzt die [Allowlist](config.md#jvm-flag-allowlist), Templates sind Ordner im Cloud-Home, Software und Plugins kommen nur aus den Download-Quellen mit Prüfsumme. `services:write` darf jeden Konsolenbefehl an einen Server schicken, also so viel wie ein Operator an der Serverkonsole. Bieten Plugins Konsolenbefehle für Dateien oder Skripte, reicht das weiter. Diesen Scope bekommen nur Skripte, denen man auch die Serverkonsole geben würde. `GET /api/v1/tokens/self` geht mit jedem gültigen Token und zeigt ID, Name, Scopes und Erstellungszeit.
+**Was die Schreib-Scopes erreichen.** `config:write` ist keine Shell auf dem Node: Die JVM-Flags begrenzt die [Allowlist](config.md#jvm-flag-allowlist), Templates sind Ordner im Cloud-Home, Software und Plugins kommen nur aus den Download-Quellen mit Prüfsumme. `services:write` darf jeden Konsolenbefehl an einen Server schicken, also so viel wie ein Operator an der Serverkonsole. Bieten Plugins Konsolenbefehle für Dateien oder Skripte, reicht das weiter. Diesen Scope bekommen nur Skripte, denen man auch die Serverkonsole geben würde. `GET /api/v1/tokens/self` geht mit jedem gültigen Token und zeigt ID, Name, Scopes, Erstellungszeit und Ablauf.
+
+Die Rechteprüfung ist für jede Route und jeden Scope gegen einen laufenden Server getestet (`ScopeMatrixTest`): Ein Token mit einem Scope bekommt genau dort `403 missing-scope`, wo die Route einen anderen braucht, und `admin` kommt überall durch.
 
 ## Endpunkte
 
@@ -92,6 +97,15 @@ Jeder Schreibzugriff läuft über `ConfigService.apply`. Geprüft wird die ganze
 
 **Backups.** `BackupServiceAccess` setzt `BackupAccess` über den `BackupService` aus cloud-backup um. Backups über die API haben den Grund `manual`, wie `backup create` an der Konsole. Läuft schon ein Backup, kommt `409`, bei einem unbekannten Dienst `422`. Antworten enthalten die Backup-ID, nie einen Pfad. Andere Fehler (Dateien, Datenbank-Dump, kaputtes Archiv) beantwortet die API mit `503 unavailable` und nur dem Grund, etwa `(io)`. Die Einzelheiten stehen im Log des Nodes. Solange der Node den Adapter nicht übergibt, antworten beide Endpunkte mit `501 not-available`.
 
+### Seiten
+
+Die Listen (`GET /services`, `/groups`, `/tasks`, `/nodes`, `/backups`) sind nach ihrem Schlüssel sortiert: Service-ID, Name der Gruppe, des Tasks oder des Nodes, Backup-ID (die nach Zeit sortiert). Ohne `limit` enthält die Antwort die ganze Liste. Mit `?limit=n` (1 bis 500) enthält sie höchstens `n` Einträge, `?after=<schlüssel>` beginnt nach diesem Schlüssel. Der Body behält seine Form (ein Array, bei Gruppen und Tasks ein Objekt nach Namen). Ein Client, der nicht blättert, merkt also keinen Unterschied. Zwei Header tragen den Stand:
+
+- `X-Total-Count`: Einträge der ganzen Liste.
+- `Link: </api/v1/services?limit=50&after=lobby-50>; rel="next"` (RFC 8288), solange weitere folgen. Die letzte Seite hat keinen.
+
+Der Cursor ist ein Schlüssel, keine Position. Ein Eintrag, den es während beider Anfragen gibt, wird weder übersprungen noch doppelt geliefert, auch wenn dazwischen andere hinzukommen oder wegfallen. Ein ungültiges `limit` oder `after` ergibt `400 invalid-query`.
+
 ### Fehler
 
 Jeder Fehler hat denselben Body: `code`, `message` und bei Konfigurationsfehlern `errors` mit `file`, `path`, `line`, `code`, `message` und `message-de`. Dateinamen (`file`, `files` beim Reload) sind relativ zu `config/` (`groups/lobby.yml`), wie in der Konsole. Meldungen nennen Felder und Regeln, nie Werte. Meldungen des Nodes laufen durch dieselbe Schwärzung wie die Konsolenausgabe und werden auf 300 Zeichen gekürzt. Die Liste der Codes steht in [api.md](api.md#errors).
@@ -127,7 +141,7 @@ Standard ist `127.0.0.1`. Jede Adresse außerhalb von Loopback, auch `0.0.0.0`, 
 Mit TLS spricht der Server nur TLS 1.3 und 1.2 und sendet `Strict-Transport-Security`. Zum Keystore (`api.tls.keystore`, PKCS#12, relativ zum Home):
 
 - **Eigenes Zertifikat:** Die PKCS#12-Datei an diesen Pfad legen und das Passwort in `secrets/vectolyn.env` als `VECTOLYN_API_KEYSTORE_PASSWORD` eintragen. Fehlt das Passwort, startet der Node die API nicht und nennt den fehlenden Schlüssel.
-- **Selbst erzeugt:** Gibt es die Datei nicht, erzeugt der Node mit `keytool` aus dem JDK ein selbstsigniertes Zertifikat. Es nutzt EC P-256, gilt 825 Tage und enthält die Namen `localhost`, `127.0.0.1`, `::1` und die Bind-Adresse, sofern sie keine Wildcard ist. Das Keystore-Passwort ist zufällig und liegt in `secrets/api-keystore.password` (nur für den Besitzer lesbar). `keytool` bekommt es über eine Umgebungsvariable, nie über die Kommandozeile. Bei jedem Start loggt der Node den SHA-256-Fingerprint, damit ein Client ihn pinnen kann.
+- **Selbst erzeugt:** Gibt es die Datei nicht, erzeugt der Node mit `keytool` aus dem JDK ein selbstsigniertes Zertifikat. Es nutzt EC P-256, gilt 825 Tage und enthält die Namen `localhost`, `127.0.0.1`, `::1` und die Bind-Adresse, sofern sie keine Wildcard ist. Das Keystore-Passwort ist zufällig und liegt in `secrets/api-keystore.password` (nur für den Besitzer lesbar). `keytool` bekommt es über eine Umgebungsvariable, nie über die Kommandozeile. `keytool` schreibt in einen neuen Ordner neben dem Keystore, den nur der Besitzer öffnen kann, und die fertige Datei wird in einem Schritt an ihren Platz verschoben. Solange sie entsteht, kann kein anderer Benutzer sie öffnen, und ein Absturz hinterlässt entweder keinen Keystore (er wird beim nächsten Start neu erzeugt) oder einen vollständigen. Bei jedem Start loggt der Node den SHA-256-Fingerprint, damit ein Client ihn pinnen kann.
 
 ### CORS
 
@@ -146,7 +160,11 @@ Standardmäßig aus. Es wird kein `Access-Control-*`-Header gesendet, Browser au
 | Event-Streams | 32 |
 | Leerlauf | Verbindung wird nach 120 s geschlossen |
 
-Bei einem Limit kommt `429 rate-limited` mit `Retry-After` in Sekunden.
+Bei einem Limit kommt `429 rate-limited` mit `Retry-After` in Sekunden. Jede Antwort auf eine Anfrage mit gültigem Token trägt `X-RateLimit-Limit` (Größe des Token-Eimers) und `X-RateLimit-Remaining` (was gerade noch drin ist). Ein Skript kann also langsamer werden, bevor es `429` bekommt.
+
+Jeder Limiter merkt sich bis zu 10.000 Schlüssel (Adressen, Tokens) in der Reihenfolge der letzten Nutzung. Ein neuer Schlüssel darüber hinaus verdrängt den am längsten unbenutzten, in konstanter Zeit. Eine Flut neuer Adressen sperrt deshalb keine neuen Clients aus, und keine Anfrage muss die ganze Tabelle durchsuchen. Ein verdrängter Schlüssel beginnt wieder mit vollem Eimer. Davon hat ein Client nur etwas, wenn er mehr als 10.000 Adressen hat, und dann hat jede davon ohnehin einen eigenen Eimer.
+
+Gezählt wird pro IPv4-Adresse und pro IPv6-/64. Ein Client hinter NAT64 (`64:ff9b::/96`, RFC 6052) zählt unter der IPv4-Adresse in den letzten 32 Bit. So teilen sich die Clients hinter einem NAT64-Gateway kein gemeinsames /64, und ein Client zählt über IPv4 und NAT64 gleich.
 
 ### Was nie in einer Antwort steht
 

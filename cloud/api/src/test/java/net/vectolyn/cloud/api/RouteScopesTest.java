@@ -20,8 +20,9 @@ import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Rights audit of the API (docs/cloud/rights-audit.md): every action that changes something needs a
- * write scope, checked by the server for each request; reading needs a read scope. The only route
- * without a scope is a token describing itself.
+ * write scope, checked by the server for each request; reading needs a read scope. Everything under
+ * {@code /admin/} (token management) needs {@code admin}. The only route without a scope is a token
+ * describing itself.
  */
 class RouteScopesTest {
 
@@ -38,8 +39,11 @@ class RouteScopesTest {
             assertFalse(router.routes().isEmpty());
             for (Router.Route<ApiRoutes.Handler> route : router.routes()) {
                 String name = route.method() + " " + route.path();
+                boolean adminArea = route.path().startsWith(ApiRoutes.PREFIX + "/admin/");
                 if (route.scope() == null) {
                     unscoped.add(name);
+                } else if (adminArea) {
+                    assertEquals(Scope.ADMIN, route.scope(), name + ": the admin area needs the scope admin");
                 } else if (route.method().equals("GET")) {
                     assertFalse(WRITE.contains(route.scope()), name + " reads with a write scope");
                     assertFalse(route.scope() == Scope.ADMIN, name);

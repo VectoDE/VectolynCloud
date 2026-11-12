@@ -14,9 +14,9 @@ Server stoppen, Welten und Stand lokal sichern; Server-Ordner nach `Server-Netwo
 
 ## 2. VectolynCloud-Kern ([#11](https://github.com/VectoDE/VectolynCloud/issues/11))
 
-**Stand: in Arbeit.**
+**Stand: in Arbeit.** Gebaut: alles in der folgenden Liste außer mehreren Nodes (erster Schritt erledigt), dem Update-System und dem verwalteten Legacy-Proxy. Siehe [Funktionsstand](Feature-Status-DE).
 
-Node mit Konsole, Einrichtungsassistent beim ersten Start, Konfiguration über Dateien und Konsolenbefehle und eine gemeinsame Konfigurationsschicht, die das Dashboard in Etappe 8 weiterverwendet. Auswahl der gewollten Server und Minigame-Gruppen; nur gewollte entstehen aus ihren Templates. Gruppen und Tasks, Autoskalierung, Multi-Node über TLS, REST-/WebSocket-API, Plattform-Downloader mit Prüfsummen und Rollback, JRE-Verwaltung, Datenbank-Assistent, Secret-Erzeugung, eigener Messaging-Kanal, Backups und Monitoring, Docker-Image auf GHCR mit Dockerfile und compose-Datei, Pterodactyl-Egg, systemd-Unit, Startskripte für Windows, Linux und macOS. Recherche eines 1.8.8-Forks für Java 21. Geplante Schutzregel: VectolynCloud verweigert den Start als Administrator oder root, außer mit einem ausdrücklichen Schalter (etwa `--allow-root`). Die Meldung erklärt dann, wie man ohne Admin-Rechte startet.
+Node mit Konsole, Einrichtungsassistent beim ersten Start, Konfiguration über Dateien und Konsolenbefehle und eine gemeinsame Konfigurationsschicht, die das Dashboard in Etappe 8 weiterverwendet. Auswahl der gewollten Server und Minigame-Gruppen; nur gewollte entstehen aus ihren Templates. Gruppen und Tasks, Autoskalierung, Multi-Node über TLS, REST-/WebSocket-API, Plattform-Downloader mit Prüfsummen und Rollback, JRE-Verwaltung, Datenbank-Assistent, Secret-Erzeugung, eigener Messaging-Kanal, Backups und Monitoring, Docker-Image auf GHCR mit Dockerfile und compose-Datei, Pterodactyl-Egg, systemd-Unit, Startskripte für Windows, Linux und macOS. Recherche eines 1.8.8-Forks für Java 21. VectolynCloud verweigert den Start als Administrator oder root, außer mit `--allow-root`. Die Meldung erklärt, wie man ohne Admin-Rechte startet.
 
 ## 3. Vectolyn-Plugin-Basis ([#12](https://github.com/VectoDE/VectolynCloud/issues/12))
 

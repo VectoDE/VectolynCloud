@@ -8,6 +8,7 @@ import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
 import java.security.MessageDigest;
@@ -164,19 +165,36 @@ public final class ApiTls {
                     + "). Bring your own keystore: api.tls.keystore in cloud.yml and " + PASSWORD_KEY
                     + " in secrets/vectolyn.env.");
         }
-        Path parent = keystore.toAbsolutePath().getParent();
-        if (parent != null) {
-            Files.createDirectories(parent);
-        }
+        Path target = keystore.toAbsolutePath();
+        Path parent = target.getParent();
+        Files.createDirectories(parent);
         List<String> san = new ArrayList<>();
         for (String name : names) {
             san.add((IPV4.matcher(name).matches() || name.contains(":") ? "ip:" : "dns:") + name);
         }
-        List<String> command = List.of(keytool.toString(), "-genkeypair", "-alias", ALIAS, "-keyalg", "EC",
-                "-groupname", "secp256r1", "-sigalg", "SHA256withECDSA", "-validity", "825",
-                "-dname", "CN=VectolynCloud API", "-ext", "SAN=" + String.join(",", san),
-                "-keystore", keystore.toString(), "-storetype", "PKCS12",
-                "-storepass:env", PASSWORD_ENV, "-keypass:env", PASSWORD_ENV, "-noprompt");
+        // keytool writes into a private folder next to the target: the folder is owner-only before
+        // the key exists (createTempDirectory makes it rwx------ on POSIX, the ACL is set on Windows),
+        // so no other user can open the half-written file. The finished file is then moved into place
+        // in one step, so a crash leaves either no keystore or a complete one, never a broken one.
+        Path work = Files.createTempDirectory(parent, ".keytool-");
+        Path draft = work.resolve("keystore.p12");
+        try {
+            OwnerOnlyPermissions.restrictDirectory(work);
+            List<String> command = List.of(keytool.toString(), "-genkeypair", "-alias", ALIAS, "-keyalg", "EC",
+                    "-groupname", "secp256r1", "-sigalg", "SHA256withECDSA", "-validity", "825",
+                    "-dname", "CN=VectolynCloud API", "-ext", "SAN=" + String.join(",", san),
+                    "-keystore", draft.toString(), "-storetype", "PKCS12",
+                    "-storepass:env", PASSWORD_ENV, "-keypass:env", PASSWORD_ENV, "-noprompt");
+            runKeytool(command, password, draft);
+            OwnerOnlyPermissions.restrictFile(draft);
+            Files.move(draft, target, StandardCopyOption.ATOMIC_MOVE);
+        } finally {
+            Files.deleteIfExists(draft);
+            Files.deleteIfExists(work);
+        }
+    }
+
+    private static void runKeytool(List<String> command, Secret password, Path draft) throws IOException {
         // nosemgrep: java.lang.security.audit.command-injection-process-builder.command-injection-process-builder -- keytool by its full path from the running JDK, arguments are separate list elements, no shell
         ProcessBuilder builder = new ProcessBuilder(command).redirectErrorStream(true);
         builder.environment().put(PASSWORD_ENV, password.reveal());
@@ -193,12 +211,11 @@ public final class ApiTls {
             Thread.currentThread().interrupt();
             throw new IOException("interrupted while keytool ran", e);
         }
-        if (process.exitValue() != 0 || !Files.isRegularFile(keystore)) {
+        if (process.exitValue() != 0 || !Files.isRegularFile(draft)) {
             String firstLine = output.lines().findFirst().orElse("").replaceAll("\\p{Cntrl}", "?");
             throw new IOException("keytool failed with exit code " + process.exitValue() + ": "
                     + firstLine.substring(0, Math.min(200, firstLine.length())));
         }
-        OwnerOnlyPermissions.restrictFile(keystore);
     }
 
     /**

@@ -3,21 +3,27 @@
 package net.vectolyn.cloud.api.http;
 
 import java.io.IOException;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import net.vectolyn.cloud.api.auth.ApiToken;
+import net.vectolyn.cloud.api.auth.ApiTokens;
 import net.vectolyn.cloud.api.auth.Scope;
 import net.vectolyn.cloud.api.backend.ApiBackend;
 import net.vectolyn.cloud.api.backend.BackupAccess;
 import net.vectolyn.cloud.api.backend.BackupOrder;
+import net.vectolyn.cloud.api.backend.BackupView;
 import net.vectolyn.cloud.api.backend.ServiceView;
 import net.vectolyn.cloud.config.CloudHome;
 import net.vectolyn.cloud.config.ConfigChanged;
@@ -76,6 +82,7 @@ public final class ApiRoutes {
     private final ConfigService config;
     private final ApiBackend backend;
     private final BooleanSupplier shuttingDown;
+    private final ApiTokens tokens;
 
     /**
      * Creates the endpoints.
@@ -85,9 +92,22 @@ public final class ApiRoutes {
      * @param shuttingDown whether start and reload must be refused
      */
     public ApiRoutes(ConfigService config, ApiBackend backend, BooleanSupplier shuttingDown) {
+        this(config, backend, shuttingDown, null);
+    }
+
+    /**
+     * Creates the endpoints with the token store, for the admin endpoints.
+     *
+     * @param config       the configuration layer
+     * @param backend      the node
+     * @param shuttingDown whether start and reload must be refused
+     * @param tokens       the token store, or null if the admin endpoints answer 501
+     */
+    public ApiRoutes(ConfigService config, ApiBackend backend, BooleanSupplier shuttingDown, ApiTokens tokens) {
         this.config = config;
         this.backend = backend;
         this.shuttingDown = shuttingDown;
+        this.tokens = tokens;
     }
 
     /**
@@ -97,7 +117,8 @@ public final class ApiRoutes {
      */
     public Router<Handler> router() {
         Router<Handler> r = new Router<>();
-        r.add("GET", PREFIX + "/services", Scope.SERVICES_READ, q -> ApiResponse.ok(backend.services().list()));
+        r.add("GET", PREFIX + "/services", Scope.SERVICES_READ,
+                q -> Page.list(q, PREFIX + "/services", backend.services().list(), ServiceView::id));
         r.add("POST", PREFIX + "/services", Scope.SERVICES_WRITE, this::startService);
         r.add("GET", PREFIX + "/services/{id}", Scope.SERVICES_READ, q -> ApiResponse.ok(service(q.param("id"))));
         r.add("POST", PREFIX + "/services/{id}/stop", Scope.SERVICES_WRITE,
@@ -108,7 +129,7 @@ public final class ApiRoutes {
         });
         r.add("POST", PREFIX + "/services/{id}/command", Scope.SERVICES_WRITE, this::command);
 
-        r.add("GET", PREFIX + "/groups", Scope.CONFIG_READ, q -> ApiResponse.ok(config.snapshot().groups()));
+        r.add("GET", PREFIX + "/groups", Scope.CONFIG_READ, q -> Page.map(q, PREFIX + "/groups", config.snapshot().groups()));
         r.add("GET", PREFIX + "/groups/{name}", Scope.CONFIG_READ, q -> ApiResponse.document(200, group(q.param("name"))));
         r.add("PUT", PREFIX + "/groups/{name}", Scope.CONFIG_WRITE, this::putGroup);
         r.add("DELETE", PREFIX + "/groups/{name}", Scope.CONFIG_WRITE, q -> {
@@ -124,7 +145,7 @@ public final class ApiRoutes {
                     return setGroupWanted(q.param("name"), q);
                 });
 
-        r.add("GET", PREFIX + "/tasks", Scope.CONFIG_READ, q -> ApiResponse.ok(config.snapshot().tasks()));
+        r.add("GET", PREFIX + "/tasks", Scope.CONFIG_READ, q -> Page.map(q, PREFIX + "/tasks", config.snapshot().tasks()));
         r.add("GET", PREFIX + "/tasks/{name}", Scope.CONFIG_READ, q -> ApiResponse.document(200, task(q.param("name"))));
         r.add("PUT", PREFIX + "/tasks/{name}", Scope.CONFIG_WRITE, this::putTask);
         r.add("DELETE", PREFIX + "/tasks/{name}", Scope.CONFIG_WRITE, q -> {
@@ -142,7 +163,8 @@ public final class ApiRoutes {
             return setGroupWanted(task.group(), q);
         });
 
-        r.add("GET", PREFIX + "/nodes", Scope.CONFIG_READ, q -> ApiResponse.ok(config.snapshot().nodes().nodes()));
+        r.add("GET", PREFIX + "/nodes", Scope.CONFIG_READ,
+                q -> Page.list(q, PREFIX + "/nodes", config.snapshot().nodes().nodes(), NodeConfig::id));
         r.add("GET", PREFIX + "/nodes/{name}", Scope.CONFIG_READ, q -> ApiResponse.document(200, node(q.param("name"))));
         r.add("PUT", PREFIX + "/nodes/{name}", Scope.CONFIG_WRITE, this::putNode);
 
@@ -178,7 +200,8 @@ public final class ApiRoutes {
         r.add("GET", PREFIX + "/setup", Scope.CONFIG_READ,
                 q -> ApiResponse.ok(backend.node().setup(config.snapshot())));
 
-        r.add("GET", PREFIX + "/backups", Scope.BACKUPS_READ, q -> ApiResponse.ok(backups().list()));
+        r.add("GET", PREFIX + "/backups", Scope.BACKUPS_READ,
+                q -> Page.list(q, PREFIX + "/backups", backups().list(), BackupView::id));
         r.add("POST", PREFIX + "/backups", Scope.BACKUPS_WRITE, q -> {
             refuseDuringShutdown();
             BackupBody body = q.json(BackupBody.class);
@@ -197,12 +220,81 @@ public final class ApiRoutes {
                     body.database() == null || body.database(), body.note())));
         });
 
-        r.add("GET", PREFIX + "/tokens/self", null, q -> ApiResponse.ok(describe(q.token())));
+        r.add("GET", PREFIX + "/tokens/self", null, q -> ApiResponse.ok(describe(q.token(), now())));
+
+        r.add("GET", PREFIX + "/admin/tokens", Scope.ADMIN, q -> {
+            Instant now = tokens().clock().instant();
+            return Page.list(q, PREFIX + "/admin/tokens",
+                    tokens().list().stream().map(t -> describe(t, now)).toList(), t -> (String) t.get("id"));
+        });
+        r.add("POST", PREFIX + "/admin/tokens", Scope.ADMIN, this::createToken);
+        r.add("DELETE", PREFIX + "/admin/tokens/{id}", Scope.ADMIN, q -> {
+            if (tokens().revoke(q.param("id")).isEmpty()) {
+                throw ApiException.notFound("Token \"" + q.param("id") + "\"");
+            }
+            return ApiResponse.noContent();
+        });
         // The WebSocket is answered by ApiHttpHandler before routing; the route carries its scope.
         r.add("GET", EVENTS, Scope.SERVICES_READ, q -> {
             throw new ApiException(426, "upgrade-required", "This endpoint is a WebSocket.");
         });
         return r;
+    }
+
+    /**
+     * {@code POST /admin/tokens}: the one answer of the API that holds a token. It is shown once,
+     * like at the console; the node keeps only its hash.
+     */
+    private ApiResponse createToken(ApiRequest q) throws Exception {
+        CreateTokenBody body = q.json(CreateTokenBody.class);
+        if (body.name() == null || !ConfigNames.isValidName(body.name())) {
+            throw ApiException.badRequest("invalid-value", "\"name\" must match " + ConfigNames.NAME + ".");
+        }
+        if (body.scopes() == null || body.scopes().isEmpty() || body.scopes().size() > Scope.values().length) {
+            throw ApiException.badRequest("invalid-value", "\"scopes\" must list at least one scope.");
+        }
+        Set<Scope> scopes = EnumSet.noneOf(Scope.class);
+        for (String id : body.scopes()) {
+            Scope scope = Scope.of(id).orElseThrow(() -> ApiException.badRequest("invalid-value",
+                    "\"scopes\" has an unknown scope."));
+            scopes.add(scope);
+        }
+        Duration lifetime = null;
+        if (body.expiresIn() != null) {
+            try {
+                lifetime = ApiTokens.parseLifetime(body.expiresIn());
+            } catch (IllegalArgumentException e) {
+                throw ApiException.badRequest("invalid-value",
+                        "\"expires-in\" must be 1h to 3650d, written " + ApiTokens.LIFETIME_FORMAT + ".");
+            }
+        }
+        ApiTokens store = tokens();
+        if (store.list().stream().anyMatch(t -> t.name().equals(body.name()))) {
+            throw new ApiException(409, "conflict", "A token with this name exists.");
+        }
+        if (store.list().size() >= ApiTokens.MAX_TOKENS) {
+            throw new ApiException(409, "conflict", "At most " + ApiTokens.MAX_TOKENS + " tokens are possible.");
+        }
+        ApiTokens.Created created;
+        try {
+            created = store.create(body.name(), scopes, lifetime);
+        } catch (IllegalArgumentException e) {
+            throw new ApiException(409, "conflict", "The token could not be created (name taken or limit reached).");
+        }
+        Map<String, Object> answer = describe(created.info(), store.clock().instant());
+        answer.put("token", created.token().reveal());
+        return ApiResponse.of(201, answer);
+    }
+
+    private Instant now() {
+        return tokens == null ? Instant.now() : tokens.clock().instant();
+    }
+
+    private ApiTokens tokens() throws ApiException {
+        if (tokens == null) {
+            throw new ApiException(501, "not-available", "Token management is not available on this server.");
+        }
+        return tokens;
     }
 
     private ApiResponse startService(ApiRequest q) throws Exception {
@@ -495,12 +587,16 @@ public final class ApiRoutes {
         return list;
     }
 
-    private static Map<String, Object> describe(ApiToken token) {
+    private static Map<String, Object> describe(ApiToken token, Instant now) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("id", token.id());
         body.put("name", token.name());
         body.put("scopes", token.scopes().stream().map(Scope::id).sorted().toList());
         body.put("created-at", token.createdAt().toString());
+        if (token.expiresAt() != null) {
+            body.put("expires-at", token.expiresAt().toString());
+        }
+        body.put("expired", token.isExpired(now));
         return body;
     }
 
@@ -514,6 +610,10 @@ public final class ApiRoutes {
 
     /** Body of the {@code wanted} endpoints. */
     record WantedBody(Boolean wanted) {
+    }
+
+    /** Body of {@code POST /admin/tokens}. */
+    record CreateTokenBody(String name, List<String> scopes, String expiresIn) {
     }
 
     /** Body of {@code POST /backups}. */

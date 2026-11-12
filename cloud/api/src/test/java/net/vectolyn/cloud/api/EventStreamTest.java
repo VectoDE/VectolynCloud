@@ -85,6 +85,22 @@ class EventStreamTest {
     }
 
     @Test
+    void aStreamEndsWhenItsTokenExpires() throws Exception {
+        try (TestApi api = new TestApi(home)) {
+            String reader = api.tokens.create("expiring", java.util.Set.of(Scope.SERVICES_READ),
+                    java.time.Duration.ofHours(1)).token().reveal();
+            Recorder recorder = new Recorder();
+            connect(api, "", reader, recorder);
+            waitForStreams(api, 1);
+            assertNull(recorder.closed.getNow(null), "open while the token is valid");
+            api.now.set(api.now.get().plus(java.time.Duration.ofHours(1)));
+            assertEquals(1008, recorder.closed.get(10, TimeUnit.SECONDS));
+            waitForStreams(api, 0);
+            assertHandshakeFails(api, reader);
+        }
+    }
+
+    @Test
     void browsersPassTheTokenAsSubprotocol() throws Exception {
         try (TestApi api = new TestApi(home)) {
             Recorder recorder = new Recorder();
