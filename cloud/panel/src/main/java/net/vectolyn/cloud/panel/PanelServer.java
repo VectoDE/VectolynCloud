@@ -42,6 +42,7 @@ import net.vectolyn.cloud.api.ApiTls;
 import net.vectolyn.cloud.api.auth.RateLimiter;
 import net.vectolyn.cloud.panel.config.PanelConfigLoader;
 import net.vectolyn.cloud.panel.web.WebAssets;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The web panel's own HTTP server (Netty, HTTP/1.1), embedded in the node.
@@ -86,10 +87,11 @@ public final class PanelServer implements AutoCloseable {
     private final Object connectionLock = new Object();
     private final Map<String, Integer> connections = new HashMap<>();
     private int openConnections;
-    private SslContext sslContext;
-    private EventLoopGroup bossGroup;
-    private EventLoopGroup workerGroup;
-    private Channel serverChannel;
+    /** Set by {@link #start} before the listener binds, read on the event loop threads. */
+    private volatile @Nullable SslContext sslContext;
+    private @Nullable EventLoopGroup bossGroup;
+    private @Nullable EventLoopGroup workerGroup;
+    private @Nullable Channel serverChannel;
     private boolean closed;
 
     private PanelServer(Builder builder) {
@@ -182,7 +184,7 @@ public final class PanelServer implements AutoCloseable {
         try {
             address = InetAddress.getByName(bind);
         } catch (UnknownHostException e) {
-            throw new IOException("bind in panel.yml cannot be resolved.");
+            throw new IOException("bind in panel.yml cannot be resolved.", e);
         }
         if (!secure && !address.isLoopbackAddress()) {
             throw new IOException("The panel listens on a non-loopback address and therefore needs TLS: switch on"
@@ -226,6 +228,8 @@ public final class PanelServer implements AutoCloseable {
         return colon < 0 ? value : value.substring(0, colon);
     }
 
+    // Netty closes and listeners are fire-and-forget; the close future ends the connection's bookkeeping.
+    @SuppressWarnings("FutureReturnValueIgnored")
     private void initConnection(SocketChannel ch) {
         String client = clientKey(ch.remoteAddress());
         if (!acquireConnection(client)) {
@@ -234,8 +238,9 @@ public final class PanelServer implements AutoCloseable {
         }
         ch.closeFuture().addListener(f -> releaseConnection(client));
         ChannelPipeline p = ch.pipeline();
-        if (sslContext != null) {
-            p.addLast("vectolyn-panel-tls", sslContext.newHandler(ch.alloc()));
+        SslContext ssl = sslContext;
+        if (ssl != null) {
+            p.addLast("vectolyn-panel-tls", ssl.newHandler(ch.alloc()));
         }
         p.addLast("vectolyn-panel-http", new HttpServerCodec(new HttpDecoderConfig()
                 .setMaxInitialLineLength(4096)
@@ -351,7 +356,7 @@ public final class PanelServer implements AutoCloseable {
         private final PanelConfigLoader.Settings settings;
         private Optional<ApiTls.Material> tls = Optional.empty();
         private String version = "dev";
-        private WebAssets assets;
+        private @Nullable WebAssets assets;
         private LongSupplier nanoTime = System::nanoTime;
 
         private Builder(PanelConfigLoader.Settings settings) {

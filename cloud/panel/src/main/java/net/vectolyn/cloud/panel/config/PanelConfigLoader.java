@@ -22,6 +22,7 @@ import net.vectolyn.cloud.config.io.ConfigFormat;
 import net.vectolyn.cloud.config.io.ConfigMappers;
 import net.vectolyn.cloud.config.io.ConfigYaml;
 import net.vectolyn.cloud.config.io.RegularPaths;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Reads and checks {@code config/panel.yml} with the strict YAML reader of the other configuration
@@ -70,7 +71,7 @@ public final class PanelConfigLoader {
         } catch (NoSuchFileException e) {
             return check(PanelConfig.defaults());
         } catch (IOException e) {
-            throw new ConfigException(ConfigError.of(FILE, "", ErrorCode.FILE_ACCESS));
+            throw new ConfigException(ConfigError.of(FILE, "", ErrorCode.FILE_ACCESS), e);
         }
         return parse(content);
     }
@@ -102,8 +103,9 @@ public final class PanelConfigLoader {
             errors.add(ConfigError.of(FILE, "bind", ErrorCode.INVALID_VALUE, "an IP address or host name"));
         }
         Optional<String> origin = Optional.empty();
-        if (config.publicUrl() != null) {
-            origin = origin(config.publicUrl());
+        String publicUrl = config.publicUrl();
+        if (publicUrl != null) {
+            origin = origin(publicUrl);
             if (origin.isEmpty()) {
                 errors.add(ConfigError.of(FILE, "public-url", ErrorCode.INVALID_VALUE,
                         "https://host[:port] without path, or http://localhost[:port]"));
@@ -123,7 +125,7 @@ public final class PanelConfigLoader {
      * @param url the URL
      * @return the origin in lower case without a default port, or empty if the URL is not allowed
      */
-    public static Optional<String> origin(String url) {
+    public static Optional<String> origin(@Nullable String url) {
         if (url == null || url.length() > 255) {
             return Optional.empty();
         }

@@ -24,6 +24,7 @@ import java.util.Optional;
 import net.vectolyn.cloud.panel.http.RequestTarget;
 import net.vectolyn.cloud.panel.http.Responses;
 import net.vectolyn.cloud.panel.web.WebAssets;
+import org.jspecify.annotations.Nullable;
 
 /**
  * One connection of the panel server. Every request is checked in this order: decodable (400),
@@ -126,8 +127,9 @@ final class PanelHttpHandler extends SimpleChannelInboundHandler<FullHttpRequest
             return notModified;
         }
         String accept = requestHeaders.get(HttpHeaderNames.ACCEPT_ENCODING, "");
-        boolean gzip = file.gzip() != null && accept.toLowerCase(Locale.ROOT).contains("gzip");
-        byte[] body = gzip ? file.gzip() : file.body();
+        byte @Nullable [] compressed = file.gzip();
+        boolean gzip = compressed != null && accept.toLowerCase(Locale.ROOT).contains("gzip");
+        byte[] body = gzip && compressed != null ? compressed : file.body();
         FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.valueOf(status),
                 head ? Unpooled.EMPTY_BUFFER : Unpooled.wrappedBuffer(body));
         HttpHeaders h = response.headers();
@@ -150,15 +152,15 @@ final class PanelHttpHandler extends SimpleChannelInboundHandler<FullHttpRequest
         if (file.gzip() != null) {
             h.set(HttpHeaderNames.VARY, "Accept-Encoding");
         }
-        h.set("Content-Security-Policy", file.csp() != null ? file.csp()
-                : "default-src 'none'; frame-ancestors 'none'");
+        String csp = file.csp();
+        h.set("Content-Security-Policy", csp != null ? csp : "default-src 'none'; frame-ancestors 'none'");
         Responses.common(h, server.secure());
     }
 
     /** Whether an {@code If-None-Match} list names the ETag (weak comparison, as RFC 9110 asks). */
     static boolean matches(String ifNoneMatch, String etag) {
         String strong = etag.startsWith("W/") ? etag.substring(2) : etag;
-        for (String candidate : ifNoneMatch.split(",")) {
+        for (String candidate : ifNoneMatch.split(",", -1)) {
             String value = candidate.strip();
             if (value.equals("*")) {
                 return true;
@@ -191,7 +193,9 @@ final class PanelHttpHandler extends SimpleChannelInboundHandler<FullHttpRequest
         }
     }
 
+    // Netty closes are fire-and-forget; the channel's close future reports the end to the pipeline.
     @Override
+    @SuppressWarnings("FutureReturnValueIgnored")
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
         if (evt instanceof IdleStateEvent) {
             ctx.close();
@@ -201,6 +205,7 @@ final class PanelHttpHandler extends SimpleChannelInboundHandler<FullHttpRequest
     }
 
     @Override
+    @SuppressWarnings("FutureReturnValueIgnored")
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         LOG.log(System.Logger.Level.DEBUG, "Panel connection failed: {0}", cause.getClass().getSimpleName());
         ctx.close();

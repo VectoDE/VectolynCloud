@@ -4,6 +4,7 @@ package net.vectolyn.cloud.panel.config;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
+import org.jspecify.annotations.Nullable;
 
 /**
  * {@code config/panel.yml} in the cloud home. Every field except {@code schema-version} is
@@ -23,7 +24,7 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
  */
 @JsonPropertyOrder({"schema-version", "enabled", "bind", "port", "public-url"})
 public record PanelConfig(@JsonProperty(required = true) int schemaVersion, Boolean enabled, String bind,
-                          Integer port, String publicUrl) {
+                          Integer port, @Nullable String publicUrl) {
 
     /** Current format version. */
     public static final int SCHEMA_VERSION = 1;
@@ -44,6 +45,6 @@ public record PanelConfig(@JsonProperty(required = true) int schemaVersion, Bool
      * @return the defaults
      */
     public static PanelConfig defaults() {
-        return new PanelConfig(SCHEMA_VERSION, null, null, null, null);
+        return new PanelConfig(SCHEMA_VERSION, Boolean.FALSE, "127.0.0.1", DEFAULT_PORT, null);
     }
 }

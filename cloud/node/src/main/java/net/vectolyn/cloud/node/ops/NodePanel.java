@@ -11,6 +11,7 @@ import net.vectolyn.cloud.api.ApiServer;
 import net.vectolyn.cloud.config.error.ConfigException;
 import net.vectolyn.cloud.panel.PanelServer;
 import net.vectolyn.cloud.panel.config.PanelConfigLoader;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Starts the web panel (docs/cloud/panel.md) next to the API. A problem never stops the node: it
@@ -31,7 +32,7 @@ public final class NodePanel {
      * @param version   the version of the cloud
      * @return the running panel, or empty
      */
-    public static Optional<PanelServer> start(Path home, ApiServer apiServer, String version) {
+    public static Optional<PanelServer> start(Path home, @Nullable ApiServer apiServer, String version) {
         PanelConfigLoader.Settings settings;
         try {
             settings = PanelConfigLoader.load(home);
