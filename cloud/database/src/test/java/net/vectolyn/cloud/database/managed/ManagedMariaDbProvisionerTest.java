@@ -148,6 +148,11 @@ class ManagedMariaDbProvisionerTest {
         assertTrue(ini.contains("bind-address=127.0.0.1\n"));
         assertTrue(ini.contains("max_connections=150\n"));
         assertTrue(ini.contains("port=3317\n"));
+        if (Files.getFileStore(layout.configFile()).supportsFileAttributeView("posix")) {
+            assertEquals(java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"),
+                    Files.getPosixFilePermissions(layout.configFile()),
+                    "mariadbd ignores an option file that others can write");
+        }
 
         List<String> root = server.statementsOf("root");
         assertTrue(root.contains("DROP USER IF EXISTS ''@'localhost'"), root.toString());

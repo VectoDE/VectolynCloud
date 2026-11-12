@@ -213,8 +213,10 @@ public final class ManagedMariaDbProvisioner implements DatabaseProvisioner {
         try {
             base = binaries.install(platform);
             Files.createDirectories(layout.home());
-            Files.writeString(layout.configFile(), MariaDbConfigFile.render(config.port(), socket(platform)),
-                    StandardCharsets.UTF_8);
+            // Owner only: mariadbd ignores an option file that others can write, and a default ACL
+            // or a umask of 0 on the home would make a plain write exactly that.
+            Files.deleteIfExists(layout.configFile());
+            writeOwnerOnly(layout.configFile(), MariaDbConfigFile.render(config.port(), socket(platform)));
             Files.deleteIfExists(layout.initFile());
         } catch (IOException e) {
             throw new DatabaseException(Reason.INSTALL, "Preparing the MariaDB folder " + layout.home() + " failed: "
