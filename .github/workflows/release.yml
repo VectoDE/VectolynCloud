@@ -76,6 +76,15 @@ jobs:
           fi
           printf '%s\n' "$result" | tee -a "$GITHUB_OUTPUT"
 
+      # The milestone gate: alpha, beta and rc need their milestones closed, a stable or LTS
+      # release also every stage; a -dev snapshot has no gate (docs/cloud/operations.md#release-process).
+      # operations.yml runs the same script on fixtures for every channel.
+      - name: Milestone gate
+        env:
+          CHANNEL: ${{ steps.tag.outputs.channel }}
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/release-gate.sh "$CHANNEL"
+
       # The tag (v1.2.3) sets the version of every module. The full build runs all tests, but
       # only VectolynCloud.jar is released: the plugin jars are not part of a release (the
       # owner's decision of 2026-10-29); operators build them from the repository.
@@ -84,9 +93,10 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: bash ./gradlew build --no-daemon --no-build-cache -Pversion="${TAG#v}"
 
-      # The release files: VectolynCloud.jar plus one archive per operating system with the
-      # start scripts; the banner images of the next step are the only other files. The same
-      # script runs as a dry run in operations.yml on every pull request.
+      # The release files: VectolynCloud.jar, one archive per operating system with the start
+      # scripts, the server templates as an archive and the example setup file; the banner
+      # images of the next step are the only other files. The same script runs as a dry run in
+      # operations.yml on every pull request.
       - name: Package VectolynCloud
         env:
           TAG: ${{ github.ref_name }}
@@ -115,7 +125,7 @@ jobs:
           bash tools/release-banner/banner-from-tag.sh "$TAG" dist --no-daemon --no-build-cache
           ls -l dist
 
-      # SHA256SUMS lists exactly the five release files; the provenance covers every file in it,
+      # SHA256SUMS lists exactly the seven release files; the provenance covers every file in it,
       # so nothing may be missing and nothing else may slip in.
       - name: Checksums
         id: hash
@@ -126,6 +136,7 @@ jobs:
           set -euo pipefail
           version="${TAG#v}"
           files=(VectolynCloud.jar "VectolynCloud-${version}-windows.zip" "VectolynCloud-${version}-linux-macos.tar.gz"
+            "VectolynCloud-${version}-templates.tar.gz" setup.example.yml
             "VectolynCloud-${version}-banner.png" "VectolynCloud-${version}-banner-2x.png")
           found=$(find . -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort)
           want=$(printf '%s\n' "${files[@]}" | LC_ALL=C sort)
@@ -144,7 +155,7 @@ jobs:
         # Retries: v0.1.0 failed once with a Rekor 409 (cosign retried an upload that had
         # already landed). A fresh attempt signs again with a new certificate and succeeds.
         run: |
-          for f in *.jar *.zip *.tar.gz *.png SHA256SUMS; do
+          for f in *.jar *.zip *.tar.gz *.png *.yml SHA256SUMS; do
             for attempt in 1 2 3; do
               if cosign sign-blob --yes --bundle "$f.sigstore.json" "$f"; then
                 break
@@ -170,7 +181,7 @@ jobs:
           subject-checksums: dist/SHA256SUMS
 
       # Written after the checksums and the signatures on purpose: the provenance describes the
-      # five release files, it is not one of them.
+      # seven release files, it is not one of them.
       - name: Provenance file for the release
         env:
           BUNDLE: ${{ steps.attest.outputs.bundle-path }}
@@ -341,6 +352,13 @@ jobs:
             api.github.com:443
             uploads.github.com:443
 
+      # The full history and the tags: the changelog lists the commits since the previous release.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
       - name: Download dist
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -368,17 +386,22 @@ jobs:
           # The banner on top, from this release's own assets (the 2x file, shown at 1280 px).
           # TAG passed the version rules of the build job, so it is safe inside HTML.
           banner="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/VectolynCloud-${TAG#v}-banner-2x.png"
-          notes=$(printf '%s\n' \
-            "<img src=\"${banner}\" alt=\"VectolynCloud ${TAG}\" width=\"1280\">" \
-            "" \
-            "Container image: \`${IMAGE}:${TAG#v}\` (\`${IMAGE}@${DIGEST}\`)" \
-            "" \
-            "How to check signatures and provenance: [docs/cloud/operations.md](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/docs/cloud/operations.md#verifying-a-release)")
-          # --notes comes first, the generated notes follow.
+          # The checkout (fetch-depth 0) brought all tags; the changelog lists the commits since
+          # the previous release tag, grouped by Conventional Commit type.
+          {
+            printf '%s\n' \
+              "<img src=\"${banner}\" alt=\"VectolynCloud ${TAG}\" width=\"1280\">" \
+              "" \
+              "Container image: \`${IMAGE}:${TAG#v}\` (\`${IMAGE}@${DIGEST}\`)" \
+              "" \
+              "How to check signatures and provenance: [docs/cloud/operations.md](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/docs/cloud/operations.md#verifying-a-release)" \
+              ""
+            bash .github/scripts/release-changelog.sh "$TAG"
+          } > "$RUNNER_TEMP/notes.md"
+          cat "$RUNNER_TEMP/notes.md"
           gh release create "$TAG" dist/* \
             --repo "$GITHUB_REPOSITORY" \
             --title "$TAG" \
-            --notes "$notes" \
-            --generate-notes \
+            --notes-file "$RUNNER_TEMP/notes.md" \
             --verify-tag \
             $prerelease

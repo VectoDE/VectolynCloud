@@ -1,0 +1,149 @@
+name: Verify release
+
+# Checks the newest published release the way an operator does (docs/cloud/operations.md#verifying-a-release):
+# SHA256SUMS against the downloaded files, the cosign keyless signature of every file and of
+# SHA256SUMS itself against the identity of release.yml at that tag, the GitHub build provenance
+# (SLSA) of the jar from GitHub and from the release's own vectolyn.intoto.jsonl, and the container
+# image: signature, provenance, SBOM, and that the image holds the released jar.
+#
+# Nothing here can sign or publish: read-only permissions, no secrets. Weekly, on demand, and on
+# pull requests that change this file or the release workflow, so a change that would break
+# verification of the next release shows up before the tag.
+
+on:
+  schedule:
+    - cron: '41 5 * * 1'
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/release-verify.yml'
+      - '.github/workflows/release.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify the newest release
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            *.sigstore.dev:443
+            ghcr.io:443
+            pkg-containers.githubusercontent.com:443
+            tuf-repo-cdn.sigstore.dev:443
+            tmaproduction.blob.core.windows.net:443
+            registry-1.docker.io:443
+            auth.docker.io:443
+            production.cloudflare.docker.com:443
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+
+      - name: Pick the release
+        id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=20" \
+            --jq '[.[] | select(.draft == false)][0].tag_name')
+          case "$tag" in v[0-9]*) ;; *) echo "::error::no release tag found: $tag"; exit 1 ;; esac
+          case "$tag" in *[!0-9A-Za-z.+-]*) echo "::error::invalid tag: $tag"; exit 1 ;; esac
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Verifying $tag"
+
+      - name: Download
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.pick.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir release
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir release
+          ls -l release
+
+      - name: Checksums
+        working-directory: release
+        run: |
+          set -euo pipefail
+          sha256sum --check --strict SHA256SUMS
+          # SHA256SUMS lists the jar and the other release files, one per line
+          grep -q '  VectolynCloud.jar$' SHA256SUMS
+
+      - name: cosign signatures
+        working-directory: release
+        env:
+          TAG: ${{ steps.pick.outputs.tag }}
+        run: |
+          set -euo pipefail
+          identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/${TAG}"
+          awk '{ print $2 }' SHA256SUMS > files.txt
+          echo SHA256SUMS >> files.txt
+          while read -r f; do
+            cosign verify-blob "$f" --bundle "$f.sigstore.json" \
+              --certificate-identity "$identity" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com
+          done < files.txt
+
+      - name: GitHub build provenance (SLSA)
+        working-directory: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.pick.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh attestation verify VectolynCloud.jar --repo "$GITHUB_REPOSITORY"
+          # the same provenance from the release file, without asking GitHub for it
+          gh attestation verify VectolynCloud.jar --repo "$GITHUB_REPOSITORY" \
+            --bundle vectolyn.intoto.jsonl \
+            --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/release.yml" \
+            --source-ref "refs/tags/${TAG}"
+
+      - name: Container image (signature, provenance, SBOM, jar)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.pick.outputs.tag }}
+        run: |
+          set -euo pipefail
+          owner=${GITHUB_REPOSITORY_OWNER,,}
+          image="ghcr.io/${owner}/vectolyn-cloud:${TAG#v}"
+          identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/${TAG}"
+          cosign verify "$image" \
+            --certificate-identity "$identity" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com > /dev/null
+          gh attestation verify "oci://${image}" --repo "$GITHUB_REPOSITORY"
+          sbom=$(docker buildx imagetools inspect "$image" --format '{{ json .SBOM }}')
+          echo "$sbom" | jq -e 'length > 0' > /dev/null || { echo "::error::the image has no SBOM"; exit 1; }
+          echo "SBOM for: $(echo "$sbom" | jq -r 'keys | join(", ")')"
+          docker buildx imagetools inspect "$image" --format '{{ json .Provenance }}' | jq -e 'length > 0' > /dev/null \
+            || { echo "::error::the image has no BuildKit provenance"; exit 1; }
+          want=$(awk '$2 == "VectolynCloud.jar" { print $1 }' release/SHA256SUMS)
+          got=$(docker run --rm --entrypoint sha256sum "$image" /opt/vectolyn/VectolynCloud.jar | cut -d' ' -f1)
+          echo "release jar $want, in image $got"
+          test "$want" = "$got"
+          # The moving tag "dev" must point to the same image as a -dev version tag; "latest" only
+          # exists for releases that are not pre-releases.
+          case "$TAG" in
+            *-dev|*-dev.*)
+              dev=$(docker buildx imagetools inspect "ghcr.io/${owner}/vectolyn-cloud:dev" --format '{{ .Manifest.Digest }}')
+              ver=$(docker buildx imagetools inspect "$image" --format '{{ .Manifest.Digest }}')
+              echo "dev $dev, $image $ver"
+              # The newest release is checked, so "dev" must be that image.
+              test "$dev" = "$ver"
+              ;;
+          esac
