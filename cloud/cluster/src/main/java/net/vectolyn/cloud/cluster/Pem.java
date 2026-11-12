@@ -33,7 +33,7 @@ final class Pem {
         String begin = "-----BEGIN " + label + "-----";
         String end = "-----END " + label + "-----";
         int from = text.indexOf(begin);
-        int to = from < 0 ? -1 : text.indexOf(end, from);
+        int to = from < 0 ? -1 : text.indexOf(end, from + begin.length());
         if (from < 0 || to < 0) {
             throw new IOException("no " + label + " in the keytool output");
         }
