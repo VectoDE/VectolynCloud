@@ -156,7 +156,7 @@ spotbugs {
     effort = com.github.spotbugs.snom.Effort.MAX
     reportLevel = com.github.spotbugs.snom.Confidence.MEDIUM
     ignoreFailures = false
-    // Excluded bug patterns, each with its reason: config/spotbugs/exclude.xml.
-    excludeFilter = rootProject.file("config/spotbugs/exclude.xml")
+    // Excluded bug patterns, each with its reason: gradle/spotbugs/exclude.xml.
+    excludeFilter = rootProject.file("gradle/spotbugs/exclude.xml")
 }
 tasks.named("spotbugsTest") { enabled = false }
