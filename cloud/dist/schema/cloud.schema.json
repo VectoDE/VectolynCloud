@@ -96,7 +96,7 @@
       "properties" : {
         "mode" : {
           "type" : "string",
-          "enum" : [ "managed", "docker", "external", "h2" ]
+          "enum" : [ "managed", "docker", "external", "h2", "postgresql" ]
         },
         "host" : {
           "type" : "string"
