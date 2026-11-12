@@ -354,6 +354,7 @@ public final class CloudClient implements AutoCloseable {
             reader = connector;
         }
         Connection open = connection;
+        boolean saidGoodbye = false;
         if (open != null) {
             // A cloud that stopped reading leaves a writer blocked in write() with the write lock
             // held; the goodbye would wait for it forever. The watchdog closes the socket after a
@@ -368,15 +369,30 @@ public final class CloudClient implements AutoCloseable {
             }, "vectolyn-cloud-client-close-watchdog");
             watchdog.setDaemon(true);
             watchdog.start();
-            send(open, Envelope.of(new Disconnect(Disconnect.Reason.SHUTDOWN)));
+            saidGoodbye = send(open, Envelope.of(new Disconnect(Disconnect.Reason.SHUTDOWN)));
             watchdog.interrupt();
+        }
+        if (reader != null) {
+            reader.interrupt(); // ends a backoff sleep; a blocking socket read is not interrupted
+        }
+        if (saidGoodbye) {
+            // Closing a socket with frames still unread (a Pong, a late message) sends RST instead
+            // of FIN, and Windows drops data the cloud has received but not yet read: the goodbye
+            // would be lost. So: half-close, and let the reader drain until the cloud closes too.
+            open.shutdownOutput();
+            if (reader != null && reader != Thread.currentThread()) {
+                try {
+                    reader.join(GOODBYE_GRACE_MILLIS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
         }
         Connection any = current;
         if (any != null) {
             any.close();
         }
         if (reader != null) {
-            reader.interrupt();
             try {
                 reader.join(1_000);
             } catch (InterruptedException e) {
@@ -731,6 +747,15 @@ public final class CloudClient implements AutoCloseable {
                 }
                 out.write(frame);
                 out.flush();
+            }
+        }
+
+        /** Sends FIN after what was written; reading goes on until the peer closes as well. */
+        void shutdownOutput() {
+            try {
+                socket.shutdownOutput();
+            } catch (IOException ignored) {
+                // Already closed: close() below finishes the job.
             }
         }
 
