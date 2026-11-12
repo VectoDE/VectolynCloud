@@ -11,6 +11,7 @@
 [![CodeQL](https://github.com/VectoDE/VectolynCloud/actions/workflows/codeql.yml/badge.svg)](https://github.com/VectoDE/VectolynCloud/actions/workflows/codeql.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/VectoDE/VectolynCloud/badge)](https://scorecard.dev/viewer/?uri=github.com/VectoDE/VectolynCloud)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/16102/badge)](https://www.bestpractices.dev/projects/16102)
+[![Release](https://img.shields.io/github/v/release/VectoDE/VectolynCloud?include_prereleases&label=release)](https://github.com/VectoDE/VectolynCloud/releases)
 [![License: GPL-3.0](https://img.shields.io/github/license/VectoDE/VectolynCloud)](LICENSE)
 
 **English** · [Deutsch](README.de.md)
@@ -19,11 +20,13 @@ Vectolyn is an open-source kit (GPL-3.0) for running your own Minecraft network,
 
 We do not run a network ourselves: there is no official server, domain, hosted website, Discord bot or store. The website, Discord bot and store are code in this repository. You configure them with your own bot token and your own Stripe account and host them yourself.
 
-The long-term goal: you run `java -jar VectolynCloud.jar` on Windows, Linux, macOS, in Docker or on Pterodactyl, answer a setup wizard, and the complete network comes up with database, proxy, lobby, game modes and minigames. A release will contain `VectolynCloud.jar`, start scripts for Windows, Linux and macOS, and a Docker image on GHCR, all signed and with provenance. Plugin jars are not attached to releases. The Dockerfile, the compose file and the Pterodactyl egg live in this repository.
+You run `java -jar VectolynCloud.jar` on Windows, Linux, macOS, in Docker or on Pterodactyl and answer a setup assistant. The cloud then downloads the server software, sets up the database and starts the network you chose: proxy, lobby, game modes and minigames. A release contains `VectolynCloud.jar`, start scripts for Windows, Linux and macOS, and a Docker image on GHCR, all signed and with build provenance. Plugin jars are not attached to releases. The Dockerfile, the compose file and the Pterodactyl egg live in this repository.
 
 ## Status
 
-**Stage 2 of 8: VectolynCloud core.** Stage 1, the foundation, is finished and out as the signed pre-release [v0.1.1-dev](https://github.com/VectoDE/VectolynCloud/releases/tag/v0.1.1-dev). Stage 2 builds the cloud module by module; the task list is in [#11](https://github.com/VectoDE/VectolynCloud/issues/11), the overall plan on the roadmap. There is no usable cloud release yet; v0.1.1-dev is an early pre-release. Much of the *Architecture* section is still the plan, not working code.
+**Stage 2 of 8: VectolynCloud core.** Stage 1, the foundation, is finished. The signed pre-release [v0.1.1-dev](https://github.com/VectoDE/VectolynCloud/releases/tag/v0.1.1-dev) contains `VectolynCloud.jar`, the start script archives and the checksums; the container image is tagged `0.1.1-dev` and `dev`. It is an early pre-release for trying things out, not for production.
+
+Built in stage 2: launcher, configuration, templates, downloads, setup assistant, console, node with static and dynamic services, autoscaling, cloud channel and bridges, REST/WebSocket API, database setup, backups, monitoring, start scripts, systemd unit, Docker image and Pterodactyl egg. Still open: several nodes over TLS ([#73](https://github.com/VectoDE/VectolynCloud/issues/73)), the update system ([#74](https://github.com/VectoDE/VectolynCloud/issues/74) to [#77](https://github.com/VectoDE/VectolynCloud/issues/77)), the managed legacy proxy ([#78](https://github.com/VectoDE/VectolynCloud/issues/78)) and the stage wrap-up ([#80](https://github.com/VectoDE/VectolynCloud/issues/80)). The plugin, lobby, game modes, dashboard, bot, website and store belong to later stages and are not built yet. The *Architecture* section marks what is planned.
 
 - Roadmap and progress: [Vectolyn Roadmap](https://github.com/users/VectoDE/projects/11)
 - Current stage: [#11 Stage 2: VectolynCloud core](https://github.com/VectoDE/VectolynCloud/issues/11)
@@ -38,6 +41,18 @@ The long-term goal: you run `java -jar VectolynCloud.jar` on Windows, Linux, mac
 | 6 | Minigames and anti-cheat |
 | 7 | Brand and resource pack |
 | 8 | Dashboard, Discord bot, website, store |
+
+## Where to start
+
+| You are | Start here |
+|---|---|
+| New to Minecraft servers | [Overview](https://github.com/VectoDE/VectolynCloud/wiki/Overview), [Getting Started](https://github.com/VectoDE/VectolynCloud/wiki/Getting-Started) and the [FAQ](https://github.com/VectoDE/VectolynCloud/wiki/FAQ) in the wiki, then the [quick start](#quick-start) below |
+| Owner of a network | [Quick start](#quick-start), then [Server Network](https://github.com/VectoDE/VectolynCloud/wiki/Server-Network) and [Crossplay](https://github.com/VectoDE/VectolynCloud/wiki/Crossplay) in the wiki |
+| Admin | [Running VectolynCloud](docs/cloud/operations.md) (Windows, Linux with systemd, macOS, Docker, Pterodactyl), [setup](docs/cloud/setup.md), [console](docs/cloud/console.md), [backups](docs/cloud/backup.md), [monitoring](docs/cloud/monitor.md), [API](docs/cloud/api.md) |
+| Developer | [Build](#build), [developer documentation](docs/development/README.md), [module reference](docs/development/modules.md), [architecture](docs/cloud/architecture.md), [releasing](docs/development/releasing.md), [Contributing](CONTRIBUTING.md) |
+| Security reviewer | [SECURITY.md](SECURITY.md), [OpenSSF](docs/openssf.md), [dependency verification](docs/dependency-verification.md), [rights audit](docs/cloud/rights-audit.md) |
+
+The README, the contributing guide and the wiki exist in English and German.
 
 ## Architecture
 
@@ -58,13 +73,13 @@ The long-term goal: you run `java -jar VectolynCloud.jar` on Windows, Linux, mac
                     │
                 MariaDB
 
- VectolynCloud (planned) starts, scales and watches all of the above.
+ VectolynCloud starts, scales and watches all of the above.
 ```
 
 - **Proxy:** Velocity is the single entry point. Geyser and Floodgate let Bedrock clients in, the Via plugins translate older Java versions. Backends run the newest Minecraft version.
 - **Backends:** Paper for Lobby, Survival, Creative, End and (later) Minigames. Fabric for the mod server.
 - **No command blocks:** they are off on every server and cannot be switched back on; the Paper and 1.8.8 bridges also remove them from the worlds. Staff commands only work for the console and players with the permission; the [rights audit](docs/cloud/rights-audit.md) lists every one.
-- **VectolynCloud** (planned, stage 2): a Java node with console and setup wizard. It downloads and verifies server software, manages JREs and the database, generates secrets, scales minigame servers and offers a REST/WebSocket API. Setup runs through a console wizard on first start, then config files and console commands (stage 2). The web dashboard will cover everything as well, first-time setup included (stage 8). In the wizard, the config or later the dashboard you mark each of the seven servers and each minigame group as wanted or not. The cloud only builds wanted servers: it copies the server's template (`templates/<Server>/` in this repository) to `runtime/`, downloads the software, fills in the secrets and starts them. Servers you do not want are never created, and neither the proxy nor the lobby refers to them.
+- **VectolynCloud** (stage 2, built): a Java node with console and setup assistant. It downloads and verifies server software, manages JREs and the database, generates secrets, scales minigame servers and offers a REST/WebSocket API. The assistant asks its questions in the console on the first start; after that you use config files and console commands. The web dashboard will cover everything as well, first-time setup included (stage 8, planned). In the assistant or the config you mark each of the seven servers and each minigame group as wanted or not. The cloud only builds wanted servers: it renders the server's template (`templates/<Server>/` in this repository, shipped inside the jar) into its home, downloads the software, fills in the secrets and starts them. Servers you do not want are never created, and neither the proxy nor the lobby refers to them.
 - **One Vectolyn plugin** (planned, stage 3): several Gradle modules (core, permissions, social, moderation, stats, economy, lobby, portals and more) bundled into one jar per platform: `Vectolyn-Paper.jar`, `Vectolyn-Velocity.jar`, `Vectolyn-Fabric.jar`. It will replace LuckPerms, TAB, WorldEdit, WorldGuard, PlaceholderAPI, ProxyPortal and Chunky.
 
 Third-party software is limited to a necessary base: Paper, Velocity, Fabric and Fabric API, Geyser, Floodgate, ViaVersion, ViaBackwards, ViaRewind, the performance mods Lithium, FerriteCore, ServerCore and FabricProxy-Lite, and MariaDB/MySQL.
@@ -78,7 +93,7 @@ VectolynCloud/
   cloud/                  VectolynCloud, one Gradle module per part: launcher, node, config, api,
                           console, setup, database, download, template, network, backup, monitor,
                           cluster
-    dist/                 start scripts, Docker, Pterodactyl egg, systemd unit, vectolyn.env.example
+    dist/                 start scripts, Docker, Pterodactyl egg, systemd unit, vectolyn.env.example; manual/ holds the old Windows scripts
   common/
     protocol/             wire format of the cloud channel
     client/               client the plugins use to talk to the cloud
@@ -97,37 +112,27 @@ VectolynCloud/
 
 Server runtimes (jars, worlds, logs) and secrets are not part of the repository. They live in the cloud home, the folder VectolynCloud runs in: `config/` holds the configuration, `local/` the templates and the worlds of the static services, `storage/` the downloads, `secrets/` the secrets (layout: [architecture](docs/cloud/architecture.md#cloud-home)). For local development that is `run/` in the repository root (see [Run locally](#run-locally)); `.gitignore` keeps the whole folder out of Git.
 
-## Quick start (transitional, until VectolynCloud exists)
+## Quick start
 
-Until stage 2 the servers run on Windows from a network folder outside the repository (for example `C:\Vectolyn`, the later cloud home) through start scripts. Picking which servers you want only becomes possible with VectolynCloud; today's launcher starts all of them. You need Java 25 on the `PATH` (Paper 26.3 requires it) and the portable MariaDB 11.8.9 for Windows.
+You need Java 21 or newer, a normal user account (the cloud refuses to start as root or administrator) and internet access on the first start.
 
-1. Clone the repository.
-2. Copy each `templates/<Server>/` to `<network folder>\<Server>\runtime\`.
-3. Copy `cloud/dist/secrets/vectolyn.env.example` to `<network folder>\secrets\vectolyn.env` and fill in your own values. Never commit this file.
-4. Replace every `{{VECTOLYN_…}}` placeholder in the `runtime/` folders with your values and create the generated files (`forwarding.secret`, Floodgate `key.pem`, `eula.txt`). [`templates/placeholders.md`](templates/placeholders.md) lists every placeholder. VectolynCloud will do this step for you.
-5. Put the server software into each `runtime/` folder. The repository ships no jars. The start scripts expect `velocity.jar`, `paper.jar` and `fabric-server.jar`; exact versions and plugin files are listed in [Getting Started](docs/wiki/Getting-Started.md).
-6. Copy `start-network.bat` and `start-vectolyn-database.cmd` from `cloud/dist/manual/` into the network folder, run `start-network.bat` there and choose:
-   - `1` everything: database, then proxy and all five backends
-   - `2` database only (same as `start-vectolyn-database.cmd`)
-   - `3` proxy only
-   - `4` backends only (Lobby, Survival, Mod, Creative, End)
-   - `5` quit
+1. Download the archive for your system from the [latest release](https://github.com/VectoDE/VectolynCloud/releases): `VectolynCloud-<version>-windows.zip` or `VectolynCloud-<version>-linux-macos.tar.gz`. Check it against `SHA256SUMS` and the cosign signature, see [Verifying a release](docs/cloud/operations.md#verifying-a-release).
+2. Unpack it into an empty folder. That folder becomes the cloud home.
+3. Start it: `start.bat` on Windows, `./start.sh` on Linux and macOS.
+4. Answer the setup assistant: language, Minecraft EULA, network name, which servers you want, ports, memory, number of services and the database. It shows a summary and writes nothing until you save. Details: [setup](docs/cloud/setup.md).
+5. The cloud downloads the server software, checks every file against its checksum and starts the network. Type `help` in the console for the commands, `shutdown` to stop everything.
 
-Default ports of the current setup:
+Without a terminal (systemd, Docker, Pterodactyl) the assistant reads a setup file instead: `./start.sh --non-interactive --setup-file setup.yml`. Docker, compose, systemd and Pterodactyl are described in [Running VectolynCloud](docs/cloud/operations.md).
+
+Default ports of a network with all servers wanted:
 
 | Service | Port |
 |---|---|
 | Proxy, Java | 25565 |
 | Proxy, Bedrock (Geyser: RakNet UDP, NetherNet signaling TCP) | 19132 |
 | Proxy, Bedrock NetherNet (Geyser, UDP, always Bedrock + 1) | 19133 |
-| Lobby | 25566 |
-| Survival | 25567 |
-| Mod server | 25568 |
-| Creative | 25569 |
-| End | 25570 |
-| MariaDB | 3307 |
 
-Only the proxy ports should be reachable from outside.
+Only the proxy ports should be reachable from outside. By default the database (port 3307) and the API (off by default, port 8085) bind to `127.0.0.1`. All ports and their config keys: [configuration](docs/cloud/config.md).
 
 ## Build
 
@@ -162,6 +167,10 @@ The launcher refuses to run as root or administrator. If your development shell 
 - [Wiki](https://github.com/VectoDE/VectolynCloud/wiki) (English and German, sources in `docs/wiki/`)
 - [Discussions](https://github.com/VectoDE/VectolynCloud/discussions) for questions, ideas and announcements
 - [Contributing](CONTRIBUTING.md) · [Code of Conduct](CODE_OF_CONDUCT.md) · [Security](SECURITY.md)
+
+## Quality seals
+
+The badges at the top come straight from the services behind them, so they change on their own when a result changes: CI and CodeQL show the last run on `main`, the OpenSSF Scorecard is recalculated by a workflow, and the OpenSSF Best Practices badge shows the level that project 16102 has reached (currently *passing*). We add a seal here only after it has been earned and can be checked. What the Scorecard cannot reach with a single maintainer, and why, is written down in [docs/openssf.md](docs/openssf.md).
 
 ## License
 

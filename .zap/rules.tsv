@@ -1,0 +1,15 @@
+# ZAP baseline rule configuration: id<TAB>action<TAB>reason (IGNORE, WARN or FAIL)
+# The target is served by GitHub Pages, which sets the response headers; a project cannot add
+# headers there. Every other rule stays at its default, so a new finding fails the scan.
+10015	IGNORE	cache headers are set by GitHub Pages (Cache-Control: max-age=600) and cannot be changed
+10020	IGNORE	X-Frame-Options and frame-ancestors are response headers; GitHub Pages sets none and allows no custom ones
+10021	IGNORE	X-Content-Type-Options is a response header set by the host, not by the project
+10023	IGNORE	reported for the start page, whose source holds none of the debug patterns (checked with grep on site/index.html); caused by the host response
+10035	IGNORE	HSTS is set by GitHub Pages for the pages.github.io host; hits on the user-site root, robots.txt and sitemap.xml are 404 pages of the account site, not of this project
+10038	IGNORE	CSP is a response header; a meta tag is not evaluated by ZAP and GitHub Pages allows no custom headers
+10049	IGNORE	cacheability is decided by the host; the content is public
+10050	IGNORE	informational: content comes from the GitHub Pages cache, which is intended for public static files
+10055	IGNORE	CSP of the GitHub 404 pages of the account site, not of this project
+10063	IGNORE	Permissions-Policy is a response header; GitHub Pages allows no custom headers
+10098	IGNORE	GitHub Pages answers every origin with Access-Control-Allow-Origin: *, intended for public static files
+90004	IGNORE	Cross-Origin-Embedder/Opener/Resource-Policy are response headers set by the host

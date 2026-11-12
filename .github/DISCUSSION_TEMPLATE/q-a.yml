@@ -1,0 +1,37 @@
+title: "[Question] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check the [wiki FAQ](https://github.com/VectoDE/VectolynCloud/wiki/FAQ) first. Security problems do not belong here, see SECURITY.md.
+
+        _DE: Schau zuerst in die [FAQ im Wiki](https://github.com/VectoDE/VectolynCloud/wiki/FAQ-DE). Sicherheitslücken bitte nicht hier melden, siehe SECURITY.md._
+  - type: textarea
+    id: question
+    attributes:
+      label: Question / Frage
+      description: What do you want to do, and what happens instead? / Was möchtest du erreichen, und was passiert stattdessen?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: VectolynCloud version / Version
+      description: Output of `--version`, or the release tag. / Ausgabe von `--version` oder der Release-Tag.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Where it runs / Wo es läuft
+      options:
+        - Windows
+        - Linux
+        - macOS
+        - Docker
+        - Pterodactyl
+        - Other / Sonstiges
+  - type: textarea
+    id: log
+    attributes:
+      label: Log excerpt / Log-Auszug
+      description: Relevant lines of logs/cloud.log. Remove secrets and IP addresses first. / Relevante Zeilen aus logs/cloud.log. Secrets und IP-Adressen vorher entfernen.
+      render: text

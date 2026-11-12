@@ -14,9 +14,9 @@ Stop the servers and back up worlds and state locally; move the server folders t
 
 ## 2. VectolynCloud core ([#11](https://github.com/VectoDE/VectolynCloud/issues/11))
 
-**Status: in progress.**
+**Status: in progress.** Built: everything in the list below except several nodes (first step done), the update system and the managed legacy proxy. See [Feature status](Feature-Status).
 
-Node with console, setup wizard on first start, configuration through files and console commands, and one shared configuration layer that the dashboard will reuse in stage 8. Choice of wanted servers and minigame groups; only wanted ones are built from their templates. Groups and tasks, autoscaling, multi-node over TLS, REST/WebSocket API, platform downloader with checksums and rollback, JRE management, database wizard, secret generation, own messaging channel, backups and monitoring, Docker image on GHCR with Dockerfile and compose file, Pterodactyl egg, systemd unit, start scripts for Windows, Linux and macOS. Research a 1.8.8 fork for Java 21. Planned safety rule: VectolynCloud refuses to start as administrator or root unless an explicit switch (such as `--allow-root`) is given, and the message explains how to start it without admin rights.
+Node with console, setup wizard on first start, configuration through files and console commands, and one shared configuration layer that the dashboard will reuse in stage 8. Choice of wanted servers and minigame groups; only wanted ones are built from their templates. Groups and tasks, autoscaling, multi-node over TLS, REST/WebSocket API, platform downloader with checksums and rollback, JRE management, database wizard, secret generation, own messaging channel, backups and monitoring, Docker image on GHCR with Dockerfile and compose file, Pterodactyl egg, systemd unit, start scripts for Windows, Linux and macOS. Research a 1.8.8 fork for Java 21. VectolynCloud refuses to start as administrator or root unless `--allow-root` is given, and the message explains how to start it without admin rights.
 
 ## 3. Vectolyn plugin base ([#12](https://github.com/VectoDE/VectolynCloud/issues/12))
 

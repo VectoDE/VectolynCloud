@@ -34,10 +34,10 @@ concurrency:
 jobs:
   regenerate:
     name: Regenerate verification metadata
-    if: >-
-      github.event.pull_request.user.login == 'dependabot[bot]'
-      && github.actor == 'dependabot[bot]'
-      && github.event.pull_request.head.repo.full_name == github.repository
+    # The pull request must be Dependabot's and the newest push must come from Dependabot (id
+    # 49699333, unlike the login it cannot be imitated), from a branch of this repository.
+    # zizmor still reports the actor check; the other two conditions cover what it warns about.
+    if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' && github.actor_id == '49699333' && github.event.pull_request.head.repo.full_name == github.repository }} # zizmor: ignore[bot-conditions]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -128,6 +128,7 @@ jobs:
       # Credentials stay in the checkout for the push. No Gradle and no build code runs here; the
       # only script is the stdlib checker, a file Dependabot never edits.
       - name: Checkout the Dependabot commit
+        # zizmor: ignore[artipacked] the push step below needs the token in the checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha }}

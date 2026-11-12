@@ -1,0 +1,136 @@
+name: Static checks
+
+# Lints the CI itself and the container/infrastructure files, on every pull request:
+# - actionlint: syntax, expressions and ShellCheck of the run: blocks of all workflows
+# - zizmor: security audit of workflows and Dependabot configuration (injection, excessive
+#   permissions, unpinned actions, cache poisoning, ...), including the online audits
+# - Checkov: policy checks of the Dockerfiles and the workflows, results in code scanning
+# Findings fail the job. A finding is fixed, or silenced in the file itself with a reason
+# (`# zizmor: ignore[rule]`, `# checkov:skip=ID: reason`), so every exception is visible in review.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '31 5 * * 3'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: static-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ACTIONLINT_IMAGE: rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+  CHECKOV_IMAGE: bridgecrew/checkov:3.4.4@sha256:ddf34d41033624e86f7578537cf23ad6880faf5aff4cf98aca657fae315b4195
+
+jobs:
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            registry-1.docker.io:443
+            auth.docker.io:443
+            production.cloudflare.docker.com:443
+            production.cloudfront.docker.com:443
+            docker-images-prod.6aa30f8b08e16409b46e0173d6de2f56.r2.cloudflarestorage.com:443
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The official image pinned by digest; it brings ShellCheck for the run: blocks.
+      - name: actionlint
+        run: docker run --rm --volume "$PWD:/repo:ro" --workdir /repo "$ACTIONLINT_IMAGE" -color
+
+  zizmor:
+    name: zizmor
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read   # the online audits read the workflow files of referenced repositories
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            pypi.org:443
+            files.pythonhosted.org:443
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # advanced-security false: findings make the job fail instead of going to code scanning only.
+      - name: zizmor
+        uses: zizmorcore/zizmor-action@45d7276c9ca790aabd705e31ca99c6185c3e76dd # v0.8.1
+        with:
+          advanced-security: false
+          version: 1.32.0
+
+  checkov:
+    name: Checkov (Dockerfiles, workflows)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write   # upload the SARIF results to code scanning
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            uploads.github.com:443
+            registry-1.docker.io:443
+            auth.docker.io:443
+            production.cloudflare.docker.com:443
+            production.cloudfront.docker.com:443
+            docker-images-prod.6aa30f8b08e16409b46e0173d6de2f56.r2.cloudflarestorage.com:443
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Checkov
+        run: |
+          set -euo pipefail
+          mkdir -p checkov-out
+          chmod 0777 checkov-out
+          docker run --rm \
+            --volume "$PWD:/tf:ro" --volume "$PWD/checkov-out:/out" \
+            --env CKV_SKIP_UPDATE_CHECK=true --env BC_SKIP_MAPPING=TRUE \
+            "$CHECKOV_IMAGE" \
+            --directory /tf --framework dockerfile github_actions \
+            --skip-download --compact \
+            --output cli --output sarif --output-file-path console,/out
+
+      - name: Upload to code scanning
+        if: ${{ !cancelled() && hashFiles('checkov-out/results_sarif.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          sarif_file: checkov-out/results_sarif.sarif
+          category: checkov
