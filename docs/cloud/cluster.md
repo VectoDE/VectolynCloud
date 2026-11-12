@@ -10,7 +10,8 @@ State of [#73](https://github.com/VectoDE/VectolynCloud/issues/73), built in ste
 | 2a | requests and pushes on the session, config mirror (`nodes.yml`, groups, tasks from the head), template sync, `cluster sync` | this page |
 | 2b, part 1 | node status on the session, the head's choice of a node for a service ([Placement](#placement)) | this page |
 | 2b, part 2 | the head starts and stops services on members (remote start), service registry and autoscaler across nodes, players across nodes | next |
-| 3 | manual promotion of a member to head (failover) | later |
+| 3, part 1 | the head notices a lost member and plans its services on the other nodes ([Failover](#failover)) | this page |
+| 3, part 2 | the head starts the planned services (needs remote start, step 2b part 2); manual promotion of a member to head | later |
 | 4 | moving static services between nodes with their world data | later |
 
 Since step 2a a member takes `nodes.yml`, the groups, the tasks and the templates from the head ([Config mirror](#config-mirror), [Template sync](#template-sync)); its `cloud.yml` stays its own. Since step 2b part 1 every member reports its memory and services to the head, and the head can choose a node for a new service; until part 2 each node still starts the services of its own tasks only.
@@ -144,6 +145,22 @@ Several services at once (`PlacementPlanner.placeAll`, for the services of a los
 
 Default, open to change: spread comes before free memory. A node with far more room does not get every new service of a task; free memory only has to be enough, and the budget left decides between nodes with the same number of services of the task.
 
+## Failover
+
+The head watches its members (`MemberWatch`, every 5 s). A member that had a session since the head started and has then been **without a session for 30 s** is **lost**. Its session ends after 30 s without a frame or at once when the connection breaks, so a member that stops answering is lost about 60 s after its last frame, one whose process ends about 30 s after. A member that never had a session since the head started is not counted: the head does not know what it runs.
+
+When a member is lost, the head plans its services from the member's last status (`FailoverPlanner`):
+
+| Service | What the plan says |
+|---|---|
+| dynamic | a new node by the rules of the [placement](#placement), one after the other, never the lost node; without room it stays unplaced |
+| static | waits for the member: its world lives there (moving static services with their world is step 4) |
+| task no longer in the configuration | dropped |
+
+Members lost at the same time are planned one after the other, and the services planned for the first count for the next. The plan is logged as a warning and handed to `ClusterService.Events.memberLost`; `cluster status` shows the member as `lost`. **Nothing is started yet**: starting the planned services on the chosen nodes needs remote start (step 2b part 2). A lost member that connects again is back (`Events.memberBack`), and its plan is dropped.
+
+Default, open to change: 30 s grace after the session ended. Shorter would move services away from a member whose network hiccups; longer leaves players without a server for longer once remote start exists.
+
 ## Database
 
 Multi-node needs MariaDB that every node reaches over the cluster network. The head refuses `cluster token create` and every join while `database.mode` is `h2`: H2 is embedded and serves one node. The same rule holds for sessions: if the head is switched back to `h2` (or to a database on loopback), its members get `DATABASE_SINGLE_NODE` at their next hello and stay out until it is changed again. A join from another machine is refused while the head's database listens on loopback only: `managed` and `docker` always bind MariaDB to 127.0.0.1 today, and an `external` server with `database.host` on a loopback or wildcard address (`127.x.x.x` in any form, `::1`, `0.0.0.0`, `localhost`, `*.localhost`) is out of reach as well. This is a check of the obvious mistakes, not proof that the new node reaches the database: names are not resolved, and a join that arrives over loopback (a tunnel, for example) is not checked. So for nodes on several machines use `external` with a MariaDB server on an address of the cluster network. Binding the head's own managed MariaDB to the cluster network follows with step 2b. Use TLS for the database connection where the server offers it ([database.md](database.md)).
@@ -242,5 +259,7 @@ Every reader throws only `ProtocolException` and checks each length before it al
 | `ClusterPlacementTest` | Head and member on loopback: the member reports right after its session starts, the head places on the member with more room and fewer services of the task, keeps the last report of a member whose session ended and no longer places on it, and refuses when no node has room; only the head places, and only known tasks. |
 | `PlacementPlannerTest` | Spread before budget left before node id, independent of the input order; the task's `nodes:` list; every refusal (`EXCLUDED`, `UNREACHABLE`, `MEMORY_UNKNOWN`, `MEMORY_BUDGET`, `MEMORY_FREE`); the budget to the byte; `placeAll` counts the services it placed before; unknown task or group. |
 | `PlacementMessagesTest`, `PlacementMessagesFuzzTest` | Round trips, a full status fits into one push, invalid task names, byte counts and trailing bytes refused; Jazzer: arbitrary bytes as a node status. |
+| `ClusterFailoverTest` | Simulated node failure: head and member on loopback, the member's session is killed; the head marks it lost once, plans both dynamic services on the head (the lost node `EXCLUDED`), keeps the static one waiting, no longer places on it, and sees it back after a restart. |
+| `FailoverPlannerTest` | Dynamic services moved, static ones waiting, services of a removed task dropped; services without room unplaced; two members lost at once (neither gets a service, placements add up); a member is lost after the grace, once, and back when it connects; a short break is no loss; a member without a session since the head started is never lost; a removed member is forgotten. |
 | `ClusterStatusReportTest` (cloud-node) | What a node reports: services with a process or prepared, their group's maximum heap, the autoscaler's budget, no memory reading. |
 | `ConfigServiceMirrorTest` (cloud-config) | Mirror mode: `apply` refuses mirrored files, `applyMirror` writes the set and deletes the rest, an invalid mirror is not written, a mirror that adds a forbidden or unlisted JVM flag (also in a new group) is not written while one the member already had stays, a hand edit is undone on reload. |
