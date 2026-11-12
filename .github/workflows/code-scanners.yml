@@ -73,12 +73,12 @@ jobs:
               --config p/default --config p/java --config p/security-audit \
               --config p/owasp-top-ten --config p/github-actions --config p/secrets \
               --exclude 'templates' --exclude 'branding' \
-              --sarif --sarif-output semgrep.sarif
+              --sarif-output=semgrep.sarif
 
       - name: List the findings
         if: ${{ !cancelled() && hashFiles('semgrep.sarif') != '' }}
         run: |
-          jq -r '.runs[].results[]? | [.level, .ruleId, (.locations[0].physicalLocation.artifactLocation.uri + ":" + (.locations[0].physicalLocation.region.startLine|tostring)), (.message.text | split("\n")[0])] | @tsv' semgrep.sarif | sort -u | head -100
+          jq -r '.runs[].results[]? | select((.suppressions // []) | length == 0) | [.level, .ruleId, (.locations[0].physicalLocation.artifactLocation.uri + ":" + (.locations[0].physicalLocation.region.startLine|tostring)), (.message.text | split("\n")[0])] | @tsv' semgrep.sarif | sort -u | head -100
 
       - name: Upload to code scanning
         if: ${{ !cancelled() && hashFiles('semgrep.sarif') != '' }}
