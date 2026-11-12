@@ -167,7 +167,7 @@ public record PrivacyConfig(@JsonProperty(required = true) int schemaVersion, Ip
          * @return default settings
          */
         public static Tracking defaults() {
-            return new Tracking(null, null, null);
+            return new Tracking(Boolean.FALSE, DEFAULT_RETENTION_DAYS, "");
         }
     }
 }

@@ -95,6 +95,7 @@ public final class BridgeSender implements AutoCloseable {
      * @param payload request payload
      * @return the answer's payload
      */
+    @SuppressWarnings("FutureReturnValueIgnored")
     public java.util.concurrent.CompletableFuture<byte[]> request(String channel, byte[] payload) {
         Objects.requireNonNull(channel, "channel");
         Objects.requireNonNull(payload, "payload");

@@ -702,7 +702,7 @@ public final class ApiRoutes {
         try {
             return UUID.fromString(text);
         } catch (IllegalArgumentException e) {
-            throw ApiException.badRequest("invalid-value", "The player must be given as a UUID.");
+            throw ApiException.badRequest("invalid-value", "The player must be given as a UUID.", e);
         }
     }
 

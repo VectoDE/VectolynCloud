@@ -25,7 +25,7 @@ final class PrivacyMessages {
      * @return the lines
      */
     static List<Component> lines(String answer, String request, boolean german) {
-        String[] parts = answer.split("\n");
+        String[] parts = answer.split("\n", -1);
         List<Component> result = new ArrayList<>();
         String head = parts[0].strip();
         if (head.startsWith("error")) {
