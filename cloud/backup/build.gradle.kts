@@ -48,6 +48,8 @@ val mariadbTest by tasks.registering(Test::class) {
     }
     systemProperty("vectolyn.mariadb.cache", layout.buildDirectory.dir("mariadb-cache").get().asFile.absolutePath)
     providers.gradleProperty("mariadbVersion").orNull?.let { systemProperty("vectolyn.mariadb.version", it) }
+    // Downloading and starting a real MariaDB takes longer than the default limit of five minutes.
+    systemProperty("junit.jupiter.execution.timeout.default", "20m")
     outputs.upToDateWhen { false }
     outputs.cacheIf { false }
 }

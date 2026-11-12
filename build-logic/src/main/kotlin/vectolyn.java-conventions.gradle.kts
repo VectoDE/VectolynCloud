@@ -17,9 +17,9 @@ plugins {
     `java-library`
     id("net.ltgt.errorprone")
     id("com.github.spotbugs")
-    checkstyle
-    pmd
-    jacoco
+    id("checkstyle")
+    id("pmd")
+    id("jacoco")
 }
 
 val defaultJavaRelease = 21
@@ -96,6 +96,9 @@ dependencies {
 
 val javaToolchains = extensions.getByType<JavaToolchainService>()
 tasks.withType<Test>().configureEach {
+    // A test that hangs fails after five minutes and names itself. The database tests that start
+    // a real MariaDB (mariadbTest) raise the limit in their build file.
+    systemProperty("junit.jupiter.execution.timeout.default", "5m")
     useJUnitPlatform {
         if (testJava != null && testJava < toolchainVersion) {
             excludeTags("requires-java25")
