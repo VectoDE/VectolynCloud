@@ -7,6 +7,8 @@ name: CI
 #   (-PtestJava=21). Tests tagged "requires-java25" load paper-api classes (class file
 #   version 69) and are skipped there; everything else, including the bytecode-level check,
 #   must pass on 21.
+# - "Tests on Java 27 (newest GA)" runs the same unit tests on the newest Java release, so a
+#   change of a later JDK (removed API, stricter checks) shows up before users run into it.
 # - "Integration" covers VectolynCloud end to end. It does real work only when cloud-related paths
 #   change (or on the nightly schedule), but it always reports a result, so it can become a
 #   required check without blocking unrelated pull requests. See the "changes" job.
@@ -262,6 +264,74 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: junit-xml-java21
+          path: '**/build/test-results/test/*.xml'
+          if-no-files-found: ignore
+          retention-days: 14
+
+  test-java-newest:
+    name: Tests on Java 27 (newest GA)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            api.adoptium.net:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            services.gradle.org:443
+            downloads.gradle.org:443
+            plugins.gradle.org:443
+            plugins-artifacts.gradle.org:443
+            repo.maven.apache.org:443
+            repo.papermc.io:443
+            repo.hpfxd.com:443
+            api.foojay.io:443
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Gradle runs on 25 (the toolchain); the tests run on the newest GA release. Raise the
+      # version here, in operations.yml (jar matrix) and in docs/java-compatibility.md together.
+      - name: Set up JDK 27 and 25
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: |
+            27
+            25
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      # fromEnv lets Gradle's toolchain lookup use the JDKs from setup-java
+      # instead of downloading them through Foojay.
+      - name: Run tests on Java 27
+        run: >-
+          bash ./gradlew test --no-daemon --stacktrace
+          -PtestJava=27
+          -Porg.gradle.java.installations.fromEnv=JAVA_HOME_27_X64,JAVA_HOME_25_X64
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-reports-java27
+          path: '**/build/reports/tests/'
+          retention-days: 7
+
+      - name: Upload JUnit XML
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: junit-xml-java27
           path: '**/build/test-results/test/*.xml'
           if-no-files-found: ignore
           retention-days: 14

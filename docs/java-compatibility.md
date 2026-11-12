@@ -14,20 +14,24 @@ The convention plugins in `build-logic/` set the defaults (toolchain 25, release
 |---|---|---|---|
 | `Build (JDK 25, ubuntu-latest)`, `Build (JDK 25, windows-latest)` | JDK 25, `--release 21` | Java 25 | Full build and every test, on Linux and Windows. Java 25 is the runtime the plugins ship for, because Paper 26.3 needs it. |
 | `Tests on Java 21` | JDK 25, `--release 21` | Java 21 (`-PtestJava=21`) | The compiled code and its resources load and pass their tests on a Java 21 runtime. |
+| `Tests on Java 27 (newest GA)` | JDK 25, `--release 21` | Java 27 (`-PtestJava=27`) | Every unit test passes on the newest Java release, so removed or changed JDK behaviour shows up in CI first. Not a required check; it is raised with each Java release together with the jar matrix below. |
 | `Jar on Java N (platform)` in `operations.yml` | JDK 25, `--release 21` | `java -jar VectolynCloud.jar` on Java 21, 25 and 27 (26 on macOS x64, where Temurin 27 has no build) | The release jar prints its banner, opens the cloud channel and stops cleanly on Linux x64 and arm64, macOS arm64 and x64, and Windows x64 (Windows only runs `--version` there; `start.bat` and `start.ps1` have their own job). |
 
 On Java 21 the tests tagged `requires-java25` are skipped. They load paper-api or velocity-api classes (class file version 69), which a Java 21 JVM cannot load. Today these are `PluginDescriptorTest.mainClassIsAJavaPlugin` in both plugin modules and in `plugins/bridge/paper`, `PortalBridgeTest` (its class under test extends `JavaPlugin`), `VelocityBridgePluginTest.velocityCanCreateAndWireThePlugin` and `VelocityServersTest`. A test class that needs such an API keeps its classes out of field, parameter and return types: JUnit reads the declared methods of every test class during discovery, also on Java 21. The bridge logic itself sits in `plugins/bridge/common`, and `plugins/bridge/legacy` compiles against pandaspigot-api with Java 8 class files, so all of their tests run on both runtimes. Every module has a `BytecodeLevelTest` that runs on both: it reads a class file without loading it and checks major version 65. The Jazzer fuzz tests in `common/protocol`, `common/client`, `cloud/config`, `cloud/template`, `cloud/download`, `cloud/network`, `cloud/database`, `cloud/node`, `cloud/console`, `cloud/setup`, `cloud/backup`, `plugins/bridge/common` and `cloud/monitor` run in regression mode on both runtimes, and so do the loopback tests of the cloud channel.
 
-Every run uploads the JUnit XML of its tests as an artifact (`junit-xml-ubuntu-latest`, `junit-xml-windows-latest`, `junit-xml-java21`). That shows which tests ran on which runner, including the ones that need POSIX permissions or symlinks and are skipped on Windows.
+Every run uploads the JUnit XML of its tests as an artifact (`junit-xml-ubuntu-latest`, `junit-xml-windows-latest`, `junit-xml-java21`, `junit-xml-java27`). That shows which tests ran on which runner, including the ones that need POSIX permissions or symlinks and are skipped on Windows.
+
+Together this covers the range from the oldest supported Java to the newest release: 21 (minimum, LTS) and 27 (newest GA) for the unit tests on Linux, 25 (LTS, the toolchain) for the unit tests on Linux and Windows, and 21, 25 and 27 for the release jar on all five target platforms. The versions in between (22 to 24, 26) are not run separately; they lie between two tested releases and are not LTS. When a new Java version reaches GA, the newest-GA job and the jar matrix move to it in one pull request.
 
 Locally:
 
 ```sh
 ./gradlew build                  # JDK 25 toolchain, all tests
 ./gradlew test -PtestJava=21     # same compile, tests on a Java 21 runtime
+./gradlew test -PtestJava=27     # same compile, tests on the newest Java release
 ```
 
-`-PtestJava=21` uses an installed JDK 21 or lets Foojay download one.
+`-PtestJava=<n>` uses an installed JDK of that version or lets Foojay download one. Below 25 the tests tagged `requires-java25` are skipped.
 
 ## Status per module
 
