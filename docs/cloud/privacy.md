@@ -76,3 +76,5 @@ That is the whole report: report format, cloud version, name of the operating sy
 5. Are the per-mode sums anonymous data, or does the short-lived in-memory session map make the statistics personal data processing?
 6. Is the consent record in `privacy.yml` (name, time, text version) sufficient as a proof of consent of the operator, and is the operator the right person to consent, or does the data protection law apply at all to a report without personal data?
 7. Which duties come with a telemetry endpoint run by someone else (processor agreement, transfer to third countries, notice in the privacy policy)?
+
+Questions 14 to 20 (legal texts, payments, licences) and the German drafts of the privacy policy, imprint and terms are in [docs/legal](../legal/README.md). All of them are drafts and not checked by a lawyer.
