@@ -392,7 +392,7 @@ final class TemplateSource {
         } catch (IOException e) {
             LOG.log(System.Logger.Level.DEBUG, "Cluster: template file {0}/{1} not served: {2}", template.name(),
                     entry.path(), e.getMessage());
-            throw new ClusterRpcException(ClusterRpcException.CHANGED);
+            throw new ClusterRpcException(ClusterRpcException.CHANGED, e);
         }
     }
 

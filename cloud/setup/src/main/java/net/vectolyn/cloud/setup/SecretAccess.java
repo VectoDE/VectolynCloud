@@ -160,7 +160,8 @@ public final class SecretAccess {
         java.util.ArrayList<String> fields = new java.util.ArrayList<>();
         StringBuilder field = new StringBuilder();
         boolean quoted = false;
-        for (int i = 0; i < line.length(); i++) {
+        int i = 0;
+        while (i < line.length()) {
             char c = line.charAt(i);
             if (quoted) {
                 if (c == '"' && i + 1 < line.length() && line.charAt(i + 1) == '"') {
@@ -179,6 +180,7 @@ public final class SecretAccess {
             } else {
                 field.append(c);
             }
+            i++;
         }
         fields.add(field.toString());
         return fields;

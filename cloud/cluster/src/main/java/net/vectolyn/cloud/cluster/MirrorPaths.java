@@ -100,7 +100,8 @@ public final class MirrorPaths {
         // space or private-use character: names reach logs and the console. Unassigned characters
         // are not refused: which ones those are depends on the Unicode version of the JDK, and head
         // and member must agree on every path.
-        for (int i = 0; i < segment.length(); ) {
+        int i = 0;
+        while (i < segment.length()) {
             int cp = segment.codePointAt(i);
             int type = Character.getType(cp);
             if (type == Character.CONTROL || type == Character.FORMAT || type == Character.PRIVATE_USE

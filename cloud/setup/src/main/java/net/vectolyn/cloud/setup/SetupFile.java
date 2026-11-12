@@ -193,7 +193,7 @@ public record SetupFile(int schemaVersion, Language language, Boolean eula, Stri
                 content = in.readNBytes(ConfigMappers.MAX_FILE_BYTES + 1);
             }
         } catch (IOException | SecurityException e) {
-            throw new SetupException(List.of(SetupMessages.FILE_UNREADABLE));
+            throw new SetupException(List.of(SetupMessages.FILE_UNREADABLE), e);
         }
         if (content.length > ConfigMappers.MAX_FILE_BYTES) {
             throw SetupException.of(new ConfigException(

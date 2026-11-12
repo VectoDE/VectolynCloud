@@ -193,7 +193,7 @@ public final class ApiRoutes {
             try {
                 change = config.reload();
             } catch (ConfigException e) {
-                throw ApiException.invalidConfig(e.errors());
+                throw ApiException.invalidConfig(e.errors(), e);
             }
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("changed", change.isPresent());
@@ -278,7 +278,7 @@ public final class ApiRoutes {
                 lifetime = ApiTokens.parseLifetime(body.expiresIn());
             } catch (IllegalArgumentException e) {
                 throw ApiException.badRequest("invalid-value",
-                        "\"expires-in\" must be 1h to 3650d, written " + ApiTokens.LIFETIME_FORMAT + ".");
+                        "\"expires-in\" must be 1h to 3650d, written " + ApiTokens.LIFETIME_FORMAT + ".", e);
             }
         }
         ApiTokens store = tokens();
@@ -292,7 +292,7 @@ public final class ApiRoutes {
         try {
             created = store.create(body.name(), scopes, lifetime);
         } catch (IllegalArgumentException e) {
-            throw new ApiException(409, "conflict", "The token could not be created (name taken or limit reached).");
+            throw new ApiException(409, "conflict", "The token could not be created (name taken or limit reached).", e);
         }
         Map<String, Object> answer = describe(created.info(), store.clock().instant());
         answer.put("token", created.token().reveal());
@@ -457,7 +457,7 @@ public final class ApiRoutes {
                 return after;
             });
         } catch (ConfigException e) {
-            throw ApiException.invalidConfig(e.errors());
+            throw ApiException.invalidConfig(e.errors(), e);
         }
     }
 
@@ -532,7 +532,7 @@ public final class ApiRoutes {
                 return after;
             });
         } catch (Refused refused) {
-            throw refused.error;
+            throw refused.error; // NOPMD - Refused only carries the stackless ApiException out of the lambda
         }
         return result.get();
     }
@@ -610,7 +610,7 @@ public final class ApiRoutes {
      * @param now     the time its expiry is judged against
      * @return 201 with id, name, scopes, created-at and token
      */
-    public static ApiResponse claimed(net.vectolyn.cloud.api.auth.ApiTokens.Created created, Instant now) {
+    public static ApiResponse claimed(ApiTokens.Created created, Instant now) {
         Map<String, Object> body = describe(created.info(), now);
         body.put("token", created.token().reveal());
         return ApiResponse.of(201, body);

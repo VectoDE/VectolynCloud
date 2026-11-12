@@ -125,7 +125,7 @@ public final class Question<T> {
             try {
                 value = Long.parseLong(text); // ten digits always fit in a long
             } catch (NumberFormatException e) {
-                throw new InvalidAnswerException(Messages.ANSWER_NUMBER, min, max);
+                throw new InvalidAnswerException(e, Messages.ANSWER_NUMBER, min, max);
             }
             if (value < min || value > max) {
                 throw new InvalidAnswerException(Messages.ANSWER_NUMBER, min, max);
@@ -170,7 +170,7 @@ public final class Question<T> {
                 try {
                     number = Integer.parseInt(text); // four digits always fit in an int
                 } catch (NumberFormatException e) {
-                    throw new InvalidAnswerException(Messages.ANSWER_CHOICE, copy.size());
+                    throw new InvalidAnswerException(e, Messages.ANSWER_CHOICE, copy.size());
                 }
                 if (number >= 1 && number <= copy.size()) {
                     return copy.get(number - 1).value();

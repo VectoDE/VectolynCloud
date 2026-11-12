@@ -211,7 +211,7 @@ public final class RuleParser {
             try {
                 raw = Double.parseDouble(number.text);
             } catch (NumberFormatException e) {
-                throw new RuleSyntaxException(Reason.BAD_NUMBER, number.position);
+                throw new RuleSyntaxException(Reason.BAD_NUMBER, number.position, e);
             }
             String unit = "";
             Token unitToken = peek();
@@ -260,7 +260,7 @@ public final class RuleParser {
             try {
                 amount = Long.parseLong(number.text);
             } catch (NumberFormatException e) {
-                throw new RuleSyntaxException(Reason.BAD_DURATION, number.position);
+                throw new RuleSyntaxException(Reason.BAD_DURATION, number.position, e);
             }
             Duration value = switch (unit.text) {
                 case "s" -> Duration.ofSeconds(amount);

@@ -7,6 +7,7 @@ import java.time.format.DateTimeParseException;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Pattern;
 import net.vectolyn.cloud.backup.BackupReason;
@@ -105,7 +106,7 @@ public final class ManifestCodec {
             manifest = MAPPER.readValue(content, BackupManifest.class);
         } catch (RuntimeException e) {
             // Jackson 3 exceptions are unchecked; their messages may quote the content, so only the type is passed on.
-            throw new ManifestException("manifest is not valid JSON of the expected shape ("
+            throw new ManifestException("manifest is not valid JSON of the expected shape (" // NOPMD - the Jackson message can quote the content
                     + e.getClass().getSimpleName() + ")");
         }
         if (manifest == null) {
@@ -126,14 +127,14 @@ public final class ManifestCodec {
         require(m.id() != null && ID_PATTERN.matcher(m.id()).matches(), "id must match " + ID);
         require(m.createdAt() != null && m.createdAt().length() <= 40, "created-at is missing or too long");
         try {
-            Instant.parse(m.createdAt());
+            Objects.requireNonNull(Instant.parse(m.createdAt()));
         } catch (DateTimeParseException e) {
-            throw new ManifestException("created-at is not an ISO-8601 instant");
+            throw new ManifestException("created-at is not an ISO-8601 instant", e);
         }
         try {
             BackupReason.ofId(String.valueOf(m.reason()));
         } catch (IllegalArgumentException e) {
-            throw new ManifestException("unknown reason");
+            throw new ManifestException("unknown reason", e);
         }
         String cloudVersion = m.cloudVersion();
         require(cloudVersion != null && VERSION.matcher(cloudVersion).matches(), "invalid cloud-version");
@@ -153,7 +154,7 @@ public final class ManifestCodec {
             try {
                 Consistency.of(String.valueOf(service.consistency()));
             } catch (IllegalArgumentException e) {
-                throw new ManifestException("unknown consistency");
+                throw new ManifestException("unknown consistency", e);
             }
             require(services.put(service.id(), service) == null, "service listed twice");
         }

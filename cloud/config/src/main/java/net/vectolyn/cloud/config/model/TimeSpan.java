@@ -8,7 +8,6 @@ import java.time.Duration;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import org.jspecify.annotations.Nullable;
 
 /**
  * A duration written in whole seconds, minutes or hours: {@code 30s}, {@code 5m}, {@code 1h}.

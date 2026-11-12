@@ -334,7 +334,7 @@ final class GroupCommands {
         try {
             return parser.get();
         } catch (IllegalArgumentException e) {
-            throw Values.invalid(file, path, format);
+            throw Values.invalid(file, path, format, e);
         }
     }
 

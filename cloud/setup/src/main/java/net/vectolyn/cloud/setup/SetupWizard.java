@@ -204,7 +204,7 @@ public final class SetupWizard {
                     try {
                         result = run(console, config, env.withLanguage(context.language()));
                     } catch (IOException e) {
-                        throw new CommandException(SetupMessages.WRITE_FAILED, String.valueOf(e.getMessage()));
+                        throw new CommandException(e, SetupMessages.WRITE_FAILED, String.valueOf(e.getMessage()));
                     } finally {
                         hooks.finished();
                     }

@@ -110,7 +110,7 @@ public final class GeneratedFiles {
         try {
             key = Base64.getDecoder().decode(base64.strip());
         } catch (IllegalArgumentException e) {
-            throw new TemplateException(path, FLOODGATE_PLACEHOLDER + " is not valid base64");
+            throw new TemplateException(path, FLOODGATE_PLACEHOLDER + " is not valid base64"); // NOPMD - the IllegalArgumentException message names the offending character of a secret key
         }
         if (key.length != FLOODGATE_KEY_BYTES) {
             throw new TemplateException(path, FLOODGATE_PLACEHOLDER + " must decode to exactly " + FLOODGATE_KEY_BYTES

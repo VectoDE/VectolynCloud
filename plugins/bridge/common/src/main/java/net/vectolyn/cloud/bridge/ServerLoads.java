@@ -15,7 +15,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
 import java.util.function.ToIntFunction;
-import org.jspecify.annotations.Nullable;
 
 /**
  * Which group each backend of the proxy belongs to, how many players it is meant for, and which

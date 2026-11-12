@@ -25,6 +25,13 @@ public final class InvalidAnswerException extends Exception {
         this.args = args.clone();
     }
 
+    /** The message, with {@link String#format} arguments, and the failure behind it. */
+    public InvalidAnswerException(Throwable cause, Text text, Object... args) {
+        super(Objects.requireNonNull(text, "text").format(Language.EN, args), cause);
+        this.text = text;
+        this.args = args.clone();
+    }
+
     /** The message in {@code language}. */
     public String message(Language language) {
         return text == null ? Objects.requireNonNullElse(getMessage(), "") : text.format(language, args);

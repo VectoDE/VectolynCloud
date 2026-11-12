@@ -71,10 +71,8 @@ public final class PlatformDetector {
     }
 
     private static boolean isPterodactyl(SystemAccess system) {
-        if (present(system, "P_SERVER_UUID")) {
-            return true;
-        }
-        return present(system, "STARTUP") && present(system, "SERVER_MEMORY") && present(system, "SERVER_PORT");
+        return present(system, "P_SERVER_UUID")
+                || (present(system, "STARTUP") && present(system, "SERVER_MEMORY") && present(system, "SERVER_PORT"));
     }
 
     private static boolean present(SystemAccess system, String name) {

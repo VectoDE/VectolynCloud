@@ -270,7 +270,7 @@ public final class JoinTokens {
             }
             try {
                 new NodeId(entry.node());
-                Instant.parse(entry.expiresAt());
+                Objects.requireNonNull(Instant.parse(entry.expiresAt()));
             } catch (IllegalArgumentException | DateTimeParseException e) {
                 throw new IOException(FILE + " has an invalid entry", e);
             }

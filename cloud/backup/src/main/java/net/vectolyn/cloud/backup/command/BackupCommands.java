@@ -230,7 +230,7 @@ public final class BackupCommands {
         try {
             return call.run();
         } catch (BackupException e) {
-            throw new CommandException(Text.of("Backup: %1$s", "Sicherung: %1$s"), e.getMessage());
+            throw new CommandException(e, Text.of("Backup: %1$s", "Sicherung: %1$s"), e.getMessage());
         }
     }
 

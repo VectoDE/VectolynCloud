@@ -41,6 +41,18 @@ public final class ApiBackendException extends Exception {
     }
 
     /**
+     * Creates the exception with the failure behind it.
+     *
+     * @param reason  why
+     * @param message text for the client, in English, without secrets
+     * @param cause   the failure behind it; it never reaches the client
+     */
+    public ApiBackendException(Reason reason, String message, Throwable cause) {
+        super(Objects.requireNonNull(message, "message"), cause);
+        this.reason = Objects.requireNonNull(reason, "reason");
+    }
+
+    /**
      * The text for the client; never null, the constructor requires it.
      *
      * @return the message

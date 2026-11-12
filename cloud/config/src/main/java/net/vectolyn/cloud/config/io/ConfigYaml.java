@@ -107,10 +107,10 @@ public final class ConfigYaml {
             throw new ConfigException(toError(file, e, content, mapper));
         } catch (MigrationException e) {
             throw new ConfigException(ConfigError.at(file, e.path(), locate(content, "/" + e.path().replace('.', '/'), mapper),
-                    e.code(), e.args()));
+                    e.code(), e.args()), e);
         } catch (RuntimeException e) {
             // A migration that trips over unexpected content.
-            throw new ConfigException(ConfigError.of(file, "", ErrorCode.INVALID_VALUE, "content of schema-version " + version));
+            throw new ConfigException(ConfigError.of(file, "", ErrorCode.INVALID_VALUE, "content of schema-version " + version)); // NOPMD - the exception message can quote the file content, which may hold a secret
         }
     }
 

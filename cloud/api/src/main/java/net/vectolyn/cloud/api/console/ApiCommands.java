@@ -106,7 +106,7 @@ public final class ApiCommands {
                 try {
                     tokens = Objects.requireNonNull(file.open(), "token store");
                 } catch (IOException e) {
-                    throw new CommandException(Text.of(
+                    throw new CommandException(e, Text.of(
                             "secrets/%1$s cannot be read (%2$s). Repair it, or delete it to start without tokens."
                                     + " The API stays off until the node starts with a readable file.",
                             "secrets/%1$s kann nicht gelesen werden (%2$s). Die Datei reparieren, oder löschen, um"
@@ -186,7 +186,7 @@ public final class ApiCommands {
             try {
                 lifetime = ApiTokens.parseLifetime(lifetimeText);
             } catch (IllegalArgumentException e) {
-                throw new CommandException(Text.of("The lifetime must be 1h to 3650d, for example 90d.",
+                throw new CommandException(e, Text.of("The lifetime must be 1h to 3650d, for example 90d.",
                         "Die Laufzeit muss 1h bis 3650d sein, zum Beispiel 90d."));
             }
         }

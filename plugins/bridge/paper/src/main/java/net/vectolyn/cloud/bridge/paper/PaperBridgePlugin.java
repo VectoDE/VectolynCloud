@@ -365,10 +365,8 @@ public final class PaperBridgePlugin extends JavaPlugin implements Listener {
         SafeSpawn.Column column = new SafeSpawn.Column() {
             @Override
             public boolean passable(int y) {
-                if (y >= world.getMaxHeight()) {
-                    return true;
-                }
-                return y >= world.getMinHeight() && world.getBlockAt(x, y, z).isPassable();
+                return y >= world.getMaxHeight()
+                        || (y >= world.getMinHeight() && world.getBlockAt(x, y, z).isPassable());
             }
 
             @Override

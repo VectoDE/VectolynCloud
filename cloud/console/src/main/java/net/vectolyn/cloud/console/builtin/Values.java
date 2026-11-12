@@ -36,7 +36,7 @@ final class Values {
         try {
             return Integer.parseInt(text); // nine digits always fit; the catch only satisfies the type
         } catch (NumberFormatException e) {
-            throw invalid(file, path, "a whole number");
+            throw invalid(file, path, "a whole number", e);
         }
     }
 
@@ -76,6 +76,10 @@ final class Values {
 
     static ConfigException invalid(String file, String path, String expected) {
         return new ConfigException(ConfigError.of(file, path, ErrorCode.INVALID_VALUE, expected));
+    }
+
+    static ConfigException invalid(String file, String path, String expected, Throwable cause) {
+        return new ConfigException(ConfigError.of(file, path, ErrorCode.INVALID_VALUE, expected), cause);
     }
 
     /** {@code on} or {@code off}, as in {@code group wanted lobby on}. */

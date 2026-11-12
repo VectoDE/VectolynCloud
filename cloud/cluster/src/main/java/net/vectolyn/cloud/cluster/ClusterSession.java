@@ -160,13 +160,14 @@ public final class ClusterSession {
             return request(channel, payload, timeout).get();
         } catch (ExecutionException e) {
             if (e.getCause() instanceof ClusterRpcException rpc) {
+                rpc.addSuppressed(e);
                 throw rpc;
             }
             throw new ClusterRpcException(e.getCause() instanceof TimeoutException ? ClusterRpcException.TIMEOUT
-                    : ClusterRpcException.FAILED);
+                    : ClusterRpcException.FAILED, e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new ClusterRpcException(ClusterRpcException.CLOSED);
+            throw new ClusterRpcException(ClusterRpcException.CLOSED, e);
         }
     }
 

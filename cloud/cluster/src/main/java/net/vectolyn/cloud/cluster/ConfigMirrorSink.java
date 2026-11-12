@@ -114,7 +114,7 @@ final class ConfigMirrorSink {
             known = Optional.empty();
             // Taking over anything now would switch the stale check off; the operator decides.
             throw new MirrorException("state/cluster/config-applied cannot be read (" + e.getMessage()
-                    + "); delete it to take over the head's config again");
+                    + "); delete it to take over the head's config again", e);
         }
         if (applied.isPresent()) {
             long last = applied.get().revision();
@@ -158,7 +158,7 @@ final class ConfigMirrorSink {
             changed |= !config.applyMirror(nodesConfig, groups, tasks).isEmpty();
         } catch (ConfigException e) {
             throw new MirrorException("the head's config does not validate on this node: "
-                    + e.describe(Language.EN).strip().replace(System.lineSeparator(), "; "));
+                    + e.describe(Language.EN).strip().replace(System.lineSeparator(), "; "), e);
         }
         // A sync that finds the revision it took over already does not write the record again: a
         // late push would otherwise rewrite it for nothing, racing anyone who reads or edits it.
@@ -189,7 +189,7 @@ final class ConfigMirrorSink {
             return decoded.value();
         } catch (ConfigException e) {
             throw new MirrorException("the head's " + path + " cannot be read: "
-                    + e.describe(Language.EN).strip().replace(System.lineSeparator(), "; "));
+                    + e.describe(Language.EN).strip().replace(System.lineSeparator(), "; "), e);
         }
     }
 }

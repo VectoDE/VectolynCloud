@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package net.vectolyn.cloud.monitor.console;
 
-import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;

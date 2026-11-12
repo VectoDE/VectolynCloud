@@ -120,10 +120,8 @@ public final class LockedDownloads implements ArtifactSource {
         if (entry.versionOpt().isPresent()) {
             return entry.versionOpt().get().equals(pinned.version());
         }
-        if (entry.gameVersion() == CatalogEntry.GameVersionUse.VERSION && minecraftVersion != null) {
-            return minecraftVersion.equals(pinned.version());
-        }
-        return true;
+        return entry.gameVersion() != CatalogEntry.GameVersionUse.VERSION || minecraftVersion == null
+                || minecraftVersion.equals(pinned.version());
     }
 
     /** Mojang's {@code javaVersion} for a release, or empty if Mojang cannot be asked now. */

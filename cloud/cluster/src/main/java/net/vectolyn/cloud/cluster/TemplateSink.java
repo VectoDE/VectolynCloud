@@ -164,7 +164,7 @@ final class TemplateSink {
             list = TemplateList.read(new PacketReader(session.call(MirrorMessages.TEMPLATE_LIST,
                     new ManifestRequest("", new byte[0], 0).write(), MirrorClient.TIMEOUT)));
         } catch (ProtocolException e) {
-            throw new MirrorException("invalid template list");
+            throw new MirrorException("invalid template list", e);
         }
         requireRealWorkDir();
         Set<String> folded = new HashSet<>();

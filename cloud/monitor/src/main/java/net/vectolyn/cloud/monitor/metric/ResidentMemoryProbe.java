@@ -238,17 +238,20 @@ public interface ResidentMemoryProbe {
      */
     static OptionalLong parseProcStatus(String status) {
         for (String line : status.split("\n", -1)) {
-            if (!line.startsWith("VmRSS:")) {
-                continue;
+            if (line.startsWith("VmRSS:")) {
+                return parseVmRss(line);
             }
-            String[] parts = line.substring("VmRSS:".length()).trim().split("\\s+", -1);
-            if (parts.length != 2 || !parts[1].equals("kB")) {
-                return OptionalLong.empty();
-            }
-            long kilobytes = parseCount(parts[0]);
-            return kilobytes < 0 ? OptionalLong.empty() : OptionalLong.of(kilobytes * 1024);
         }
         return OptionalLong.empty();
+    }
+
+    private static OptionalLong parseVmRss(String line) {
+        String[] parts = line.substring("VmRSS:".length()).trim().split("\\s+", -1);
+        if (parts.length != 2 || !parts[1].equals("kB")) {
+            return OptionalLong.empty();
+        }
+        long kilobytes = parseCount(parts[0]);
+        return kilobytes < 0 ? OptionalLong.empty() : OptionalLong.of(kilobytes * 1024);
     }
 
     /**

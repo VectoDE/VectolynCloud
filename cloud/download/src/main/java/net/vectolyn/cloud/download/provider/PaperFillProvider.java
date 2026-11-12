@@ -19,6 +19,7 @@ import net.vectolyn.cloud.download.hash.Checksum;
 import net.vectolyn.cloud.download.hash.HashAlgorithm;
 import net.vectolyn.cloud.download.http.DownloadClient;
 import net.vectolyn.cloud.download.http.HostAllowlist;
+import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
 
 /**
@@ -81,36 +82,45 @@ public final class PaperFillProvider implements ArtifactProvider {
             if (++tried > MAX_VERSIONS_TRIED) {
                 break;
             }
-            String v = request.versionOpt().isPresent()
-                    ? ApiSupport.segment(version, "version")
-                    : ApiSupport.apiSegment(version, "Fill project version");
-            FillBuild build;
-            if (request.buildOpt().isPresent()) {
-                String b = ApiSupport.segment(request.buildOpt().get(), "build");
-                build = parseBuild(ApiSupport.fetchJson(client, URI.create(base + v + "/builds/" + b), HOSTS,
-                        "Fill build " + project + " " + version + " #" + request.build()));
-            } else {
-                List<FillBuild> builds = parseBuilds(ApiSupport.fetchJson(client,
-                        URI.create(base + v + "/builds" + ApiSupport.query(Map.of("channel", channel))), HOSTS,
-                        "Fill builds of " + project + " " + version));
-                Optional<FillBuild> newest = builds.stream()
-                        .filter(b -> b.channel().equalsIgnoreCase(channel))
-                        .max((a, b) -> Long.compare(a.id(), b.id()));
-                if (newest.isEmpty()) {
-                    if (request.versionOpt().isPresent()) {
-                        throw new ArtifactNotAvailableException("Fill has no " + channel + " build of "
-                                + project + " " + version);
-                    }
-                    continue;
-                }
-                build = newest.get();
+            ResolvedArtifact found = resolveVersion(request, project, channel, base, version);
+            if (found != null) {
+                return found;
             }
-            FillVersion info = parseVersion(ApiSupport.fetchJson(client, URI.create(base + v), HOSTS,
-                    "Fill version " + project + " " + version));
-            return toArtifact(project, info, build);
         }
         throw new ArtifactNotAvailableException("Fill has no " + channel + " build of " + project
                 + " in its newest " + MAX_VERSIONS_TRIED + " versions");
+    }
+
+    /** The artifact of one version, or {@code null} if Fill has no build of the channel for it. */
+    private @Nullable ResolvedArtifact resolveVersion(ArtifactRequest request, String project, String channel,
+            String base, String version) throws IOException, InterruptedException {
+        String v = request.versionOpt().isPresent()
+                ? ApiSupport.segment(version, "version")
+                : ApiSupport.apiSegment(version, "Fill project version");
+        FillBuild build;
+        if (request.buildOpt().isPresent()) {
+            String b = ApiSupport.segment(request.buildOpt().get(), "build");
+            build = parseBuild(ApiSupport.fetchJson(client, URI.create(base + v + "/builds/" + b), HOSTS,
+                    "Fill build " + project + " " + version + " #" + request.build()));
+        } else {
+            List<FillBuild> builds = parseBuilds(ApiSupport.fetchJson(client,
+                    URI.create(base + v + "/builds" + ApiSupport.query(Map.of("channel", channel))), HOSTS,
+                    "Fill builds of " + project + " " + version));
+            Optional<FillBuild> newest = builds.stream()
+                    .filter(b -> b.channel().equalsIgnoreCase(channel))
+                    .max((a, b) -> Long.compare(a.id(), b.id()));
+            if (newest.isEmpty()) {
+                if (request.versionOpt().isPresent()) {
+                    throw new ArtifactNotAvailableException("Fill has no " + channel + " build of "
+                            + project + " " + version);
+                }
+                return null;
+            }
+            build = newest.get();
+        }
+        FillVersion info = parseVersion(ApiSupport.fetchJson(client, URI.create(base + v), HOSTS,
+                "Fill version " + project + " " + version));
+        return toArtifact(project, info, build);
     }
 
     /**

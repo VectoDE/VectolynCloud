@@ -91,7 +91,8 @@ final class CommandBlockSetting {
         List<String> lines = new ArrayList<>();
         List<String> breaks = new ArrayList<>();
         int start = 0;
-        for (int at = 0; at < text.length(); at++) {
+        int at = 0;
+        while (at < text.length()) {
             char c = text.charAt(at);
             if (c == '\n' || c == '\r') {
                 lines.add(text.substring(start, at));
@@ -100,6 +101,7 @@ final class CommandBlockSetting {
                 at += crlf ? 1 : 0;
                 start = at + 1;
             }
+            at++;
         }
         if (start < text.length()) {
             lines.add(text.substring(start));

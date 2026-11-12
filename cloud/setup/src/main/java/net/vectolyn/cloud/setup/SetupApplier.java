@@ -76,7 +76,7 @@ final class SetupApplier {
         try {
             stored = secrets.load().hasValue(GeneratedSecret.DB_PASSWORD.key());
         } catch (EnvFormatException e) {
-            throw new SetupException(List.of(SetupMessages.fill(SetupMessages.SECRETS_UNREADABLE, e.line())));
+            throw new SetupException(List.of(SetupMessages.fill(SetupMessages.SECRETS_UNREADABLE, e.line())), e);
         }
         List<Text> problems = new ArrayList<>();
         if (!answers.eulaAccepted()) {
@@ -92,7 +92,7 @@ final class SetupApplier {
         try {
             previousPassword = secrets.load().get(GeneratedSecret.DB_PASSWORD.key());
         } catch (EnvFormatException e) {
-            throw new SetupException(List.of(SetupMessages.fill(SetupMessages.SECRETS_UNREADABLE, e.line())));
+            throw new SetupException(List.of(SetupMessages.fill(SetupMessages.SECRETS_UNREADABLE, e.line())), e);
         }
         // 1. The configuration. If it fails, nothing at all has been written yet.
         boolean configWritten = false;
@@ -126,18 +126,15 @@ final class SetupApplier {
             if (!finish.isEmpty()) {
                 files.addAll(config.apply(finish).files());
             }
-        } catch (IOException | EnvFormatException | ConfigException | RuntimeException e) {
+        } catch (EnvFormatException e) {
             rollBack(config, configWritten ? current : null, secrets, passwordWritten ? previousPassword : Optional.empty(), e);
-            if (e instanceof EnvFormatException format) {
-                throw new SetupException(List.of(SetupMessages.fill(SetupMessages.SECRETS_UNREADABLE, format.line())));
-            }
-            if (e instanceof ConfigException configProblem) {
-                throw SetupException.of(configProblem);
-            }
-            if (e instanceof IOException io) {
-                throw io;
-            }
-            throw (RuntimeException) e;
+            throw new SetupException(List.of(SetupMessages.fill(SetupMessages.SECRETS_UNREADABLE, e.line())), e);
+        } catch (ConfigException e) {
+            rollBack(config, configWritten ? current : null, secrets, passwordWritten ? previousPassword : Optional.empty(), e);
+            throw SetupException.of(e);
+        } catch (IOException | RuntimeException e) {
+            rollBack(config, configWritten ? current : null, secrets, passwordWritten ? previousPassword : Optional.empty(), e);
+            throw e;
         }
         if (first) {
             return new SetupResult(SetupResult.Status.COMPLETED, files, answers.adminName());

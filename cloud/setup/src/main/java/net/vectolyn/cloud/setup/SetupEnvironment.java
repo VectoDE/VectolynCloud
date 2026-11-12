@@ -93,10 +93,8 @@ public record SetupEnvironment(Language language, boolean interactive, Optional<
 
     /** The launcher's Pterodactyl rule on {@code env}. */
     public static boolean isPterodactyl(Map<String, String> env) {
-        if (present(env.get("P_SERVER_UUID"))) {
-            return true;
-        }
-        return present(env.get("STARTUP")) && present(env.get("SERVER_MEMORY")) && present(env.get("SERVER_PORT"));
+        return present(env.get("P_SERVER_UUID"))
+                || (present(env.get("STARTUP")) && present(env.get("SERVER_MEMORY")) && present(env.get("SERVER_PORT")));
     }
 
     /** A copy with another language (tests, and the language the operator picked). */

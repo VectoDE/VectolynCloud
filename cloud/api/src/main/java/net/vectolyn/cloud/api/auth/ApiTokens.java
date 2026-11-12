@@ -179,7 +179,7 @@ public final class ApiTokens {
         try {
             parsed = JSON.readValue(content, SetupFile.class);
         } catch (JacksonException e) {
-            throw new IOException(SETUP_FILE_NAME + " is not a valid setup token file (unknown field, wrong type or broken JSON)");
+            throw new IOException(SETUP_FILE_NAME + " is not a valid setup token file (unknown field, wrong type or broken JSON)"); // NOPMD - the Jackson message can quote token material
         }
         if (parsed == null || parsed.schemaVersion() != SCHEMA_VERSION || parsed.token() == null) {
             throw new IOException(SETUP_FILE_NAME + ": schema-version must be " + SCHEMA_VERSION + " and token must be set");
@@ -209,7 +209,7 @@ public final class ApiTokens {
         try {
             parsed = JSON.readValue(content, TokenFile.class);
         } catch (JacksonException e) {
-            throw new IOException(FILE_NAME + " is not a valid token file (unknown field, wrong type or broken JSON)");
+            throw new IOException(FILE_NAME + " is not a valid token file (unknown field, wrong type or broken JSON)"); // NOPMD - the Jackson message can quote token material
         }
         if (parsed == null || parsed.schemaVersion() != SCHEMA_VERSION) {
             throw new IOException(FILE_NAME + ": schema-version must be " + SCHEMA_VERSION);
@@ -559,7 +559,7 @@ public final class ApiTokens {
             return false;
         }
         try {
-            Instant.parse(text);
+            Objects.requireNonNull(Instant.parse(text));
             return true;
         } catch (DateTimeParseException e) {
             return false;

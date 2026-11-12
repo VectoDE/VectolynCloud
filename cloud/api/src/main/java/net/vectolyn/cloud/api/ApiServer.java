@@ -157,7 +157,7 @@ public final class ApiServer implements AutoCloseable {
                         .protocols("TLSv1.3", "TLSv1.2")
                         .build();
             } catch (IOException e) {
-                throw new ApiStartException(Objects.requireNonNullElse(e.getMessage(), e.toString()));
+                throw new ApiStartException(Objects.requireNonNullElse(e.getMessage(), e.toString()), e);
             }
         }
         bossGroup = new MultiThreadIoEventLoopGroup(1, new DefaultThreadFactory("vectolyn-api-accept"),
@@ -224,7 +224,7 @@ public final class ApiServer implements AutoCloseable {
         try {
             address = InetAddress.getByName(settings.bind());
         } catch (UnknownHostException e) {
-            throw new ApiStartException("api.bind cannot be resolved.");
+            throw new ApiStartException("api.bind cannot be resolved.", e);
         }
         if (settings.tls().isEmpty() && !address.isLoopbackAddress()) {
             throw new ApiStartException("The API listens on a non-loopback address (api.bind) and therefore needs TLS: "
