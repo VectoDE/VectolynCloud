@@ -18,7 +18,9 @@ import net.vectolyn.cloud.config.error.ConfigException;
 import net.vectolyn.cloud.config.error.ErrorCode;
 import net.vectolyn.cloud.config.io.ConfigYaml;
 import net.vectolyn.cloud.config.model.Language;
+import net.vectolyn.cloud.config.model.GroupConfig;
 import net.vectolyn.cloud.config.model.NodesConfig;
+import net.vectolyn.cloud.config.model.ProcessConfig;
 import net.vectolyn.cloud.config.operation.PutGroup;
 import net.vectolyn.cloud.config.operation.PutTask;
 import net.vectolyn.cloud.config.operation.RemoveTask;
@@ -82,6 +84,56 @@ class ConfigServiceMirrorTest {
             assertThrows(ConfigException.class, () -> service.applyMirror(NodesConfig.defaults(),
                     Map.of("lobby", Samples.lobbyGroup()), Map.of("lobby", Samples.lobbyTask().withNodes(List.of("node-9")))));
             assertFalse(Files.exists(root.resolve("config/groups/lobby.yml")));
+        }
+    }
+
+    @Test
+    void aMirrorThatAddsAJvmFlagOutsideTheAllowlistIsRefused() throws Exception {
+        try (ConfigService service = ConfigService.open(CloudHome.of(root))) {
+            service.mirrorMode(true);
+            service.applyMirror(NodesConfig.defaults(), Map.of("lobby", Samples.lobbyGroup()), Map.of());
+            Path file = root.resolve("config/groups/lobby.yml");
+            byte[] before = Files.readAllBytes(file);
+
+            for (String flag : List.of("-javaagent:/tmp/agent.jar", "-XX:OnOutOfMemoryError=sh", "-Dmyplugin.debug=true")) {
+                GroupConfig flagged = Samples.lobbyGroup().withProcess(new ProcessConfig(List.of("-XX:+UseG1GC", flag),
+                        null, null, null));
+                ConfigException e = assertThrows(ConfigException.class,
+                        () -> service.applyMirror(NodesConfig.defaults(), Map.of("lobby", flagged), Map.of()), flag);
+                assertEquals(1, e.errors().size(), flag);
+                assertEquals("process.jvm-flags[1]", e.errors().getFirst().path(), flag);
+                assertEquals(flag.startsWith("-D") ? ErrorCode.JVM_FLAG_NOT_LISTED : ErrorCode.JVM_FLAG_FORBIDDEN,
+                        e.errors().getFirst().code(), flag);
+                assertArrayEquals(before, Files.readAllBytes(file), "nothing written for " + flag);
+                assertEquals(Samples.lobbyGroup(), service.snapshot().groups().get("lobby"));
+            }
+            // A new group counts as adding all its flags.
+            GroupConfig other = Samples.lobbyGroup().withProcess(new ProcessConfig(List.of("-agentlib:jdwp=x"), null,
+                    null, null));
+            assertThrows(ConfigException.class, () -> service.applyMirror(NodesConfig.defaults(),
+                    Map.of("lobby", Samples.lobbyGroup(), "other", other), Map.of()));
+            assertFalse(Files.exists(root.resolve("config/groups/other.yml")));
+
+            // Allowed flags are taken over.
+            GroupConfig tuned = Samples.lobbyGroup().withProcess(new ProcessConfig(List.of("-XX:+UseG1GC"), null, null,
+                    null));
+            service.applyMirror(NodesConfig.defaults(), Map.of("lobby", tuned), Map.of());
+            assertEquals(tuned, service.snapshot().groups().get("lobby"));
+        }
+    }
+
+    @Test
+    void aFlagTheMemberAlreadyHadStaysAccepted() throws Exception {
+        GroupConfig old = Samples.lobbyGroup().withProcess(new ProcessConfig(List.of("-Dmyplugin.debug=true"), null,
+                null, null));
+        try (ConfigService service = ConfigService.open(CloudHome.of(root))) {
+            // Written by the operator on this node before it joined: a warning, not an error.
+            service.apply(new PutGroup("lobby", old));
+            service.mirrorMode(true);
+            GroupConfig changed = old.withProcess(new ProcessConfig(List.of("-XX:+UseG1GC", "-Dmyplugin.debug=true"),
+                    null, null, null));
+            service.applyMirror(NodesConfig.defaults(), Map.of("lobby", changed), Map.of());
+            assertEquals(changed, service.snapshot().groups().get("lobby"));
         }
     }
 

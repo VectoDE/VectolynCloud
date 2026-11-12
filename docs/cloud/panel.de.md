@@ -40,6 +40,18 @@ Jede Anfrage muss das Panel im `Host`-Header nennen (`localhost`, `127.0.0.1`, `
 - **CSP pro Seite:** nur die eigene Origin plus genau die Inline-Skripte der Seite über ihren SHA-256-Hash. Kein `unsafe-inline`, kein `unsafe-eval`. Der Server berechnet die Hashes beim Laden.
 - **Grenzen:** 600 Anfragen pro Minute und Adresse (Burst 120), 256 Verbindungen, höchstens 32 je Adresse, Body 256 KiB, Leerlauf 120 s. Anfrageziele mit `%`, Backslash, leeren, `.`- oder `..`-Segmenten werden mit `400` abgelehnt.
 
+## Konten und Anmeldung
+
+**Erstes Konto:** Es gibt keinen Standard-Benutzer und kein Standard-Passwort. Solange kein Konto existiert, zeigt das Panel **Erstes Konto anlegen** und fragt nach dem einmaligen Einrichtungs-Token aus der Konsole des Knotens (`vcs_...`, einmal gültig, 24 Stunden; `api token setup` gibt einen neuen aus). Damit entsteht das Eigentümer-Konto mit allen Rechten; der Token ist danach verbraucht, auch für die API.
+
+**Anmeldeverfahren:** Passwort (12 bis 256 Zeichen, PBKDF2-HMAC-SHA-256 mit 600.000 Iterationen), Authenticator-App (TOTP nach RFC 6238, jeder Code nur einmal), Passkeys (WebAuthn mit Benutzerprüfung; brauchen einen Hostnamen wie `localhost`, keine IP-Adresse) und Single Sign-on über OpenID Connect (Code-Flow mit PKCE, `state`, `nonce`; nur für Konten, die ihr Anbieter-Konto unter **Mein Konto** verknüpft haben). Einstellungen unter `oidc:` in `panel.yml`, das Client-Secret als `VECTOLYN_PANEL_OIDC_SECRET` in `secrets/vectolyn.env`; Details in [panel.md](panel.md#accounts-and-sign-in).
+
+**Rollen und Rechte:** eingebaut sind `owner` (alles), `operator` und `viewer`; eigene Rollen entstehen aus den zehn API-Scopes und den Panel-Rechten `files:read`, `files:write`, `players:manage`, `audit:read`, `users:manage`. Niemand vergibt mehr Rechte, als er selbst hat; mindestens ein aktiver `owner` bleibt. Gespeichert in `secrets/panel-users.json` (nur für den Eigentümer lesbar, nur Hashes).
+
+**Schutz:** Sitzungs-Cookie `__Host-vectolyn-session` (`HttpOnly`, `Secure`, `SameSite=Strict`), 30 Minuten Leerlauf, höchstens 12 Stunden. Jede ändernde Anfrage braucht den eigenen Origin und das CSRF-Token im Header `X-Vectolyn-CSRF`. Fünf Fehlversuche sperren ein Konto für 15 Minuten.
+
+**Audit-Log:** `logs/panel-audit.jsonl`, eine Zeile je Anmeldung, Fehlversuch, Sperre, Abmeldung und Änderung an Konten, Faktoren und Rollen, ohne Passwörter oder Codes. Lesbar mit dem Recht `audit:read`.
+
 ## Oberfläche bauen
 
 ```sh

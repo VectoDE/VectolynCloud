@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
+import { AuthProvider } from "@/lib/auth";
 import { I18nProvider } from "@/lib/i18n";
 import { Shell } from "@/components/Shell";
 import "./globals.css";
@@ -25,7 +26,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <body className="min-h-screen antialiased">
         <I18nProvider>
-          <Shell>{children}</Shell>
+          <AuthProvider>
+            <Shell>{children}</Shell>
+          </AuthProvider>
         </I18nProvider>
       </body>
     </html>

@@ -109,10 +109,51 @@ public final class PanelConfigLoader {
                         "https://host[:port] without path, or http://localhost[:port]"));
             }
         }
+        PanelConfig.Oidc oidc = config.oidc();
+        if (oidc != null) {
+            if (config.publicUrl() == null) {
+                errors.add(ConfigError.of(FILE, "oidc", ErrorCode.INVALID_VALUE, "public-url set as well"));
+            }
+            if (!issuerAllowed(oidc.issuer())) {
+                errors.add(ConfigError.of(FILE, "oidc.issuer", ErrorCode.INVALID_VALUE,
+                        "https://host[/path], or http://localhost for tests"));
+            }
+            if (oidc.clientId().isEmpty() || oidc.clientId().length() > 255
+                    || !oidc.clientId().matches("[!-~]+")) {
+                errors.add(ConfigError.of(FILE, "oidc.client-id", ErrorCode.INVALID_VALUE, "printable ASCII, 1 to 255"));
+            }
+            if (oidc.name().isBlank() || oidc.name().length() > 64 || oidc.name().chars().anyMatch(Character::isISOControl)) {
+                errors.add(ConfigError.of(FILE, "oidc.name", ErrorCode.INVALID_VALUE, "1 to 64 characters"));
+            }
+            if (oidc.scopes().size() > 16 || oidc.scopes().stream().anyMatch(sc -> sc == null || !sc.matches("[a-z0-9_:.-]{1,64}"))) {
+                errors.add(ConfigError.of(FILE, "oidc.scopes", ErrorCode.INVALID_VALUE, "up to 16 scope names"));
+            }
+        }
         if (!errors.isEmpty()) {
             throw new ConfigException(errors);
         }
         return new Settings(config, origin);
+    }
+
+    /**
+     * Whether an issuer URL may be used: {@code https} with a host, or {@code http} on loopback (tests).
+     *
+     * @param issuer the URL
+     * @return true if allowed
+     */
+    static boolean issuerAllowed(String issuer) {
+        if (issuer == null || issuer.length() > 255) {
+            return false;
+        }
+        try {
+            URI uri = new URI(issuer);
+            String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT);
+            boolean loopback = host.equals("localhost") || host.equals("127.0.0.1");
+            return !host.isEmpty() && uri.getRawUserInfo() == null && uri.getRawQuery() == null && uri.getRawFragment() == null
+                    && ("https".equals(uri.getScheme()) || ("http".equals(uri.getScheme()) && loopback));
+        } catch (URISyntaxException e) {
+            return false;
+        }
     }
 
     /**

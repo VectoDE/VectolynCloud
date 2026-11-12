@@ -43,10 +43,15 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.function.LongSupplier;
+import net.vectolyn.cloud.api.auth.ApiToken;
 import net.vectolyn.cloud.api.auth.ApiTokens;
 import net.vectolyn.cloud.api.auth.RateLimiter;
+import net.vectolyn.cloud.api.auth.Scope;
 import net.vectolyn.cloud.api.backend.ApiBackend;
 import net.vectolyn.cloud.api.event.ApiEvent;
+import net.vectolyn.cloud.api.http.ApiException;
+import net.vectolyn.cloud.api.http.ApiRequest;
+import net.vectolyn.cloud.api.http.ApiResponse;
 import net.vectolyn.cloud.api.http.ApiRoutes;
 import net.vectolyn.cloud.api.http.Router;
 import net.vectolyn.cloud.config.ConfigService;
@@ -82,6 +87,13 @@ public final class ApiServer implements AutoCloseable {
 
     /** Name of the idle handler in the pipeline. */
     static final String IDLE = "vectolyn-api-idle";
+
+    /**
+     * Id prefix of the principals of an in-process client ({@link #call}, {@link #subscribe}): the
+     * web panel signs its users in itself and has no API token for them. Such an id is never in the
+     * token store, so it can never be presented over the network.
+     */
+    public static final String LOCAL_PREFIX = "local:";
 
     private static final System.Logger LOG = System.getLogger(ApiServer.class.getName());
     private static final WriteBufferWaterMark WATER_MARK = new WriteBufferWaterMark(256 * 1024, 1024 * 1024);
@@ -261,7 +273,7 @@ public final class ApiServer implements AutoCloseable {
         }
         // A token that expires while its event stream is open: the stream closes with 1008 within
         // EXPIRY_CHECK_SECONDS, as if the token had been revoked.
-        workerGroup.scheduleAtFixedRate(() -> events.closeTokensIf(id -> !tokens.isValid(id)),
+        workerGroup.scheduleAtFixedRate(() -> events.closeTokensIf(id -> !id.startsWith(LOCAL_PREFIX) && !tokens.isValid(id)),
                 expiryCheckMillis, expiryCheckMillis, TimeUnit.MILLISECONDS);
         // Metrics only while a stream wants them; the status is read on a virtual thread, never on
         // the event loop.
@@ -492,6 +504,105 @@ public final class ApiServer implements AutoCloseable {
 
     ApiSettings settings() {
         return settings;
+    }
+
+    /**
+     * Runs a REST route in-process for an embedded client (the web panel), exactly as
+     * {@link ApiHttpHandler} does after authentication: resolve the target, check the route's scope
+     * against the principal, run the handler, map a failure to its error. The rate limits of the
+     * network listener do not apply; the caller has its own. The setup claim is not reachable.
+     *
+     * @param principal the signed-in user as a token whose id starts with {@link #LOCAL_PREFIX}
+     * @param method    HTTP method
+     * @param target    path below {@code /api/v1}, starting with {@code /}, with query; checked by the router
+     * @param body      the JSON body, empty for none
+     * @param ifMatch   the {@code If-Match} value, or null
+     * @return the answer
+     * @throws ApiException the error REST would answer (400, 403, 404, 405, 422, ...)
+     */
+    public ApiResponse call(ApiToken principal, String method, String target, byte[] body, String ifMatch)
+            throws ApiException {
+        Objects.requireNonNull(principal, "principal");
+        if (!principal.id().startsWith(LOCAL_PREFIX)) {
+            throw new IllegalArgumentException("only local principals call in-process");
+        }
+        Router.Resolution<ApiRoutes.Handler> resolution = router.resolve(method, ApiRoutes.PREFIX + target);
+        Router.Resolution.Found<ApiRoutes.Handler> found = switch (resolution) {
+            case Router.Resolution.Found<ApiRoutes.Handler> f -> f;
+            case Router.Resolution.NotFound<ApiRoutes.Handler>() -> throw new ApiException(404, "not-found", "No such endpoint.");
+            case Router.Resolution.MethodNotAllowed<ApiRoutes.Handler> m -> throw new ApiException(405,
+                    "method-not-allowed", "Allowed: " + String.join(", ", new java.util.TreeSet<>(m.allowed())) + ".");
+            case Router.Resolution.Invalid<ApiRoutes.Handler> i -> throw new ApiException(400, i.code(),
+                    "The request target breaks a rule of the API.");
+        };
+        String path = found.route().path();
+        if (path.equals(ApiRoutes.SETUP_CLAIM) || path.equals(ApiRoutes.EVENTS)) {
+            throw new ApiException(404, "not-found", "No such endpoint.");
+        }
+        Scope scope = found.route().scope();
+        if (scope != null && !principal.allows(scope)) {
+            throw new ApiException(403, "missing-scope", "This user lacks the right " + scope.id() + ".");
+        }
+        ApiRequest request = new ApiRequest(method, found.params(), found.query(), body == null ? new byte[0] : body,
+                principal, ifMatch);
+        try {
+            return found.route().handler().handle(request);
+        } catch (Exception e) {
+            throw ApiHttpHandler.toApiException(e, this::redact);
+        }
+    }
+
+    /**
+     * Adds a WebSocket of an embedded client to the event streams: the channel then gets the same
+     * text frames as {@code /api/v1/events}. It counts against the stream limit, is removed when it
+     * closes, and gets {@code 1001} at shutdown.
+     *
+     * @param channel   the client's WebSocket channel, after its handshake
+     * @param principal the signed-in user, id starting with {@link #LOCAL_PREFIX}
+     * @param types     the event types asked for, empty for every type the principal may see
+     * @param services  the services to follow, empty for all
+     * @return the event types the stream receives
+     * @throws ApiException 400 for an unknown type, 403 {@code missing-scope}, 503 {@code too-many-streams}
+     */
+    public java.util.Set<String> subscribe(Channel channel, ApiToken principal, java.util.Set<String> types,
+                                           java.util.Set<String> services) throws ApiException {
+        if (!principal.id().startsWith(LOCAL_PREFIX)) {
+            throw new IllegalArgumentException("only local principals subscribe in-process");
+        }
+        for (String type : types) {
+            if (!EventHub.TYPES.contains(type)) {
+                throw new ApiException(400, "invalid-query", "\"types\" has an unknown entry.");
+            }
+        }
+        java.util.Set<String> permitted = ApiHttpHandler.permittedTypes(principal, types);
+        if (!events.add(channel, principal.id(), permitted, services)) {
+            throw new ApiException(503, "too-many-streams", "Too many event streams are open.");
+        }
+        return permitted;
+    }
+
+    /**
+     * Uses the one-time setup token for something other than an API token: the web panel creates
+     * its first account with it ({@link ApiTokens#useSetupToken}).
+     *
+     * @param presented the token the user typed
+     * @param use       the work
+     * @param <T>       its result
+     * @return the result, or empty for a wrong, used or expired token
+     * @throws java.io.IOException if the work fails; the token stays valid
+     */
+    public <T> java.util.Optional<T> useSetupToken(String presented, ApiTokens.SetupUse<T> use)
+            throws java.io.IOException {
+        return tokens.useSetupToken(presented, use);
+    }
+
+    /**
+     * Whether a setup token is waiting to be used (for the panel's first-account page).
+     *
+     * @return true while an unexpired setup token exists
+     */
+    public boolean setupTokenPending() {
+        return tokens.setupTokenExpiry().map(expiry -> tokens.clock().instant().isBefore(expiry)).orElse(false);
     }
 
     /**
