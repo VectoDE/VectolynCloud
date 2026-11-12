@@ -17,7 +17,8 @@
 import { readFileSync, writeFileSync, mkdirSync, cpSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { pages, extraPages, routes, nav, footerLinks, strings, posts } from './src/pages.mjs';
+import { pages, extraPages, routes, nav, footerLinks, strings, posts, team } from './src/pages.mjs';
+import { resolveHeads } from './src/heads.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -40,6 +41,9 @@ if (process.env.SITE_OFFLINE !== '1') {
     }
   } catch { /* leave it out */ }
 }
+// Minecraft heads of the team, cropped from the active skins at build time (never loaded from a third party).
+config.heads = await resolveHeads(team.filter((m) => m.mcName).map((m) => m.mcName), { siteDir: here, offline: process.env.SITE_OFFLINE === '1' });
+for (const [n, h] of Object.entries(config.heads)) console.log(`team: head of ${n} (UUID ${h.uuid}) -> ${h.file}`);
 const langs = ['de', 'en'];
 
 export const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -252,6 +256,9 @@ function write(path, html) {
 
 mkdirSync(out, { recursive: true });
 cpSync(join(here, 'assets'), join(out, 'assets'), { recursive: true });
+// One rule per team head; the CSP allows no inline styles, so the skin goes into the stylesheet.
+const skinCss = Object.values(config.heads).map((h) => `.skin-${h.key} .f{background-image:url(${h.file.replace(/^assets\//, '')})}`).join('\n');
+if (skinCss) writeFileSync(join(out, 'assets', 'site.css'), readFileSync(join(out, 'assets', 'site.css'), 'utf8') + '\n' + skinCss + '\n');
 
 const sitemap = [];
 for (const [key, build] of Object.entries(pages)) {

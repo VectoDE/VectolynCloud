@@ -1,0 +1,8 @@
+Minecraft skin crops on the team page
+
+The files under site/assets/img/team/ are cut from the active Minecraft skin of a team member
+(head only, 48 x 8 pixels). The skin belongs to that player or to whoever made it. It is shown on
+the VectolynCloud team page with the member's consent and is not licensed for any other use.
+A member who leaves the team or withdraws consent is removed together with the file.
+
+Minecraft is a trademark of Mojang Synergies AB. This project is not affiliated with Mojang or Microsoft.

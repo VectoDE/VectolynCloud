@@ -68,7 +68,22 @@ SPDX-License-Identifier = "MIT"
 
 # Rendered from site/assets/scene.js; shows the Vectolyn mark, so it follows the brand licence
 [[annotations]]
-path = "site/assets/img/**"
+path = ["site/assets/img/world.avif", "site/assets/img/world.webp"]
 precedence = "override"
 SPDX-FileCopyrightText = "2026 VectoDE"
 SPDX-License-Identifier = "CC-BY-SA-4.0"
+
+# Heads cut at build time from the active Minecraft skin of each team member (site/src/heads.mjs).
+# The skin belongs to the player; it is shown only on the team page, with the member's consent.
+[[annotations]]
+path = "site/assets/img/team/**"
+precedence = "override"
+SPDX-FileCopyrightText = "The respective team members (Minecraft skins)"
+SPDX-License-Identifier = "LicenseRef-Minecraft-Skin"
+
+# Build cache of the team heads (name, UUID, skin id, last check)
+[[annotations]]
+path = "site/src/heads.json"
+precedence = "override"
+SPDX-FileCopyrightText = "2026 VectoDE"
+SPDX-License-Identifier = "GPL-3.0-or-later"

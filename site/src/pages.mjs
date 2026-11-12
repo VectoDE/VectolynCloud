@@ -189,9 +189,20 @@ function netVisual(t) {
 }
 
 
-const FACE = '<svg viewBox="0 0 8 8" shape-rendering="crispEdges" aria-hidden="true" focusable="false"><path fill="#2A2440" d="M0 0h8v8H0z"/><path fill="#00E5FF" d="M0 0h8v2H0zM0 2h1v1H0zM7 2h1v1H7z"/><path fill="#ECEEF4" d="M1 4h1v1H1zM5 4h1v1H5z"/><path fill="#00E5FF" d="M2 4h1v1H2zM6 4h1v1H6z"/><path fill="#FFD23F" d="M3 6h2v1H3z"/></svg>';
 /** A pixel head as a CSS cube. Purely decorative; open roles get an empty wireframe. */
-const head3d = (open) => `<div class="head3d${open ? ' head-open' : ''}" aria-hidden="true"><div class="cube"><span class="f f-front">${open ? '' : FACE}</span><span class="f f-back"></span><span class="f f-right"></span><span class="f f-left"></span><span class="f f-top"></span><span class="f f-bottom"></span></div></div>`;
+// Team head: the real Minecraft head (cropped at build time, see heads.mjs) or the open placeholder cube.
+const head3d = (head, label) => head
+  ? `<div class="head3d head-skin skin-${head}" role="img" aria-label="${label}"><div class="cube" aria-hidden="true"><span class="f f-front"></span><span class="f f-back"></span><span class="f f-right"></span><span class="f f-left"></span><span class="f f-top"></span><span class="f f-bottom"></span></div></div>`
+  : `<div class="head3d head-open" role="img" aria-label="${label}"><div class="cube" aria-hidden="true"><span class="f f-front"></span><span class="f f-back"></span><span class="f f-right"></span><span class="f f-left"></span><span class="f f-top"></span><span class="f f-bottom"></span></div></div>`;
+
+/** Team roster. mcName is the Java Edition name whose active skin the build fetches; leave it out for open roles. */
+export const team = [
+  { role: { de: 'Leitung und Entwicklung', en: 'Lead and development' }, what: { de: 'Plant das Projekt, schreibt den Code, entscheidet über Releases.', en: 'Plans the project, writes the code, decides on releases.' }, who: 'Tim Hauke (<a href="https://github.com/VectoDE">VectoDE</a>)', person: 'Tim Hauke', mcName: 'VectoDE' },
+  { role: { de: 'Administration', en: 'Administration' }, what: { de: 'Betreut die Server des Testnetzwerks.', en: 'Looks after the servers of the test network.' } },
+  { role: { de: 'Moderation', en: 'Moderation' }, what: { de: 'Achtet auf die Regeln im Spiel und im Discord.', en: 'Keeps an eye on the rules in game and in Discord.' } },
+  { role: { de: 'Support', en: 'Support' }, what: { de: 'Hilft bei Fragen zu Konto, Bestellungen und Strafen.', en: 'Helps with questions about accounts, orders and penalties.' } },
+  { role: { de: 'Bau', en: 'Building' }, what: { de: 'Baut Lobby und Spielwelten.', en: 'Builds the lobby and game worlds.' } },
+];
 
 function pageHead(kicker, h1, lede) {
   return `<section class="page-head">
@@ -618,13 +629,6 @@ ${rules.map((r, i) => `  <section id="${id(r)}" aria-labelledby="${id(r)}-h"><h2
 
   team(lang) {
     const t = L(lang);
-    const roles = [
-      [t('Leitung und Entwicklung', 'Lead and development'), t('Plant das Projekt, schreibt den Code, entscheidet über Releases.', 'Plans the project, writes the code, decides on releases.'), 'Tim Hauke (<a href="https://github.com/VectoDE">VectoDE</a>)'],
-      [t('Administration', 'Administration'), t('Betreut die Server des Testnetzwerks.', 'Looks after the servers of the test network.'), null],
-      [t('Moderation', 'Moderation'), t('Achtet auf die Regeln im Spiel und im Discord.', 'Keeps an eye on the rules in game and in Discord.'), null],
-      [t('Support', 'Support'), t('Hilft bei Fragen zu Konto, Bestellungen und Strafen.', 'Helps with questions about accounts, orders and penalties.'), null],
-      [t('Bau', 'Building'), t('Baut Lobby und Spielwelten.', 'Builds the lobby and game worlds.'), null],
-    ];
     return {
       title: t('Team hinter VectolynCloud und dem Vectolyn Network', 'The team behind VectolynCloud and Vectolyn Network'),
       description: t('Wer VectolynCloud entwickelt und welche Aufgaben im Team des Testnetzwerks Vectolyn Network noch offen sind.',
@@ -632,10 +636,14 @@ ${rules.map((r, i) => `  <section id="${id(r)}" aria-labelledby="${id(r)}-h"><h2
       type: 'AboutPage',
       crumbs: [{ key: 'home', name: 'VectolynCloud' }, { key: 'team', name: 'Team' }],
       extraLd: (base) => [{ '@type': 'Person', name: 'Tim Hauke', alternateName: 'VectoDE', url: 'https://github.com/VectoDE', jobTitle: t('Leitung und Entwicklung', 'Lead and development'), worksFor: { '@id': base + '#org' } }],
-      body: () => `${pageHead('', 'Team',
+      body: (ctx) => `${pageHead('', 'Team',
         t('VectolynCloud ist ein Gemeinschaftsprojekt. Heute steckt eine Person dahinter; das Team des Testnetzwerks entsteht vor dessen Start.', 'VectolynCloud is a community project. Right now one person is behind it; the test network team will come together before it launches.'))}
 <section class="band">
-  <ul class="team">${roles.map(([role, what, who]) => `<li class="${who ? '' : 'open'}">${head3d(!who)}<h2>${role}</h2><p>${what}</p><p class="who">${who || t('noch offen', 'not filled yet')}</p></li>`).join('')}</ul>
+  <ul class="team">${team.map((m) => {
+    const head = m.mcName && ctx.config.heads?.[m.mcName];
+    const label = head ? t(`Kopf von ${head.name}`, `Head of ${head.name}`) + (m.person ? ` (${m.person})` : '') : t('Offene Stelle, noch ohne Kopf', 'Open position, no head yet');
+    return `<li class="${m.who ? '' : 'open'}">${head3d(head && head.key, ctx.esc(label))}<h2>${m.role[lang]}</h2><p>${m.what[lang]}</p><p class="who">${m.who || t('noch offen', 'not filled yet')}</p></li>`;
+  }).join('')}</ul>
   <p>${t('Du willst mitmachen? Code, Übersetzungen und Dokumentation kannst du jederzeit beitragen, siehe', 'Want to help? You can contribute code, translations and documentation at any time, see the')} ${ext(REPO + '/blob/main/CONTRIBUTING' + (lang === 'de' ? '.de' : '') + '.md', t('Anleitung zum Mitmachen', 'contributing guide'))}. ${t('Bewerbungen für Moderation und Support öffnen wir vor dem Start des Testnetzwerks.', 'Applications for moderation and support open before the test network launches.')}</p>
 </section>`,
     };
