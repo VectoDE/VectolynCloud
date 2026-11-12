@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Content of a {@code KEY=VALUE} file such as {@code secrets/vectolyn.env}, line by line, so that
@@ -112,7 +113,7 @@ public final class EnvFile {
      * non-empty value is never replaced. An empty entry ({@code KEY=}, as copied from the example
      * file) is filled in place; a missing key is appended, after {@code comment} if one is given.
      */
-    public EnvFile withValueIfAbsent(String key, Secret value, String comment) {
+    public EnvFile withValueIfAbsent(String key, Secret value, @Nullable String comment) {
         EnvFileParser.checkKey(key);
         EnvFileParser.checkValue(value.reveal());
         if (hasValue(key)) {
@@ -129,7 +130,7 @@ public final class EnvFile {
             if (!copy.isEmpty() && !(copy.getLast() instanceof Blank)) {
                 copy.add(new Blank(""));
             }
-            for (String part : comment.split("\n")) {
+            for (String part : comment.split("\n", 0)) {
                 copy.add(new Comment("# " + part));
             }
         }
@@ -143,7 +144,7 @@ public final class EnvFile {
      * values the operator chose (for example the password of an external database), never for
      * generated secrets, which must stay as they are.
      */
-    public EnvFile withValue(String key, Secret value, String comment) {
+    public EnvFile withValue(String key, Secret value, @Nullable String comment) {
         EnvFileParser.checkKey(key);
         EnvFileParser.checkValue(value.reveal());
         List<Line> copy = new ArrayList<>(lines);

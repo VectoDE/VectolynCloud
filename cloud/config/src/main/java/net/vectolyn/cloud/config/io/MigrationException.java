@@ -22,7 +22,7 @@ public final class MigrationException extends RuntimeException {
     /**
      * Creates the exception.
      *
-     * @param path dotted field path in the file as it was read, for example {@code mode}
+     * @param path dotted field path in the file as it was read, for example {@code database.mode}
      * @param code what is wrong, for example {@link ErrorCode#REQUIRED}
      * @param args arguments of the message template of {@code code}; never the value of the file
      */

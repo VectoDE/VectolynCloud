@@ -35,8 +35,12 @@ class CommandBlockSettingTest {
 
     @Test
     void trueIsOverwrittenAndTheRestStays() throws Exception {
-        CommandBlockSetting.Fixed fixed = CommandBlockSetting.fix("#Minecraft server properties\n"
-                + "difficulty=easy\nenable-command-block=true\nmotd=A Minecraft Server\n");
+        CommandBlockSetting.Fixed fixed = CommandBlockSetting.fix("""
+                #Minecraft server properties
+                difficulty=easy
+                enable-command-block=true
+                motd=A Minecraft Server
+                """);
         assertEquals("#Minecraft server properties\ndifficulty=easy\nenable-command-block=false\nmotd=A Minecraft Server\n",
                 fixed.text());
         assertTrue(fixed.overwritten());
@@ -91,8 +95,13 @@ class CommandBlockSettingTest {
 
     @Test
     void commentsAndOtherKeysAreNoOccurrence() throws Exception {
-        String text = "# enable-command-block=true\n! enable-command-block=true\nmy-enable-command-block=true\n"
-                + "x=\\\n#enable-command-block=true\n";
+        String text = """
+                # enable-command-block=true
+                ! enable-command-block=true
+                my-enable-command-block=true
+                x=\\
+                #enable-command-block=true
+                """;
         CommandBlockSetting.Fixed fixed = CommandBlockSetting.fix(text);
         assertEquals(text + "enable-command-block=false\n", fixed.text());
         assertFalse(fixed.overwritten());

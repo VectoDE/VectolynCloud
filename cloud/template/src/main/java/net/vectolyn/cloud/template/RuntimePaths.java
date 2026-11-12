@@ -27,6 +27,7 @@ import java.security.SecureRandom;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Safe writes below a runtime folder.
@@ -269,7 +270,7 @@ final class RuntimePaths {
         return attributes.isSymbolicLink() || attributes.isOther();
     }
 
-    private static BasicFileAttributes attributesOrNull(Path path) {
+    private static @Nullable BasicFileAttributes attributesOrNull(Path path) {
         try {
             return Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
         } catch (IOException e) {

@@ -4,6 +4,7 @@ package net.vectolyn.cloud.config.model;
 
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 /**
  * How the node runs the process of each service of a group. Optional in {@code groups/<name>.yml};
@@ -20,8 +21,11 @@ import java.util.List;
  * @param restart     restart after a crash
  */
 @JsonPropertyOrder({"jvm-flags", "stop-command", "stop-timeout", "restart"})
-public record ProcessConfig(List<String> jvmFlags, String stopCommand, TimeSpan stopTimeout, RestartConfig restart) {
+public record ProcessConfig(List<String> jvmFlags, @Nullable String stopCommand, TimeSpan stopTimeout,
+                            RestartConfig restart) {
 
+    /** {@code stop-timeout} when the file has none. */
+    public static final TimeSpan DEFAULT_STOP_TIMEOUT = TimeSpan.ofSeconds(60);
     /** Largest number of entries in {@code jvm-flags}. */
     public static final int MAX_JVM_FLAGS = 64;
     /** Pattern of one JVM flag: starts with {@code -}, no whitespace, quotes or control characters. */
@@ -36,13 +40,13 @@ public record ProcessConfig(List<String> jvmFlags, String stopCommand, TimeSpan 
     /** Copies the flag list; missing values become their defaults (the stop command stays null). */
     public ProcessConfig {
         jvmFlags = jvmFlags == null ? List.of() : List.copyOf(jvmFlags);
-        stopTimeout = stopTimeout == null ? TimeSpan.ofSeconds(60) : stopTimeout;
+        stopTimeout = stopTimeout == null ? DEFAULT_STOP_TIMEOUT : stopTimeout;
         restart = restart == null ? RestartConfig.defaults() : restart;
     }
 
     /** No extra flags, the software's stop command, 60 s stop timeout, {@link RestartConfig#defaults()}. */
     public static ProcessConfig defaults() {
-        return new ProcessConfig(List.of(), null, null, null);
+        return new ProcessConfig(List.of(), null, DEFAULT_STOP_TIMEOUT, RestartConfig.defaults());
     }
 
     /**

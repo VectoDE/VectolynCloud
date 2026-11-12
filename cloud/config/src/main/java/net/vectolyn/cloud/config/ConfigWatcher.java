@@ -109,7 +109,7 @@ final class ConfigWatcher implements AutoCloseable {
     private boolean drain(WatchKey key) {
         boolean relevant = false;
         for (WatchEvent<?> event : key.pollEvents()) {
-            if (event.kind() == StandardWatchEventKinds.OVERFLOW) {
+            if (StandardWatchEventKinds.OVERFLOW.equals(event.kind())) {
                 relevant = true;
             } else if (event.context() instanceof Path path) {
                 String name = path.getFileName().toString();
