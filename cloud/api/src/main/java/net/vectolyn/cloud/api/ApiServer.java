@@ -42,6 +42,7 @@ import net.vectolyn.cloud.api.event.ApiEvent;
 import net.vectolyn.cloud.api.http.ApiRoutes;
 import net.vectolyn.cloud.api.http.Router;
 import net.vectolyn.cloud.config.ConfigService;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The REST and WebSocket API of the node (Netty, HTTP/1.1, JSON).
@@ -97,15 +98,15 @@ public final class ApiServer implements AutoCloseable {
     private final long metricsMillis;
     private final ApiLogHandler logHandler;
     private volatile boolean shuttingDown;
-    private EventLoopGroup bossGroup;
-    private EventLoopGroup workerGroup;
-    private Channel serverChannel;
-    private SslContext sslContext;
+    private @Nullable EventLoopGroup bossGroup;
+    private @Nullable EventLoopGroup workerGroup;
+    private @Nullable Channel serverChannel;
+    private @Nullable SslContext sslContext;
     private int openConnections;
     private boolean closed;
 
     private ApiServer(Builder builder) {
-        this.settings = builder.settings;
+        this.settings = Objects.requireNonNull(builder.settings, "settings");
         this.tokens = builder.tokens;
         this.backend = builder.backend;
         ApiLimits limits = settings.limits();
@@ -142,6 +143,8 @@ public final class ApiServer implements AutoCloseable {
      * @throws IOException       if the address cannot be bound, for example because the port is in use;
      *                           both event loop groups have ended by then
      */
+    // The periodic checks run until close() ends the event loop group; their futures are never needed.
+    @SuppressWarnings("FutureReturnValueIgnored")
     public synchronized InetSocketAddress start() throws IOException {
         if (closed || serverChannel != null) {
             throw new IllegalStateException("the API server can be started only once");
@@ -154,7 +157,7 @@ public final class ApiServer implements AutoCloseable {
                         .protocols("TLSv1.3", "TLSv1.2")
                         .build();
             } catch (IOException e) {
-                throw new ApiStartException(e.getMessage());
+                throw new ApiStartException(Objects.requireNonNullElse(e.getMessage(), e.toString()));
             }
         }
         bossGroup = new MultiThreadIoEventLoopGroup(1, new DefaultThreadFactory("vectolyn-api-accept"),
@@ -230,6 +233,8 @@ public final class ApiServer implements AutoCloseable {
         return address;
     }
 
+    // Closing a refused connection is fire-and-forget; there is nobody to report a failure to.
+    @SuppressWarnings("FutureReturnValueIgnored")
     private void initConnection(SocketChannel ch) {
         String client = ClientAddress.key(ch.remoteAddress());
         if (!acquireConnection(client)) {
@@ -431,7 +436,7 @@ public final class ApiServer implements AutoCloseable {
         private final ConfigService config;
         private final ApiBackend backend;
         private final ApiTokens tokens;
-        private ApiSettings settings;
+        private @Nullable ApiSettings settings;
         private LongSupplier nanoTime = System::nanoTime;
         private long expiryCheckMillis = EXPIRY_CHECK_SECONDS * 1000L;
         private long metricsMillis = METRICS_SECONDS * 1000L;

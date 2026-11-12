@@ -14,6 +14,7 @@ import net.vectolyn.cloud.config.model.MemoryReserve;
 import net.vectolyn.cloud.config.model.MemorySize;
 import net.vectolyn.cloud.config.model.TimeSpan;
 import net.vectolyn.cloud.config.secret.Secret;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Everything the assistant decides, whether the answers come from the console or from a setup file.
@@ -50,7 +51,8 @@ public record SetupAnswers(Language language, boolean eulaAccepted, String netwo
                            Map<NetworkServer, Boolean> servers, Map<String, Boolean> groupSwitches,
                            String bind, int javaPort, int bedrockPort, int legacyPort,
                            Map<String, MemorySize> heap, Map<String, ServiceCounts> services,
-                           Map<String, TimeSpan> drainTimeouts, MemorySize maxMemory, MemoryReserve memoryReserve,
+                           Map<String, TimeSpan> drainTimeouts, @Nullable MemorySize maxMemory,
+                           @Nullable MemoryReserve memoryReserve,
                            DatabaseConfig database,
                            Optional<Secret> databasePassword) {
 
@@ -76,7 +78,7 @@ public record SetupAnswers(Language language, boolean eulaAccepted, String netwo
 
     /** Whether {@code server} is wanted. */
     public boolean wants(NetworkServer server) {
-        return servers.get(server);
+        return Boolean.TRUE.equals(servers.get(server));
     }
 
     /** A copy with another language. */
@@ -188,7 +190,7 @@ public record SetupAnswers(Language language, boolean eulaAccepted, String netwo
      * @param newMaxMemory    {@code max-memory}; null means automatic
      * @param newReserve      {@code memory-reserve} as written to the file; null means every default
      */
-    public SetupAnswers withNodeMemory(MemorySize newMaxMemory, MemoryReserve newReserve) {
+    public SetupAnswers withNodeMemory(@Nullable MemorySize newMaxMemory, @Nullable MemoryReserve newReserve) {
         return new SetupAnswers(language, eulaAccepted, networkName, minecraftVersion, adminName,
                 servers, groupSwitches, bind, javaPort, bedrockPort,
                 legacyPort, heap, services, drainTimeouts, newMaxMemory, newReserve, database, databasePassword);

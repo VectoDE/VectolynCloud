@@ -3,8 +3,10 @@
 package net.vectolyn.cloud.api.http;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import net.vectolyn.cloud.api.auth.ApiToken;
+import org.jspecify.annotations.Nullable;
 
 /**
  * A request that passed authentication, rate limits, routing and the scope check.
@@ -16,8 +18,10 @@ import net.vectolyn.cloud.api.auth.ApiToken;
  * @param token   the token that made the request
  * @param ifMatch the {@code If-Match} header, or null
  */
+// The body is the received JSON; copying it into a List would cost every request, so the array stays.
+@SuppressWarnings("ArrayRecordComponent")
 public record ApiRequest(String method, Map<String, String> params, Map<String, String> query, byte[] body,
-                         ApiToken token, String ifMatch) {
+                         ApiToken token, @Nullable String ifMatch) {
 
     /**
      * A path parameter.
@@ -26,7 +30,7 @@ public record ApiRequest(String method, Map<String, String> params, Map<String, 
      * @return the value
      */
     public String param(String name) {
-        return params.get(name);
+        return Objects.requireNonNull(params.get(name), name);
     }
 
     /**

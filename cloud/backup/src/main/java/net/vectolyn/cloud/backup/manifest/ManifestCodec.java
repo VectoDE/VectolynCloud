@@ -172,7 +172,9 @@ public final class ManifestCodec {
                 int slash = rest.indexOf('/');
                 require(slash > 0 && slash < rest.length() - 1, "service file without a service folder");
                 ServiceEntry owner = services.get(rest.substring(0, slash));
-                require(owner != null, "file of a service the manifest does not list");
+                if (owner == null) {
+                    throw new ManifestException("file of a service the manifest does not list");
+                }
                 require(owner.hasFiles(), "file of a service marked as skipped or missing");
             } else {
                 require(file.path().startsWith(ManifestPaths.DATABASE)

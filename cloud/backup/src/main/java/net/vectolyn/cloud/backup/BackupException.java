@@ -63,6 +63,12 @@ public final class BackupException extends Exception {
         this.reason = Objects.requireNonNull(reason, "reason");
     }
 
+    /** The message given at creation; never null (the reason's name if none was given). */
+    @Override
+    public String getMessage() {
+        return Objects.requireNonNullElse(super.getMessage(), reason.name());
+    }
+
     /** Why it failed. */
     public Reason reason() {
         return reason;

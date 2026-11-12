@@ -37,6 +37,7 @@ import net.vectolyn.cloud.console.prompt.PromptCancelledException;
 import net.vectolyn.cloud.console.prompt.Prompter;
 import net.vectolyn.cloud.console.prompt.Question;
 import net.vectolyn.cloud.console.terminal.ConsoleTerminal;
+import org.jspecify.annotations.Nullable;
 
 /**
  * One run of the assistant on the console. The questions, in order:
@@ -195,7 +196,7 @@ final class InteractiveSetup {
     // ---- questions --------------------------------------------------------------------------------
 
     /** All questions once, with {@code answers} as defaults; null if the EULA was declined. */
-    private SetupAnswers questions(ConfigSnapshot current, SetupAnswers answers) throws PromptCancelledException {
+    private @Nullable SetupAnswers questions(ConfigSnapshot current, SetupAnswers answers) throws PromptCancelledException {
         Language language = ask.ask(Question.choice(SetupMessages.LANGUAGE, List.of(
                 Question.option("de", SetupMessages.LANGUAGE_DE, Language.DE),
                 Question.option("en", SetupMessages.LANGUAGE_EN, Language.EN))).defaultValue(answers.language()));
@@ -313,7 +314,8 @@ final class InteractiveSetup {
     }
 
     /** One field of {@code memory-reserve}; null means the default. */
-    private MemorySize reserve(Text prompt, String node, MemorySize current, MemorySize fallback)
+    private @Nullable MemorySize reserve(Text prompt, String node, @Nullable MemorySize current,
+            MemorySize fallback)
             throws PromptCancelledException {
         return ask.ask(Question.custom(SetupMessages.fill(prompt, node), InteractiveSetup::reserveSize,
                         (Optional<MemorySize> v) -> v.orElse(fallback).toString())
@@ -326,7 +328,7 @@ final class InteractiveSetup {
         }
         try {
             TimeSpan value = TimeSpan.parse(text);
-            long seconds = value.duration().getSeconds();
+            long seconds = value.duration().toSeconds();
             if (seconds >= GroupConfig.MIN_DRAIN_TIMEOUT_SECONDS && seconds <= GroupConfig.MAX_DRAIN_TIMEOUT_SECONDS) {
                 return Optional.of(value);
             }
@@ -584,6 +586,8 @@ final class InteractiveSetup {
      * assistant first offers to put the password into {@code secrets/vectolyn.env} by hand and checks
      * the file afterwards, so the password never appears on the screen.
      */
+    // The sentinel is compared by identity on purpose: only the unchanged default means "keep".
+    @SuppressWarnings("ReferenceEquality")
     private Optional<Secret> password(boolean wasExternal, Optional<Secret> earlier) throws PromptCancelledException {
         Optional<Secret> stored = storedPassword();
         boolean canKeep = earlier.isPresent() || (wasExternal && stored.isPresent());
@@ -605,27 +609,27 @@ final class InteractiveSetup {
             options.add(Question.option("keep", SetupMessages.PASSWORD_KEEP, "keep"));
         }
         String how = ask.ask(Question.choice(SetupMessages.PASSWORD_HOW, options).defaultValue(canKeep ? "keep" : "file"));
-        switch (how) {
-            case "keep" -> {
-                return earlier;
+        return switch (how) {
+            case "keep" -> earlier;
+            case "type" -> Optional.of(ask.ask(typed));
+            default -> passwordFromFile(wasExternal, stored);
+        };
+    }
+
+    /** Waits until the operator has put the password into the file; empty, because the file holds it. */
+    private Optional<Secret> passwordFromFile(boolean wasExternal, Optional<Secret> stored)
+            throws PromptCancelledException {
+        for (int attempt = 1; attempt <= Prompter.MAX_ATTEMPTS; attempt++) {
+            ask.ask(Question.yesNo(SetupMessages.PASSWORD_FILE_SAVED).defaultValue(Boolean.TRUE));
+            Optional<Secret> now = storedPassword();
+            boolean fresh = now.isPresent() && (wasExternal || stored.isEmpty() || !now.get().equals(stored.get()));
+            if (fresh && SecretStore.isStorable(now.get())) {
+                out.success(SetupMessages.PASSWORD_FOUND);
+                return Optional.empty();
             }
-            case "type" -> {
-                return Optional.of(ask.ask(typed));
-            }
-            default -> {
-                for (int attempt = 1; attempt <= Prompter.MAX_ATTEMPTS; attempt++) {
-                    ask.ask(Question.yesNo(SetupMessages.PASSWORD_FILE_SAVED).defaultValue(Boolean.TRUE));
-                    Optional<Secret> now = storedPassword();
-                    boolean fresh = now.isPresent() && (wasExternal || stored.isEmpty() || !now.get().equals(stored.get()));
-                    if (fresh && SecretStore.isStorable(now.get())) {
-                        out.success(SetupMessages.PASSWORD_FOUND);
-                        return Optional.empty();
-                    }
-                    out.warning(SetupMessages.PASSWORD_STILL_MISSING);
-                }
-                throw new PromptCancelledException(PromptCancelledException.Reason.TOO_MANY_ATTEMPTS);
-            }
+            out.warning(SetupMessages.PASSWORD_STILL_MISSING);
         }
+        throw new PromptCancelledException(PromptCancelledException.Reason.TOO_MANY_ATTEMPTS);
     }
 
     private Optional<Secret> storedPassword() {
@@ -695,7 +699,7 @@ final class InteractiveSetup {
         String endpoint = db.host() + ":" + db.port();
         String database = switch (db.mode()) {
             case MANAGED -> SetupMessages.S_DB_MANAGED.format(lang, endpoint);
-            case DOCKER -> SetupMessages.S_DB_DOCKER.format(lang, db.dockerImage(), endpoint);
+            case DOCKER -> SetupMessages.S_DB_DOCKER.format(lang, Objects.requireNonNullElse(db.dockerImage(), DatabaseConfig.DEFAULT_DOCKER_IMAGE), endpoint);
             case EXTERNAL -> SetupMessages.S_DB_EXTERNAL.format(lang, endpoint, db.name(), db.user());
             case H2 -> SetupMessages.S_DB_H2.get(lang);
         };

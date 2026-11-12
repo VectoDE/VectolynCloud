@@ -34,11 +34,13 @@ import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 import net.vectolyn.cloud.api.auth.ApiToken;
 import net.vectolyn.cloud.api.auth.RateLimiter;
 import net.vectolyn.cloud.api.auth.Scope;
@@ -51,6 +53,7 @@ import net.vectolyn.cloud.api.http.ApiResponse;
 import net.vectolyn.cloud.api.http.ApiRoutes;
 import net.vectolyn.cloud.api.http.Router;
 import net.vectolyn.cloud.config.error.ConfigException;
+import org.jspecify.annotations.Nullable;
 
 /**
  * One HTTP connection of the API. Order of the checks for every request, all before the body is
@@ -75,10 +78,11 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
     private static final String WS_PROTOCOL = "vectolyn.v1";
     private static final String WS_BEARER = "vectolyn.bearer.";
     private static final int WS_MAX_FRAME = 4096;
+    private static final Pattern COMMA = Pattern.compile(",");
 
     private final ApiServer server;
 
-    private Pending pending;
+    private @Nullable Pending pending;
     private boolean busy;
     private boolean closeAfterResponse;
     /** A response with {@code Connection: close} is on its way; the rest of the input is dropped. */
@@ -93,15 +97,17 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
     }
 
     /** A request whose head passed every check and whose body is being collected. */
-    private record Pending(HttpRequest head, Router.Resolution.Found<ApiRoutes.Handler> route, ApiToken token,
-                           String origin, boolean keepAlive, boolean upgrade, ByteArrayOutputStream body,
-                           String setupToken) {
+    private record Pending(HttpRequest head, Router.Resolution.Found<ApiRoutes.Handler> route,
+                           @Nullable ApiToken token, @Nullable String origin, boolean keepAlive, boolean upgrade,
+                           ByteArrayOutputStream body, @Nullable String setupToken) {
     }
 
     /** Key of the setup token in the token rate limiter; API token ids are 8 hex characters. */
     private static final String SETUP_LIMIT_KEY = "setup";
 
+    // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
     @Override
+    @SuppressWarnings("FutureReturnValueIgnored")
     protected void channelRead0(ChannelHandlerContext ctx, HttpObject msg) {
         try {
             if (lingering) {
@@ -140,6 +146,8 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
         }
     }
 
+    // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
+    @SuppressWarnings("FutureReturnValueIgnored")
     private void head(ChannelHandlerContext ctx, HttpRequest request) throws IOException {
         if (!request.decoderResult().isSuccess()) {
             reject(ctx, null, new ApiException(400, "bad-request", "The request could not be read."), true);
@@ -256,16 +264,20 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
         }
         busy = true;
         ctx.channel().config().setAutoRead(false);
-        ApiRequest apiRequest = new ApiRequest(request.head().method().name(), request.route().params(),
-                request.route().query(), request.body().toByteArray(), request.token(),
+        // A request with a setup token has no API token; it is answered by claim() and needs no ApiRequest.
+        ApiToken token = request.token();
+        ApiRequest apiRequest = token == null ? null : new ApiRequest(request.head().method().name(),
+                request.route().params(), request.route().query(), request.body().toByteArray(), token,
                 request.head().headers().get(HttpHeaderNames.IF_MATCH));
         String client = ClientAddress.key(ctx.channel().remoteAddress());
         try {
             server.executor().execute(() -> {
                 FullHttpResponse response;
                 try {
-                    response = respond(request.setupToken() != null ? claim(request.setupToken(), client)
-                            : request.route().route().handler().handle(apiRequest), request.origin());
+                    String setupToken = request.setupToken();
+                    response = respond(setupToken != null ? claim(setupToken, client)
+                            : request.route().route().handler().handle(Objects.requireNonNull(apiRequest, "token")),
+                            request.origin());
                 } catch (Exception e) {
                     response = error(map(e), request.origin());
                 } finally {
@@ -318,13 +330,16 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
         response.headers().set("X-RateLimit-Remaining", Integer.toString(limiter.remaining(limitKey)));
     }
 
+    // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
+    @SuppressWarnings("FutureReturnValueIgnored")
     private void upgrade(ChannelHandlerContext ctx, Pending request) {
+        ApiToken token = Objects.requireNonNull(request.token(), "token");
         Set<String> types;
         Set<String> services;
         try {
             types = list(request.route().query().get("types"), EventHub.TYPES, "types");
             services = list(request.route().query().get("services"), null, "services");
-            types = permittedTypes(request.token(), types);
+            types = permittedTypes(token, types);
         } catch (ApiException e) {
             reject(ctx, request.origin(), e, true);
             return;
@@ -352,11 +367,11 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
             WebSocketServerHandshakerFactory.sendUnsupportedVersionResponse(ctx.channel());
             return;
         }
-        if (!server.events().add(ctx.channel(), request.token().id(), types, services)) {
+        if (!server.events().add(ctx.channel(), token.id(), types, services)) {
             reject(ctx, request.origin(), new ApiException(503, "too-many-streams", "Too many event streams are open."), true);
             return;
         }
-        if (!server.tokens().isValid(request.token().id())) {
+        if (!server.tokens().isValid(token.id())) {
             // Revoked between the check of the head and now; a revoke from here on closes the stream.
             reject(ctx, request.origin(), unauthorized(), true);
             return;
@@ -390,7 +405,7 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
             return result;
         }
         for (String type : asked) {
-            Scope scope = ApiEvent.scopeOf(type);
+            Scope scope = Objects.requireNonNull(ApiEvent.scopeOf(type), type);
             if (!token.allows(scope)) {
                 throw new ApiException(403, "missing-scope",
                         "The event type " + type + " needs the scope " + scope.id() + ".");
@@ -400,7 +415,7 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
         return result;
     }
 
-    private static Set<String> list(String value, Set<String> known, String name) throws ApiException {
+    private static Set<String> list(@Nullable String value, @Nullable Set<String> known, String name) throws ApiException {
         if (value == null || value.isEmpty()) {
             return Set.of();
         }
@@ -427,7 +442,7 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
             // Browsers cannot set headers on a WebSocket; they pass the token as a subprotocol.
             String protocols = headers.get(HttpHeaderNames.SEC_WEBSOCKET_PROTOCOL);
             if (protocols != null) {
-                for (String protocol : protocols.split(",")) {
+                for (String protocol : COMMA.splitAsStream(protocols).toList()) {
                     String p = protocol.strip();
                     if (p.startsWith(WS_BEARER)) {
                         return Optional.of(p.substring(WS_BEARER.length()));
@@ -454,11 +469,11 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
         send(ctx, response, !keepAlive);
     }
 
-    private void reject(ChannelHandlerContext ctx, String origin, ApiException error, boolean close) {
+    private void reject(ChannelHandlerContext ctx, @Nullable String origin, ApiException error, boolean close) {
         send(ctx, error(error, origin), close || closeAfterResponse);
     }
 
-    private FullHttpResponse respond(ApiResponse answer, String origin) {
+    private FullHttpResponse respond(ApiResponse answer, @Nullable String origin) {
         FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1,
                 HttpResponseStatus.valueOf(answer.status()),
                 answer.body() == null ? Unpooled.EMPTY_BUFFER : Unpooled.wrappedBuffer(answer.body()));
@@ -469,7 +484,7 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
         return response;
     }
 
-    private FullHttpResponse error(ApiException error, String origin) {
+    private FullHttpResponse error(ApiException error, @Nullable String origin) {
         FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1,
                 HttpResponseStatus.valueOf(error.status()), Unpooled.wrappedBuffer(ApiJson.error(error)));
         if (error.status() == 401) {
@@ -482,7 +497,7 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
         return response;
     }
 
-    private void decorate(FullHttpResponse response, String origin, boolean json) {
+    private void decorate(FullHttpResponse response, @Nullable String origin, boolean json) {
         HttpHeaders h = response.headers();
         if (json) {
             h.set(HttpHeaderNames.CONTENT_TYPE, "application/json; charset=utf-8");
@@ -519,6 +534,8 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
      * client still sends is read and dropped, and the connection closes when the client closes its
      * side, or after {@value #LINGER_SECONDS} seconds at the latest.
      */
+    // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
+    @SuppressWarnings("FutureReturnValueIgnored")
     private static void lingeringClose(ChannelHandlerContext ctx) {
         if (!(ctx.channel() instanceof SocketChannel socket) || !socket.isActive()) {
             ctx.close();
@@ -565,7 +582,9 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
         return text.length() > 300 ? text.substring(0, 300) : text;
     }
 
+    // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
     @Override
+    @SuppressWarnings("FutureReturnValueIgnored")
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
         if (evt instanceof IdleStateEvent) {
             ctx.close();
@@ -574,7 +593,9 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
         super.userEventTriggered(ctx, evt);
     }
 
+    // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
     @Override
+    @SuppressWarnings("FutureReturnValueIgnored")
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         LOG.log(System.Logger.Level.DEBUG, "API connection failed: {0}", cause.getClass().getSimpleName());
         ctx.close();

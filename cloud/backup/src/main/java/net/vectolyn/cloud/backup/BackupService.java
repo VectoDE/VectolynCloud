@@ -66,6 +66,7 @@ import net.vectolyn.cloud.config.validation.ConfigNames;
 import net.vectolyn.cloud.download.archive.ArchiveException;
 import net.vectolyn.cloud.download.archive.ExtractionLimits;
 import net.vectolyn.cloud.download.archive.SafeExtractor;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Creates, lists, restores and deletes backups and applies the retention rules. One operation at
@@ -131,12 +132,12 @@ public final class BackupService {
     private final ZoneId zone;
     private final String cloudVersion;
     private final Path java;
-    private final String searchPath;
+    private final @Nullable String searchPath;
     private final boolean windows;
     private final ReentrantLock lock = new ReentrantLock();
     private final SecureRandom random = new SecureRandom();
     /** The service a restore holds stopped right now; only touched under {@link #lock}. */
-    private String restoring;
+    private @Nullable String restoring;
 
     private BackupService(Builder builder) {
         this.home = builder.home;
@@ -504,10 +505,10 @@ public final class BackupService {
     private DatabaseEntry backupDatabase(ArchiveWriter writer, DatabaseAccess access, Run run)
             throws BackupException, IOException, InterruptedException {
         String mode = access.mode().name().toLowerCase(Locale.ROOT);
-        switch (access.mode()) {
+        return switch (access.mode()) {
             case DOCKER -> {
                 run.warnings.add("database mode docker: the cloud does not dump the container. " + dockerHint(access));
-                return new DatabaseEntry(mode, "manual", null, "dump the container by hand, see docs/cloud/backup.md");
+                yield new DatabaseEntry(mode, "manual", null, "dump the container by hand, see docs/cloud/backup.md");
             }
             case H2 -> {
                 String detail = "SCRIPT TO for: " + (run.h2Dumped.isEmpty() ? "none" : String.join(", ", run.h2Dumped));
@@ -516,19 +517,17 @@ public final class BackupService {
                     run.warnings.add("H2 databases are dumped only while their service is stopped; raw files only for "
                             + String.join(", ", run.h2Missed));
                 }
-                return new DatabaseEntry(mode, "per-service", null, shorten(detail));
+                yield new DatabaseEntry(mode, "per-service", null, shorten(detail));
             }
-            default -> {
-                return dumpServer(writer, access, run, mode);
-            }
-        }
+            default -> dumpServer(writer, access, run, mode);
+        };
     }
 
     private DatabaseEntry dumpServer(ArchiveWriter writer, DatabaseAccess access, Run run, String mode)
             throws BackupException, IOException, InterruptedException {
         String configured = run.settings.database().dumpExecutable();
-        Optional<Path> executable = MariaDbDumper.findExecutable(access, configured == null ? null : Path.of(configured),
-                searchPath, windows);
+        Path configuredPath = configured == null ? null : Path.of(configured);
+        Optional<Path> executable = MariaDbDumper.findExecutable(access, configuredPath, searchPath, windows);
         try {
             if (executable.isEmpty()) {
                 throw new BackupException(BackupException.Reason.DATABASE, configured != null
@@ -719,11 +718,11 @@ public final class BackupService {
                     + serviceId + " (" + service.consistency() + ")");
         }
         Path current = target.directory();
-        Path parent = current.getParent();
+        Path parent = Objects.requireNonNull(current.getParent(), "parent folder of the service folder");
         Path staging = null;
         try {
-            if (Files.isSymbolicLink(current) || Files.exists(current, LinkOption.NOFOLLOW_LINKS)
-                    && !Files.isDirectory(current, LinkOption.NOFOLLOW_LINKS)) {
+            if (Files.isSymbolicLink(current) || (Files.exists(current, LinkOption.NOFOLLOW_LINKS)
+                    && !Files.isDirectory(current, LinkOption.NOFOLLOW_LINKS))) {
                 throw new BackupException(BackupException.Reason.IO, current + " is a link or not a folder; "
                         + "restore it by hand");
             }
@@ -1206,16 +1205,16 @@ public final class BackupService {
     public static final class Builder {
 
         private final Path home;
-        private ConfigSource config;
-        private BackupTargets targets;
-        private ServiceControl control;
+        private @Nullable ConfigSource config;
+        private @Nullable BackupTargets targets;
+        private @Nullable ServiceControl control;
         private DatabaseSource database = DatabaseSource.NONE;
         private ToolRunner tools = new ProcessToolRunner();
         private Clock clock = Clock.systemUTC();
         private ZoneId zone = ZoneId.systemDefault();
         private String cloudVersion = defaultVersion();
         private Path java = H2Dumper.currentJava();
-        private String searchPath = System.getenv("PATH");
+        private @Nullable String searchPath = System.getenv("PATH");
         private boolean windows = System.getProperty("os.name", "").toLowerCase(Locale.ROOT).startsWith("windows");
 
         private Builder(Path home) {
@@ -1272,7 +1271,7 @@ public final class BackupService {
         }
 
         /** {@code PATH} for finding the dump tool and whether to look for {@code .exe} files. */
-        public Builder searchPath(String path, boolean windowsNames) {
+        public Builder searchPath(@Nullable String path, boolean windowsNames) {
             this.searchPath = path;
             this.windows = windowsNames;
             return this;

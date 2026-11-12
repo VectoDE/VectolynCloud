@@ -9,6 +9,7 @@ import java.util.Objects;
 import net.vectolyn.cloud.api.auth.Scope;
 import net.vectolyn.cloud.api.backend.NodeStatus;
 import net.vectolyn.cloud.api.backend.ServiceView;
+import org.jspecify.annotations.Nullable;
 
 /**
  * A live event for the WebSocket {@code /api/v1/events}. cloud-node hands them to
@@ -36,7 +37,7 @@ public sealed interface ApiEvent {
      * @param type the type name
      * @return the scope, or null for an unknown type
      */
-    static Scope scopeOf(String type) {
+    static @Nullable Scope scopeOf(String type) {
         return TYPES.get(type);
     }
 
@@ -48,7 +49,7 @@ public sealed interface ApiEvent {
      *
      * @return the service id, or null if the event belongs to none
      */
-    String service();
+    @Nullable String service();
 
     /**
      * A service changed its state.
@@ -149,7 +150,7 @@ public sealed interface ApiEvent {
         }
 
         @Override
-        public String service() {
+        public @Nullable String service() {
             return null;
         }
     }
@@ -178,7 +179,7 @@ public sealed interface ApiEvent {
         }
 
         @Override
-        public String service() {
+        public @Nullable String service() {
             return null;
         }
     }

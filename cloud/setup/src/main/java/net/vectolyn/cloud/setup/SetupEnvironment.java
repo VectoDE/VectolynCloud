@@ -13,6 +13,7 @@ import java.util.OptionalLong;
 import net.vectolyn.cloud.config.model.Language;
 import net.vectolyn.cloud.database.managed.ManagedPlatform;
 import net.vectolyn.cloud.download.provider.TargetPlatform;
+import org.jspecify.annotations.Nullable;
 
 /**
  * What the assistant knows about the machine and the start: the launcher settings (see
@@ -110,11 +111,11 @@ public record SetupEnvironment(Language language, boolean interactive, Optional<
                 serverMemory, serverPort, totalMemory, value);
     }
 
-    private static boolean present(String value) {
+    private static boolean present(@Nullable String value) {
         return value != null && !value.isBlank();
     }
 
-    private static OptionalLong positiveLong(String value) {
+    private static OptionalLong positiveLong(@Nullable String value) {
         if (value == null || !value.matches("[0-9]{1,9}")) {
             return OptionalLong.empty();
         }
@@ -126,7 +127,7 @@ public record SetupEnvironment(Language language, boolean interactive, Optional<
         }
     }
 
-    private static OptionalInt port(String value) {
+    private static OptionalInt port(@Nullable String value) {
         if (value == null || !value.matches("[0-9]{1,5}")) {
             return OptionalInt.empty();
         }

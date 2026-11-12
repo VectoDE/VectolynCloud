@@ -5,6 +5,7 @@ package net.vectolyn.cloud.backup;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
+import org.jspecify.annotations.Nullable;
 
 /**
  * What a backup should contain.
@@ -16,7 +17,7 @@ import java.util.TreeSet;
  * @param note free text for the manifest, at most 300 characters; may be null
  */
 public record BackupRequest(BackupReason reason, boolean allServices, Set<String> services, boolean database,
-                            String note) {
+                            @Nullable String note) {
 
     /** Checks and copies the values. */
     public BackupRequest {
@@ -51,7 +52,7 @@ public record BackupRequest(BackupReason reason, boolean allServices, Set<String
     }
 
     /** A copy with a note. */
-    public BackupRequest withNote(String value) {
+    public BackupRequest withNote(@Nullable String value) {
         return new BackupRequest(reason, allServices, services, database, value);
     }
 

@@ -3,6 +3,7 @@
 package net.vectolyn.cloud.api.http;
 
 import java.util.Map;
+import org.jspecify.annotations.Nullable;
 
 /**
  * A successful answer.
@@ -11,7 +12,9 @@ import java.util.Map;
  * @param body    JSON body, or null for none (204)
  * @param headers extra headers, for example {@code ETag}
  */
-public record ApiResponse(int status, byte[] body, Map<String, String> headers) {
+// The body is the encoded JSON; copying it into a List would cost every response, so the array stays.
+@SuppressWarnings("ArrayRecordComponent")
+public record ApiResponse(int status, byte @Nullable [] body, Map<String, String> headers) {
 
     /** Copies the headers. */
     public ApiResponse {

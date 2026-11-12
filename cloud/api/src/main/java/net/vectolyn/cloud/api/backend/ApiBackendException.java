@@ -41,6 +41,16 @@ public final class ApiBackendException extends Exception {
     }
 
     /**
+     * The text for the client; never null, the constructor requires it.
+     *
+     * @return the message
+     */
+    @Override
+    public String getMessage() {
+        return Objects.requireNonNull(super.getMessage(), "message");
+    }
+
+    /**
      * Why the backend refused.
      *
      * @return the reason

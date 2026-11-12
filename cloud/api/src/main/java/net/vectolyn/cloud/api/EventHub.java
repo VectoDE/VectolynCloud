@@ -77,6 +77,8 @@ final class EventHub {
         return false;
     }
 
+    // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
+    @SuppressWarnings("FutureReturnValueIgnored")
     void publish(ApiEvent event) {
         if (streams.isEmpty()) {
             return;
@@ -132,6 +134,8 @@ final class EventHub {
         streams.keySet().forEach(channel -> close(channel, WebSocketCloseStatus.ENDPOINT_UNAVAILABLE, "shutting down"));
     }
 
+    // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
+    @SuppressWarnings("FutureReturnValueIgnored")
     private static void close(Channel channel, WebSocketCloseStatus status, String reason) {
         channel.writeAndFlush(new CloseWebSocketFrame(status, reason)).addListener(f -> channel.close());
     }

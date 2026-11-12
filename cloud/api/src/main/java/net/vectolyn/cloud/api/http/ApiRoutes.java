@@ -49,6 +49,7 @@ import net.vectolyn.cloud.config.operation.SetGroupWanted;
 import net.vectolyn.cloud.config.operation.SetServerWanted;
 import net.vectolyn.cloud.config.validation.ConfigNames;
 import net.vectolyn.cloud.config.validation.JvmFlagPolicy;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The REST endpoints under {@value #PREFIX}. Every write is a {@link ConfigOperation} for
@@ -87,7 +88,7 @@ public final class ApiRoutes {
     private final ConfigService config;
     private final ApiBackend backend;
     private final BooleanSupplier shuttingDown;
-    private final ApiTokens tokens;
+    private final @Nullable ApiTokens tokens;
 
     /**
      * Creates the endpoints.
@@ -108,7 +109,8 @@ public final class ApiRoutes {
      * @param shuttingDown whether start and reload must be refused
      * @param tokens       the token store, or null if the admin endpoints answer 501
      */
-    public ApiRoutes(ConfigService config, ApiBackend backend, BooleanSupplier shuttingDown, ApiTokens tokens) {
+    public ApiRoutes(ConfigService config, ApiBackend backend, BooleanSupplier shuttingDown,
+            @Nullable ApiTokens tokens) {
         this.config = config;
         this.backend = backend;
         this.shuttingDown = shuttingDown;
@@ -230,7 +232,7 @@ public final class ApiRoutes {
         r.add("GET", PREFIX + "/admin/tokens", Scope.ADMIN, q -> {
             Instant now = tokens().clock().instant();
             return Page.list(q, PREFIX + "/admin/tokens",
-                    tokens().list().stream().map(t -> describe(t, now)).toList(), t -> (String) t.get("id"));
+                    tokens().list().stream().map(t -> describe(t, now)).toList(), t -> String.valueOf(t.get("id")));
         });
         r.add("POST", PREFIX + "/admin/tokens", Scope.ADMIN, this::createToken);
         r.add("DELETE", PREFIX + "/admin/tokens/{id}", Scope.ADMIN, q -> {
@@ -342,7 +344,8 @@ public final class ApiRoutes {
             existed.set(current.isPresent());
             return current;
         }, new PutGroup(name, next));
-        return ApiResponse.document(existed.get() ? 200 : 201, after.groups().get(name));
+        return ApiResponse.document(existed.get() ? 200 : 201,
+                Objects.requireNonNull(after.groups().get(name), name));
     }
 
     private ApiResponse putTask(ApiRequest q) throws Exception {
@@ -356,7 +359,8 @@ public final class ApiRoutes {
             existed.set(current.isPresent());
             return current;
         }, new PutTask(name, next));
-        return ApiResponse.document(existed.get() ? 200 : 201, after.tasks().get(name));
+        return ApiResponse.document(existed.get() ? 200 : 201,
+                Objects.requireNonNull(after.tasks().get(name), name));
     }
 
     /**
@@ -397,7 +401,7 @@ public final class ApiRoutes {
             return after;
         });
         ConfigSnapshot snapshot = result.get();
-        GroupConfig group = snapshot.groups().get(name);
+        GroupConfig group = Objects.requireNonNull(snapshot.groups().get(name), name);
         Optional<ServerKind> kind = switchOf(group);
         boolean kindWanted = kind.map(k -> k != ServerKind.DATABASE && kindSwitch(snapshot.cloud(), k)).orElse(true);
         Map<String, Object> body = new LinkedHashMap<>();

@@ -21,6 +21,8 @@ import java.util.regex.Pattern;
 import net.vectolyn.cloud.backup.BackupException;
 import net.vectolyn.cloud.config.model.DatabaseMode;
 import net.vectolyn.cloud.config.secret.RedactingFilter;
+import net.vectolyn.cloud.config.secret.Secret;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Dumps the managed or external MariaDB/MySQL database with {@code mariadb-dump} (or
@@ -42,6 +44,7 @@ public final class MariaDbDumper {
 
     private static final Pattern DATABASE_NAME = Pattern.compile("[A-Za-z0-9_]{1,64}");
     private static final String COMPLETED = "-- Dump completed";
+    private static final Pattern PATH_SEPARATOR = Pattern.compile(Pattern.quote(File.pathSeparator));
 
     private final ToolRunner runner;
     private final Duration timeout;
@@ -72,7 +75,8 @@ public final class MariaDbDumper {
      * @param windows whether to look for {@code .exe} files
      * @return the tool, if found
      */
-    public static Optional<Path> findExecutable(DatabaseAccess access, Path configured, String path, boolean windows) {
+    public static Optional<Path> findExecutable(DatabaseAccess access, @Nullable Path configured, @Nullable String path,
+            boolean windows) {
         if (configured != null) {
             return Files.isRegularFile(configured) ? Optional.of(configured) : Optional.empty();
         }
@@ -80,7 +84,7 @@ public final class MariaDbDumper {
         if (access.mode() == DatabaseMode.MANAGED) {
             access.managedBaseFolder().ifPresent(base -> folders.add(base.resolve("bin")));
         } else if (path != null) {
-            for (String part : path.split(File.pathSeparator)) {
+            for (String part : PATH_SEPARATOR.splitAsStream(path).toList()) {
                 if (!part.isBlank()) {
                     try {
                         Path folder = Path.of(part.strip());
@@ -155,18 +159,20 @@ public final class MariaDbDumper {
         if (access.mode() != DatabaseMode.MANAGED && access.mode() != DatabaseMode.EXTERNAL) {
             throw new IllegalArgumentException("only managed and external databases are dumped with " + TOOL_NAMES);
         }
-        RedactingFilter redact = RedactingFilter.of(List.of(access.password()));
+        Secret password = Objects.requireNonNull(access.password(), "password of the " + access.mode() + " database");
+        RedactingFilter redact = RedactingFilter.of(List.of(password));
         String tool = executable.getFileName().toString();
         OptionFile.removeLeftovers(workDirectory);
         ToolRunner.Result result;
         try {
             Files.deleteIfExists(resultFile);
-            try (OptionFile option = OptionFile.create(workDirectory, access.user(), access.password(), access.host(),
+            try (OptionFile option = OptionFile.create(workDirectory, access.user(), password, access.host(),
                     access.port())) {
                 result = runner.run(arguments(access, executable, option.file(), resultFile), workDirectory, timeout);
             }
         } catch (IllegalArgumentException e) {
-            throw new BackupException(BackupException.Reason.DATABASE, e.getMessage());
+            throw new BackupException(BackupException.Reason.DATABASE, Objects.requireNonNullElse(e.getMessage(),
+                    e.toString()));
         } catch (IOException e) {
             throw new BackupException(BackupException.Reason.DATABASE,
                     tool + " could not run: " + redact.redact(String.valueOf(e.getMessage())), e);

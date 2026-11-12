@@ -12,6 +12,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Pattern;
 import net.vectolyn.cloud.api.auth.Scope;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Maps a method and a raw request target to a route. Strict, because the target comes straight
@@ -54,7 +55,7 @@ public final class Router<H> {
      * @param handler the handler
      * @return this router
      */
-    public Router<H> add(String method, String path, Scope scope, H handler) {
+    public Router<H> add(String method, String path, @Nullable Scope scope, H handler) {
         Objects.requireNonNull(method, "method");
         Objects.requireNonNull(handler, "handler");
         String[] parts = path.substring(1).split("/", -1);
@@ -95,7 +96,7 @@ public final class Router<H> {
         }
         int q = rawTarget.indexOf('?');
         String path = q < 0 ? rawTarget : rawTarget.substring(0, q);
-        String query = q < 0 ? null : rawTarget.substring(q + 1);
+        @Nullable String query = q < 0 ? null : rawTarget.substring(q + 1);
         if (rawTarget.indexOf('#') >= 0) {
             return new Resolution.Invalid<>("invalid-target");
         }
@@ -139,7 +140,7 @@ public final class Router<H> {
      * Path parameters of {@code route} for {@code segments}, or null if the route does not fit.
      * A parameter that fails its pattern is stored under the key null.
      */
-    private Map<String, String> match(Route<H> route, String[] segments) {
+    private @Nullable Map<String, String> match(Route<H> route, String[] segments) {
         if (route.segments().size() != segments.length) {
             return null;
         }
@@ -148,7 +149,7 @@ public final class Router<H> {
             String template = route.segments().get(i);
             if (template.startsWith("{")) {
                 String name = template.substring(1, template.length() - 1);
-                if (PARAMETERS.get(name).matcher(segments[i]).matches()) {
+                if (Objects.requireNonNull(PARAMETERS.get(name), name).matcher(segments[i]).matches()) {
                     params.put(name, segments[i]);
                 } else {
                     params.put(null, "");
@@ -160,7 +161,7 @@ public final class Router<H> {
         return params;
     }
 
-    private static Map<String, String> parseQuery(String query) {
+    private static Map<String, String> parseQuery(@Nullable String query) {
         if (query == null || query.isEmpty()) {
             return Map.of();
         }
@@ -214,7 +215,7 @@ public final class Router<H> {
      * @param handler  the handler
      * @param <H>      the handler type
      */
-    public record Route<H>(String method, String path, List<String> segments, Scope scope, H handler) {
+    public record Route<H>(String method, String path, List<String> segments, @Nullable Scope scope, H handler) {
     }
 
     /**
