@@ -16,9 +16,22 @@ import org.jspecify.annotations.Nullable;
 @SuppressWarnings("ArrayRecordComponent")
 public record ApiResponse(int status, byte @Nullable [] body, Map<String, String> headers) {
 
-    /** Copies the headers. */
-    public ApiResponse {
-        headers = headers == null ? Map.of() : Map.copyOf(headers);
+    /**
+     * Copies the headers.
+     *
+     * <p>Written out instead of a compact constructor: for a compact one javac copies the
+     * {@code @Nullable} of the component onto the constructor with target type FIELD, which PMD
+     * cannot read ("Invalid target type of type annotation"), so PMD lost the types of every
+     * {@code new ApiResponse(...)}.
+     *
+     * @param status  HTTP status
+     * @param body    JSON body, or null for none (204)
+     * @param headers extra headers, for example {@code ETag}
+     */
+    public ApiResponse(int status, byte @Nullable [] body, Map<String, String> headers) {
+        this.status = status;
+        this.body = body;
+        this.headers = headers == null ? Map.of() : Map.copyOf(headers);
     }
 
     /**
