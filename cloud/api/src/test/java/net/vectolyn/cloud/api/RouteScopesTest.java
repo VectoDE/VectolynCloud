@@ -53,7 +53,8 @@ class RouteScopesTest {
             }
         }
         // The event stream checks a scope per event type on the handshake (EventStreamTest).
-        assertEquals(List.of("GET /api/v1/tokens/self", "GET /api/v1/events"), unscoped,
-                "only a token describing itself and the event stream need no route scope");
+        assertEquals(List.of("GET /api/v1/tokens/self", "POST /api/v1/graphql", "GET /api/v1/graphql",
+                "GET /api/v1/events"), unscoped,
+                "only a token describing itself, GraphQL (a scope per field) and the event stream need no route scope");
     }
 }

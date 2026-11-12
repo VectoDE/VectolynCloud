@@ -19,20 +19,22 @@ import net.vectolyn.cloud.api.event.ApiEvent;
 import net.vectolyn.cloud.api.http.ApiJson;
 
 /**
- * The open event streams ({@code /api/v1/events}) and the fan-out of {@link ApiEvent}s to them.
+ * The open event streams ({@code /api/v1/events}) and GraphQL WebSocket connections
+ * ({@code /api/v1/graphql}), and the fan-out of {@link ApiEvent}s to them.
  *
- * <p>Each event is turned into JSON once and written to every stream whose filter matches. A
- * stream whose socket buffer is full (a slow client) skips events instead of piling them up in the
- * node's memory; the next event that gets through is preceded by
- * {@code {"type":"dropped","data":{"count":n}}}. Output lines are redacted once more before they
- * are sent. Thread-safe; {@link #publish} may be called from any thread.
+ * <p>Each event is turned into JSON once and offered to every connection; the connection's
+ * {@link Sink} filters and writes it. A stream whose socket buffer is full (a slow client) skips
+ * events instead of piling them up in the node's memory; the next event that gets through is
+ * preceded by {@code {"type":"dropped","data":{"count":n}}}. Output lines and log messages are
+ * redacted once more before they are sent. Both kinds of connection count against one limit.
+ * Thread-safe; {@link #publish} may be called from any thread.
  */
 final class EventHub {
 
     /** Event types a client may filter on. */
     static final Set<String> TYPES = ApiEvent.TYPES.keySet();
 
-    private final Map<Channel, Stream> streams = new ConcurrentHashMap<>();
+    private final Map<Channel, Entry> streams = new ConcurrentHashMap<>();
     private final UnaryOperator<String> redactor;
     private final int max;
 
@@ -41,36 +43,84 @@ final class EventHub {
         this.max = max;
     }
 
+    /** The receiving end of one connection. */
+    interface Sink {
+
+        /**
+         * Whether the connection receives an event type at the moment.
+         *
+         * @param type the type name
+         * @return whether it wants it
+         */
+        boolean wants(String type);
+
+        /**
+         * Filters and writes one event. Called from the publishing thread.
+         *
+         * @param delivery the event, redacted, with its JSON envelope
+         */
+        void offer(Delivery delivery);
+    }
+
     /**
-     * Registers a stream unless the limit is reached.
+     * One event on its way out.
+     *
+     * @param event the event, already redacted
+     * @param json  {@code {"type":...,"time":...,"data":...}}
+     */
+    record Delivery(ApiEvent event, byte[] json) {
+
+        /**
+         * The envelope as maps and lists (for GraphQL).
+         *
+         * @return the parsed envelope
+         */
+        @SuppressWarnings("unchecked")
+        Map<String, Object> tree() {
+            return ApiJson.mapper().readValue(json, Map.class);
+        }
+    }
+
+    /**
+     * Registers an event stream unless the limit is reached.
      *
      * @param types the event types the stream receives: what it asked for, cut down to what its
      *              token's scopes allow; never empty
-     * @return false if there are already {@code max} streams
+     * @return false if there are already {@code max} connections
      */
-    synchronized boolean add(Channel channel, String tokenId, Set<String> types, Set<String> services) {
+    boolean add(Channel channel, String tokenId, Set<String> types, Set<String> services) {
+        return add(channel, tokenId, new ChannelStream(channel, types, services));
+    }
+
+    /**
+     * Registers a connection with its own sink unless the limit is reached. It is removed when the
+     * channel closes.
+     *
+     * @return false if there are already {@code max} connections
+     */
+    synchronized boolean add(Channel channel, String tokenId, Sink sink) {
         if (streams.size() >= max) {
             return false;
         }
-        streams.put(channel, new Stream(tokenId, types, services));
+        streams.put(channel, new Entry(tokenId, sink));
         channel.closeFuture().addListener(f -> streams.remove(channel));
         return true;
     }
 
-    /** Number of open streams. */
+    /** Number of open connections. */
     int size() {
         return streams.size();
     }
 
     /**
-     * Whether any open stream receives an event type, so a producer can skip work nobody reads.
+     * Whether any open connection receives an event type, so a producer can skip work nobody reads.
      *
      * @param type the type name
-     * @return whether a stream wants it
+     * @return whether a connection wants it
      */
     boolean anyWants(String type) {
-        for (Stream stream : streams.values()) {
-            if (stream.types.contains(type)) {
+        for (Entry entry : streams.values()) {
+            if (entry.sink().wants(type)) {
                 return true;
             }
         }
@@ -87,47 +137,33 @@ final class EventHub {
             case ApiEvent.NodeLog log -> new ApiEvent.NodeLog(log.level(), log.logger(), redactor.apply(log.message()));
             default -> event;
         };
-        byte[] json = envelope(safe.type(), safe);
-        for (Map.Entry<Channel, Stream> entry : streams.entrySet()) {
-            Stream stream = entry.getValue();
-            if (!stream.wants(safe)) {
-                continue;
+        Delivery delivery = new Delivery(safe, envelope(safe.type(), safe));
+        for (Map.Entry<Channel, Entry> entry : streams.entrySet()) {
+            if (entry.getKey().isActive()) {
+                entry.getValue().sink().offer(delivery);
             }
-            Channel channel = entry.getKey();
-            if (!channel.isActive()) {
-                continue;
-            }
-            if (!channel.isWritable()) {
-                stream.dropped.incrementAndGet();
-                continue;
-            }
-            long dropped = stream.dropped.getAndSet(0);
-            if (dropped > 0) {
-                channel.write(new TextWebSocketFrame(Unpooled.wrappedBuffer(envelope("dropped", Map.of("count", dropped)))));
-            }
-            channel.writeAndFlush(new TextWebSocketFrame(Unpooled.wrappedBuffer(json)));
         }
     }
 
-    /** Closes every stream of a revoked token (WebSocket close code 1008). */
+    /** Closes every connection of a revoked token (WebSocket close code 1008). */
     void closeToken(String tokenId) {
-        streams.forEach((channel, stream) -> {
-            if (stream.tokenId.equals(tokenId)) {
+        streams.forEach((channel, entry) -> {
+            if (entry.tokenId().equals(tokenId)) {
                 close(channel, WebSocketCloseStatus.POLICY_VIOLATION, "token revoked");
             }
         });
     }
 
-    /** Closes every stream whose token matches (WebSocket close code 1008), for expired tokens. */
+    /** Closes every connection whose token matches (WebSocket close code 1008), for expired tokens. */
     void closeTokensIf(Predicate<String> tokenIdMatches) {
-        streams.forEach((channel, stream) -> {
-            if (tokenIdMatches.test(stream.tokenId)) {
+        streams.forEach((channel, entry) -> {
+            if (tokenIdMatches.test(entry.tokenId())) {
                 close(channel, WebSocketCloseStatus.POLICY_VIOLATION, "token expired");
             }
         });
     }
 
-    /** Closes every stream (1001, the node goes away). */
+    /** Closes every connection (1001, the node goes away). */
     void closeAll() {
         streams.keySet().forEach(channel -> close(channel, WebSocketCloseStatus.ENDPOINT_UNAVAILABLE, "shutting down"));
     }
@@ -144,27 +180,60 @@ final class EventHub {
         return ApiJson.write(body);
     }
 
-    private static final class Stream {
+    /**
+     * Whether a filter takes an event.
+     *
+     * @param types    the types it receives
+     * @param services the services it receives, empty for all
+     * @param event    the event
+     * @return whether it takes it
+     */
+    static boolean matches(Set<String> types, Set<String> services, ApiEvent event) {
+        if (!types.contains(event.type())) {
+            return false;
+        }
+        if (event instanceof ApiEvent.Metrics || event instanceof ApiEvent.NodeLog) {
+            return true; // node-wide: the services filter does not apply
+        }
+        return services.isEmpty() || (event.service() != null && services.contains(event.service()));
+    }
 
-        private final String tokenId;
+    private record Entry(String tokenId, Sink sink) {
+    }
+
+    /** An event stream of {@code /api/v1/events}: the envelope as one text frame per event. */
+    private static final class ChannelStream implements Sink {
+
+        private final Channel channel;
         private final Set<String> types;
         private final Set<String> services;
         private final AtomicLong dropped = new AtomicLong();
 
-        Stream(String tokenId, Set<String> types, Set<String> services) {
-            this.tokenId = tokenId;
+        ChannelStream(Channel channel, Set<String> types, Set<String> services) {
+            this.channel = channel;
             this.types = Set.copyOf(types);
             this.services = Set.copyOf(services);
         }
 
-        boolean wants(ApiEvent event) {
-            if (!types.contains(event.type())) {
-                return false;
+        @Override
+        public boolean wants(String type) {
+            return types.contains(type);
+        }
+
+        @Override
+        public void offer(Delivery delivery) {
+            if (!matches(types, services, delivery.event())) {
+                return;
             }
-            if (event instanceof ApiEvent.Metrics || event instanceof ApiEvent.NodeLog) {
-                return true; // node-wide: the services filter does not apply
+            if (!channel.isWritable()) {
+                dropped.incrementAndGet();
+                return;
             }
-            return services.isEmpty() || (event.service() != null && services.contains(event.service()));
+            long skipped = dropped.getAndSet(0);
+            if (skipped > 0) {
+                channel.write(new TextWebSocketFrame(Unpooled.wrappedBuffer(envelope("dropped", Map.of("count", skipped)))));
+            }
+            channel.writeAndFlush(new TextWebSocketFrame(Unpooled.wrappedBuffer(delivery.json())));
         }
     }
 }

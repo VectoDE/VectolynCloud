@@ -39,6 +39,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.function.UnaryOperator;
 import net.vectolyn.cloud.api.auth.ApiToken;
 import net.vectolyn.cloud.api.auth.RateLimiter;
 import net.vectolyn.cloud.api.auth.Scope;
@@ -203,8 +204,9 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
                     "This token lacks the scope " + scope.id() + "."), true);
             return;
         }
-        boolean events = found.route().path().equals(ApiRoutes.EVENTS);
-        if (events && upgrade) {
+        String path = found.route().path();
+        boolean socket = path.equals(ApiRoutes.EVENTS) || path.equals(ApiRoutes.GRAPHQL);
+        if (socket && upgrade && method.equals("GET")) {
             if (origin != null && !allowedOrigin) {
                 reject(ctx, null, new ApiException(403, "origin-not-allowed",
                         "This origin is not in api.cors-origins."), true);
@@ -252,7 +254,7 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
                 try {
                     response = respond(request.route().route().handler().handle(apiRequest), request.origin());
                 } catch (Exception e) {
-                    response = error(map(e), request.origin());
+                    response = error(toApiException(e, server::redact), request.origin());
                 } finally {
                     server.requestSlots().release();
                 }
@@ -289,6 +291,10 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
     }
 
     private void upgrade(ChannelHandlerContext ctx, Pending request) {
+        if (request.route().route().path().equals(ApiRoutes.GRAPHQL)) {
+            upgradeGraphQl(ctx, request);
+            return;
+        }
         Set<String> types;
         Set<String> services;
         try {
@@ -333,6 +339,53 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
         }
         ctx.pipeline().replace(ApiServer.IDLE, ApiServer.IDLE, new IdleStateHandler(90, 30, 0, TimeUnit.SECONDS));
         ctx.pipeline().replace(this, "vectolyn-api-events", new EventStreamHandler(handshaker));
+        handshaker.handshake(ctx.channel(), full).addListener(f -> {
+            if (!f.isSuccess()) {
+                ctx.channel().close();
+            }
+        });
+    }
+
+    /**
+     * Opens a GraphQL WebSocket ({@code graphql-transport-ws}). Same checks as the event stream:
+     * the token from the head, the origin, the subprotocol and the WebSocket limit.
+     */
+    private void upgradeGraphQl(ChannelHandlerContext ctx, Pending request) {
+        String offered = request.head().headers().get(HttpHeaderNames.SEC_WEBSOCKET_PROTOCOL);
+        if (offered == null || Arrays.stream(offered.split(",")).map(String::strip)
+                .noneMatch(GraphQlSocketHandler.PROTOCOL::equals)) {
+            reject(ctx, request.origin(), new ApiException(400, "subprotocol-required",
+                    "Offer the subprotocol " + GraphQlSocketHandler.PROTOCOL + "."), true);
+            return;
+        }
+        if (server.events().size() >= server.limits().maxWebSockets()) {
+            reject(ctx, request.origin(), new ApiException(503, "too-many-streams", "Too many event streams are open."), true);
+            return;
+        }
+        String scheme = server.settings().tls().isPresent() ? "wss" : "ws";
+        String host = request.head().headers().get(HttpHeaderNames.HOST, "localhost");
+        WebSocketServerHandshakerFactory factory = new WebSocketServerHandshakerFactory(
+                scheme + "://" + host + ApiRoutes.GRAPHQL, GraphQlSocketHandler.PROTOCOL,
+                WebSocketDecoderConfig.newBuilder().maxFramePayloadLength(GraphQlSocketHandler.MAX_MESSAGE)
+                        .allowExtensions(false).build());
+        FullHttpRequest full = new DefaultFullHttpRequest(request.head().protocolVersion(), request.head().method(),
+                request.head().uri(), Unpooled.EMPTY_BUFFER, request.head().headers(), new DefaultHttpHeaders());
+        WebSocketServerHandshaker handshaker = factory.newHandshaker(full);
+        if (handshaker == null) {
+            WebSocketServerHandshakerFactory.sendUnsupportedVersionResponse(ctx.channel());
+            return;
+        }
+        GraphQlSocketHandler handler = new GraphQlSocketHandler(server, handshaker, request.token());
+        if (!server.events().add(ctx.channel(), request.token().id(), handler)) {
+            reject(ctx, request.origin(), new ApiException(503, "too-many-streams", "Too many event streams are open."), true);
+            return;
+        }
+        if (!server.tokens().isValid(request.token().id())) {
+            reject(ctx, request.origin(), unauthorized(), true);
+            return;
+        }
+        ctx.pipeline().replace(ApiServer.IDLE, ApiServer.IDLE, new IdleStateHandler(90, 30, 0, TimeUnit.SECONDS));
+        ctx.pipeline().replace(this, "vectolyn-api-graphql", handler);
         handshaker.handshake(ctx.channel(), full).addListener(f -> {
             if (!f.isSuccess()) {
                 ctx.channel().close();
@@ -504,7 +557,14 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
         });
     }
 
-    private ApiException map(Exception e) {
+    /**
+     * The API error of a failed route, also for GraphQL fields.
+     *
+     * @param e        the failure
+     * @param redactor redacts a backend message
+     * @return the error
+     */
+    static ApiException toApiException(Exception e, UnaryOperator<String> redactor) {
         if (e instanceof InterruptedException) {
             Thread.currentThread().interrupt();
             return new ApiException(503, "interrupted", "The request was interrupted.");
@@ -516,7 +576,7 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
                 case CONFLICT -> 409;
                 case UNAVAILABLE -> 503;
                 case INVALID -> 422;
-            }, backend.reason().name().toLowerCase(Locale.ROOT).replace('_', '-'), clean(backend.getMessage()));
+            }, backend.reason().name().toLowerCase(Locale.ROOT).replace('_', '-'), clean(backend.getMessage(), redactor));
             case ConfigException config -> ApiException.invalidConfig(config.errors());
             case IOException io -> {
                 LOG.log(System.Logger.Level.WARNING, "API request failed: {0}", io.getClass().getSimpleName());
@@ -530,8 +590,8 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
     }
 
     /** Redacts, removes control characters and cuts a backend message. */
-    private String clean(String message) {
-        String text = server.redact(message == null ? "" : message).replaceAll("\\p{Cntrl}", "?");
+    private static String clean(String message, UnaryOperator<String> redactor) {
+        String text = redactor.apply(message == null ? "" : message).replaceAll("\\p{Cntrl}", "?");
         return text.length() > 300 ? text.substring(0, 300) : text;
     }
 

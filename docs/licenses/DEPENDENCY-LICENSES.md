@@ -29,6 +29,10 @@ Transitive Abhängigkeiten sind nicht einzeln aufgeführt. Die Verifikation der 
 | tools.jackson:jackson-bom | 3.2.4 | platform | Apache-2.0 | yes |
 | tools.jackson.core:jackson-databind | 3.2.4 | implementation, api | Apache-2.0 | yes |
 | tools.jackson.dataformat:jackson-dataformat-yaml | 3.2.4 | implementation, test | Apache-2.0 | yes |
+| com.graphql-java:graphql-java | 26.1 | implementation | MIT | yes |
+| com.graphql-java:java-dataloader | 6.0.0 | runtime (via graphql-java) | Apache-2.0 | yes |
+| org.reactivestreams:reactive-streams | 1.0.3 | runtime (via graphql-java) | MIT-0 | yes |
+| org.jspecify:jspecify | 1.0.0 | runtime (via graphql-java) | Apache-2.0 | yes |
 | org.mariadb.jdbc:mariadb-java-client | 4.0.0 | implementation | LGPL-2.1-or-later | yes (the "or later" clause allows combination under GPL-3.0) |
 | com.code-intelligence:jazzer-junit | 0.30.0 | test (fuzz) | Apache-2.0 | yes |
 

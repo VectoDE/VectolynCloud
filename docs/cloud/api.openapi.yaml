@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: VectolynCloud API
-  version: 1.3.0
+  version: 1.4.0
   summary: REST API and live events of a VectolynCloud node.
   description: |
     JSON over HTTP/1.1. Every request needs a bearer token (`vct_...`) created at the node console
@@ -35,6 +35,7 @@ tags:
   - name: tokens
   - name: admin
   - name: events
+  - name: graphql
 
 paths:
   /services:
@@ -643,6 +644,49 @@ paths:
         "204": {description: Revoked}
         default: {$ref: "#/components/responses/Error"}
 
+  /graphql:
+    post:
+      tags: [graphql]
+      summary: GraphQL queries and mutations
+      description: |
+        Any valid token; every field runs the REST endpoint named in the schema
+        (cloud/api/src/main/resources/net/vectolyn/cloud/api/schema.graphqls) with the same token
+        and checks that endpoint's scope. A refused or failed field is null and has an error with
+        `extensions.code` and `extensions.status` (the REST code and status); the other fields are
+        still answered. Limits: 16384 characters, 2000 tokens, depth 8, complexity 200, at most 20
+        fields that read or change data; every such field after the first takes one request from
+        the token's rate limit. Introspection only with `api.graphql-introspection: true`.
+        Subscriptions run over the WebSocket (GET).
+      operationId: graphql
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/GraphQlRequest"}
+      responses:
+        "200":
+          description: The result (data, errors or both)
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/GraphQlResult"}
+        default: {$ref: "#/components/responses/Error"}
+    get:
+      tags: [graphql]
+      summary: GraphQL subscriptions (WebSocket, graphql-transport-ws)
+      description: |
+        Any valid token. Upgrade to a WebSocket with the subprotocol `graphql-transport-ws`
+        (offering none answers 400 subprotocol-required); a plain GET answers 426. Browsers pass
+        the token as subprotocol `vectolyn.bearer.<token>`. Send `connection_init` within 10 s,
+        then `subscribe` with `subscription { events(types: [...]) { type time data } }`; every
+        event type needs its scope as on /events. Queries and mutations work here too. At most 16
+        operations at once; each `subscribe` takes one request from the rate limit. The socket
+        counts against the WebSocket limit and closes with 1008 when the token is revoked.
+      operationId: graphqlSubscriptions
+      responses:
+        "101":
+          description: Switching to the WebSocket
+        default: {$ref: "#/components/responses/Error"}
+
   /events:
     get:
       tags: [events]
@@ -780,6 +824,32 @@ components:
         application/json:
           schema: {$ref: "#/components/schemas/Error"}
   schemas:
+    GraphQlRequest:
+      type: object
+      additionalProperties: false
+      required: [query]
+      properties:
+        query: {type: string, maxLength: 16384}
+        operationName: {type: [string, "null"]}
+        variables: {type: [object, "null"]}
+        extensions: {type: [object, "null"]}
+    GraphQlResult:
+      type: object
+      properties:
+        data: {type: [object, "null"]}
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              message: {type: string}
+              path: {type: array, items: {type: [string, integer]}}
+              extensions:
+                type: object
+                properties:
+                  code: {type: string}
+                  status: {type: integer}
+                  retryAfter: {type: integer}
     ServiceId:
       type: string
       pattern: "^[a-z0-9][a-z0-9_-]{0,63}$"

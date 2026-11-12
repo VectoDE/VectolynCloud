@@ -15,9 +15,11 @@ import net.vectolyn.cloud.config.model.ApiConfig;
  * @param tls         key material for HTTPS, or empty for plain HTTP (loopback only)
  * @param corsOrigins origins a browser may call from; empty switches CORS off
  * @param limits      limits
+ * @param graphqlIntrospection whether the GraphQL endpoint answers introspection
+ *                    ({@code api.graphql-introspection})
  */
 public record ApiSettings(String bind, int port, Optional<ApiTls.Material> tls, List<String> corsOrigins,
-                          ApiLimits limits) {
+                          ApiLimits limits, boolean graphqlIntrospection) {
 
     /** Checks and copies the values. */
     public ApiSettings {
@@ -28,6 +30,12 @@ public record ApiSettings(String bind, int port, Optional<ApiTls.Material> tls, 
         if (port < 0 || port > 65535) {
             throw new IllegalArgumentException("port out of range");
         }
+    }
+
+    /** Settings with GraphQL introspection off. */
+    public ApiSettings(String bind, int port, Optional<ApiTls.Material> tls, List<String> corsOrigins,
+                       ApiLimits limits) {
+        this(bind, port, tls, corsOrigins, limits, false);
     }
 
     /**
@@ -48,7 +56,8 @@ public record ApiSettings(String bind, int port, Optional<ApiTls.Material> tls, 
         if (!enabled && tls.isPresent()) {
             throw new IllegalArgumentException("key material was given, but api.tls.enabled is off in cloud.yml");
         }
-        return new ApiSettings(api.bind(), api.port(), tls, api.corsOrigins(), ApiLimits.defaults());
+        return new ApiSettings(api.bind(), api.port(), tls, api.corsOrigins(), ApiLimits.defaults(),
+                api.graphqlIntrospection());
     }
 
     /**
@@ -58,6 +67,16 @@ public record ApiSettings(String bind, int port, Optional<ApiTls.Material> tls, 
      * @return the copy
      */
     public ApiSettings withLimits(ApiLimits value) {
-        return new ApiSettings(bind, port, tls, corsOrigins, value);
+        return new ApiSettings(bind, port, tls, corsOrigins, value, graphqlIntrospection);
+    }
+
+    /**
+     * A copy with GraphQL introspection switched.
+     *
+     * @param value whether introspection is answered
+     * @return the copy
+     */
+    public ApiSettings withGraphqlIntrospection(boolean value) {
+        return new ApiSettings(bind, port, tls, corsOrigins, limits, value);
     }
 }
