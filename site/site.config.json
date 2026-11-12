@@ -1,0 +1,27 @@
+{
+  "baseUrl": "https://vectode.github.io/VectolynCloud/",
+  "updated": "2026-11-12",
+  "repo": "https://github.com/VectoDE/VectolynCloud",
+  "testNetwork": {
+    "address": null,
+    "bedrockPort": null,
+    "statusUrl": null
+  },
+  "contactEmail": null,
+  "analytics": {
+    "gtmId": null,
+    "searchConsoleToken": null
+  },
+  "trust": {
+    "trustpilot": null,
+    "gridinsoft": null
+  },
+  "shop": {
+    "mode": "test",
+    "liveApproved": false
+  },
+  "social": {
+    "discord": null,
+    "youtube": null
+  }
+}

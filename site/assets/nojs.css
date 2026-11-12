@@ -1,0 +1,11 @@
+/* SPDX-FileCopyrightText: 2026 VectoDE */
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/* Loaded only without JavaScript: navigation as plain, always visible lists. */
+.menu-button{display:none!important}
+.site-head{position:static}
+.head-inner{flex-wrap:wrap}
+.site-nav{display:flex!important;position:static!important;flex-wrap:wrap;width:100%;border:0;padding:0}
+.nav-list{flex-wrap:wrap;align-items:flex-start}
+.nav-panel{display:block!important;position:static!important;width:auto!important;box-shadow:none!important;border:0!important;padding:0 0 8px!important;background:none!important}
+.nav-panel::before,.caret,.panel-intro,.pl-desc{display:none!important}
+.nav-trigger{pointer-events:none;color:var(--c-accent)}
