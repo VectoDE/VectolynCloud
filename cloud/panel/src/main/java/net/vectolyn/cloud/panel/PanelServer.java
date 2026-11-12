@@ -67,8 +67,8 @@ public final class PanelServer implements AutoCloseable {
     /** Name of the idle handler in the pipeline. */
     static final String IDLE = "vectolyn-panel-idle";
 
-    /** Largest request body. */
-    static final int MAX_BODY_BYTES = 256 * 1024;
+    /** Largest request body: a file upload of up to 8 MiB; every other request {@link BodyLimitHandler#SMALL}. */
+    static final int MAX_BODY_BYTES = 8 * 1024 * 1024;
     /** Most open connections. */
     static final int MAX_CONNECTIONS = 256;
     /** Most open connections of one client address. */
@@ -81,6 +81,7 @@ public final class PanelServer implements AutoCloseable {
     private final String version;
     private final WebAssets assets;
     private final @Nullable PanelApi api;
+    private final java.util.concurrent.Semaphore uploads = new java.util.concurrent.Semaphore(BodyLimitHandler.UPLOADS);
     private final RateLimiter<String> addressLimiter;
     private final Set<String> allowedHosts;
     private final ExecutorService executor = Executors.newThreadPerTaskExecutor(
@@ -126,6 +127,7 @@ public final class PanelServer implements AutoCloseable {
      * @throws IOException if the address is not loopback and TLS is missing, cannot be resolved,
      *                     or cannot be bound; the event loop groups have ended by then
      */
+    @SuppressWarnings("FutureReturnValueIgnored")
     public synchronized InetSocketAddress start() throws IOException {
         if (closed || serverChannel != null) {
             throw new IllegalStateException("the panel server can be started only once");
@@ -169,6 +171,10 @@ public final class PanelServer implements AutoCloseable {
             throw new IOException("The panel cannot listen on port " + settings.config().port() + ": " + reason, cause);
         }
         serverChannel = binding.channel();
+        if (api != null) {
+            // Ends live-event streams of sessions that expired, signed out or whose user was disabled.
+            workerGroup.next().scheduleAtFixedRate(api::sweepStreams, 15, 15, TimeUnit.SECONDS);
+        }
         InetSocketAddress bound = (InetSocketAddress) serverChannel.localAddress();
         LOG.log(System.Logger.Level.INFO, "Panel listening on {0}://{1}:{2,number,#}{3}",
                 sslContext == null ? "http" : "https", bound.getAddress().getHostAddress(), bound.getPort(),
@@ -252,6 +258,7 @@ public final class PanelServer implements AutoCloseable {
                 .setMaxHeaderSize(8192)
                 .setMaxChunkSize(8192)));
         p.addLast(IDLE, new IdleStateHandler(IDLE_SECONDS, 0, 0, TimeUnit.SECONDS));
+        p.addLast("vectolyn-panel-limit", new BodyLimitHandler(uploads, secure()));
         p.addLast("vectolyn-panel-body", new HttpObjectAggregator(MAX_BODY_BYTES, true));
         p.addLast("vectolyn-panel-handler", new PanelHttpHandler(this));
     }

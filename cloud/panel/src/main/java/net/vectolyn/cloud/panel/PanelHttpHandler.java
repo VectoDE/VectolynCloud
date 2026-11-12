@@ -16,10 +16,19 @@ import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.HttpVersion;
+import io.netty.handler.codec.http.websocketx.CloseWebSocketFrame;
+import io.netty.handler.codec.http.websocketx.WebSocketCloseStatus;
+import io.netty.handler.codec.http.websocketx.WebSocketDecoderConfig;
+import io.netty.handler.codec.http.websocketx.WebSocketServerHandshaker;
+import io.netty.handler.codec.http.websocketx.WebSocketServerHandshakerFactory;
 import io.netty.handler.timeout.IdleStateEvent;
+import io.netty.handler.timeout.IdleStateHandler;
+import java.util.concurrent.TimeUnit;
+import net.vectolyn.cloud.api.http.ApiException;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import net.vectolyn.cloud.panel.http.RequestTarget;
 import net.vectolyn.cloud.panel.http.Responses;
@@ -35,6 +44,8 @@ import org.jspecify.annotations.Nullable;
 final class PanelHttpHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
 
     private static final System.Logger LOG = System.getLogger(PanelHttpHandler.class.getName());
+    /** Largest frame the browser may send on the event stream; it only sends ping, pong and close. */
+    private static final int MAX_FRAME = 4096;
 
     private final PanelServer server;
 
@@ -67,6 +78,10 @@ final class PanelHttpHandler extends SimpleChannelInboundHandler<FullHttpRequest
             return;
         }
         PanelApi api = server.api();
+        if (target.get().path().equals(PanelApi.EVENTS) && api != null) {
+            upgrade(ctx, request, target.get());
+            return;
+        }
         if (target.get().path().startsWith("/api/") && api != null) {
             // Password hashing, file writes and calls to a sign-on provider block: they run on a
             // virtual thread, and the connection reads nothing else until the answer is out.
@@ -97,6 +112,56 @@ final class PanelHttpHandler extends SimpleChannelInboundHandler<FullHttpRequest
         } else {
             send(ctx, file(request, target.get()), keepAlive);
         }
+    }
+
+    /**
+     * Opens the live-event stream: the session, the panel's own origin and the rights are checked
+     * before the handshake, the subscription right after it. A refused subscription closes the
+     * stream with {@code 1008} (rights) or {@code 1013} (too many streams).
+     */
+    @SuppressWarnings("FutureReturnValueIgnored")
+    private void upgrade(ChannelHandlerContext ctx, FullHttpRequest request, RequestTarget target) {
+        if (!request.method().equals(HttpMethod.GET)
+                || !"websocket".equalsIgnoreCase(request.headers().get(HttpHeaderNames.UPGRADE))) {
+            send(ctx, Responses.error(426, "upgrade-required", "Open this address as a WebSocket.", server.secure()),
+                    false);
+            return;
+        }
+        int q = request.uri().indexOf('?');
+        PanelApi.Call call = new PanelApi.Call("GET", target.path(), target.query(),
+                q < 0 ? "" : request.uri().substring(q + 1), new byte[0], request.headers().copy(),
+                PanelServer.clientKey(ctx.channel().remoteAddress()));
+        PanelApi events = Objects.requireNonNull(server.api(), "api");
+        PanelApi.StreamGrant grant;
+        try {
+            grant = events.openStream(call);
+        } catch (PanelApi.Refusal r) {
+            send(ctx, events.refusal(r), false);
+            return;
+        }
+        String host = request.headers().get(HttpHeaderNames.HOST);
+        WebSocketServerHandshakerFactory factory = new WebSocketServerHandshakerFactory(
+                (server.secure() ? "wss" : "ws") + "://" + host + PanelApi.EVENTS, null,
+                WebSocketDecoderConfig.newBuilder().maxFramePayloadLength(MAX_FRAME).allowExtensions(false).build());
+        WebSocketServerHandshaker handshaker = factory.newHandshaker(request);
+        if (handshaker == null) {
+            WebSocketServerHandshakerFactory.sendUnsupportedVersionResponse(ctx.channel());
+            return;
+        }
+        ctx.pipeline().replace(PanelServer.IDLE, PanelServer.IDLE, new IdleStateHandler(90, 30, 0, TimeUnit.SECONDS));
+        ctx.pipeline().replace(this, "vectolyn-panel-events", new PanelStreamHandler(handshaker));
+        handshaker.handshake(ctx.channel(), request).addListener(f -> {
+            if (!f.isSuccess()) {
+                ctx.channel().close();
+                return;
+            }
+            try {
+                events.subscribe(ctx.channel(), grant);
+            } catch (ApiException e) {
+                ctx.writeAndFlush(new CloseWebSocketFrame(e.status() == 503 ? WebSocketCloseStatus.TRY_AGAIN_LATER
+                        : WebSocketCloseStatus.POLICY_VIOLATION, e.code())).addListener(ChannelFutureListener.CLOSE);
+            }
+        });
     }
 
     private boolean hostAllowed(String host) {

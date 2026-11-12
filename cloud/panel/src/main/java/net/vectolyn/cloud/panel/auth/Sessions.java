@@ -136,6 +136,28 @@ public final class Sessions {
     }
 
     /**
+     * Whether a session still runs, without counting as use (for open event streams).
+     *
+     * @param id the session id
+     * @return true while it has not ended
+     */
+    public boolean alive(String id) {
+        Session session = id == null ? null : sessions.get(id);
+        return session != null && !expired(session, clock.instant());
+    }
+
+    /**
+     * The user of a session.
+     *
+     * @param id the session id
+     * @return the user name, or empty
+     */
+    public Optional<String> userOf(String id) {
+        Session session = id == null ? null : sessions.get(id);
+        return session == null ? Optional.empty() : Optional.of(session.user());
+    }
+
+    /**
      * Whether a presented CSRF token belongs to a session, compared in constant time.
      *
      * @param session the session

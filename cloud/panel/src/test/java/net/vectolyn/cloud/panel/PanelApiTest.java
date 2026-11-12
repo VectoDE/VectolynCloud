@@ -75,6 +75,17 @@ class PanelApiTest {
             }
             return ApiResponse.ok(Map.of("target", target));
         }
+
+        final List<io.netty.channel.Channel> streams = new java.util.concurrent.CopyOnWriteArrayList<>();
+        final AtomicReference<ApiToken> streamPrincipal = new AtomicReference<>();
+
+        @Override
+        public java.util.Set<String> subscribe(io.netty.channel.Channel channel, ApiToken principal,
+                                               java.util.Set<String> types, java.util.Set<String> services) {
+            streams.add(channel);
+            streamPrincipal.set(principal);
+            return types.isEmpty() ? java.util.Set.of("service-state") : types;
+        }
     }
 
     /** A browser: keeps the session cookie and the CSRF token. */
@@ -92,7 +103,17 @@ class PanelApiTest {
             return send("POST", path, body, true);
         }
 
+        Reply upload(String path, byte[] content) {
+            return sendRaw("POST", path, content, true);
+        }
+
+        HttpHeaders lastHeaders;
+
         Reply send(String method, String path, Map<String, ?> body, boolean withCsrf) {
+            return sendRaw(method, path, body == null ? new byte[0] : ApiJson.write(body), withCsrf);
+        }
+
+        Reply sendRaw(String method, String path, byte[] bytes, boolean withCsrf) {
             HttpHeaders headers = new DefaultHttpHeaders();
             headers.set("Host", HOST);
             if (!method.equals("GET")) {
@@ -120,11 +141,11 @@ class PanelApiTest {
                     query.put(pair.substring(0, eq), pair.substring(eq + 1));
                 }
             }
-            byte[] bytes = body == null ? new byte[0] : ApiJson.write(body);
             FullHttpResponse response = api.handle(new PanelApi.Call(method, q < 0 ? path : path.substring(0, q), query,
                     q < 0 ? "" : path.substring(q + 1), bytes, headers, "127.0.0.1"));
             Reply reply = new Reply(response.status().code(), response.content().toString(StandardCharsets.UTF_8),
                     response.headers().getAll("Set-Cookie"), response.headers().get("Location"));
+            lastHeaders = response.headers().copy();
             response.release();
             for (String cookie : reply.cookies()) {
                 assertTrue(cookie.contains("HttpOnly") && cookie.contains("Secure") && cookie.contains("SameSite="), cookie);
@@ -167,7 +188,8 @@ class PanelApiTest {
         audit = new AuditLog(home.resolve("logs").resolve(AuditLog.FILE_NAME), Clock.systemUTC());
         node = new FakeNode();
         AtomicLong nanos = new AtomicLong();
-        api = new PanelApi(users, audit, node, oidc, Clock.systemUTC(), nanos::get);
+        api = new PanelApi(users, audit, node, oidc, Clock.systemUTC(), nanos::get,
+                new net.vectolyn.cloud.panel.files.ServiceFiles(home));
         PanelConfigLoader.Settings settings = new PanelConfigLoader.Settings(
                 new PanelConfig(1, true, "127.0.0.1", 0, null), Optional.empty());
         PanelServer.builder(settings).assets(WebAssets.of(Map.of("index.html", "<p>x</p>".getBytes(StandardCharsets.UTF_8)), false))
@@ -394,6 +416,127 @@ class PanelApiTest {
         assertFalse(node.lastPrincipal.get().scopes().contains(net.vectolyn.cloud.api.auth.Scope.TEMPLATES_READ),
                 "the viewer role has no template scope");
         assertEquals(200, owner.get("/api/v1/templates/lobby/files/server.properties").status(), "the owner reads them");
+    }
+
+    @Test
+    void theFileManagerNeedsItsRightsAndStaysInTheServiceFolder() throws Exception {
+        start(null);
+        Path service = Files.createDirectories(home.resolve("temp/services/lobby-1"));
+        Files.writeString(service.resolve("server.properties"), "motd=hi\n");
+        Files.createDirectories(home.resolve("secrets"));
+        Browser owner = owner();
+        assertEquals(200, owner.post("/api/panel/users", Map.of("name", "vic", "password", PASSWORD,
+                "roles", List.of("viewer"))).status());
+        assertEquals(200, owner.post("/api/panel/users", Map.of("name", "olga", "password", PASSWORD,
+                "roles", List.of("operator"))).status());
+        Browser viewer = new Browser();
+        assertEquals(200, viewer.post("/api/panel/login", Map.of("name", "vic", "password", PASSWORD)).status());
+        Browser operator = new Browser();
+        assertEquals(200, operator.post("/api/panel/login", Map.of("name", "olga", "password", PASSWORD)).status());
+
+        assertEquals(403, viewer.get("/api/panel/files?service=lobby-1&path=").status(), "the viewer has no files:read");
+        assertEquals(403, viewer.get("/api/panel/files/content?service=lobby-1&path=server.properties").status());
+        assertEquals(401, new Browser().get("/api/panel/files?service=lobby-1&path=").status());
+
+        Reply list = operator.get("/api/panel/files?service=lobby-1&path=");
+        assertEquals(200, list.status(), list.body());
+        assertTrue(list.body().contains("\"name\":\"server.properties\""), list.body());
+
+        Reply content = operator.get("/api/panel/files/content?service=lobby-1&path=server.properties");
+        assertEquals(200, content.status());
+        assertEquals("motd=hi\n", content.body());
+        assertEquals("application/octet-stream", operator.lastHeaders.get("Content-Type"));
+        assertTrue(operator.lastHeaders.get("Content-Disposition").startsWith("attachment;"));
+        assertEquals("nosniff", operator.lastHeaders.get("X-Content-Type-Options"));
+
+        byte[] yaml = "a: 1\n".getBytes(StandardCharsets.UTF_8);
+        assertEquals(200, operator.upload("/api/panel/files/write?service=lobby-1&path=plugins%2FDemo%2Fconfig.yml", yaml).status());
+        assertEquals("a: 1\n", Files.readString(service.resolve("plugins/Demo/config.yml")));
+        assertEquals(403, viewer.upload("/api/panel/files/write?service=lobby-1&path=x.txt", yaml).status());
+        String csrf = operator.csrf;
+        operator.csrf = "wrong";
+        assertEquals(403, operator.upload("/api/panel/files/write?service=lobby-1&path=x.txt", yaml).status(), "CSRF");
+        operator.csrf = csrf;
+
+        for (String bad : List.of("..%2Fsecrets%2Fpanel-users.json", "%2E%2E", "a%5Cb", "C%3A%2Fx", "nul", "plugins%2F")) {
+            Reply refused = operator.get("/api/panel/files/content?service=lobby-1&path=" + bad);
+            assertEquals(400, refused.status(), bad + " " + refused.body());
+        }
+        assertEquals(400, operator.get("/api/panel/files?service=..&path=").status());
+        assertEquals(404, operator.get("/api/panel/files?service=lobby-9&path=").status());
+
+        assertEquals(200, operator.post("/api/panel/files/folder", Map.of("service", "lobby-1", "path", "world")).status());
+        assertTrue(Files.isDirectory(service.resolve("world")));
+        assertEquals(409, operator.post("/api/panel/files/delete", Map.of("service", "lobby-1", "path", "plugins")).status(),
+                "only empty folders");
+        assertEquals(200, operator.post("/api/panel/files/delete", Map.of("service", "lobby-1", "path", "world")).status());
+        assertEquals(200, operator.post("/api/panel/files/delete",
+                Map.of("service", "lobby-1", "path", "plugins/Demo/config.yml")).status());
+        assertFalse(Files.exists(service.resolve("plugins/Demo/config.yml")));
+
+        String log = Files.readString(home.resolve("logs").resolve(AuditLog.FILE_NAME));
+        assertTrue(log.contains("\"event\":\"file.written\"") && log.contains("\"event\":\"file.deleted\"")
+                && log.contains("\"event\":\"folder.created\"") && log.contains("lobby-1/plugins/Demo/config.yml"), log);
+    }
+
+    @Test
+    void theEventStreamNeedsSessionAndOriginAndEndsWithTheSession() throws Exception {
+        start(null);
+        Browser owner = owner();
+        assertEquals(401, refusal(() -> api.openStream(upgrade(null, ORIGIN, ""))));
+        assertEquals(403, refusal(() -> api.openStream(upgrade(owner.session, "https://evil.example", ""))),
+                "another site cannot open a stream with the user's cookie");
+        assertEquals(403, refusal(() -> api.openStream(upgrade(owner.session, null, ""))));
+        assertEquals(400, refusal(() -> api.openStream(upgrade(owner.session, ORIGIN, "types=Service State"))));
+
+        PanelApi.StreamGrant grant = api.openStream(upgrade(owner.session, ORIGIN, "types=service-output&services=lobby-1"));
+        assertEquals(java.util.Set.of("service-output"), grant.types());
+        assertEquals(java.util.Set.of("lobby-1"), grant.services());
+        assertEquals("local:owner", grant.principal().id());
+
+        io.netty.channel.embedded.EmbeddedChannel channel = new io.netty.channel.embedded.EmbeddedChannel();
+        api.subscribe(channel, grant);
+        assertEquals(1, node.streams.size());
+        api.sweepStreams();
+        assertTrue(channel.isOpen(), "a live session keeps its stream");
+        assertEquals(200, owner.post("/api/panel/logout", Map.of()).status());
+        api.sweepStreams();
+        channel.runPendingTasks();
+        assertFalse(channel.isOpen(), "signing out ends the stream");
+    }
+
+    private PanelApi.Call upgrade(String session, String origin, String rawQuery) {
+        HttpHeaders headers = new DefaultHttpHeaders();
+        headers.set("Host", HOST);
+        if (origin != null) {
+            headers.set("Origin", origin);
+        }
+        if (session != null) {
+            headers.set("Cookie", PanelApi.SESSION_COOKIE + "=" + session);
+        }
+        Map<String, String> query = new LinkedHashMap<>();
+        if (!rawQuery.isEmpty()) {
+            for (String pair : rawQuery.split("&", -1)) {
+                query.put(pair.substring(0, pair.indexOf('=')), pair.substring(pair.indexOf('=') + 1));
+            }
+        }
+        return new PanelApi.Call("GET", PanelApi.EVENTS, query, rawQuery, new byte[0], headers, "127.0.0.1");
+    }
+
+    private interface Opening {
+        Object open() throws PanelApi.Refusal;
+    }
+
+    private int refusal(Opening opening) {
+        try {
+            opening.open();
+            return 200;
+        } catch (PanelApi.Refusal r) {
+            FullHttpResponse response = api.refusal(r);
+            int status = response.status().code();
+            response.release();
+            return status;
+        }
     }
 
     private static String query(String url, String key) {
