@@ -1,0 +1,146 @@
+name: Lobby on Paper
+
+# Starts the real Paper build that the repository compiles against (gradle/libs.versions.toml,
+# paper-api) with VectolynLobby in it and checks, on the running server, that the plugin enables
+# without an error and that the world rules it sets (including the fire rule that replaces the
+# removed DO_FIRE_TICK) have the values the plugin sets. The Paper jar comes from the PaperMC
+# download API and is checked against the SHA-256 the API reports before it runs. Only this
+# workflow starts a downloaded server; the normal build never does.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/lobby-paper-smoke.yml
+      - plugins/lobby/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lobby-paper-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lobby:
+    name: Lobby on Paper (real server)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            services.gradle.org:443
+            downloads.gradle.org:443
+            plugins.gradle.org:443
+            plugins-artifacts.gradle.org:443
+            repo.maven.apache.org:443
+            repo.papermc.io:443
+            api.foojay.io:443
+            api.adoptium.net:443
+            fill.papermc.io:443
+            fill-data.papermc.io:443
+            piston-meta.mojang.com:443
+            piston-data.mojang.com:443
+            launchermeta.mojang.com:443
+            launcher.mojang.com:443
+            libraries.minecraft.net:443
+            resources.download.minecraft.net:443
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      - name: Build the lobby plugin
+        run: bash ./gradlew :plugins:lobby:paper:jar --no-daemon --stacktrace
+
+      - name: Download Paper and check its SHA-256
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/paper/plugins"
+          # The Paper build the plugin is compiled against, e.g. 26.3.build.231-stable.
+          pin=$(sed -n 's/^paper-api = "\(.*\)"/\1/p' gradle/libs.versions.toml | head -1)
+          version=${pin%%.build.*}
+          build=${pin#*.build.}; build=${build%%-*}
+          echo "Paper $version build $build"
+          curl -fsS "https://fill.papermc.io/v3/projects/paper/versions/$version/builds/$build" -o "$RUNNER_TEMP/build.json"
+          url=$(jq -r '.downloads["server:default"].url' "$RUNNER_TEMP/build.json")
+          sha=$(jq -r '.downloads["server:default"].checksums.sha256' "$RUNNER_TEMP/build.json")
+          curl -fsS -o "$RUNNER_TEMP/paper/paper.jar" "$url"
+          echo "$sha  $RUNNER_TEMP/paper/paper.jar" | sha256sum -c -
+          cp plugins/lobby/paper/build/libs/VectolynLobby-*.jar "$RUNNER_TEMP/paper/plugins/"
+
+      - name: Start Paper with the lobby and query the world rules
+        run: |
+          set -uo pipefail
+          cd "$RUNNER_TEMP/paper"
+          echo "eula=true" > eula.txt
+          printf '%s\n' 'online-mode=false' 'server-ip=127.0.0.1' 'server-port=25599' \
+            'level-type=minecraft\:flat' 'view-distance=4' 'simulation-distance=4' > server.properties
+          rules="advance_time advance_weather spawn_mobs spawn_monsters spawn_patrols spawn_wandering_traders spawn_wardens spawn_phantoms raids mob_griefing fire_spread_radius_around_player fall_damage drowning_damage fire_damage freeze_damage pvp"
+          {
+            for i in $(seq 1 240); do
+              grep -q 'Done (' server.log 2>/dev/null && break
+              sleep 2
+            done
+            for r in $rules; do echo "gamerule $r"; sleep 1; done
+            echo "plugins"; sleep 2
+            echo "stop"
+          } | timeout 600 java -Xmx1G -jar paper.jar --nogui > server.log 2>&1
+          echo "server exit: $?"
+
+      - name: Check the log and the rules
+        run: |
+          set -uo pipefail
+          log="$RUNNER_TEMP/paper/server.log"
+          fail=0
+          check() { # description, pattern
+            if grep -Eqi -- "$2" "$log"; then echo "ok   $1"; else echo "FAIL $1"; fail=1; fi
+          }
+          check "server started" 'Done \('
+          check "plugin enabled" 'Enabling VectolynLobby'
+          if grep -E 'Could not load|Error occurred while enabling|VectolynLobby.*(Exception|SEVERE)' "$log"; then
+            echo "FAIL plugin reported an error"; fail=1
+          else
+            echo "ok   no plugin error"
+          fi
+          for r in advance_time advance_weather spawn_mobs spawn_monsters spawn_patrols spawn_wandering_traders spawn_wardens spawn_phantoms raids mob_griefing fall_damage drowning_damage fire_damage freeze_damage pvp; do
+            check "$r is false" "$r[^0-9a-z]*(is currently set to)?[^a-z]*false"
+          done
+          check "fire_spread_radius_around_player is 0" 'fire_spread_radius_around_player[^0-9]*0([^0-9]|$)'
+          {
+            echo "### Lobby on Paper"
+            echo
+            echo '```'
+            grep -Ei 'VectolynLobby|gamerule|Done \(|Paper' "$log" | head -80
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $fail
+
+      - name: Upload the server log
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: lobby-paper-log
+          path: ${{ runner.temp }}/paper/server.log
+          if-no-files-found: ignore
+          retention-days: 14
