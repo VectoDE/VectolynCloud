@@ -494,6 +494,15 @@ public final class ApiServer implements AutoCloseable {
         return settings;
     }
 
+    /**
+     * The TLS material of the API, which the web panel (cloud/panel) uses for its own listener.
+     *
+     * @return the material, or empty while the API runs without TLS
+     */
+    public java.util.Optional<ApiTls.Material> tls() {
+        return settings.tls();
+    }
+
     ApiLimits limits() {
         return settings.limits();
     }

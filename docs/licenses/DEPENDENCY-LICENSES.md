@@ -38,6 +38,26 @@ Transitive Abhängigkeiten sind nicht einzeln aufgeführt. Die Verifikation der 
 | org.postgresql:postgresql | 42.7.14 | implementation | BSD-2-Clause (transitiv: org.checkerframework:checker-qual, MIT) | yes |
 | com.code-intelligence:jazzer-junit | 0.30.0 | test (fuzz) | Apache-2.0 | yes |
 
+## Web panel frontend (npm, `cloud/panel/web`)
+
+Exakte Versionen in `cloud/panel/web/package-lock.json`. Installiert wird nur mit `npm ci --ignore-scripts`, Installationsskripte laufen nicht. Ausgeliefert wird allein der statische Export (`next build`) im Jar; Node.js läuft zur Laufzeit nicht. Lizenzen laut npm-Registry (`npm view <paket> license`, Stand 2026-11-12).
+
+| Package | Version | Scope | License (SPDX) | GPL-3.0 compatible |
+|---|---|---|---|---|
+| next | 16.4.3 | build, Laufzeitcode im Export | MIT | yes |
+| react | 19.3.1 | build, Laufzeitcode im Export | MIT | yes |
+| react-dom | 19.3.1 | build, Laufzeitcode im Export | MIT | yes |
+| tailwindcss | 4.3.3 | build only | MIT | yes |
+| @tailwindcss/postcss | 4.3.3 | build only | MIT | yes |
+| postcss | 8.5.32 | build only | MIT | yes |
+| typescript | 5.9.3 | build only | Apache-2.0 | yes |
+| @types/node, @types/react, @types/react-dom | 24.x, 19.3.0 | build only | MIT | yes |
+| @img/sharp-* (optional, transitiv über next) | 0.34.x | nur Bauzeit, wird nicht aufgerufen | LGPL-3.0-or-later, teils mit Apache-2.0/MIT | yes |
+
+`sharp` ist eine optionale Abhängigkeit von Next.js für `next/image`. Der Export läuft mit `images.unoptimized`, sharp wird also nie aufgerufen; npm installiert nur das Paket der Bau-Plattform, und nichts davon kommt ins Jar. Die Trivy-Lizenzprüfung nimmt genau diese Lizenzen für `cloud/panel/web/package-lock.json` aus (`.trivyignore.yaml`).
+
+Schriften und Design-Tokens im Panel kommen aus `branding/` (OFL-1.1 bzw. CC-BY-SA-4.0, siehe `REUSE.toml`).
+
 ## Build tooling (not shipped)
 
 | Component | License | Note |

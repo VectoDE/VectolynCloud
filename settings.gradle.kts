@@ -60,6 +60,7 @@ include(
     "cloud:backup",
     "cloud:monitor",
     "cloud:cluster",
+    "cloud:panel",
     "cloud:privacy",
 )
 

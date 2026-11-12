@@ -1,0 +1,67 @@
+/* SPDX-FileCopyrightText: 2026 VectoDE */
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/* Design tokens come from branding/tokens.css (copied by scripts/sync-brand.mjs); Tailwind maps them. */
+@import "tailwindcss";
+@import "./brand-tokens.css";
+
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  src: url("/fonts/AtkinsonHyperlegibleNext-Variable.ttf") format("truetype");
+  font-weight: 200 800;
+  font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono-Variable.ttf") format("truetype");
+  font-weight: 100 800;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Pixelify Sans";
+  src: url("/fonts/PixelifySans-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-display: swap;
+}
+
+@theme inline {
+  --color-surface: var(--vl-color-surface);
+  --color-raised: var(--vl-color-surface-raised);
+  --color-sunken: var(--vl-color-surface-sunken);
+  --color-line: var(--vl-color-border);
+  --color-ink: var(--vl-color-text);
+  --color-muted: var(--vl-color-text-muted);
+  --color-primary: var(--vl-color-primary);
+  --color-accent: var(--vl-color-accent);
+  --color-ok: var(--vl-color-success);
+  --color-warn: var(--vl-color-warning);
+  --color-bad: var(--vl-color-error);
+  --font-sans: var(--vl-font-text);
+  --font-mono: var(--vl-font-mono);
+  --font-display: var(--vl-font-display);
+  --radius-none: 0px;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  background: var(--vl-color-surface);
+  color: var(--vl-color-text);
+  font-family: var(--vl-font-text);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+/* One visible focus style everywhere (WCAG 2.4.7, 2.4.11, 2.4.13): 3px, offset, in the accent colour. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 3px solid var(--vl-color-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

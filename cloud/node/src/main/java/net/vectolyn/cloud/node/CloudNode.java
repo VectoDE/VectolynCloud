@@ -47,6 +47,7 @@ import net.vectolyn.cloud.privacy.StatisticsCollector;
 import net.vectolyn.cloud.node.ops.NodeApi;
 import net.vectolyn.cloud.node.ops.NodeBackups;
 import net.vectolyn.cloud.node.ops.NodeMonitoring;
+import net.vectolyn.cloud.node.ops.NodePanel;
 import net.vectolyn.cloud.config.ConfigChanged;
 import net.vectolyn.cloud.config.ConfigListener;
 import net.vectolyn.cloud.config.ConfigService;
@@ -95,6 +96,7 @@ import net.vectolyn.cloud.node.software.ArtifactSource;
 import net.vectolyn.cloud.node.software.BridgePlugins;
 import net.vectolyn.cloud.node.software.LockedDownloads;
 import net.vectolyn.cloud.node.software.SoftwareInstaller;
+import net.vectolyn.cloud.panel.PanelServer;
 import net.vectolyn.cloud.setup.MinecraftVersions;
 import net.vectolyn.cloud.setup.NetworkServer;
 import net.vectolyn.cloud.setup.SetupEnvironment;
@@ -165,6 +167,8 @@ public final class CloudNode implements AutoCloseable {
     private final Object closeLock = new Object();
     private final List<Handler> removedHandlers = new ArrayList<>();
     private ConsoleLogHandler logHandler;
+    /** The web panel, when panel.yml switches it on and the API runs (docs/cloud/panel.md). */
+    private volatile PanelServer panelServer;
     private ServiceCommands serviceCommands;
     private ConfigListener reconcile;
     private boolean closing;
@@ -691,6 +695,7 @@ public final class CloudNode implements AutoCloseable {
             } catch (IOException e) {
                 LOG.log(System.Logger.Level.ERROR, "The API cannot start ({0}); the node runs without it.", e.getMessage());
             }
+            panelServer = NodePanel.start(settings.home(), ops.apiServer(), settings.launcherVersion()).orElse(null);
         }
         // The questions read the terminal on this thread, so the console's own read loop starts
         // only afterwards.
@@ -1145,6 +1150,11 @@ public final class CloudNode implements AutoCloseable {
         step(errors, "closing the configuration", config::close);
         step(errors, "closing the console", this::closeConsole);
         // Last: event streams get 1001, then the sockets close.
+        step(errors, "closing the panel", () -> {
+            if (panelServer != null) {
+                panelServer.close();
+            }
+        });
         step(errors, "closing the API", () -> {
             if (ops.apiServer() != null) {
                 Logger.getLogger("").removeHandler(ops.apiServer().logHandler());
