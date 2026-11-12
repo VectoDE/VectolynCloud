@@ -405,6 +405,54 @@ public final class ApiTokens {
     }
 
     /**
+     * What a setup token is used for instead of an API token, for example the first account of the
+     * web panel.
+     *
+     * @param <T> the result
+     */
+    @FunctionalInterface
+    public interface SetupUse<T> {
+
+        /**
+         * Does the work the setup token allows.
+         *
+         * @param admin the administrator the setup token was made for
+         * @return the result
+         * @throws IOException if it fails; the setup token then stays valid
+         */
+        T apply(String admin) throws IOException;
+    }
+
+    /**
+     * Uses the setup token, once, for something other than an API token (the web panel creates its
+     * first account with it). Same order as {@link #claimSetupToken}: {@code use} runs first; if it
+     * fails, the setup token stays valid. Once it succeeded, the setup token stops working at once
+     * and its file is deleted.
+     *
+     * @param presented the setup token
+     * @param use       the work, called at most once, under the lock of the store
+     * @param <T>       the result
+     * @return the result, or empty if {@code presented} is not a valid, unexpired setup token
+     * @throws IOException if {@code use} fails; then the setup token is still valid
+     */
+    public synchronized <T> Optional<T> useSetupToken(String presented, SetupUse<T> use) throws IOException {
+        Optional<String> admin = setupAdmin(presented);
+        if (admin.isEmpty()) {
+            return Optional.empty();
+        }
+        T result = use.apply(admin.get());
+        setup = null;
+        try {
+            Files.deleteIfExists(setupFile());
+        } catch (IOException | RuntimeException e) {
+            LOG.log(System.Logger.Level.ERROR, "The used setup token is invalid now, but " + SETUP_FILE_NAME
+                    + " could not be deleted ({0}). Delete it, or run \"api token setup\" to replace it;"
+                    + " otherwise it is valid again after a restart until it expires.", e.getClass().getSimpleName());
+        }
+        return Optional.of(result);
+    }
+
+    /**
      * When the current setup token expires.
      *
      * @return the expiry, or empty if there is no setup token
