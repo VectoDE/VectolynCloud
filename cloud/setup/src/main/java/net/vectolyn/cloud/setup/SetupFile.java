@@ -153,7 +153,7 @@ public record SetupFile(int schemaVersion, Language language, Boolean eula, Stri
     /**
      * Database settings.
      *
-     * @param mode         {@code managed}, {@code docker}, {@code external} or {@code h2}
+     * @param mode         {@code managed}, {@code docker}, {@code external}, {@code postgresql} or {@code h2}
      * @param host         host of an external server
      * @param port         port of an external server
      * @param name         database name

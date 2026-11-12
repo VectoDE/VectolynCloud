@@ -10,7 +10,7 @@ Software: Velocity 4.3.0, Geyser-Velocity, Floodgate, LuckPerms-Velocity, ViaVer
 - `{{VECTOLYN_PROXY_SERVERS}}`, `{{VECTOLYN_PROXY_TRY}}`, `{{VECTOLYN_PROXY_FORCED_HOSTS}}` in `velocity.toml`: filled from the wanted servers only
 - `{{VECTOLYN_BEDROCK_PORT}}`, `{{VECTOLYN_BEDROCK_NETHERNET_PORT}}` in `plugins/Geyser-Velocity/config.yml` (Geyser runs `transport: both`: RakNet and NetherNet)
 - `{{VECTOLYN_DB_HOST}}`, `{{VECTOLYN_DB_PORT}}`, `{{VECTOLYN_DB_NAME}}`, `{{VECTOLYN_DB_USER}}`, `{{VECTOLYN_DB_PASSWORD}}` in `plugins/luckperms/config.yml`
-- `{{VECTOLYN_DB_STORAGE_METHOD}}` (`mariadb`, `mysql` or `h2`) and `{{VECTOLYN_DB_POOL_SIZE}}` (pool size set centrally by the cloud, normally 4) in `plugins/luckperms/config.yml`
+- `{{VECTOLYN_DB_STORAGE_METHOD}}` (`mariadb`, `mysql`, `postgresql` or `h2`) and `{{VECTOLYN_DB_POOL_SIZE}}` (pool size set centrally by the cloud, normally 4) in `plugins/luckperms/config.yml`
 - `{{VECTOLYN_XMS}}`, `{{VECTOLYN_XMX}}` in `start.bat`
 - `server-icon.png` (64 x 64, the Vectolyn mark) is copied unchanged; Velocity shows it in the server list
 - Generated files: `forwarding.secret` from `VECTOLYN_FORWARDING_SECRET`, `plugins/floodgate/key.pem` from `VECTOLYN_FLOODGATE_KEY_B64`

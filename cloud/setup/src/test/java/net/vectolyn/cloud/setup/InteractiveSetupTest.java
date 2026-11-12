@@ -21,6 +21,7 @@ import net.vectolyn.cloud.config.CloudHome;
 import net.vectolyn.cloud.config.ConfigService;
 import net.vectolyn.cloud.config.error.ConfigException;
 import net.vectolyn.cloud.config.model.CloudConfig;
+import net.vectolyn.cloud.config.model.DatabaseConfig;
 import net.vectolyn.cloud.config.model.DatabaseMode;
 import net.vectolyn.cloud.config.model.Language;
 import net.vectolyn.cloud.config.model.MemoryReserve;
@@ -282,6 +283,37 @@ class InteractiveSetupTest {
         assertEquals(LineKind.SECRET, terminal.reads().stream().filter(r -> r.prompt().startsWith("Password"))
                 .findFirst().orElseThrow().kind());
         assertTrue(terminal.output().contains("database password: new (hidden)"));
+    }
+
+    @Test
+    void postgresqlAsksLikeExternalWithItsOwnPort() throws Exception {
+        start();
+        terminal.enter(SERVER_QUESTIONS + 3 + MEMORY_QUESTIONS)
+                .type("postgresql", "pg.example.org", "", "lp", "lpuser", "a-typed-password-1234").enter(ADMIN_QUESTION + 1);
+
+        SetupResult result = SetupWizard.run(console, config, env(false, true));
+
+        assertEquals(SetupResult.Status.COMPLETED, result.status(), terminal.output());
+        var db = config.snapshot().cloud().database();
+        assertEquals(DatabaseMode.POSTGRESQL, db.mode());
+        assertEquals("pg.example.org", db.host());
+        assertEquals(SetupPlan.POSTGRESQL_PORT, db.port());
+        assertEquals("lpuser", db.user());
+        assertEquals("a-typed-password-1234",
+                new SecretStore(config.home()).load().get("VECTOLYN_DB_PASSWORD").orElseThrow().reveal());
+        assertTrue(terminal.output().contains("PostgreSQL pg.example.org:5432"), terminal.output());
+    }
+
+    @Test
+    void switchingBetweenServerModesSwapsOnlyTheDefaultPort() {
+        DatabaseConfig external = new DatabaseConfig(DatabaseMode.EXTERNAL, "db", 3306, "lp", "lp", null);
+        assertEquals(SetupPlan.POSTGRESQL_PORT, SetupPlan.switchMode(external, DatabaseMode.POSTGRESQL).port());
+        DatabaseConfig custom = new DatabaseConfig(DatabaseMode.EXTERNAL, "db", 6000, "lp", "lp", null);
+        assertEquals(6000, SetupPlan.switchMode(custom, DatabaseMode.POSTGRESQL).port());
+        DatabaseConfig pg = new DatabaseConfig(DatabaseMode.POSTGRESQL, "db", 5432, "lp", "lp", null);
+        assertEquals(SetupPlan.EXTERNAL_DATABASE_PORT, SetupPlan.switchMode(pg, DatabaseMode.EXTERNAL).port());
+        assertEquals(SetupPlan.POSTGRESQL_PORT,
+                SetupPlan.switchMode(DatabaseConfig.defaults(), DatabaseMode.POSTGRESQL).port());
     }
 
     @Test

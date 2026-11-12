@@ -66,6 +66,8 @@ public final class SetupPlan {
     static final MemorySize MAX_INITIAL_HEAP = MemorySize.ofMegabytes(512);
     /** Port of an external MariaDB or MySQL server unless the operator says otherwise. */
     public static final int EXTERNAL_DATABASE_PORT = 3306;
+    /** Port of a PostgreSQL server unless the operator says otherwise. */
+    public static final int POSTGRESQL_PORT = 5432;
     /** Suggested name of the first administrator. */
     public static final String DEFAULT_ADMIN = "admin";
     /** Players one minigame service is meant for. */
@@ -416,7 +418,9 @@ public final class SetupPlan {
     /**
      * {@code current} in another mode. Switching to the managed or Docker server moves host and port
      * to the cloud's own defaults ({@code 127.0.0.1:3307}); switching from them to an external server
-     * sets the usual MariaDB port 3306. Database and user name stay.
+     * sets the usual MariaDB port 3306, to PostgreSQL its usual port 5432. Switching between
+     * {@code external} and {@code postgresql} swaps the port only while it is the other one's
+     * default. Database and user name stay.
      */
     public static DatabaseConfig switchMode(DatabaseConfig current, DatabaseMode mode) {
         DatabaseConfig moved = current.withMode(mode);
@@ -426,8 +430,11 @@ public final class SetupPlan {
             DatabaseConfig defaults = DatabaseConfig.defaults();
             return new DatabaseConfig(mode, defaults.host(), defaults.port(), moved.name(), moved.user(), moved.dockerImage());
         }
-        if (mode == DatabaseMode.EXTERNAL && wasLocal) {
+        if (mode == DatabaseMode.EXTERNAL && (wasLocal || current.port() == POSTGRESQL_PORT)) {
             return new DatabaseConfig(mode, moved.host(), EXTERNAL_DATABASE_PORT, moved.name(), moved.user(), null);
+        }
+        if (mode == DatabaseMode.POSTGRESQL && (wasLocal || current.port() == EXTERNAL_DATABASE_PORT)) {
+            return new DatabaseConfig(mode, moved.host(), POSTGRESQL_PORT, moved.name(), moved.user(), null);
         }
         return moved;
     }
