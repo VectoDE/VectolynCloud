@@ -46,6 +46,9 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Test the generator
+        run: node --test site/test/*.test.mjs
+
       - name: Assemble site
         run: sh site/build.sh
         env:
