@@ -107,6 +107,17 @@ class ClusterMirrorTest {
         return node.cluster.status().mirror().orElseThrow().configRevision();
     }
 
+    /**
+     * Whether the member holds the head's current config. The head counts a new revision on its
+     * mirror worker after its snapshot changed (the join adds the member to nodes.yml), so equal
+     * revisions alone can still be the one before; equal nodes as well mean the member has the
+     * latest one and no push for an older change is still to come with new content.
+     */
+    private boolean memberIsCurrent() {
+        return revision(member) > 0 && revision(member) == revision(head)
+                && head.config.snapshot().nodes().equals(member.config.snapshot().nodes());
+    }
+
     @Test
     void theMemberTakesOverNodesGroupsAndTasksButNeverCloudYml() throws Exception {
         join();
@@ -115,7 +126,7 @@ class ClusterMirrorTest {
         // The head added the new node to nodes.yml with the address the join came from.
         NodeConfig added = head.config.snapshot().nodes().find("node-2").orElseThrow();
         assertEquals("127.0.0.1", added.host());
-        await(() -> revision(member) == revision(head));
+        await(this::memberIsCurrent);
         assertEquals(head.config.snapshot().nodes(), member.config.snapshot().nodes());
         assertEquals(task(), member.config.snapshot().tasks().get("lobby"));
         for (String file : List.of("nodes.yml", "groups/lobby.yml", "tasks/lobby.yml")) {
@@ -130,7 +141,7 @@ class ClusterMirrorTest {
         // A change on the head arrives by push.
         long before = revision(member);
         head.config.apply(new PutGroup("lobby", group("1G")));
-        // The revision is counted after the group is visible, so wait for both.
+        // The member's snapshot changes before its sync records the revision, so wait for both.
         await(() -> group("1G").equals(member.config.snapshot().groups().get("lobby")) && revision(member) > before);
         assertTrue(revision(member) > before);
 
@@ -163,7 +174,9 @@ class ClusterMirrorTest {
     @Test
     void aStaleRevisionIsRefused() throws Exception {
         join();
-        await(() -> revision(member) > 0);
+        // Wait until the join's own change to nodes.yml has arrived: a sync still taking it over
+        // could write its record over the one this test writes.
+        await(this::memberIsCurrent);
         MirrorState.writeRevision(member.paths.configApplied(), new MirrorState.Revision(1000, new byte[32]));
 
         ExecutionException e = assertThrows(ExecutionException.class,
@@ -205,6 +218,11 @@ class ClusterMirrorTest {
         Path own = member.home.resolve("local/templates/Own/default");
         Files.createDirectories(own);
         Files.writeString(own.resolve("mine.txt"), "mine");
+        // The head started its first template scan in setUp, on its mirror worker, while this test
+        // was still writing the files above; that scan can hold a partial template, and the next
+        // timed rescan is 60 s away (ClusterService.TEMPLATE_RESCAN), past the 30 s of await. A
+        // sync rescans on the same worker after that first scan, so the head lists every file.
+        head.cluster.sync().get(30, TimeUnit.SECONDS);
 
         join();
         Path mirrored = member.home.resolve("local/templates/Lobby-Server/default");

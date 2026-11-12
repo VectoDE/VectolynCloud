@@ -42,6 +42,12 @@ final class ConfigMirrorSink {
 
     private final ConfigService config;
     private final Path stateFile;
+    /**
+     * The record as the last sync read or wrote it (read once at creation before that). The status
+     * answers from here and never opens the file: on Windows a reader holding it open makes the
+     * sync's atomic replace fail with an access-denied error, which failed the whole sync.
+     */
+    private volatile Optional<MirrorState.Revision> known;
 
     /**
      * Creates the sink.
@@ -52,15 +58,24 @@ final class ConfigMirrorSink {
     ConfigMirrorSink(ConfigService config, Path stateFile) {
         this.config = Objects.requireNonNull(config, "config");
         this.stateFile = Objects.requireNonNull(stateFile, "stateFile");
+        this.known = readQuietly(stateFile);
     }
 
-    /** The revision taken over last, if any, for the status (empty also if its record cannot be read). */
-    Optional<MirrorState.Revision> applied() {
+    private static Optional<MirrorState.Revision> readQuietly(Path stateFile) {
         try {
             return MirrorState.readRevision(stateFile);
         } catch (IOException e) {
             return Optional.empty();
         }
+    }
+
+    /**
+     * The revision taken over last, if any, for the status (empty also if its record cannot be
+     * read). It is the record as the last sync saw it; a hand edit of the file shows after the next
+     * sync.
+     */
+    Optional<MirrorState.Revision> applied() {
+        return known;
     }
 
     /**
@@ -91,7 +106,9 @@ final class ConfigMirrorSink {
         Optional<MirrorState.Revision> applied;
         try {
             applied = MirrorState.readRevision(stateFile);
+            known = applied;
         } catch (IOException e) {
+            known = Optional.empty();
             // Taking over anything now would switch the stale check off; the operator decides.
             throw new MirrorException("state/cluster/config-applied cannot be read (" + e.getMessage()
                     + "); delete it to take over the head's config again");
@@ -136,7 +153,14 @@ final class ConfigMirrorSink {
             throw new MirrorException("the head's config does not validate on this node: "
                     + e.describe(Language.EN).strip().replace(System.lineSeparator(), "; "));
         }
-        MirrorState.writeRevision(stateFile, new MirrorState.Revision(listing.revision(), listing.digest()));
+        // A sync that finds the revision it took over already does not write the record again: a
+        // late push would otherwise rewrite it for nothing, racing anyone who reads or edits it.
+        if (applied.isEmpty() || applied.get().revision() != listing.revision()
+                || !applied.get().sameDigest(listing.digest())) {
+            MirrorState.Revision taken = new MirrorState.Revision(listing.revision(), listing.digest());
+            MirrorState.writeRevision(stateFile, taken);
+            known = Optional.of(taken);
+        }
         return new Outcome(listing.revision(), changed);
     }
 
