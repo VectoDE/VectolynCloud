@@ -200,20 +200,26 @@ public record ClusterConfig(@JsonProperty(required = true) int schemaVersion, He
         return problems;
     }
 
-    private static boolean validNodeId(String value) {
+    private static boolean validNodeId(@Nullable String value) {
+        if (value == null) {
+            return false;
+        }
         try {
             new NodeId(value);
             return true;
-        } catch (IllegalArgumentException | NullPointerException e) {
+        } catch (IllegalArgumentException e) {
             return false;
         }
     }
 
-    private static boolean validInstant(String value) {
+    private static boolean validInstant(@Nullable String value) {
+        if (value == null) {
+            return false;
+        }
         try {
             Instant.parse(value);
             return true;
-        } catch (DateTimeParseException | NullPointerException e) {
+        } catch (DateTimeParseException e) {
             return false;
         }
     }

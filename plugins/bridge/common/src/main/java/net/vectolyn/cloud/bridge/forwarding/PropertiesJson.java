@@ -56,9 +56,10 @@ public final class PropertiesJson {
             string(out, property.name());
             out.append(",\"value\":");
             string(out, property.value());
-            if (property.signature() != null) {
+            String signature = property.signature();
+            if (signature != null) {
                 out.append(",\"signature\":");
-                string(out, property.signature());
+                string(out, signature);
             }
             out.append('}');
         }

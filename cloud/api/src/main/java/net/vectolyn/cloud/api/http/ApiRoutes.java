@@ -622,8 +622,9 @@ public final class ApiRoutes {
         body.put("name", token.name());
         body.put("scopes", token.scopes().stream().map(Scope::id).sorted().toList());
         body.put("created-at", token.createdAt().toString());
-        if (token.expiresAt() != null) {
-            body.put("expires-at", token.expiresAt().toString());
+        Instant expiresAt = token.expiresAt();
+        if (expiresAt != null) {
+            body.put("expires-at", expiresAt.toString());
         }
         body.put("expired", token.isExpired(now));
         return body;

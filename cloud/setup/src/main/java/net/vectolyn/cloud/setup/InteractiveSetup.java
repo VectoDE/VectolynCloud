@@ -304,7 +304,8 @@ final class InteractiveSetup {
         Optional<MemorySize> max = ask.ask(Question.custom(SetupMessages.fill(SetupMessages.MAX_MEMORY_OF, id),
                         InteractiveSetup::maxMemory, (Optional<MemorySize> v) -> v.map(MemorySize::toString).orElse(SetupFile.Node.AUTO))
                 .defaultValue(Optional.ofNullable(answers.maxMemory())));
-        MemoryReserve raw = answers.memoryReserve() == null ? new MemoryReserve(null, null, null) : answers.memoryReserve();
+        MemoryReserve stored = answers.memoryReserve();
+        MemoryReserve raw = stored == null ? new MemoryReserve(null, null, null) : stored;
         MemorySize system = reserve(SetupMessages.RESERVE_SYSTEM_OF, id, raw.system(), MemoryReserve.DEFAULT_SYSTEM);
         MemorySize overhead = reserve(SetupMessages.RESERVE_NODE_OVERHEAD_OF, id, raw.nodeOverhead(),
                 MemoryReserve.DEFAULT_NODE_OVERHEAD);

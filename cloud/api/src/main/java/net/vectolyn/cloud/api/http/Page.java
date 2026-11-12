@@ -55,10 +55,11 @@ public final class Page {
         sorted.sort(Comparator.comparing(key));
         List<T> page = new ArrayList<>();
         @Nullable String last = null;
+        @Nullable String after = request.after();
         boolean more = false;
         for (T item : sorted) {
             String k = key.apply(item);
-            if (request.after() != null && k.compareTo(request.after()) <= 0) {
+            if (after != null && k.compareTo(after) <= 0) {
                 continue;
             }
             if (page.size() == request.limit()) {
@@ -85,9 +86,10 @@ public final class Page {
         Request request = request(q);
         Map<String, V> page = new LinkedHashMap<>();
         @Nullable String last = null;
+        @Nullable String after = request.after();
         boolean more = false;
         for (Map.Entry<String, V> entry : new TreeMap<>(items).entrySet()) {
-            if (request.after() != null && entry.getKey().compareTo(request.after()) <= 0) {
+            if (after != null && entry.getKey().compareTo(after) <= 0) {
                 continue;
             }
             if (page.size() == request.limit()) {

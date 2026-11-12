@@ -319,8 +319,9 @@ public final class Monitor implements AutoCloseable {
             List<MonitoredService> services = directory.services();
             Instant now = Instant.ofEpochSecond(clock.instant().getEpochSecond());
             ProcessReading reading = lastProbe;
-            Map<Long, MetricSource.ProcessMetrics> processes = reading.at() != null
-                    && !reading.at().plus(config.staleAfter().duration()).isBefore(now) ? reading.values() : Map.of();
+            Instant probedAt = reading.at();
+            Map<Long, MetricSource.ProcessMetrics> processes = probedAt != null
+                    && !probedAt.plus(config.staleAfter().duration()).isBefore(now) ? reading.values() : Map.of();
             List<AlertEvent> events = new ArrayList<>();
             Set<String> present = new HashSet<>();
             for (MonitoredService service : services) {

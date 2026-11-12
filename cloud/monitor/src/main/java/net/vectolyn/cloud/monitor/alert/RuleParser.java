@@ -178,7 +178,8 @@ public final class RuleParser {
                 if (at == null || at.kind != Kind.WORD || !at.text.equals("at")) {
                     throw new RuleSyntaxException(Reason.UNEXPECTED_WORD, at == null ? end : at.position);
                 }
-                int position = peek() == null ? end : peek().position;
+                Token next = peek();
+                int position = next == null ? end : next.position;
                 clearAt = quantity(metric);
                 boolean healthySide = comparison.watchesLow()
                         ? clearAt.value() >= threshold.value() : clearAt.value() <= threshold.value();

@@ -208,8 +208,9 @@ final class CommandBlockGuard implements Listener {
     public void onClick(InventoryClickEvent event) {
         if (forbidden(event.getCurrentItem()) || forbidden(event.getCursor())) {
             event.setCancelled(true);
-            if (event.getClickedInventory() != null) {
-                log.itemsRemoved(strip(event.getClickedInventory()), "an inventory in world "
+            Inventory clicked = event.getClickedInventory();
+            if (clicked != null) {
+                log.itemsRemoved(strip(clicked), "an inventory in world "
                         + worldName(event.getWhoClicked().getWorld()));
             }
             if (event.getWhoClicked() instanceof Player player) {
