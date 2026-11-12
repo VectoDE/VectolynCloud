@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: VectolynCloud API
-  version: 1.2.0
+  version: 1.3.0
   summary: REST API and live events of a VectolynCloud node.
   description: |
     JSON over HTTP/1.1. Every request needs a bearer token (`vct_...`) created at the node console
@@ -648,7 +648,10 @@ paths:
       tags: [events]
       summary: Live events (WebSocket)
       description: |
-        Scope: services:read. Upgrade to a WebSocket; a plain GET answers 426. Browsers pass the
+        Every event type needs its scope: service-state, service-output and player services:read,
+        metrics node:read, node-log admin. `types` asking for a type without its scope answers 403
+        missing-scope; without `types` the stream gets every type the token may see (403 if none).
+        Upgrade to a WebSocket; a plain GET answers 426. Browsers pass the
         token as subprotocol `vectolyn.bearer.<token>` next to `vectolyn.v1`; offering subprotocols
         without `vectolyn.v1` answers 400 subprotocol-required. Every text frame is an
         `Event`. Output lines are redacted. Revoking the token closes the stream with 1008,
@@ -659,7 +662,7 @@ paths:
           in: query
           schema:
             type: string
-            example: service-state,service-output,player
+            example: service-state,service-output,player,metrics,node-log
         - name: services
           in: query
           schema:
@@ -993,7 +996,7 @@ components:
       properties:
         type:
           type: string
-          enum: [service-state, service-output, player, dropped]
+          enum: [service-state, service-output, player, metrics, node-log, dropped]
         time: {type: string, format: date-time}
         data:
           oneOf:
@@ -1014,6 +1017,17 @@ components:
                 player-id: {type: string}
                 player-name: {type: string}
                 service: {type: string}
+            - title: metrics
+              type: object
+              description: Every 10 s while a stream wants it.
+              properties:
+                node: {$ref: "#/components/schemas/NodeStatus"}
+            - title: node-log
+              type: object
+              properties:
+                level: {type: string, enum: [info, warning, error]}
+                logger: {type: string}
+                message: {type: string, description: Redacted, without a stack trace, at most 2000 characters.}
             - title: dropped
               type: object
               properties:
