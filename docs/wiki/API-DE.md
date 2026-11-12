@@ -25,7 +25,7 @@ Jede Anfrage braucht ein Token; es gibt keinen anonymen Endpunkt. Ein Token legs
 api token create dashboard services:read,config:read,node:read
 ```
 
-Das Token beginnt mit `vct_`, wird einmal angezeigt und nur als SHA-256-Hash gespeichert. Gesendet wird es als `Authorization: Bearer vct_...`. `api token list` und `api token revoke <name>` verwalten Tokens; ein Widerruf wirkt sofort.
+Das Token beginnt mit `vct_`, wird einmal angezeigt und nur als SHA-256-Hash gespeichert. Gesendet wird es als `Authorization: Bearer vct_...`. `api token list` und `api token revoke <name>` verwalten Tokens; ein Widerruf wirkt sofort. Ein drittes Argument gibt dem Token eine Laufzeit (`api token create ci services:read 90d`, 1h bis 3650d); danach scheitert es wie ein widerrufenes. Ein Token mit `admin` kann dasselbe über `/api/v1/admin/tokens`.
 
 | Scope | Erlaubt |
 |---|---|
@@ -35,7 +35,7 @@ Das Token beginnt mit `vct_`, wird einmal angezeigt und nur als SHA-256-Hash ges
 | `config:write` | Gruppen, Tasks, Server-Schalter und `cloud.yml` ändern (nicht `api` und `database`), neu laden |
 | `backups:read`, `backups:write` | Backups auflisten, ein Backup anlegen |
 | `node:read` | Node-Status |
-| `admin` | alles, einschließlich der Abschnitte `api` und `database` |
+| `admin` | alles, einschließlich der Abschnitte `api` und `database` und der Token-Verwaltung |
 
 ## Endpunkte
 
@@ -58,7 +58,7 @@ Schreibzugriffe werden als Ganzes geprüft, bevor etwas gespeichert wird. `DELET
 
 ## Grenzen
 
-Bodys sind höchstens 256 KiB groß, JSON wird strikt gelesen, und es gibt Ratenbegrenzungen je Client-Adresse und je Token (Standard 600 Anfragen pro Minute je Adresse und 300 je Token). Höchstens 32 Ereignisströme laufen gleichzeitig. Langsame Stream-Clients verlieren Ereignisse, die dann in einem einzigen `dropped`-Ereignis gemeldet werden; sie bremsen den Node nie aus.
+Bodys sind höchstens 256 KiB groß, JSON wird strikt gelesen, und es gibt Ratenbegrenzungen je Client-Adresse und je Token (Standard 600 Anfragen pro Minute je Adresse und 300 je Token). Jede Antwort zeigt das Budget des Tokens in `X-RateLimit-Limit` und `X-RateLimit-Remaining`. Listen lassen sich mit `?limit=50` seitenweise abrufen; der `Link`-Header zeigt auf die nächste Seite, `X-Total-Count` nennt die Größe der ganzen Liste. Höchstens 32 Ereignisströme laufen gleichzeitig. Langsame Stream-Clients verlieren Ereignisse, die dann in einem einzigen `dropped`-Ereignis gemeldet werden; sie bremsen den Node nie aus.
 
 ## Beispiel
 
@@ -68,4 +68,4 @@ curl -s -H "Authorization: Bearer $VECTOLYN_TOKEN" http://127.0.0.1:8085/api/v1/
 
 ## Noch nicht verfügbar
 
-gRPC, GraphQL, Rollen und API-Schlüssel über Scopes hinaus sowie das Web-Panel sind geplant ([#154](https://github.com/VectoDE/VectolynCloud/issues/154), [#155](https://github.com/VectoDE/VectolynCloud/issues/155), [#156](https://github.com/VectoDE/VectolynCloud/issues/156), [#151](https://github.com/VectoDE/VectolynCloud/issues/151)).
+gRPC, GraphQL und das Web-Panel sind geplant ([#154](https://github.com/VectoDE/VectolynCloud/issues/154), [#155](https://github.com/VectoDE/VectolynCloud/issues/155), [#151](https://github.com/VectoDE/VectolynCloud/issues/151)).

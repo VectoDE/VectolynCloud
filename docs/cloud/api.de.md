@@ -19,12 +19,13 @@ api:
 
 ## Tokens
 
-Jede Anfrage braucht ein Token. Ohne Token, mit einem falschen oder einem widerrufenen kommt `401` mit `WWW-Authenticate: Bearer`. Einen Endpunkt ohne Anmeldung gibt es nicht.
+Jede Anfrage braucht ein Token. Ohne Token, mit einem falschen, widerrufenen oder abgelaufenen kommt `401` mit `WWW-Authenticate: Bearer`. Einen Endpunkt ohne Anmeldung gibt es nicht.
 
-Tokens verwaltet man an der Konsole des Nodes. Der ganze Befehl `api` gilt als sensibel, keine seiner Zeilen landet in der History.
+Tokens verwaltet man an der Konsole des Nodes oder mit einem `admin`-Token über `/api/v1/admin/tokens` (`GET` listet, `POST` erstellt, `DELETE /admin/tokens/{id}` widerruft). Der ganze Befehl `api` gilt als sensibel, keine seiner Zeilen landet in der History.
 
 ```text
 vectolyn> api token create dashboard services:read,config:read,node:read
+vectolyn> api token create ci services:read 90d    # gilt 90 Tage
 vectolyn> api token list
 vectolyn> api token revoke dashboard          # oder die ID; Aliase: delete, remove
 vectolyn> api scopes
@@ -35,6 +36,8 @@ vectolyn> api scopes
 - Eine Token-Datei, die sich nicht lesen lässt (fehlerhaft, ein Link, zu groß), hält den Node nicht auf. Mit `api.enabled: false` schreibt er eine Warnung ins Log, bei eingeschalteter API einen Fehler, und läuft dann ohne API weiter, so wie bei unbrauchbarem TLS-Material. `api token create`, `list` und `revoke` scheitern dann mit dem Grund (`secrets/api-tokens.json kann nicht gelesen werden (…)`) und versuchen es bei jedem Aufruf neu. Sobald die Datei repariert ist oder gelöscht wurde (dann ohne Tokens), funktionieren sie wieder. Die API selbst kommt mit dem nächsten Start des Nodes zurück.
 - Die Prüfung vergleicht den Hash in konstanter Zeit (`MessageDigest.isEqual`) mit allen gespeicherten Hashes und bricht beim ersten Treffer nicht ab.
 - Ein Widerruf wirkt sofort. Die nächste Anfrage scheitert, offene WebSockets dieses Tokens werden mit Code `1008` geschlossen.
+- **Laufzeit:** Ein Token kann eine Laufzeit von 1h bis 3650d bekommen (`12h`, `90d`). Ab `expires-at` scheitert es mit `401` wie ein widerrufenes, offene WebSockets schließen sich innerhalb von 15 Sekunden mit `1008`. In `list` bleibt es (als abgelaufen markiert), bis es widerrufen wird, damit sein Name nicht versehentlich neu vergeben wird. Ohne Laufzeit gilt ein Token, bis es widerrufen wird.
+- **Über die API:** `POST /api/v1/admin/tokens` mit `{"name": "ci", "scopes": ["services:read"], "expires-in": "90d"}` erstellt ein Token. Die Antwort ist die einzige Stelle, an der die API je ein Token zeigt. Ein vergebener Name oder das 101. Token ergibt `409 conflict`. Ein `admin`-Token kann weitere `admin`-Tokens erstellen. `admin` bekommt also nur, wer auch an die Konsole des Nodes darf.
 - Höchstens 100 Tokens. Namen folgen der Regel für Gruppennamen `[a-z0-9][a-z0-9_-]{0,31}`.
 - Wo das angezeigte Token landet: Der Befehl schreibt auf die Konsole, nicht ins Log. Logdateien und Journal bekommen es also nicht. Unter systemd hat die Cloud gar keine Konsole, lege Tokens dann in einer `tmux`- oder `screen`-Sitzung an ([Betrieb](operations.de.md)). In Docker ist die Konsole eines angehängten Containers (`docker attach`) seine Standardausgabe, `docker logs` behält das Token also. Leere oder rotiere diese Logs, oder widerrufe das Token und lege ein neues an, wenn die Logs geteilt werden.
 
@@ -51,11 +54,13 @@ Das Token geht als `Authorization: Bearer vct_...` mit. Browser können am WebSo
 | `backups:read` | Backups auflisten |
 | `backups:write` | Backup erstellen |
 | `node:read` | Node-Status |
-| `admin` | alles oben |
+| `admin` | alles oben und die Token-Verwaltung unter `/admin/tokens` |
 
 Ein Schreib-Scope schließt den Lese-Scope nicht ein. Fehlt der Scope, kommt `403 missing-scope`. Für Änderungen an `api` oder `database` in `cloud.yml` braucht es `admin`. Diese Abschnitte bestimmen, wer den Node erreicht und welches Image `docker compose` mit dem Root-Passwort der Datenbank startet.
 
-**Was die Schreib-Scopes erreichen.** `config:write` ist keine Shell auf dem Node: Die JVM-Flags begrenzt die [Allowlist](config.md#jvm-flag-allowlist), Templates sind Ordner im Cloud-Home, Software und Plugins kommen nur aus den Download-Quellen mit Prüfsumme. `services:write` darf jeden Konsolenbefehl an einen Server schicken, also so viel wie ein Operator an der Serverkonsole. Bieten Plugins Konsolenbefehle für Dateien oder Skripte, reicht das weiter. Diesen Scope bekommen nur Skripte, denen man auch die Serverkonsole geben würde. `GET /api/v1/tokens/self` geht mit jedem gültigen Token und zeigt ID, Name, Scopes und Erstellungszeit.
+**Was die Schreib-Scopes erreichen.** `config:write` ist keine Shell auf dem Node: Die JVM-Flags begrenzt die [Allowlist](config.md#jvm-flag-allowlist), Templates sind Ordner im Cloud-Home, Software und Plugins kommen nur aus den Download-Quellen mit Prüfsumme. `services:write` darf jeden Konsolenbefehl an einen Server schicken, also so viel wie ein Operator an der Serverkonsole. Bieten Plugins Konsolenbefehle für Dateien oder Skripte, reicht das weiter. Diesen Scope bekommen nur Skripte, denen man auch die Serverkonsole geben würde. `GET /api/v1/tokens/self` geht mit jedem gültigen Token und zeigt ID, Name, Scopes, Erstellungszeit und Ablauf.
+
+Die Rechteprüfung ist für jede Route und jeden Scope gegen einen laufenden Server getestet (`ScopeMatrixTest`): Ein Token mit einem Scope bekommt genau dort `403 missing-scope`, wo die Route einen anderen braucht, und `admin` kommt überall durch.
 
 ## Endpunkte
 

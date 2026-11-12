@@ -9,12 +9,18 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Path;
+import java.security.SecureRandom;
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.UnaryOperator;
 import net.vectolyn.cloud.api.auth.ApiTokens;
 import net.vectolyn.cloud.api.auth.Scope;
@@ -30,6 +36,8 @@ final class TestApi implements AutoCloseable {
     final ApiTokens tokens;
     final FakeBackend backend = new FakeBackend();
     final AtomicLong nanos = new AtomicLong(1_000_000_000L);
+    /** Wall clock of the token store (expiry); tests move it forward. */
+    final AtomicReference<Instant> now = new AtomicReference<>(Instant.parse("2026-11-01T10:00:00Z"));
     final ApiServer server;
     final InetSocketAddress address;
     final String admin;
@@ -42,10 +50,26 @@ final class TestApi implements AutoCloseable {
     TestApi(Path home, UnaryOperator<ApiSettings> settings) throws IOException, ConfigException {
         this.home = home;
         this.config = ConfigService.open(CloudHome.of(home));
-        this.tokens = ApiTokens.open(CloudHome.of(home));
+        this.tokens = ApiTokens.open(CloudHome.of(home).secretsDir().resolve(ApiTokens.FILE_NAME), new Clock() {
+            @Override
+            public ZoneId getZone() {
+                return ZoneOffset.UTC;
+            }
+
+            @Override
+            public Clock withZone(ZoneId zone) {
+                return this;
+            }
+
+            @Override
+            public Instant instant() {
+                return now.get();
+            }
+        }, new SecureRandom());
         this.admin = tokens.create("admin", EnumSet.of(Scope.ADMIN)).token().reveal();
         ApiSettings base = new ApiSettings("127.0.0.1", 0, Optional.empty(), List.of(), ApiLimits.defaults());
-        this.server = ApiServer.builder(config, backend, tokens).settings(settings.apply(base)).nanoTime(nanos::get).build();
+        this.server = ApiServer.builder(config, backend, tokens).settings(settings.apply(base)).nanoTime(nanos::get)
+                .expiryCheckMillis(200).build();
         this.address = server.start();
     }
 
