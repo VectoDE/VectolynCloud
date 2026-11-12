@@ -10,7 +10,7 @@ This page describes the module layout. Each module gets its content in its own p
 |---|---|---|
 | `common/protocol` | `net.vectolyn.protocol` | Wire format of the cloud channel. No dependencies at all, because it runs inside every proxy and server. See [protocol.md](protocol.md). |
 | `common/client` | `net.vectolyn.cloud.client` | Client side of the channel, used by the bridges and later by the Vectolyn plugin. Uses only the JDK for networking (no Netty, neither shaded nor the server's), reasons in [network.md](network.md#why-the-client-uses-plain-jdk-sockets-and-no-netty). |
-| `cloud/config` | `net.vectolyn.cloud.config` | Configuration model: `config/cloud.yml`, `config/groups/`, `config/tasks/`, `config/nodes.yml`, each with a `schema-version`, plus `secrets/vectolyn.env`. The API speaks JSON with the same model. `config.template` holds the path rules for template files (shared by the cluster mirror and the API) and their safe reading and writing. See [config.md](config.md). |
+| `cloud/config` | `net.vectolyn.cloud.config` | Configuration model: `config/cloud.yml`, `config/groups/`, `config/tasks/`, `config/nodes.yml`, each with a `schema-version`, plus `secrets/vectolyn.env`. Generates the JSON Schemas for editors, previews a change as a line diff and exports or imports the configuration as a zip file. The API speaks JSON with the same model. `config.template` holds the path rules for template files (shared by the cluster mirror and the API) and their safe reading and writing. See [config.md](config.md). |
 | `cloud/template` | `net.vectolyn.cloud.template` | Turns `<home>/local/templates/<Server>/default/` (from `templates/<Server>/`) into the service folder: placeholders, secrets, wanted and unwanted servers. See [template.md](template.md). |
 | `cloud/download` | `net.vectolyn.cloud.download` | Downloads server software, plugins, mods and JREs over HTTPS from an allowlist of hosts, verifies checksums, guards against zip slip. Owns `config/software.lock.yml`, the record of every resolved artifact with its hash. Its `jre` package picks and installs the Java runtime per group; `cloud/node` calls `JreManager`. See [download.md](download.md). |
 | `cloud/console` | `net.vectolyn.cloud.console` | Console: JLine terminal or plain stdin, command registry and parser, built-in commands (`help`, `shutdown`, `config`, `group`, `task`), question API for the setup assistant. See [console.md](console.md). |
@@ -139,6 +139,7 @@ The cloud keeps its data in files, not in a database. The home is the folder the
   VectolynCloud.jar
   config/            cloud.yml, nodes.yml, monitor.yml, privacy.yml, backup.yml, software.lock.yml
                      (+ <file>.v<N>.bak after a schema migration)
+    schema/          JSON Schemas of the files, for editors (written by the cloud)
     groups/          <group>.yml
     tasks/           <task>.yml
   local/

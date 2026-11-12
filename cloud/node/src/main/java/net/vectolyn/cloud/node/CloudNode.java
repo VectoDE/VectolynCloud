@@ -28,6 +28,7 @@ import net.vectolyn.cloud.api.backend.BackupServiceAccess;
 import net.vectolyn.cloud.api.console.ApiCommands;
 import net.vectolyn.cloud.backup.BackupException;
 import net.vectolyn.cloud.backup.BackupService;
+import net.vectolyn.cloud.backup.config.BackupConfigFile;
 import net.vectolyn.cloud.backup.command.BackupCommands;
 import net.vectolyn.cloud.backup.schedule.BackupScheduler;
 import net.vectolyn.cloud.cluster.ClusterCommands;
@@ -36,8 +37,11 @@ import net.vectolyn.cloud.cluster.ClusterService;
 import net.vectolyn.cloud.cluster.VersionPolicy;
 import net.vectolyn.cloud.config.CloudHome;
 import net.vectolyn.cloud.config.model.ApiConfig;
+import net.vectolyn.cloud.config.transfer.ConfigArchive;
 import net.vectolyn.cloud.monitor.MonitorRuntime;
+import net.vectolyn.cloud.monitor.config.MonitorConfigLoader;
 import net.vectolyn.cloud.privacy.IpBanStore;
+import net.vectolyn.cloud.privacy.PrivacyConfigLoader;
 import net.vectolyn.cloud.privacy.PrivacyRuntime;
 import net.vectolyn.cloud.node.ops.NodeApi;
 import net.vectolyn.cloud.node.ops.NodeBackups;
@@ -980,7 +984,10 @@ public final class CloudNode implements AutoCloseable {
             }
             root.addHandler(logHandler);
         }
-        BuiltinCommands.register(console, config, this::close);
+        BuiltinCommands.register(console, config, this::close, List.of(
+                new ConfigArchive.ExtraFile(CloudHome.MONITOR_FILE, MonitorConfigLoader::parse),
+                new ConfigArchive.ExtraFile(CloudHome.PRIVACY_FILE, PrivacyConfigLoader::parse),
+                new ConfigArchive.ExtraFile(CloudHome.BACKUP_FILE, BackupConfigFile::parse)));
         serviceCommands = new ServiceCommands(services, config, channel::status, console.output());
         services.addListener(serviceCommands);
         console.commands().register(serviceCommands.command());
