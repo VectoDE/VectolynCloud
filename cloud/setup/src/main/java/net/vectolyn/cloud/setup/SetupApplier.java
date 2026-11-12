@@ -139,7 +139,7 @@ final class SetupApplier {
             throw (RuntimeException) e;
         }
         if (first) {
-            return new SetupResult(SetupResult.Status.COMPLETED, files);
+            return new SetupResult(SetupResult.Status.COMPLETED, files, answers.adminName());
         }
         return new SetupResult(files.isEmpty() ? SetupResult.Status.UNCHANGED : SetupResult.Status.CHANGED, files);
     }

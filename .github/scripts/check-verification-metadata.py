@@ -21,7 +21,7 @@ Only the Python standard library is used. Exit code 0 means accepted.
 
 import re
 import sys
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as ET  # nosemgrep: python.lang.security.use-defused-xml.use-defused-xml -- the body has no DOCTYPE, entity or comment (rejected in load) and is limited to MAX_BYTES
 
 NS = "{https://schema.gradle.org/dependency-verification}"
 MAX_BYTES = 5_000_000
@@ -51,7 +51,7 @@ def load(path):
         if token in body:
             raise Rejected(f"{path}: contains {token!r} (DOCTYPE, entity, comment, CDATA or processing instruction)")
     try:
-        root = ET.fromstring(body)
+            root = ET.fromstring(body)
     except ET.ParseError as exc:
         raise Rejected(f"{path}: not well-formed XML ({exc})") from None
     return root

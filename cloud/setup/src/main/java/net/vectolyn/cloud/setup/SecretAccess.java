@@ -96,6 +96,7 @@ public final class SecretAccess {
         }
         Process process;
         try {
+            // nosemgrep: java.lang.security.audit.command-injection-process-builder.command-injection-process-builder -- whoami by its full path in System32 with fixed arguments, no shell
             process = new ProcessBuilder(whoami.toString(), "/groups", "/fo", "csv", "/nh")
                     .redirectErrorStream(true)
                     .start();

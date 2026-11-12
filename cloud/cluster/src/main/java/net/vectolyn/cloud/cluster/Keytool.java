@@ -56,6 +56,7 @@ final class Keytool {
         List<String> command = new ArrayList<>();
         command.add(keytool.toString());
         command.addAll(arguments);
+        // nosemgrep: java.lang.security.audit.command-injection-process-builder.command-injection-process-builder -- keytool by its full path from the running JDK, arguments are separate list elements, no shell
         ProcessBuilder builder = new ProcessBuilder(command).redirectErrorStream(true);
         Map<String, String> environment = builder.environment();
         // Nothing of the cloud's own JVM options (an agent, a class path) reaches the process that

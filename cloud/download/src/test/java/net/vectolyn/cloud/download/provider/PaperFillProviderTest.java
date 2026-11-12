@@ -61,6 +61,22 @@ class PaperFillProviderTest {
     }
 
     @Test
+    void stableVersionsListsOnlyWantedVersionsWithAStableBuild() throws Exception {
+        String project = "{\"project\":{\"id\":\"paper\",\"name\":\"Paper\"},\"versions\":{\"26\":[\"26.4\",\"26.3\",\"26.2\",\"26.1\"],"
+                + "\"1.21\":[\"1.21.11\"]}}";
+        String stable = new String(FakeTransport.resource("fill-paper-builds-26.3.json"), java.nio.charset.StandardCharsets.UTF_8);
+        FakeTransport transport = new FakeTransport()
+                .ok(FILL + "paper", project)
+                .ok(FILL + "paper/versions/26.3/builds?channel=STABLE", stable)
+                .ok(FILL + "paper/versions/26.2/builds?channel=STABLE", "[]")
+                .ok(FILL + "paper/versions/26.1/builds?channel=STABLE", stable);
+        // 26.4 and 1.21.11 are not wanted, so they are never requested (the fake answers 404 for them).
+        java.util.List<String> versions = new PaperFillProvider(FakeTransport.client(transport))
+                .stableVersions("paper", v -> v.startsWith("26.") && !v.equals("26.4"));
+        assertEquals(java.util.List.of("26.3", "26.1"), versions);
+    }
+
+    @Test
     void unknownBuildIsNotAvailable() {
         FakeTransport transport = new FakeTransport().status(FILL + "paper/versions/26.3/builds/9999", 404);
         assertThrows(ArtifactNotAvailableException.class, () -> new PaperFillProvider(FakeTransport.client(transport))

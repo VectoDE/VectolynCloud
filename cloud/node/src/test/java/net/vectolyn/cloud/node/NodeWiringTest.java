@@ -196,6 +196,60 @@ class NodeWiringTest {
     }
 
     @Test
+    void theFirstSetupShowsASetupTokenOnceAndASecondStartRunsTheNetworkWithoutQuestions() throws Exception {
+        NodeFixture fixture = NodeFixture.create(dir, false, List.of());
+        Path answers = dir.resolve("setup.yml");
+        Files.writeString(answers, SETUP_FILE.formatted("true") + "admin-name: owner\n");
+        ByteArrayOutputStream firstScreen = new ByteArrayOutputStream();
+        java.io.PipedOutputStream firstKeys = new java.io.PipedOutputStream();
+        Console firstConsole = Console.builder().terminal(new PlainTerminal(new java.io.PipedInputStream(firstKeys),
+                new PrintStream(firstScreen, true, StandardCharsets.UTF_8))).build();
+        CloudNode node = CloudNode.open(fixture.settings(Map.of("non-interactive", "true", "setup-file", answers.toString())),
+                fixture.options().andThen(o -> o.console(firstConsole)));
+        String setupToken;
+        try {
+            node.start();
+            assertEquals(java.util.Optional.of(SetupResult.Status.COMPLETED), node.setupStatus());
+            String text = firstScreen.toString(StandardCharsets.UTF_8);
+            java.util.regex.Matcher shown = java.util.regex.Pattern.compile("vcs_[A-Za-z0-9_-]{43}").matcher(text);
+            assertTrue(shown.find(), text);
+            setupToken = shown.group();
+            assertFalse(shown.find(), "shown exactly once");
+            assertTrue(text.contains("administrator owner") && text.contains("/api/v1/setup/claim"), text);
+            String stored = Files.readString(fixture.home.resolve("secrets/setup-token.json"));
+            assertFalse(stored.contains(setupToken.substring(4)), "only the hash is stored");
+        } finally {
+            node.close();
+            firstKeys.close();
+        }
+        assertEquals("owner", net.vectolyn.cloud.api.auth.ApiTokens.open(
+                net.vectolyn.cloud.config.CloudHome.of(fixture.home)).setupAdmin(setupToken).orElseThrow());
+
+        // Second start, interactive and without a setup file: no question, the network starts, the console reads.
+        ByteArrayOutputStream screen = new ByteArrayOutputStream();
+        java.io.PipedOutputStream keys = new java.io.PipedOutputStream();
+        Console console = Console.builder().terminal(new PlainTerminal(new java.io.PipedInputStream(keys),
+                new PrintStream(screen, true, StandardCharsets.UTF_8))).build();
+        CloudNode again = CloudNode.open(fixture.settings(), fixture.options().andThen(o -> o.console(console)));
+        try {
+            again.start();
+            assertEquals(java.util.Optional.of(SetupResult.Status.ALREADY_COMPLETE), again.setupStatus());
+            NodeFixture.await("lobby-1 running", () -> NodeEndToEndTest.state(again, new ServiceId("lobby-1"))
+                    == ServiceState.RUNNING);
+            keys.write("service list\n".getBytes(StandardCharsets.UTF_8));
+            keys.flush();
+            NodeFixture.await("the console answers", () -> screen.toString(StandardCharsets.UTF_8).contains("lobby-1"));
+            assertTrue(console.isRunning(), "the console stays open");
+            String text = screen.toString(StandardCharsets.UTF_8);
+            assertFalse(text.contains("Language / Sprache") || text.contains("EULA"), "no setup question: " + text);
+            assertFalse(text.contains("vcs_"), "no new setup token");
+        } finally {
+            again.close();
+            keys.close();
+        }
+    }
+
+    @Test
     void aDeclinedEulaOrMissingAnswersStartNothingUntilTheSetupIsDone() throws Exception {
         NodeFixture fixture = NodeFixture.create(dir, false, List.of());
         Path answers = dir.resolve("setup.yml");

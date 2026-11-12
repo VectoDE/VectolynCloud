@@ -47,7 +47,8 @@ class NodeStartTest {
     void anIncompleteSetupCreatesSecretsButStartsNoServer(@TempDir Path dir) throws Exception {
         NodeSettings settings = NodeSettings.parse(Map.of("home", dir.toAbsolutePath().toString()));
         CloudNode node = CloudNode.open(settings, options -> options.noConsole()
-                .network(network -> network.withAddress("127.0.0.1", 0)));
+                .network(network -> network.withAddress("127.0.0.1", 0))
+                .minecraftVersions(java.util.List::of));
         try {
             assertTrue(Files.isRegularFile(dir.resolve("secrets").resolve("vectolyn.env")), "secrets generated");
             node.start();

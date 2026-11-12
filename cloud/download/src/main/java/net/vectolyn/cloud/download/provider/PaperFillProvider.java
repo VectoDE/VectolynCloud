@@ -113,6 +113,43 @@ public final class PaperFillProvider implements ArtifactProvider {
                 + " in its newest " + MAX_VERSIONS_TRIED + " versions");
     }
 
+    /**
+     * The versions of {@code project} that {@code wanted} accepts and that have at least one
+     * {@code STABLE} build, newest first as Fill lists them. Asks Fill for the builds of at most
+     * {@value #MAX_VERSIONS_TRIED} accepted versions, so a long list costs a bounded number of requests.
+     * The setup assistant uses it for its Minecraft version question ({@code docs/cloud/setup.md}).
+     *
+     * @param project the Fill project, for example {@code paper}
+     * @param wanted  which version names to look at; versions it rejects are not requested
+     * @return the stable versions, newest first; empty if none of the checked ones has a stable build
+     * @throws IOException          if Fill cannot be reached or answers malformed
+     * @throws InterruptedException if interrupted while waiting
+     */
+    public List<String> stableVersions(String project, java.util.function.Predicate<String> wanted)
+            throws IOException, InterruptedException {
+        Objects.requireNonNull(wanted, "wanted");
+        String name = ApiSupport.segment(project, "project");
+        byte[] body = ApiSupport.fetchJson(client, URI.create(API + name), HOSTS, "Fill project " + name);
+        List<String> stable = new ArrayList<>();
+        int tried = 0;
+        for (String version : parseProjectVersions(body)) {
+            if (!wanted.test(version)) {
+                continue;
+            }
+            if (++tried > MAX_VERSIONS_TRIED) {
+                break;
+            }
+            String v = ApiSupport.apiSegment(version, "Fill project version");
+            List<FillBuild> builds = parseBuilds(ApiSupport.fetchJson(client, URI.create(API + name + "/versions/" + v
+                    + "/builds" + ApiSupport.query(Map.of("channel", DEFAULT_CHANNEL))), HOSTS,
+                    "Fill builds of " + name + " " + version));
+            if (builds.stream().anyMatch(b -> b.channel().equalsIgnoreCase(DEFAULT_CHANNEL))) {
+                stable.add(version);
+            }
+        }
+        return List.copyOf(stable);
+    }
+
     private ResolvedArtifact toArtifact(String project, FillVersion version, FillBuild build)
             throws IOException {
         FillDownload download = build.downloads().get(DOWNLOAD_KEY);

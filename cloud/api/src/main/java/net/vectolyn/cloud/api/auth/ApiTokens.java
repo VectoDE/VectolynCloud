@@ -56,6 +56,13 @@ import tools.jackson.databind.json.JsonMapper;
  * <p>Thread-safe. The console ({@code api token create|list|revoke}) and the API server share one
  * instance; a revoked token stops working at once and its WebSocket connections are closed
  * ({@link #onRevoke}).
+ *
+ * <p>The store also holds at most one <em>setup token</em> ({@link #issueSetupToken}): {@code vcs_}
+ * and 43 characters, made at the end of the first setup for the first administrator. It is shown
+ * once, only its SHA-256 and its expiry are kept in {@code secrets/setup-token.json}, and it does
+ * exactly one thing: {@code POST /api/v1/setup/claim} exchanges it, once, for an API token with
+ * {@link Scope#ADMIN} named after that administrator ({@link #claimSetupToken}). A new setup token
+ * replaces the old one. There is no default password anywhere.
  */
 public final class ApiTokens {
 
@@ -76,7 +83,17 @@ public final class ApiTokens {
 
     private static final Pattern LIFETIME = Pattern.compile("([1-9][0-9]{0,5})([hd])");
 
+    /** Prefix of the one-time setup token. */
+    public static final String SETUP_PREFIX = "vcs_";
+    /** File name of the setup token in {@code secrets/}. */
+    public static final String SETUP_FILE_NAME = "setup-token.json";
+    /** How long a setup token is valid unless the caller says otherwise. */
+    public static final Duration SETUP_TOKEN_TTL = Duration.ofHours(24);
+    /** Longest validity of a setup token. */
+    public static final Duration MAX_SETUP_TOKEN_TTL = Duration.ofDays(7);
+
     private static final int RANDOM_BYTES = 32;
+    private static final Pattern SETUP_TOKEN = Pattern.compile("vcs_[A-Za-z0-9_-]{43}");
     private static final Pattern TOKEN = Pattern.compile("vct_[A-Za-z0-9_-]{43}");
     private static final Pattern ID = Pattern.compile("[0-9a-f]{8}");
     private static final Pattern HASH = Pattern.compile("[0-9a-f]{64}");
@@ -95,12 +112,14 @@ public final class ApiTokens {
     private final AtomicFileWriter writer = new AtomicFileWriter();
     private final List<Consumer<ApiToken>> revokeListeners = new CopyOnWriteArrayList<>();
     private volatile List<Entry> entries;
+    private volatile SetupEntry setup;
 
-    private ApiTokens(Path file, Clock clock, SecureRandom random, List<Entry> entries) {
+    private ApiTokens(Path file, Clock clock, SecureRandom random, List<Entry> entries, SetupEntry setup) {
         this.file = file;
         this.clock = clock;
         this.random = random;
         this.entries = List.copyOf(entries);
+        this.setup = setup;
     }
 
     /**
@@ -134,7 +153,46 @@ public final class ApiTokens {
             }
             entries.addAll(parse(Files.readAllBytes(file)));
         }
-        return new ApiTokens(file, clock, random, entries);
+        Path setupFile = file.resolveSibling(SETUP_FILE_NAME);
+        RegularPaths.requireFileOrMissing(setupFile);
+        SetupEntry setup = null;
+        if (Files.exists(setupFile)) {
+            if (Files.size(setupFile) > MAX_FILE_BYTES) {
+                throw new IOException(SETUP_FILE_NAME + " is larger than " + MAX_FILE_BYTES + " bytes");
+            }
+            setup = parseSetup(Files.readAllBytes(setupFile));
+        }
+        return new ApiTokens(file, clock, random, entries, setup);
+    }
+
+    /**
+     * Reads the content of a setup token file.
+     *
+     * @param content the bytes of the file
+     * @return the entry
+     * @throws IOException if the content is malformed; the message never contains a value of the file
+     */
+    static SetupEntry parseSetup(byte[] content) throws IOException {
+        SetupFile parsed;
+        try {
+            parsed = JSON.readValue(content, SetupFile.class);
+        } catch (JacksonException e) {
+            throw new IOException(SETUP_FILE_NAME + " is not a valid setup token file (unknown field, wrong type or broken JSON)");
+        }
+        if (parsed == null || parsed.schemaVersion() != SCHEMA_VERSION || parsed.token() == null) {
+            throw new IOException(SETUP_FILE_NAME + ": schema-version must be " + SCHEMA_VERSION + " and token must be set");
+        }
+        SetupEntry entry = parsed.token();
+        if (entry.admin() == null || !ConfigNames.isValidName(entry.admin())) {
+            throw new IOException(SETUP_FILE_NAME + ": token.admin must match " + ConfigNames.NAME);
+        }
+        if (entry.sha256() == null || !HASH.matcher(entry.sha256()).matches()) {
+            throw new IOException(SETUP_FILE_NAME + ": token.sha256 must be 64 lower-case hex characters");
+        }
+        if (!isInstant(entry.expiresAt())) {
+            throw new IOException(SETUP_FILE_NAME + ": token.expires-at must be an ISO-8601 instant");
+        }
+        return entry;
     }
 
     /**
@@ -253,6 +311,117 @@ public final class ApiTokens {
         save(next);
         entries = List.copyOf(next);
         return new Created(Secret.of(token), entry.toToken());
+    }
+
+    /**
+     * Makes the one-time setup token for the first administrator and replaces an earlier one. The
+     * returned {@link SetupToken#token()} is the only copy; the file keeps its SHA-256 and expiry.
+     *
+     * @param admin name of the administrator, {@code [a-z0-9][a-z0-9_-]{0,31}}; the claimed API token
+     *              gets this name (with {@code -2}, {@code -3}, ... if it is taken)
+     * @param ttl   how long it is valid, more than zero and at most {@link #MAX_SETUP_TOKEN_TTL}
+     * @return the token, the administrator and when it expires
+     * @throws IllegalArgumentException if the name or the validity is out of range
+     * @throws IOException              if the file cannot be written; then no setup token is valid
+     */
+    public synchronized SetupToken issueSetupToken(String admin, Duration ttl) throws IOException {
+        if (admin == null || !ConfigNames.isValidName(admin)) {
+            throw new IllegalArgumentException("admin must match " + ConfigNames.NAME);
+        }
+        if (ttl == null || ttl.isNegative() || ttl.isZero() || ttl.compareTo(MAX_SETUP_TOKEN_TTL) > 0) {
+            throw new IllegalArgumentException("ttl must be more than zero and at most " + MAX_SETUP_TOKEN_TTL);
+        }
+        byte[] bytes = new byte[RANDOM_BYTES];
+        random.nextBytes(bytes);
+        String token = SETUP_PREFIX + Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+        Instant expires = clock.instant().plus(ttl);
+        SetupEntry entry = new SetupEntry(admin, expires.toString(), HexFormat.of().formatHex(sha256(token)));
+        // The old token stops working before the new file is written, so a failed write leaves none.
+        setup = null;
+        Path target = setupFile();
+        prepareDirectory();
+        RegularPaths.requireFileOrMissing(target);
+        writer.write(target, JSON.writeValueAsBytes(new SetupFile(SCHEMA_VERSION, entry)), OwnerOnlyPermissions::restrictFile);
+        OwnerOnlyPermissions.restrictFile(target);
+        setup = entry;
+        return new SetupToken(Secret.of(token), admin, expires);
+    }
+
+    /**
+     * Checks a setup token presented by a client, without using it up.
+     *
+     * @param presented the text after {@code Bearer }, may be anything
+     * @return the administrator it is for, if it is the current setup token and not expired
+     */
+    public Optional<String> setupAdmin(String presented) {
+        SetupEntry current = setup;
+        if (current == null || presented == null || !SETUP_TOKEN.matcher(presented).matches()) {
+            return Optional.empty();
+        }
+        boolean equal = MessageDigest.isEqual(sha256(presented), HexFormat.of().parseHex(current.sha256()));
+        if (!equal || !clock.instant().isBefore(Instant.parse(current.expiresAt()))) {
+            return Optional.empty();
+        }
+        return Optional.of(current.admin());
+    }
+
+    /**
+     * Exchanges the setup token, once, for an API token with {@link Scope#ADMIN}. The setup token
+     * is removed first, so it can never be used twice; if the API token cannot be written afterwards,
+     * a new setup token is needed ({@code api token setup}).
+     *
+     * @param presented the setup token
+     * @return the new API token, or empty if {@code presented} is not a valid, unexpired setup token
+     * @throws IOException if a file cannot be written
+     */
+    public synchronized Optional<Created> claimSetupToken(String presented) throws IOException {
+        Optional<String> admin = setupAdmin(presented);
+        if (admin.isEmpty()) {
+            return Optional.empty();
+        }
+        setup = null;
+        Files.deleteIfExists(setupFile());
+        List<Entry> current = entries;
+        String name = admin.get();
+        for (int i = 2; taken(current, name); i++) {
+            name = candidate(admin.get(), i);
+        }
+        return Optional.of(create(name, EnumSet.of(Scope.ADMIN)));
+    }
+
+    /**
+     * When the current setup token expires.
+     *
+     * @return the expiry, or empty if there is no setup token
+     */
+    public Optional<Instant> setupTokenExpiry() {
+        SetupEntry current = setup;
+        return current == null ? Optional.empty() : Optional.of(Instant.parse(current.expiresAt()));
+    }
+
+    private static boolean taken(List<Entry> list, String name) {
+        return list.stream().anyMatch(e -> e.name().equals(name));
+    }
+
+    /** {@code admin} for the first try, then {@code admin-2}, ... cut so the name stays valid. */
+    private static String candidate(String admin, int number) {
+        if (number == 1) {
+            return admin;
+        }
+        String suffix = "-" + number;
+        String head = admin.length() + suffix.length() > 32 ? admin.substring(0, 32 - suffix.length()) : admin;
+        return head + suffix;
+    }
+
+    private Path setupFile() {
+        return file.resolveSibling(SETUP_FILE_NAME);
+    }
+
+    private void prepareDirectory() throws IOException {
+        Path dir = file.getParent();
+        RegularPaths.requireDirectoryOrMissing(dir);
+        Files.createDirectories(dir);
+        OwnerOnlyPermissions.restrictDirectory(dir);
     }
 
     /**
@@ -375,11 +544,8 @@ public final class ApiTokens {
     }
 
     private void save(List<Entry> next) throws IOException {
-        Path dir = file.getParent();
-        RegularPaths.requireDirectoryOrMissing(dir);
-        Files.createDirectories(dir);
+        prepareDirectory();
         RegularPaths.requireFileOrMissing(file);
-        OwnerOnlyPermissions.restrictDirectory(dir);
         byte[] content = JSON.writeValueAsBytes(new TokenFile(SCHEMA_VERSION, next));
         writer.write(file, content, OwnerOnlyPermissions::restrictFile);
         OwnerOnlyPermissions.restrictFile(file);
@@ -416,6 +582,26 @@ public final class ApiTokens {
      * @param info  its description
      */
     public record Created(Secret token, ApiToken info) {
+    }
+
+    /**
+     * A new setup token.
+     *
+     * @param token     the token; shown once, never stored
+     * @param admin     the administrator it is for
+     * @param expiresAt when it stops working
+     */
+    public record SetupToken(Secret token, String admin, Instant expiresAt) {
+    }
+
+    /** Content of the setup token file. */
+    @JsonPropertyOrder({"schema-version", "token"})
+    record SetupFile(int schemaVersion, SetupEntry token) {
+    }
+
+    /** The stored setup token. */
+    @JsonPropertyOrder({"admin", "expires-at", "sha256"})
+    record SetupEntry(String admin, String expiresAt, String sha256) {
     }
 
     /** Content of the token file. */

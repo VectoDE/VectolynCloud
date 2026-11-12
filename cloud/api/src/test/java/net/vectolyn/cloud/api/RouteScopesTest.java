@@ -52,8 +52,9 @@ class RouteScopesTest {
                 }
             }
         }
-        // The event stream checks a scope per event type on the handshake (EventStreamTest).
-        assertEquals(List.of("GET /api/v1/tokens/self", "GET /api/v1/events"), unscoped,
-                "only a token describing itself and the event stream need no route scope");
+        // A token describing itself; the setup claim (an API token gets 403 there, only the setup token
+        // passes); the event stream, which checks a scope per event type on the handshake (EventStreamTest).
+        assertEquals(List.of("GET /api/v1/tokens/self", "POST /api/v1/setup/claim", "GET /api/v1/events"),
+                unscoped, "only these three need no route scope");
     }
 }

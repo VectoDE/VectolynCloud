@@ -1,0 +1,7 @@
+# OSV-Scanner configuration. An advisory is only allowed here with a reason and an expiry date;
+# after the date the scan reports it again and somebody has to decide again.
+
+[[IgnoredVulns]]
+id = "GHSA-j288-q9x7-2f5v"
+ignoreUntil = 2027-05-12
+reason = "commons-lang 2.6 (CVE-2025-48924): pandaspigot-api needs it at test runtime for the Bukkit 1.8.8 classes. The 2.x line has no fixed release, it is in no shipped jar. See docs/dependency-verification.md."
