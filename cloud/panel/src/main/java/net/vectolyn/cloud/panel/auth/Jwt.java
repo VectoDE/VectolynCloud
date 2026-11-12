@@ -31,6 +31,8 @@ import net.vectolyn.cloud.api.http.ApiJson;
  * @param signed    the bytes the signature covers ({@code header.payload})
  * @param signature the signature bytes
  */
+// The signed bytes and the signature go to Signature.update/verify as they are; a List would only cost memory.
+@SuppressWarnings("ArrayRecordComponent")
 public record Jwt(Map<String, Object> header, Map<String, Object> claims, byte[] signed, byte[] signature) {
 
     private static final int MAX_LENGTH = 16 * 1024;
@@ -42,6 +44,10 @@ public record Jwt(Map<String, Object> header, Map<String, Object> claims, byte[]
 
         JwtException(String message) {
             super(message);
+        }
+
+        JwtException(String message, Throwable cause) {
+            super(message, cause);
         }
     }
 
@@ -71,9 +77,9 @@ public record Jwt(Map<String, Object> header, Map<String, Object> claims, byte[]
             return new Jwt(header, claims, (parts[0] + "." + parts[1]).getBytes(StandardCharsets.US_ASCII),
                     decoder.decode(parts[2]));
         } catch (IllegalArgumentException e) {
-            throw new JwtException("not Base64url");
+            throw new JwtException("not Base64url", e);
         } catch (RuntimeException e) {
-            throw new JwtException("header or payload is not JSON");
+            throw new JwtException("header or payload is not JSON", e);
         }
     }
 

@@ -18,6 +18,10 @@ dependencies {
     implementation(libs.mariadb.java.client)
     // Mode postgresql: an operator's PostgreSQL server (BSD-2-Clause).
     implementation(libs.postgresql)
+    // pgjdbc's package-info carries Checker Framework annotations (@DefaultQualifier). NullAway reads
+    // them, and without the annotation classes javac warns [classfile], which -Werror turns into an
+    // error. Compile only: pgjdbc brings the same jar at runtime.
+    compileOnly(libs.checker.qual)
 
     // Only to check that the generated compose file is valid YAML.
     testImplementation(platform(libs.jackson.bom))
@@ -44,6 +48,8 @@ val mariadbTest by tasks.registering(Test::class) {
     // Keeps the downloaded archive between local runs; CI starts empty.
     systemProperty("vectolyn.mariadb.cache", layout.buildDirectory.dir("mariadb-cache").get().asFile.absolutePath)
     providers.gradleProperty("mariadbVersion").orNull?.let { systemProperty("vectolyn.mariadb.version", it) }
+    // Downloading and starting a real MariaDB takes longer than the default limit of five minutes.
+    systemProperty("junit.jupiter.execution.timeout.default", "20m")
     outputs.upToDateWhen { false }
     outputs.cacheIf { false }
 }

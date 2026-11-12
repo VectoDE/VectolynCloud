@@ -48,6 +48,7 @@ import net.vectolyn.cloud.config.operation.SetProxy;
 import net.vectolyn.cloud.config.operation.SetServerWanted;
 import net.vectolyn.cloud.config.operation.SetTaskScaling;
 import net.vectolyn.cloud.config.validation.ConfigNames;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Turns {@link SetupAnswers} into configuration operations, and the current configuration into the
@@ -97,7 +98,7 @@ public final class SetupPlan {
         }
         Map<String, Boolean> switches = new TreeMap<>();
         for (String group : groupsOf(snapshot, NetworkServer.MINIGAME)) {
-            switches.put(group, snapshot.groups().get(group).wantedOrDefault());
+            switches.put(group, group(snapshot, group).wantedOrDefault());
         }
         ProxyConfig proxy = cloud.proxy() == null ? ProxyConfig.defaults() : cloud.proxy();
         int javaPort = first && env.serverPort().isPresent() ? env.serverPort().getAsInt() : proxy.port();
@@ -109,7 +110,7 @@ public final class SetupPlan {
                 heap.put(newGroupName(snapshot, server), server.defaultHeap());
             }
             for (String group : groups) {
-                HeapConfig current = snapshot.groups().get(group).heap();
+                HeapConfig current = group(snapshot, group).heap();
                 heap.put(group, current == null || current.max() == null ? server.defaultHeap() : current.max());
             }
         }
@@ -219,7 +220,7 @@ public final class SetupPlan {
                 continue;
             }
             for (String group : groupsOf(snapshot, server)) {
-                String version = snapshot.groups().get(group).minecraftVersion();
+                String version = group(snapshot, group).minecraftVersion();
                 if (MinecraftVersions.supported(version)) {
                     return version;
                 }
@@ -243,11 +244,16 @@ public final class SetupPlan {
     }
 
     /** {@code answer} if the operator changed it from {@code shown}, else {@code fresh} if there is one. */
-    private static <T> T pick(T answer, T shown, T fresh, boolean hasFresh) {
+    private static <T> @Nullable T pick(@Nullable T answer, @Nullable T shown, @Nullable T fresh, boolean hasFresh) {
         return Objects.equals(answer, shown) && hasFresh ? fresh : answer;
     }
 
-    private static MemoryReserve orNone(MemoryReserve reserve) {
+    /** A group that {@code groupsOf} or the answers named, so it exists in {@code snapshot}. */
+    private static GroupConfig group(ConfigSnapshot snapshot, String name) {
+        return Objects.requireNonNull(snapshot.groups().get(name), "group " + name);
+    }
+
+    private static MemoryReserve orNone(@Nullable MemoryReserve reserve) {
         return reserve == null ? new MemoryReserve(null, null, null) : reserve;
     }
 
@@ -362,14 +368,14 @@ public final class SetupPlan {
             }
             for (String group : existing) {
                 MemorySize max = answers.heap().get(group);
-                HeapConfig heap = current.groups().get(group).heap();
+                HeapConfig heap = group(current, group).heap();
                 if (max != null && (heap == null || !max.equals(heap.max()))) {
                     MemorySize min = heap == null || heap.min() == null ? initialHeap(max) : smaller(heap.min(), max);
                     ops.add(new SetGroupHeap(group, min, max));
                 }
                 TimeSpan drain = answers.drainTimeouts().get(group);
                 // The defaults hold every value of the files, so a missing entry was removed on purpose.
-                if (!Objects.equals(drain, current.groups().get(group).drainTimeout())) {
+                if (!Objects.equals(drain, group(current, group).drainTimeout())) {
                     ops.add(new SetGroupDrainTimeout(group, drain));
                 }
             }

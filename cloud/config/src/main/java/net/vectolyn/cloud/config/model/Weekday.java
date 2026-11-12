@@ -28,7 +28,15 @@ public enum Weekday {
      * @return the day
      */
     public DayOfWeek day() {
-        return DayOfWeek.of(ordinal() + 1);
+        return switch (this) {
+            case MON -> DayOfWeek.MONDAY;
+            case TUE -> DayOfWeek.TUESDAY;
+            case WED -> DayOfWeek.WEDNESDAY;
+            case THU -> DayOfWeek.THURSDAY;
+            case FRI -> DayOfWeek.FRIDAY;
+            case SAT -> DayOfWeek.SATURDAY;
+            case SUN -> DayOfWeek.SUNDAY;
+        };
     }
 
     /**
@@ -38,6 +46,14 @@ public enum Weekday {
      * @return the weekday
      */
     public static Weekday of(DayOfWeek day) {
-        return values()[day.getValue() - 1];
+        return switch (day) {
+            case MONDAY -> MON;
+            case TUESDAY -> TUE;
+            case WEDNESDAY -> WED;
+            case THURSDAY -> THU;
+            case FRIDAY -> FRI;
+            case SATURDAY -> SAT;
+            case SUNDAY -> SUN;
+        };
     }
 }

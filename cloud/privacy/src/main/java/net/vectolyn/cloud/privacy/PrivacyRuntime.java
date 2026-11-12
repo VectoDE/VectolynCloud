@@ -16,6 +16,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import net.vectolyn.cloud.config.CloudHome;
 import net.vectolyn.cloud.config.error.ConfigException;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Everything data protection needs, put together from {@code privacy.yml}: the {@link IpBanStore}
@@ -32,7 +33,7 @@ public final class PrivacyRuntime implements AutoCloseable {
     private final Telemetry telemetry;
     private final TrackingStore tracking;
     private final PrivacyRequests requests;
-    private ScheduledExecutorService scheduler;
+    private @Nullable ScheduledExecutorService scheduler;
 
     private PrivacyRuntime(PrivacyConfig config, IpBanStore ipBans, StatisticsCollector statistics,
                            Telemetry telemetry, TrackingStore tracking) {
@@ -161,11 +162,12 @@ public final class PrivacyRuntime implements AutoCloseable {
     }
 
     /** Starts the hourly deletion. Calling it twice has no effect. */
+    @SuppressWarnings("FutureReturnValueIgnored") // the scheduler is shut down in close(); every task catches its failures
     public synchronized void start() {
         if (scheduler != null) {
             return;
         }
-        scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "privacy-purge");
             t.setDaemon(true);
             return t;
@@ -209,6 +211,7 @@ public final class PrivacyRuntime implements AutoCloseable {
                 }
             }, 1, 24, TimeUnit.HOURS);
         }
+        this.scheduler = scheduler;
     }
 
     @Override

@@ -119,7 +119,7 @@ public final class HistoryStore {
         if (Files.exists(file, LinkOption.NOFOLLOW_LINKS) && !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) {
             return;
         }
-        Files.createDirectories(file.getParent());
+        Files.createDirectories(Objects.requireNonNull(file.getParent(), "parent folder"));
         writer.write(file, HistoryFile.encode(trim(content, now)));
     }
 

@@ -55,9 +55,8 @@ class PrometheusTest {
             assertTrue(text.contains("vectolyn_alerts_active{severity=\"critical\"} 1\n"), text);
             assertTrue(text.contains("vectolyn_alerts_active{severity=\"warning\"} 0\n"), text);
             assertTrue(text.endsWith("\n"));
-            for (String line : text.split("\n")) {
-                assertTrue(line.startsWith("# ") || line.matches("[a-z_]+(\\{[^}]*\\})? [0-9.]+"), line);
-            }
+            text.lines().forEach(line ->
+                    assertTrue(line.startsWith("# ") || line.matches("[a-z_]+(\\{[^}]*\\})? [0-9.]+"), line));
         }
     }
 
@@ -72,9 +71,11 @@ class PrometheusTest {
             assertEquals(List.of(new Monitor.ScalingCount("bedwars", "minigame", 1, 0),
                     new Monitor.ScalingCount("lobby", "lobby", 2, 1)), monitor.scalingCounts());
             String text = PrometheusFormat.render(monitor);
-            assertTrue(text.contains("# TYPE vectolyn_scaling_ups_total counter\n"
-                    + "vectolyn_scaling_ups_total{task=\"bedwars\",group=\"minigame\"} 1\n"
-                    + "vectolyn_scaling_ups_total{task=\"lobby\",group=\"lobby\"} 2\n"), text);
+            assertTrue(text.contains("""
+                    # TYPE vectolyn_scaling_ups_total counter
+                    vectolyn_scaling_ups_total{task="bedwars",group="minigame"} 1
+                    vectolyn_scaling_ups_total{task="lobby",group="lobby"} 2
+                    """), text);
             assertTrue(text.contains("vectolyn_scaling_downs_total{task=\"lobby\",group=\"lobby\"} 1\n"), text);
             assertTrue(text.contains("vectolyn_scaling_downs_total{task=\"bedwars\",group=\"minigame\"} 0\n"), text);
         }

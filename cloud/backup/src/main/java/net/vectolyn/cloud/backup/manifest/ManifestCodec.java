@@ -7,6 +7,7 @@ import java.time.format.DateTimeParseException;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Pattern;
 import net.vectolyn.cloud.backup.BackupReason;
@@ -105,7 +106,7 @@ public final class ManifestCodec {
             manifest = MAPPER.readValue(content, BackupManifest.class);
         } catch (RuntimeException e) {
             // Jackson 3 exceptions are unchecked; their messages may quote the content, so only the type is passed on.
-            throw new ManifestException("manifest is not valid JSON of the expected shape ("
+            throw new ManifestException("manifest is not valid JSON of the expected shape (" // NOPMD - the Jackson message can quote the content
                     + e.getClass().getSimpleName() + ")");
         }
         if (manifest == null) {
@@ -126,17 +127,19 @@ public final class ManifestCodec {
         require(m.id() != null && ID_PATTERN.matcher(m.id()).matches(), "id must match " + ID);
         require(m.createdAt() != null && m.createdAt().length() <= 40, "created-at is missing or too long");
         try {
-            Instant.parse(m.createdAt());
+            Objects.requireNonNull(Instant.parse(m.createdAt()));
         } catch (DateTimeParseException e) {
-            throw new ManifestException("created-at is not an ISO-8601 instant");
+            throw new ManifestException("created-at is not an ISO-8601 instant", e);
         }
         try {
             BackupReason.ofId(String.valueOf(m.reason()));
         } catch (IllegalArgumentException e) {
-            throw new ManifestException("unknown reason");
+            throw new ManifestException("unknown reason", e);
         }
-        require(m.cloudVersion() != null && VERSION.matcher(m.cloudVersion()).matches(), "invalid cloud-version");
-        require(m.note() == null || isText(m.note(), 300), "note is too long or has control characters");
+        String cloudVersion = m.cloudVersion();
+        require(cloudVersion != null && VERSION.matcher(cloudVersion).matches(), "invalid cloud-version");
+        String note = m.note();
+        require(note == null || isText(note, 300), "note is too long or has control characters");
 
         require(m.services() != null, "services is missing");
         require(m.services().size() <= MAX_SERVICES, "more than " + MAX_SERVICES + " services");
@@ -151,7 +154,7 @@ public final class ManifestCodec {
             try {
                 Consistency.of(String.valueOf(service.consistency()));
             } catch (IllegalArgumentException e) {
-                throw new ManifestException("unknown consistency");
+                throw new ManifestException("unknown consistency", e);
             }
             require(services.put(service.id(), service) == null, "service listed twice");
         }
@@ -172,7 +175,9 @@ public final class ManifestCodec {
                 int slash = rest.indexOf('/');
                 require(slash > 0 && slash < rest.length() - 1, "service file without a service folder");
                 ServiceEntry owner = services.get(rest.substring(0, slash));
-                require(owner != null, "file of a service the manifest does not list");
+                if (owner == null) {
+                    throw new ManifestException("file of a service the manifest does not list");
+                }
                 require(owner.hasFiles(), "file of a service marked as skipped or missing");
             } else {
                 require(file.path().startsWith(ManifestPaths.DATABASE)
@@ -185,13 +190,15 @@ public final class ManifestCodec {
         if (database != null) {
             require(MODES.contains(String.valueOf(database.mode())), "unknown database mode");
             require(STATUSES.contains(String.valueOf(database.status())), "unknown database status");
-            require(database.detail() == null || isText(database.detail(), 500),
+            String detail = database.detail();
+            require(detail == null || isText(detail, 500),
                     "database detail is too long or has control characters");
+            String databaseFile = database.file();
             if ("dumped".equals(database.status())) {
-                require(database.file() != null && database.file().startsWith(ManifestPaths.DATABASE)
-                        && paths.contains(ManifestPaths.foldKey(database.file())), "database file is not listed");
+                require(databaseFile != null && databaseFile.startsWith(ManifestPaths.DATABASE)
+                        && paths.contains(ManifestPaths.foldKey(databaseFile)), "database file is not listed");
             } else {
-                require(database.file() == null, "database file without a dump");
+                require(databaseFile == null, "database file without a dump");
             }
         }
 

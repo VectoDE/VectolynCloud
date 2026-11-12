@@ -17,6 +17,8 @@ import net.vectolyn.protocol.ProtocolException;
  * @param status how the request went
  * @param payload result or error details, up to {@value MessageLimits#MAX_PAYLOAD_SIZE} bytes
  */
+// The wire payload is a byte array; the constructor and accessor copy it, so the record stays immutable.
+@SuppressWarnings("ArrayRecordComponent")
 public record Response(Status status, byte[] payload) implements Message {
 
     /**

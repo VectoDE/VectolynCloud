@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 VectoDE
+SPDX-License-Identifier: GPL-3.0-or-later
+
+SpotBugs exclusions (issue #223). Each pattern is switched off for the whole code base, with the
+reason below. Nothing here hides a bug class that applies: every pattern was read at each of its
+sites first, and the sites that were real bugs were fixed. A new kind of finding fails the build.
+
+EI_EXPOSE_REP, EI_EXPOSE_REP2, MS_EXPOSE_REP
+    Fires on every record or class that hands out a List, Map, Set, Message or a shared ObjectMapper.
+    The values are immutable by contract (copied with List.copyOf and the like in the constructor, or
+    never modified after construction). Errors in that contract show up in the unit tests of the
+    records, which check the copies.
+SECPR
+    ThreadLocalRandom is used for retry jitter and shuffling, never for tokens, keys or ids. Secrets
+    come from SecureRandom.
+USO (unsafe synchronization on the outer class)
+    The inner Slot of ConnectionLimiter locks its outer limiter on purpose; the outer class is not
+    visible outside the package.
+DMI_HARDCODED_ABSOLUTE_FILENAME
+    Detection of the operating system by well-known paths (/proc, /etc/os-release, /.dockerenv,
+    /lib/ld-musl). They are probes, not configuration.
+VA_FORMAT_STRING_USES_NEWLINE
+    Console and generated files use LF on every platform on purpose (compose files, the launcher
+    messages that are tested for exact text).
+SECCI (command injection)
+    Every ProcessBuilder here takes a fixed program and an argument list (no shell). Values from
+    configuration go to arguments, never into a command string. The same sites carry a reasoned
+    nosemgrep comment and are covered by CodeQL.
+SECRD (regular expression DoS)
+    The flagged expressions have bounded repeats ({0,61}) and are applied to short, length-checked
+    input (host names, version tags, JVM flags).
+SECPTI (Files.createTemp* in a configured directory), SECOPFP (permissions of extracted files)
+    The directories belong to the cloud home. The extracted file mode comes from the archive and is
+    cut to owner-write by SafeExtractor.
+SECSQLIJDBC
+    The statements of JdbcConnector are administrative statements built from validated identifiers
+    (database and user names pass ConfigNames), not from request data.
+SECWTM
+    The cluster trust manager accepts exactly the pinned CA fingerprint of the cluster (see
+    ClusterTrust); it is not an accept-all manager.
+SECUSS
+    PortAllocator only binds a port to see whether it is free and closes it again.
+SECUHE
+    The compared value is a public checksum of a file, not a secret.
+ERRMSG
+    The messages go to the operator's own console and log, not to a remote client.
+BX_UNBOXING_IMMEDIATELY_REBOXED
+    Config records use Integer / Boolean components to say "not set"; the cost is irrelevant.
+-->
+<FindBugsFilter>
+    <Match><Bug code="EI,EI2,MS"/></Match>
+    <Match><Bug code="SECPR"/></Match>
+    <Match><Bug code="USO"/></Match>
+    <Match><Bug pattern="DMI_HARDCODED_ABSOLUTE_FILENAME"/></Match>
+    <Match><Bug pattern="VA_FORMAT_STRING_USES_NEWLINE"/></Match>
+    <Match><Bug code="SECCI,SECRD,SECPTI,SECOPFP,SECSQLIJDBC,SECWTM,SECUSS,SECUHE,ERRMSG"/></Match>
+    <Match><Bug pattern="BX_UNBOXING_IMMEDIATELY_REBOXED"/></Match>
+</FindBugsFilter>

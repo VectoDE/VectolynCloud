@@ -11,6 +11,9 @@ plugins {
 vectolyn {
     // Jar and manifest name from before the repository layout change.
     artifactName = "cloud-node"
+    // Line coverage of the unit tests: 0.546 measured (issue #223). Lower than the default of
+    // 0.70 because the node wires everything together; the end-to-end tests run in a separate task.
+    minimumLineCoverage = 0.5
 }
 
 dependencies {
@@ -223,6 +226,9 @@ fun Test.startsTheCloudJar() {
 val e2eTest by tasks.registering(Test::class) {
     description = "Starts VectolynCloud.jar in an empty folder with fake servers and checks the whole network."
     startsTheCloudJar()
+    // The test waits up to 15 minutes for a managed MariaDB to download and start (START_TIMEOUT in
+    // CloudJarEndToEndTest) and says what it waited for; the five minute default would cut that off.
+    systemProperty("junit.jupiter.execution.timeout.default", "30m")
     useJUnitPlatform {
         includeTags("e2e")
         excludeTags("e2e-live")
@@ -234,6 +240,7 @@ val e2eTest by tasks.registering(Test::class) {
 val e2eLiveTest by tasks.registering(Test::class) {
     description = "Starts VectolynCloud.jar with real downloads and real servers (needs internet access)."
     startsTheCloudJar()
+    systemProperty("junit.jupiter.execution.timeout.default", "30m")
     useJUnitPlatform {
         includeTags("e2e-live")
     }

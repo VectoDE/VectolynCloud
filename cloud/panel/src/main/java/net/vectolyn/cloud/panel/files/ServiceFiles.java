@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
@@ -59,12 +60,12 @@ public final class ServiceFiles {
             this.code = code;
         }
 
-        /** @return the HTTP status to answer */
+        /** Returns the HTTP status to answer. */
         public int status() {
             return status;
         }
 
-        /** @return a stable code */
+        /** Returns a stable code. */
         public String code() {
             return code;
         }
@@ -200,7 +201,7 @@ public final class ServiceFiles {
                 if (a.isSymbolicLink() || a.isOther()) {
                     continue;
                 }
-                String name = child.getFileName().toString();
+                String name = Objects.requireNonNull(child.getFileName(), "name").toString();
                 if (name.startsWith(".vectolyn-") && name.endsWith(".tmp")) {
                     continue;
                 }
@@ -251,7 +252,7 @@ public final class ServiceFiles {
         if (Files.isDirectory(file, LinkOption.NOFOLLOW_LINKS)) {
             throw new FileException(409, "is-folder", "A folder has this name.");
         }
-        Path parent = file.getParent();
+        Path parent = Objects.requireNonNull(file.getParent(), "parent");
         createFolders(root, parts.subList(0, parts.size() - 1));
         Path temp = parent.resolve(".vectolyn-" + HexFormat.of().formatHex(randomBytes()) + ".tmp");
         try {
@@ -320,7 +321,9 @@ public final class ServiceFiles {
             }
             Files.delete(entry);
         } catch (NoSuchFileException e) {
-            throw new FileException(404, "no-such-file", "No such file.");
+            FileException missing = new FileException(404, "no-such-file", "No such file.");
+            missing.initCause(e);
+            throw missing;
         }
     }
 

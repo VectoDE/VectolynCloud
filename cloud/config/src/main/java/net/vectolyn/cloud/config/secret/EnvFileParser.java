@@ -57,7 +57,7 @@ public final class EnvFileParser {
                     .decode(ByteBuffer.wrap(content))
                     .toString();
         } catch (CharacterCodingException e) {
-            throw new EnvFormatException(0, Reason.INVALID_ENCODING);
+            throw new EnvFormatException(0, Reason.INVALID_ENCODING, e);
         }
         return parse(text);
     }

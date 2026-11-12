@@ -17,6 +17,7 @@ import java.util.OptionalDouble;
 import java.util.function.Predicate;
 import net.vectolyn.cloud.monitor.metric.Metric;
 import net.vectolyn.cloud.monitor.metric.RingBuffer;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Evaluates the alert rules sample by sample and keeps the alerts. One state per rule and subject
@@ -54,9 +55,9 @@ public final class AlertEngine {
     }
 
     private static final class Track {
-        Instant conditionSince;
-        Instant healthySince;
-        Alert firing;
+        @Nullable Instant conditionSince;
+        @Nullable Instant healthySince;
+        @Nullable Alert firing;
     }
 
     private final Map<String, AlertRule> rules = new LinkedHashMap<>();

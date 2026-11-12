@@ -5,6 +5,7 @@ package net.vectolyn.cloud.console.command;
 import java.util.Objects;
 import net.vectolyn.cloud.config.model.Language;
 import net.vectolyn.cloud.console.Text;
+import org.jspecify.annotations.Nullable;
 
 /**
  * A command cannot do what was asked, because of the input or the current state. The console
@@ -14,7 +15,7 @@ public final class CommandException extends Exception {
 
     private static final long serialVersionUID = 1L;
 
-    private final transient Text text;
+    private final transient @Nullable Text text;
     private final transient Object[] args;
 
     /** The message, with {@link String#format} arguments. */
@@ -24,8 +25,16 @@ public final class CommandException extends Exception {
         this.args = args.clone();
     }
 
+    /** The message, with {@link String#format} arguments, and the failure behind it. */
+    public CommandException(Throwable cause, Text text, Object... args) {
+        super(Objects.requireNonNull(text, "text").format(Language.EN, args), cause);
+        this.text = text;
+        this.args = args.clone();
+    }
+
     /** The message in {@code language}. */
     public String message(Language language) {
-        return text == null ? getMessage() : text.format(language, args);
+        return text == null ? Objects.requireNonNullElse(getMessage(), "") : text.format(language, args);
+
     }
 }

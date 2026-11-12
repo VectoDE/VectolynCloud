@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import net.vectolyn.cloud.api.http.ApiJson;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Builds the answers of the panel server with the headers every answer carries.
@@ -41,7 +42,7 @@ public final class Responses {
      * @param secure whether the server runs with TLS
      * @return the answer
      */
-    public static FullHttpResponse json(int status, Object value, boolean secure) {
+    public static FullHttpResponse json(int status, @Nullable Object value, boolean secure) {
         byte[] body = value == null ? new byte[0] : ApiJson.write(value);
         return jsonBytes(status, body, secure);
     }

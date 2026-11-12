@@ -9,6 +9,7 @@ import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Minimal, strict reader for TAR streams in the formats the cloud meets: POSIX ustar, pax
@@ -51,7 +52,7 @@ public final class TarReader {
      * @throws ArchiveException if the archive is malformed
      * @throws IOException if reading fails
      */
-    public TarEntry next() throws IOException {
+    public @Nullable TarEntry next() throws IOException {
         if (finished) {
             return null;
         }
@@ -65,7 +66,11 @@ public final class TarReader {
         String longName = null;
         String longLink = null;
         int metadataHeaders = 0;
-        while (true) {
+        boolean gnu;
+        byte flag;
+        long size;
+        boolean metadata;
+        do {
             if (!readBlock(header, true)) {
                 throw new ArchiveException("TAR stream ends without an end-of-archive block");
             }
@@ -74,10 +79,11 @@ public final class TarReader {
                 return null;
             }
             verifyChecksum();
-            boolean gnu = checkMagic();
-            byte flag = header[156];
-            long size = octal(124, 12, "size");
-            if (flag == 'x' || flag == 'g' || flag == 'L' || flag == 'K') {
+            gnu = checkMagic();
+            flag = header[156];
+            size = octal(124, 12, "size");
+            metadata = flag == 'x' || flag == 'g' || flag == 'L' || flag == 'K';
+            if (metadata) {
                 if (++metadataHeaders > 8) {
                     throw new ArchiveException("too many extended headers before one entry");
                 }
@@ -95,54 +101,53 @@ public final class TarReader {
                         // 'g': global pax header. None of its keys matter here.
                     }
                 }
-                continue;
             }
-            TarEntry.Type type = switch (flag) {
-                case '0', 0, '7' -> TarEntry.Type.FILE;
-                case '5' -> TarEntry.Type.DIRECTORY;
-                case '2' -> TarEntry.Type.SYMLINK;
-                case '1' -> TarEntry.Type.HARDLINK;
-                default -> throw new ArchiveException("unsupported TAR entry type '" + printable(flag) + "'");
-            };
-            String name;
-            if (paxPath != null) {
-                name = paxPath;
-            } else if (longName != null) {
-                name = longName;
-            } else {
-                name = cString(header, 0, 100, "name");
-                if (!gnu) {
-                    String prefix = cString(header, 345, 155, "prefix");
-                    if (!prefix.isEmpty()) {
-                        name = prefix + "/" + name;
-                    }
+        } while (metadata);
+        TarEntry.Type type = switch (flag) {
+            case '0', 0, '7' -> TarEntry.Type.FILE;
+            case '5' -> TarEntry.Type.DIRECTORY;
+            case '2' -> TarEntry.Type.SYMLINK;
+            case '1' -> TarEntry.Type.HARDLINK;
+            default -> throw new ArchiveException("unsupported TAR entry type '" + printable(flag) + "'");
+        };
+        String name;
+        if (paxPath != null) {
+            name = paxPath;
+        } else if (longName != null) {
+            name = longName;
+        } else {
+            name = cString(header, 0, 100, "name");
+            if (!gnu) {
+                String prefix = cString(header, 345, 155, "prefix");
+                if (!prefix.isEmpty()) {
+                    name = prefix + "/" + name;
                 }
             }
-            String linkName = paxLink != null ? paxLink : longLink != null ? longLink : cString(header, 157, 100, "linkname");
-            if (paxSize >= 0) {
-                size = paxSize;
-            }
-            int mode = (int) (octal(100, 8, "mode") & 07777);
-            if (name.isEmpty()) {
-                throw new ArchiveException("TAR entry without a name");
-            }
-            if ((type == TarEntry.Type.SYMLINK || type == TarEntry.Type.HARDLINK) && linkName.isEmpty()) {
-                throw new ArchiveException("link without a target: " + name);
-            }
-            if (type != TarEntry.Type.FILE && size != 0 && type != TarEntry.Type.DIRECTORY) {
-                throw new ArchiveException("link entry with content: " + name);
-            }
-            long pad = (BLOCK - size % BLOCK) % BLOCK;
-            if (type != TarEntry.Type.FILE) {
-                // Directory content, if any, is skipped and never handed out; links have none.
-                remaining = 0;
-                padding = size + pad;
-                return new TarEntry(name, type, 0, mode, type == TarEntry.Type.DIRECTORY ? "" : linkName);
-            }
-            remaining = size;
-            padding = pad;
-            return new TarEntry(name, type, size, mode, "");
         }
+        String linkName = paxLink != null ? paxLink : longLink != null ? longLink : cString(header, 157, 100, "linkname");
+        if (paxSize >= 0) {
+            size = paxSize;
+        }
+        int mode = (int) (octal(100, 8, "mode") & 0xFFF);
+        if (name.isEmpty()) {
+            throw new ArchiveException("TAR entry without a name");
+        }
+        if ((type == TarEntry.Type.SYMLINK || type == TarEntry.Type.HARDLINK) && linkName.isEmpty()) {
+            throw new ArchiveException("link without a target: " + name);
+        }
+        if (type != TarEntry.Type.FILE && size != 0 && type != TarEntry.Type.DIRECTORY) {
+            throw new ArchiveException("link entry with content: " + name);
+        }
+        long pad = (BLOCK - size % BLOCK) % BLOCK;
+        if (type != TarEntry.Type.FILE) {
+            // Directory content, if any, is skipped and never handed out; links have none.
+            remaining = 0;
+            padding = size + pad;
+            return new TarEntry(name, type, 0, mode, type == TarEntry.Type.DIRECTORY ? "" : linkName);
+        }
+        remaining = size;
+        padding = pad;
+        return new TarEntry(name, type, size, mode, "");
     }
 
     /**
@@ -317,8 +322,9 @@ public final class TarReader {
     /** The pax keys this reader uses. */
     private static final class PaxHeaders {
 
-        String path;
-        String linkPath;
+        @Nullable String path;
+        @Nullable String linkPath;
+
         long size = -1;
 
         /** Parses records of the form {@code "<length> <key>=<value>\n"}. */

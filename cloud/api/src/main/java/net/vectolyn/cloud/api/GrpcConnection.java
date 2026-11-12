@@ -9,6 +9,7 @@ import io.netty.handler.codec.http2.DefaultHttp2PingFrame;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.LongSupplier;
+import org.jspecify.annotations.Nullable;
 
 /**
  * State of one gRPC connection, kept on its event loop (the stream channels share it).
@@ -30,7 +31,7 @@ final class GrpcConnection extends ChannelInboundHandlerAdapter {
     private int calls;
     private long buffered;
     private long lastBusy;
-    private ScheduledFuture<?> check;
+    private @Nullable ScheduledFuture<?> check;
 
     GrpcConnection(int idleTimeoutSeconds, long bodyBudget, LongSupplier nanoTime) {
         this.idleNanos = TimeUnit.SECONDS.toNanos(idleTimeoutSeconds);
@@ -39,7 +40,7 @@ final class GrpcConnection extends ChannelInboundHandlerAdapter {
     }
 
     /** The state of the connection a stream channel belongs to, or null. */
-    static GrpcConnection of(Channel stream) {
+    static @Nullable GrpcConnection of(Channel stream) {
         Channel parent = stream.parent();
         return parent == null ? null : parent.pipeline().get(GrpcConnection.class);
     }
@@ -58,6 +59,8 @@ final class GrpcConnection extends ChannelInboundHandlerAdapter {
         }
     }
 
+    // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
+    @SuppressWarnings("FutureReturnValueIgnored")
     private void check(ChannelHandlerContext ctx) {
         long now = nanoTime.getAsLong();
         if (calls > 0) {

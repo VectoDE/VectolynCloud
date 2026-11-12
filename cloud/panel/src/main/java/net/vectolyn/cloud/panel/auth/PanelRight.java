@@ -9,6 +9,7 @@ import java.util.EnumSet;
 import java.util.Optional;
 import java.util.Set;
 import net.vectolyn.cloud.api.auth.Scope;
+import org.jspecify.annotations.Nullable;
 
 /**
  * What a panel user may do. The first ten are the scopes of the REST API ({@link Scope}); the
@@ -48,9 +49,9 @@ public enum PanelRight {
     USERS_MANAGE("users:manage", null);
 
     private final String id;
-    private final Scope scope;
+    private final @Nullable Scope scope;
 
-    PanelRight(String id, Scope scope) {
+    PanelRight(String id, @Nullable Scope scope) {
         this.id = id;
         this.scope = scope;
     }

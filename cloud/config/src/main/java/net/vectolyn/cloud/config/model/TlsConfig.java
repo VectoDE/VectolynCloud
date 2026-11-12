@@ -2,13 +2,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package net.vectolyn.cloud.config.model;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * TLS of the API listener. The keystore password is a secret and lives in {@code secrets/}.
  *
  * @param enabled  whether the API uses HTTPS
  * @param keystore PKCS#12 keystore, relative to the cloud home; required when enabled, null otherwise
  */
-public record TlsConfig(boolean enabled, String keystore) {
+public record TlsConfig(boolean enabled, @Nullable String keystore) {
 
     /** TLS off. */
     public static TlsConfig disabled() {

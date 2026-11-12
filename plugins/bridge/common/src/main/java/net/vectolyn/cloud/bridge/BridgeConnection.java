@@ -10,6 +10,7 @@ import java.util.function.UnaryOperator;
 import net.vectolyn.cloud.client.CloudClient;
 import net.vectolyn.cloud.client.CloudClientListener;
 import net.vectolyn.cloud.client.CloudClientSettings;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Start-up of a bridge: read the settings the cloud passed, create the client and the sender.
@@ -55,7 +56,7 @@ public final class BridgeConnection {
      * @return the sender; close it in the platform's disable or shutdown hook
      */
     public static BridgeSender open(CloudClientSettings settings,
-            Function<BridgeSender, CloudClientListener> listenerFactory) {
+            Function<BridgeSender, @Nullable CloudClientListener> listenerFactory) {
         Objects.requireNonNull(settings, "settings");
         Objects.requireNonNull(listenerFactory, "listenerFactory");
         CloudClient client = CloudClient.create(settings);

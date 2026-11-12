@@ -57,7 +57,7 @@ public final class SecretStore {
 
     /** The current content; empty if the file does not exist yet. */
     public synchronized EnvFile load() throws IOException, EnvFormatException {
-        RegularPaths.requireDirectoryOrMissing(file.getParent());
+        RegularPaths.requireDirectoryOrMissing(directory());
         RegularPaths.requireFileOrMissing(file);
         try {
             if (Files.size(file) > EnvFileParser.MAX_BYTES) {
@@ -87,7 +87,7 @@ public final class SecretStore {
         if (!generated.isEmpty()) {
             write(content);
         } else if (Files.exists(file)) {
-            OwnerOnlyPermissions.restrictDirectory(file.getParent());
+            OwnerOnlyPermissions.restrictDirectory(directory());
             OwnerOnlyPermissions.restrictFile(file);
         }
         return generated;
@@ -141,8 +141,12 @@ public final class SecretStore {
         return RedactingFilter.of(load());
     }
 
+    private Path directory() {
+        return Objects.requireNonNull(file.getParent(), "file has no parent folder");
+    }
+
     private void write(EnvFile content) throws IOException {
-        Path dir = file.getParent();
+        Path dir = directory();
         RegularPaths.requireDirectoryOrMissing(dir);
         Files.createDirectories(dir);
         RegularPaths.requireFileOrMissing(file);

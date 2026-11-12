@@ -3,6 +3,7 @@
 package net.vectolyn.cloud.config.model;
 
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Memory of a node that its services must leave free, under {@code memory-reserve} of a node in
@@ -16,7 +17,8 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
  *                     {@link #DEFAULT_DATABASE}; counts only while {@link #countsDatabase} holds
  */
 @JsonPropertyOrder({"system", "node-overhead", "database"})
-public record MemoryReserve(MemorySize system, MemorySize nodeOverhead, MemorySize database) {
+public record MemoryReserve(@Nullable MemorySize system, @Nullable MemorySize nodeOverhead,
+        @Nullable MemorySize database) {
 
     /** {@code system} when the field is missing. */
     public static final MemorySize DEFAULT_SYSTEM = MemorySize.ofMegabytes(1024);
@@ -45,7 +47,7 @@ public record MemoryReserve(MemorySize system, MemorySize nodeOverhead, MemorySi
      * @param base the values to fall back to, may be null
      * @return the merged reserve
      */
-    public MemoryReserve over(MemoryReserve base) {
+    public MemoryReserve over(@Nullable MemoryReserve base) {
         if (base == null) {
             return this;
         }
@@ -63,17 +65,17 @@ public record MemoryReserve(MemorySize system, MemorySize nodeOverhead, MemorySi
     }
 
     /** A copy with another {@code system}; null means the default. */
-    public MemoryReserve withSystem(MemorySize value) {
+    public MemoryReserve withSystem(@Nullable MemorySize value) {
         return new MemoryReserve(value, nodeOverhead, database);
     }
 
     /** A copy with another {@code node-overhead}; null means the default. */
-    public MemoryReserve withNodeOverhead(MemorySize value) {
+    public MemoryReserve withNodeOverhead(@Nullable MemorySize value) {
         return new MemoryReserve(system, value, database);
     }
 
     /** A copy with another {@code database}; null means the default. */
-    public MemoryReserve withDatabase(MemorySize value) {
+    public MemoryReserve withDatabase(@Nullable MemorySize value) {
         return new MemoryReserve(system, nodeOverhead, value);
     }
 
@@ -84,9 +86,10 @@ public record MemoryReserve(MemorySize system, MemorySize nodeOverhead, MemorySi
      * @return {@code system + node-overhead (+ database)}
      */
     public long megabytes(boolean withDatabase) {
-        MemoryReserve full = withDefaults();
-        return full.system().megabytes() + full.nodeOverhead().megabytes()
-                + (withDatabase ? full.database().megabytes() : 0);
+        MemorySize systemPart = system != null ? system : DEFAULT_SYSTEM;
+        MemorySize overheadPart = nodeOverhead != null ? nodeOverhead : DEFAULT_NODE_OVERHEAD;
+        MemorySize databasePart = database != null ? database : DEFAULT_DATABASE;
+        return systemPart.megabytes() + overheadPart.megabytes() + (withDatabase ? databasePart.megabytes() : 0);
     }
 
     /**

@@ -281,8 +281,8 @@ final class GroupCommands {
             case "heap.min" -> g.withHeap(new HeapConfig(parse(file, field, MemorySize.FORMAT, () -> MemorySize.parse(value)), heap(g).max()));
             case "heap.max" -> g.withHeap(new HeapConfig(heap(g).min(), parse(file, field, MemorySize.FORMAT, () -> MemorySize.parse(value))));
             case "combat" -> g.withCombat(Values.enumValue(file, field, value, CombatSystem.class));
-            case "drain-timeout" -> g.withDrainTimeout(DEFAULT_VALUE.equals(value) ? null
-                    : parse(file, field, TimeSpan.FORMAT + ", or " + DEFAULT_VALUE, () -> TimeSpan.parse(value)));
+            case "drain-timeout" -> g.withDrainTimeout(Values.unset(DEFAULT_VALUE.equals(value) ? null
+                    : parse(file, field, TimeSpan.FORMAT + ", or " + DEFAULT_VALUE, () -> TimeSpan.parse(value))));
             default -> throw unknownField(file, GROUP_FIELDS);
         };
     }
@@ -334,7 +334,7 @@ final class GroupCommands {
         try {
             return parser.get();
         } catch (IllegalArgumentException e) {
-            throw Values.invalid(file, path, format);
+            throw Values.invalid(file, path, format, e);
         }
     }
 

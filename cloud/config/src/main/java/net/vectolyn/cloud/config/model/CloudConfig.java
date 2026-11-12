@@ -3,6 +3,7 @@
 package net.vectolyn.cloud.config.model;
 
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Content of {@code <home>/cloud.yml}: the settings of the whole network and of this node.
@@ -26,7 +27,7 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 @JsonPropertyOrder({"schema-version", "network-name", "language", "eula-accepted", "setup-complete", "node-id",
         "fallback-group", "servers", "proxy", "legacy-proxy", "database", "api", "branding"})
 public record CloudConfig(int schemaVersion, String networkName, Language language, boolean eulaAccepted,
-                          boolean setupComplete, String nodeId, String fallbackGroup, WantedServers servers,
+                          boolean setupComplete, String nodeId, @Nullable String fallbackGroup, WantedServers servers,
                           ProxyConfig proxy, LegacyProxyConfig legacyProxy, DatabaseConfig database, ApiConfig api,
                           BrandingConfig branding) {
 

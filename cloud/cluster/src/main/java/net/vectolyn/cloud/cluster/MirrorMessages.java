@@ -155,6 +155,7 @@ public final class MirrorMessages {
      * @param digest   the digest the member got on page 0 (32 bytes), empty for page 0
      * @param page     the page, from 0
      */
+    @SuppressWarnings("ArrayRecordComponent") // raw bytes of the wire format; a List<Byte> would only cost memory
     public record ManifestRequest(String template, byte[] digest, int page) {
 
         /** Checks the values. */
@@ -185,7 +186,7 @@ public final class MirrorMessages {
             try {
                 return new ManifestRequest(template, digest, page);
             } catch (IllegalArgumentException e) {
-                throw new ProtocolException(e.getMessage(), e);
+                throw new ProtocolException(String.valueOf(e.getMessage()), e);
             }
         }
 
@@ -219,6 +220,7 @@ public final class MirrorMessages {
      * @param size   size in bytes
      * @param sha256 SHA-256 of the content (32 bytes)
      */
+    @SuppressWarnings("ArrayRecordComponent") // raw bytes of the wire format; a List<Byte> would only cost memory
     public record FileEntry(String path, long size, byte[] sha256) {
 
         /** Checks the values. */
@@ -249,7 +251,7 @@ public final class MirrorMessages {
             try {
                 return new FileEntry(path, size, sha);
             } catch (IllegalArgumentException e) {
-                throw new ProtocolException(e.getMessage(), e);
+                throw new ProtocolException(String.valueOf(e.getMessage()), e);
             }
         }
 
@@ -282,6 +284,7 @@ public final class MirrorMessages {
      * @param page     this page
      * @param entries  the entries of this page, sorted by path
      */
+    @SuppressWarnings("ArrayRecordComponent") // raw bytes of the wire format; a List<Byte> would only cost memory
     public record Manifest(long revision, byte[] digest, int total, int page, List<FileEntry> entries) {
 
         /** Checks the values. */
@@ -311,7 +314,7 @@ public final class MirrorMessages {
             try {
                 return new Manifest(revision, digest, total, page, entries);
             } catch (IllegalArgumentException e) {
-                throw new ProtocolException(e.getMessage(), e);
+                throw new ProtocolException(String.valueOf(e.getMessage()), e);
             }
         }
 
@@ -350,6 +353,7 @@ public final class MirrorMessages {
      * @param offset   where the chunk starts
      * @param length   bytes wanted, 1 to {@link #CHUNK}
      */
+    @SuppressWarnings("ArrayRecordComponent") // raw bytes of the wire format; a List<Byte> would only cost memory
     public record ChunkRequest(String template, byte[] digest, String path, long offset, int length) {
 
         /** Checks the values. */
@@ -381,7 +385,7 @@ public final class MirrorMessages {
             try {
                 return new ChunkRequest(template, digest, path, offset, length);
             } catch (IllegalArgumentException e) {
-                throw new ProtocolException(e.getMessage(), e);
+                throw new ProtocolException(String.valueOf(e.getMessage()), e);
             }
         }
 
@@ -417,6 +421,7 @@ public final class MirrorMessages {
      * @param files  number of files
      * @param bytes  their total size
      */
+    @SuppressWarnings("ArrayRecordComponent") // raw bytes of the wire format; a List<Byte> would only cost memory
     public record TemplateEntry(String name, byte[] digest, int files, long bytes) {
 
         /** Checks the values. */
@@ -441,7 +446,7 @@ public final class MirrorMessages {
             try {
                 return new TemplateEntry(name, digest, files, bytes);
             } catch (IllegalArgumentException e) {
-                throw new ProtocolException(e.getMessage(), e);
+                throw new ProtocolException(String.valueOf(e.getMessage()), e);
             }
         }
 

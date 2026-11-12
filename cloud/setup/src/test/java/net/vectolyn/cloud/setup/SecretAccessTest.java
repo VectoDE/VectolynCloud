@@ -99,6 +99,11 @@ class SecretAccessTest {
                     }
                     return -1;
                 }
+
+                @Override
+                public int read(byte[] buffer, int offset, int length) throws IOException {
+                    return length == 0 ? 0 : read();
+                }
             };
         }
 

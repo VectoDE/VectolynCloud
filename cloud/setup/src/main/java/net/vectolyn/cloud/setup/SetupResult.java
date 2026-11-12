@@ -7,6 +7,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import org.jspecify.annotations.Nullable;
 
 /**
  * How a run of the assistant ended.
@@ -16,7 +17,7 @@ import java.util.TreeSet;
  * @param admin  the first administrator chosen in the setup, only with {@link Status#COMPLETED};
  *               null otherwise. The node issues the one-time setup token for this name
  */
-public record SetupResult(Status status, Set<String> files, String admin) {
+public record SetupResult(Status status, Set<String> files, @Nullable String admin) {
 
     /** How the run ended. */
     public enum Status {

@@ -8,7 +8,6 @@ import io.netty.handler.codec.http.websocketx.CloseWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.PingWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.PongWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketCloseStatus;
-import io.netty.handler.codec.http.websocketx.WebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketServerHandshaker;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
@@ -26,20 +25,22 @@ final class EventStreamHandler extends SimpleChannelInboundHandler<Object> {
         this.handshaker = handshaker;
     }
 
+    // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
     @Override
+    @SuppressWarnings("FutureReturnValueIgnored")
     protected void channelRead0(ChannelHandlerContext ctx, Object msg) {
         if (msg instanceof CloseWebSocketFrame close) {
             handshaker.close(ctx.channel(), close.retain());
         } else if (msg instanceof PingWebSocketFrame ping) {
             ctx.writeAndFlush(new PongWebSocketFrame(ping.content().retain()));
-        } else if (msg instanceof WebSocketFrame) {
-            // pong, text or binary: nothing to do, the stream only sends
-            return;
         }
-        // anything else (the end of the upgrade request) is dropped
+        // pong, text and binary frames need no answer (the stream only sends); anything else
+        // (the end of the upgrade request) is dropped
     }
 
+    // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
     @Override
+    @SuppressWarnings("FutureReturnValueIgnored")
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
         if (evt instanceof IdleStateEvent idle) {
             if (idle.state() == IdleState.WRITER_IDLE) {
@@ -53,7 +54,9 @@ final class EventStreamHandler extends SimpleChannelInboundHandler<Object> {
         super.userEventTriggered(ctx, evt);
     }
 
+    // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
     @Override
+    @SuppressWarnings("FutureReturnValueIgnored")
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         ctx.close();
     }

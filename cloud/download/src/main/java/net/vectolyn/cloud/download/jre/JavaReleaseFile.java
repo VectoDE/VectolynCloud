@@ -14,6 +14,7 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code release} file in a Java home ({@code JAVA_VERSION="21.0.13"}, {@code OS_ARCH="x86_64"}).
@@ -120,7 +121,8 @@ public record JavaReleaseFile(Map<String, String> values) {
      * @param version the version text
      * @return the feature version, or empty if the text is no Java version
      */
-    public static OptionalInt featureOf(String version) {
+    public static OptionalInt featureOf(@Nullable String version)
+ {
         if (version == null) {
             return OptionalInt.empty();
         }

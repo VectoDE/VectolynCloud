@@ -40,6 +40,19 @@ public final class ArgumentException extends Exception {
     }
 
     /**
+     * Creates the exception with the failure behind it.
+     *
+     * @param kind     what went wrong
+     * @param argument the offending argument as typed
+     * @param cause    the failure behind it
+     */
+    public ArgumentException(Kind kind, String argument, Throwable cause) {
+        super(kind + ": " + argument, cause);
+        this.kind = kind;
+        this.argument = argument;
+    }
+
+    /**
      * Returns what went wrong.
      *
      * @return the kind of mistake

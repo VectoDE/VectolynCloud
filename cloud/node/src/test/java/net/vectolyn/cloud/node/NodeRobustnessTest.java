@@ -99,7 +99,7 @@ class NodeRobustnessTest {
     }
 
     private static int freePort() throws Exception {
-        try (ServerSocket socket = new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))) {
+        try (ServerSocket socket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
             return socket.getLocalPort();
         }
     }
@@ -185,7 +185,7 @@ class NodeRobustnessTest {
 
     @Test
     void aTakenApiPortLeavesTheNodeRunningAndNoApiThreadBehind() throws Exception {
-        try (ServerSocket taken = new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))) {
+        try (ServerSocket taken = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
             NodeFixture fixture = NodeFixture.create(dir, false, List.of(api(taken.getLocalPort())));
             Set<Thread> before = apiThreads();
             Screen screen = new Screen();

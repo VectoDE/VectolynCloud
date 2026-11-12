@@ -71,7 +71,7 @@ public final class AtomicFileWriter {
      */
     public void write(Path target, byte[] content, TempFileHook hook) throws IOException {
         Path absolute = target.toAbsolutePath();
-        Path dir = absolute.getParent();
+        Path dir = Objects.requireNonNull(absolute.getParent(), "target has no parent folder");
         Files.createDirectories(dir);
         Path temp = Files.createTempFile(dir, "." + absolute.getFileName() + ".", ".tmp");
         boolean moved = false;
@@ -117,7 +117,9 @@ public final class AtomicFileWriter {
             Thread.sleep(millis);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new InterruptedIOException("interrupted while retrying a rename");
+            InterruptedIOException failure = new InterruptedIOException("interrupted while retrying a rename");
+            failure.initCause(e);
+            throw failure;
         }
     }
 

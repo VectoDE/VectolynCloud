@@ -34,11 +34,14 @@ public record MonitorConfig(@JsonProperty(required = true) int schemaVersion, Bo
     /** Current format version. */
     public static final int SCHEMA_VERSION = 1;
 
+    private static final TimeSpan DEFAULT_SAMPLE_INTERVAL = TimeSpan.ofSeconds(10);
+    private static final TimeSpan DEFAULT_STALE_AFTER = TimeSpan.ofSeconds(60);
+
     /** Fills in the defaults. */
     public MonitorConfig {
         enabled = enabled == null ? Boolean.TRUE : enabled;
-        sampleInterval = sampleInterval == null ? TimeSpan.ofSeconds(10) : sampleInterval;
-        staleAfter = staleAfter == null ? TimeSpan.ofSeconds(60) : staleAfter;
+        sampleInterval = sampleInterval == null ? DEFAULT_SAMPLE_INTERVAL : sampleInterval;
+        staleAfter = staleAfter == null ? DEFAULT_STALE_AFTER : staleAfter;
         history = history == null ? History.defaults() : history;
         rules = rules == null ? defaultRules() : List.copyOf(rules);
         notifications = notifications == null ? Notifications.defaults() : notifications;
@@ -47,7 +50,8 @@ public record MonitorConfig(@JsonProperty(required = true) int schemaVersion, Bo
 
     /** Configuration without a file. */
     public static MonitorConfig defaults() {
-        return new MonitorConfig(SCHEMA_VERSION, null, null, null, null, null, null, null);
+        return new MonitorConfig(SCHEMA_VERSION, Boolean.TRUE, DEFAULT_SAMPLE_INTERVAL, DEFAULT_STALE_AFTER, History.defaults(),
+                defaultRules(), Notifications.defaults(), Prometheus.defaults());
     }
 
     /**
@@ -59,11 +63,13 @@ public record MonitorConfig(@JsonProperty(required = true) int schemaVersion, Bo
      */
     public static List<Rule> defaultRules() {
         return List.of(
-                new Rule("low-tps", "tps < 18 for 60s clear at 19 after 30s", Severity.WARNING, null, null),
-                new Rule("high-heap", "heap > 90% for 60s clear at 85%", Severity.WARNING, null, null),
-                new Rule("low-disk", "disk-free < 5GB clear at 6GB", Severity.CRITICAL, null, null),
-                new Rule("crash-loop", "crashes >= 3 within 10m", Severity.CRITICAL, null, null),
-                new Rule("high-node-memory", "node-memory > 95% for 5m clear at 90%", Severity.WARNING, null, null));
+                new Rule("low-tps", "tps < 18 for 60s clear at 19 after 30s", Severity.WARNING, List.of(),
+                        Boolean.TRUE),
+                new Rule("high-heap", "heap > 90% for 60s clear at 85%", Severity.WARNING, List.of(), Boolean.TRUE),
+                new Rule("low-disk", "disk-free < 5GB clear at 6GB", Severity.CRITICAL, List.of(), Boolean.TRUE),
+                new Rule("crash-loop", "crashes >= 3 within 10m", Severity.CRITICAL, List.of(), Boolean.TRUE),
+                new Rule("high-node-memory", "node-memory > 95% for 5m clear at 90%", Severity.WARNING, List.of(),
+                        Boolean.TRUE));
     }
 
     /**
@@ -79,17 +85,21 @@ public record MonitorConfig(@JsonProperty(required = true) int schemaVersion, Bo
     @JsonPropertyOrder({"samples", "persist", "retention", "persist-interval"})
     public record History(Integer samples, Boolean persist, TimeSpan retention, TimeSpan persistInterval) {
 
+        private static final int DEFAULT_SAMPLES = 360;
+        private static final TimeSpan DEFAULT_RETENTION = TimeSpan.ofSeconds(24 * 3600);
+        private static final TimeSpan DEFAULT_PERSIST_INTERVAL = TimeSpan.ofSeconds(300);
+
         /** Fills in the defaults. */
         public History {
-            samples = samples == null ? 360 : samples;
+            samples = samples == null ? DEFAULT_SAMPLES : samples;
             persist = persist == null ? Boolean.FALSE : persist;
-            retention = retention == null ? TimeSpan.ofSeconds(24 * 3600) : retention;
-            persistInterval = persistInterval == null ? TimeSpan.ofSeconds(300) : persistInterval;
+            retention = retention == null ? DEFAULT_RETENTION : retention;
+            persistInterval = persistInterval == null ? DEFAULT_PERSIST_INTERVAL : persistInterval;
         }
 
         /** The defaults. */
         public static History defaults() {
-            return new History(null, null, null, null);
+            return new History(DEFAULT_SAMPLES, Boolean.FALSE, DEFAULT_RETENTION, DEFAULT_PERSIST_INTERVAL);
         }
     }
 
@@ -128,7 +138,7 @@ public record MonitorConfig(@JsonProperty(required = true) int schemaVersion, Bo
 
         /** The defaults: webhook off. */
         public static Notifications defaults() {
-            return new Notifications(null);
+            return new Notifications(Webhook.defaults());
         }
     }
 
@@ -151,19 +161,22 @@ public record MonitorConfig(@JsonProperty(required = true) int schemaVersion, Bo
         /** Default key of the URL in {@code vectolyn.env}. */
         public static final String DEFAULT_URL_SECRET = "VECTOLYN_MONITOR_WEBHOOK_URL";
 
+        private static final TimeSpan DEFAULT_TIMEOUT = TimeSpan.ofSeconds(10);
+
         /** Fills in the defaults. */
         public Webhook {
             enabled = enabled == null ? Boolean.FALSE : enabled;
             urlSecret = urlSecret == null ? DEFAULT_URL_SECRET : urlSecret;
             format = format == null ? WebhookFormat.DISCORD : format;
-            timeout = timeout == null ? TimeSpan.ofSeconds(10) : timeout;
+            timeout = timeout == null ? DEFAULT_TIMEOUT : timeout;
             sendResolved = sendResolved == null ? Boolean.TRUE : sendResolved;
             minSeverity = minSeverity == null ? Severity.WARNING : minSeverity;
         }
 
         /** The defaults: off. */
         public static Webhook defaults() {
-            return new Webhook(null, null, null, null, null, null);
+            return new Webhook(Boolean.FALSE, DEFAULT_URL_SECRET, WebhookFormat.DISCORD, DEFAULT_TIMEOUT, Boolean.TRUE,
+                    Severity.WARNING);
         }
     }
 
@@ -187,16 +200,19 @@ public record MonitorConfig(@JsonProperty(required = true) int schemaVersion, Bo
     @JsonPropertyOrder({"enabled", "bind", "port"})
     public record Prometheus(Boolean enabled, String bind, Integer port) {
 
+        private static final String DEFAULT_BIND = "127.0.0.1";
+        private static final int DEFAULT_PORT = 9464;
+
         /** Fills in the defaults. */
         public Prometheus {
             enabled = enabled == null ? Boolean.FALSE : enabled;
-            bind = bind == null ? "127.0.0.1" : bind;
-            port = port == null ? 9464 : port;
+            bind = bind == null ? DEFAULT_BIND : bind;
+            port = port == null ? DEFAULT_PORT : port;
         }
 
         /** The defaults: off. */
         public static Prometheus defaults() {
-            return new Prometheus(null, null, null);
+            return new Prometheus(Boolean.FALSE, DEFAULT_BIND, DEFAULT_PORT);
         }
     }
 }

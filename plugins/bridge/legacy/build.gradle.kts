@@ -20,6 +20,9 @@ plugins {
 vectolyn {
     // Jar and manifest name from before the repository layout change.
     artifactName = "cloud-bridge-legacy"
+    // Line coverage of the unit tests: 0.486 measured (issue #223). Lower than the default of
+    // 0.70 because most code needs a running PandaSpigot server; unit tests cover the logic that does not.
+    minimumLineCoverage = 0.45
 }
 
 base {

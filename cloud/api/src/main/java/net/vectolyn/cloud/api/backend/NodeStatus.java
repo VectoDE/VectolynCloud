@@ -47,7 +47,7 @@ public record NodeStatus(String nodeId, String version, String javaVersion, Stri
     public static NodeStatus ofThisJvm(String nodeId, String version, Instant startedAt, boolean shuttingDown,
                                        int servicesTotal, int servicesRunning) {
         Runtime runtime = Runtime.getRuntime();
-        long uptime = Math.max(0, Duration.between(startedAt, Instant.now()).getSeconds());
+        long uptime = Math.max(0, Duration.between(startedAt, Instant.now()).toSeconds());
         String os = System.getProperty("os.name", "?") + " " + System.getProperty("os.arch", "?");
         return new NodeStatus(nodeId, version == null ? "dev" : version, Runtime.version().toString(),
                 os.toLowerCase(Locale.ROOT), uptime, shuttingDown, servicesTotal, servicesRunning,

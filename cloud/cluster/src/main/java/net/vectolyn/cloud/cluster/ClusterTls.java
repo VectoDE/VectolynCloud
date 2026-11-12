@@ -9,6 +9,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLServerSocket;
 import javax.net.ssl.X509ExtendedTrustManager;
+import org.jspecify.annotations.Nullable;
 
 /**
  * TLS settings of the cluster port: TLS 1.3 only (no fallback to 1.2 or older), the JDK's default
@@ -40,7 +41,7 @@ public final class ClusterTls {
      * @param trust the trust decision
      * @return the context
      */
-    public static SSLContext context(KeyManager[] keys, X509ExtendedTrustManager trust) {
+    public static SSLContext context(KeyManager @Nullable [] keys, X509ExtendedTrustManager trust) {
         try {
             SSLContext context = SSLContext.getInstance(PROTOCOL);
             context.init(keys, new javax.net.ssl.TrustManager[] {trust}, new SecureRandom());

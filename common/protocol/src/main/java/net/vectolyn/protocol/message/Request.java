@@ -19,6 +19,8 @@ import net.vectolyn.protocol.PacketWriter;
  * @param channel channel that handles the request
  * @param payload up to {@value MessageLimits#MAX_PAYLOAD_SIZE} bytes
  */
+// The wire payload is a byte array; the constructor and accessor copy it, so the record stays immutable.
+@SuppressWarnings("ArrayRecordComponent")
 public record Request(ChannelName channel, byte[] payload) implements Message {
 
     /**

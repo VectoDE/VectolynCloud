@@ -223,7 +223,7 @@ final class SpigotRestart {
                     .decode(ByteBuffer.wrap(bytes))
                     .toString();
         } catch (CharacterCodingException e) {
-            throw new TemplateException(FILE, "is not valid UTF-8");
+            throw new TemplateException(FILE, "is not valid UTF-8", e);
         }
     }
 

@@ -28,6 +28,7 @@ import net.vectolyn.cloud.config.model.GroupConfig;
 import net.vectolyn.cloud.config.model.NodesConfig;
 import net.vectolyn.cloud.config.model.TaskConfig;
 import net.vectolyn.cloud.config.validation.ConfigNames;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Reads the whole configuration from a {@link CloudHome} and writes the files that changed.
@@ -176,7 +177,7 @@ public final class ConfigStore {
                 stream.forEach(entries::add);
             }
             for (Path entry : entries) {
-                String fileName = entry.getFileName().toString();
+                String fileName = Objects.requireNonNull(entry.getFileName(), "file name").toString();
                 String relative = folder + "/" + fileName;
                 boolean config = fileName.endsWith(".yml") || fileName.endsWith(".yaml");
                 if (!config || fileName.startsWith(".") || wanted.containsKey(relative)
@@ -217,7 +218,7 @@ public final class ConfigStore {
         return files;
     }
 
-    private <T> T readSingle(String file, ConfigFormat<T> format, List<ConfigError> errors, Set<String> missing,
+    private <T> @Nullable T readSingle(String file, ConfigFormat<T> format, List<ConfigError> errors, Set<String> missing,
                              Map<String, Integer> migrated) {
         Path path = home.configDir().resolve(file);
         RegularPaths.Kind kind;
@@ -265,7 +266,7 @@ public final class ConfigStore {
         }
         entries.sort(null);
         for (Path entry : entries) {
-            String fileName = entry.getFileName().toString();
+            String fileName = Objects.requireNonNull(entry.getFileName(), "file name").toString();
             if (fileName.startsWith(".") || Files.isDirectory(entry, LinkOption.NOFOLLOW_LINKS)) {
                 continue; // hidden files (editor swap files, our own temp files) and folders
             }
@@ -291,7 +292,7 @@ public final class ConfigStore {
         return result;
     }
 
-    private static <T> T readFile(String file, Path path, ConfigFormat<T> format, List<ConfigError> errors,
+    private static <T> @Nullable T readFile(String file, Path path, ConfigFormat<T> format, List<ConfigError> errors,
                                   Map<String, Integer> migrated) {
         try {
             if (Files.size(path) > ConfigMappers.MAX_FILE_BYTES) {

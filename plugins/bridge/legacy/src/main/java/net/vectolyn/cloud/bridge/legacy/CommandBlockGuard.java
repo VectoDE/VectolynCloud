@@ -39,6 +39,7 @@ import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Removes command blocks from a PandaSpigot 1.8.8 server ({@link CommandBlocks}): command blocks
@@ -73,11 +74,11 @@ final class CommandBlockGuard implements Listener {
         this.log = Objects.requireNonNull(log, "log");
     }
 
-    static boolean forbidden(Material material) {
+    static boolean forbidden(@Nullable Material material) {
         return material != null && CommandBlocks.forbidden(material.name());
     }
 
-    static boolean forbidden(ItemStack item) {
+    static boolean forbidden(@Nullable ItemStack item) {
         return item != null && forbidden(item.getType());
     }
 
@@ -117,12 +118,12 @@ final class CommandBlockGuard implements Listener {
                 entity.remove();
                 log.minecartRemoved(worldName(at.getWorld()), at.getBlockX(), at.getBlockY(), at.getBlockZ(), why);
                 removed++;
-            } else if (entity instanceof Item && forbidden(((Item) entity).getItemStack())) {
+            } else if (entity instanceof Item item && forbidden(item.getItemStack())) {
                 entity.remove();
                 log.itemsRemoved(1, "the ground in world " + worldName(entity.getWorld()));
                 removed++;
-            } else if (entity instanceof ItemFrame && forbidden(((ItemFrame) entity).getItem())) {
-                ((ItemFrame) entity).setItem(null);
+            } else if (entity instanceof ItemFrame frame && forbidden(frame.getItem())) {
+                frame.setItem(null);
                 log.itemsRemoved(1, "an item frame in world " + worldName(entity.getWorld()));
                 removed++;
             }
@@ -159,10 +160,9 @@ final class CommandBlockGuard implements Listener {
                 removed++;
             }
         }
-        if (inventory instanceof PlayerInventory) {
+        if (inventory instanceof PlayerInventory player) {
             // The armour slots are not part of the 36 slots of a 1.8.8 player inventory.
-            PlayerInventory player = (PlayerInventory) inventory;
-            ItemStack[] armour = player.getArmorContents();
+            @Nullable ItemStack[] armour = player.getArmorContents();
             boolean changed = false;
             for (int i = 0; i < armour.length; i++) {
                 if (forbidden(armour[i])) {
@@ -198,7 +198,7 @@ final class CommandBlockGuard implements Listener {
     @EventHandler(priority = EventPriority.LOWEST)
     public void onSpawn(EntitySpawnEvent event) {
         Entity entity = event.getEntity();
-        if (entity instanceof CommandMinecart || entity instanceof Item && forbidden(((Item) entity).getItemStack())) {
+        if (entity instanceof CommandMinecart || (entity instanceof Item item && forbidden(item.getItemStack()))) {
             event.setCancelled(true);
         }
     }

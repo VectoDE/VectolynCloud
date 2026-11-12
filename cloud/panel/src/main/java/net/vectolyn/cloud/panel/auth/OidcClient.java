@@ -26,6 +26,7 @@ import java.util.stream.Collectors;
 import net.vectolyn.cloud.api.http.ApiJson;
 import net.vectolyn.cloud.config.secret.Secret;
 import net.vectolyn.cloud.panel.config.PanelConfig;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Sign-in with an OpenID Connect provider: authorization code flow with PKCE (S256), a random
@@ -49,9 +50,9 @@ public final class OidcClient {
     private final Clock clock;
     private final HttpClient http;
     private final SecureRandom random = new SecureRandom();
-    private Discovery discovery;
+    private @Nullable Discovery discovery;
     private Instant discoveredAt = Instant.EPOCH;
-    private Map<String, Object> jwks;
+    private @Nullable Map<String, Object> jwks;
     private Instant jwksAt = Instant.EPOCH;
 
     /**
@@ -103,6 +104,10 @@ public final class OidcClient {
         OidcException(String message) {
             super(message);
         }
+
+        OidcException(String message, Throwable cause) {
+            super(message, cause);
+        }
     }
 
     /**
@@ -149,7 +154,7 @@ public final class OidcClient {
      * @return the account at the provider
      * @throws OidcException if the exchange or any check of the ID token fails
      */
-    public Identity finish(Attempt attempt, String code) throws OidcException {
+    public Identity finish(Attempt attempt, @Nullable String code) throws OidcException {
         if (code == null || code.isEmpty() || code.length() > 2048) {
             throw new OidcException("missing code");
         }
@@ -177,9 +182,12 @@ public final class OidcClient {
             jwt.checkIdToken(config.issuer(), config.clientId(), attempt.nonce(), clock.instant().getEpochSecond());
             Map<String, Object> claims = jwt.claims();
             String name = firstText(claims, "preferred_username", "name", "email");
-            return new Identity(config.issuer(), (String) claims.get("sub"), name);
+            if (!(claims.get("sub") instanceof String subject)) {
+                throw new OidcException("ID token refused: missing subject");
+            }
+            return new Identity(config.issuer(), subject, name);
         } catch (Jwt.JwtException e) {
-            throw new OidcException("ID token refused: " + e.getMessage());
+            throw new OidcException("ID token refused: " + e.getMessage(), e);
         }
     }
 
@@ -195,8 +203,9 @@ public final class OidcClient {
 
     private synchronized Discovery discovery() throws OidcException {
         Instant now = clock.instant();
-        if (discovery != null && now.isBefore(discoveredAt.plus(CACHE))) {
-            return discovery;
+        Discovery cached = discovery;
+        if (cached != null && now.isBefore(discoveredAt.plus(CACHE))) {
+            return cached;
         }
         String issuer = config.issuer();
         String base = issuer.endsWith("/") ? issuer.substring(0, issuer.length() - 1) : issuer;
@@ -220,7 +229,7 @@ public final class OidcClient {
         try {
             uri = URI.create(url);
         } catch (IllegalArgumentException e) {
-            throw new OidcException("the discovery document has an invalid " + name);
+            throw new OidcException("the discovery document has an invalid " + name, e);
         }
         boolean testIssuer = config.issuer().startsWith("http://");
         if (uri.getHost() == null || !("https".equals(uri.getScheme()) || (testIssuer && "http".equals(uri.getScheme())))) {
@@ -231,13 +240,15 @@ public final class OidcClient {
 
     private synchronized Map<String, Object> jwks(boolean reload) throws OidcException {
         Instant now = clock.instant();
-        if (!reload && jwks != null && now.isBefore(jwksAt.plus(CACHE))) {
-            return jwks;
+        Map<String, Object> cached = jwks;
+        if (!reload && cached != null && now.isBefore(jwksAt.plus(CACHE))) {
+            return cached;
         }
-        jwks = json(HttpRequest.newBuilder(URI.create(discovery().jwks())).timeout(TIMEOUT)
+        Map<String, Object> loaded = json(HttpRequest.newBuilder(URI.create(discovery().jwks())).timeout(TIMEOUT)
                 .header("Accept", "application/json").GET().build());
+        jwks = loaded;
         jwksAt = now;
-        return jwks;
+        return loaded;
     }
 
     @SuppressWarnings("unchecked")
@@ -260,12 +271,12 @@ public final class OidcClient {
             }
             return value;
         } catch (IOException e) {
-            throw new OidcException("the provider cannot be reached (" + e.getClass().getSimpleName() + ")");
+            throw new OidcException("the provider cannot be reached (" + e.getClass().getSimpleName() + ")", e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new OidcException("interrupted");
+            throw new OidcException("interrupted", e);
         } catch (RuntimeException e) {
-            throw new OidcException("the provider's answer is not JSON");
+            throw new OidcException("the provider's answer is not JSON", e);
         }
     }
 

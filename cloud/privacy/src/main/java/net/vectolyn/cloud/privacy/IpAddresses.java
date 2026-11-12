@@ -34,7 +34,7 @@ public final class IpAddresses {
             throw new IllegalArgumentException("not an IP address");
         }
         if (v4) {
-            for (String part : value.split("\\.")) {
+            for (String part : value.split("\\.", -1)) {
                 if (Integer.parseInt(part) > 255) {
                     throw new IllegalArgumentException("not an IP address");
                 }

@@ -144,8 +144,11 @@ public final class DefaultSystemAccess implements SystemAccess {
         }
     }
 
+    // Java 21 is still supported and there System.console() returns null without a terminal.
+    @SuppressWarnings("SystemConsoleNull")
     @Override
     public boolean interactiveTerminal() {
+
         Console console = System.console();
         if (console == null) {
             return false;

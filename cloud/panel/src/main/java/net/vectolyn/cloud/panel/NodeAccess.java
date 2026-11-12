@@ -12,6 +12,7 @@ import net.vectolyn.cloud.api.auth.ApiToken;
 import net.vectolyn.cloud.api.auth.ApiTokens;
 import net.vectolyn.cloud.api.http.ApiException;
 import net.vectolyn.cloud.api.http.ApiResponse;
+import org.jspecify.annotations.Nullable;
 
 /** What the panel needs of the node's API; {@link #of} adapts the running {@link ApiServer}. */
 public interface NodeAccess {
@@ -38,7 +39,8 @@ public interface NodeAccess {
      * @return the answer
      * @throws ApiException the error the API answers
      */
-    ApiResponse call(ApiToken principal, String method, String target, byte[] body, String ifMatch) throws ApiException;
+    ApiResponse call(ApiToken principal, String method, String target, byte[] body, @Nullable String ifMatch)
+            throws ApiException;
 
     /**
      * Adds the WebSocket of a signed-in user to the node's event streams.
@@ -68,7 +70,8 @@ public interface NodeAccess {
             }
 
             @Override
-            public ApiResponse call(ApiToken principal, String method, String target, byte[] body, String ifMatch)
+            public ApiResponse call(ApiToken principal, String method, String target, byte[] body,
+                                    @Nullable String ifMatch)
                     throws ApiException {
                 return server.call(principal, method, target, body, ifMatch);
             }

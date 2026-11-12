@@ -237,7 +237,7 @@ public final class SafeExtractor {
                     || linkTarget.indexOf('\0') >= 0) {
                 throw new ArchiveException("symlink " + name + " has an absolute or unsafe target " + linkTarget);
             }
-            Path resolved = link.getParent().resolve(linkTarget).normalize();
+            Path resolved = Objects.requireNonNull(link.getParent(), "symlink parent").resolve(linkTarget).normalize();
             if (!resolved.startsWith(root)) {
                 throw new ArchiveException("symlink " + name + " points outside the target directory: " + linkTarget);
             }
@@ -319,7 +319,8 @@ public final class SafeExtractor {
         }
 
         private boolean realTargetInside(Path link) throws IOException {
-            Path target = link.getParent().resolve(Files.readSymbolicLink(link));
+            Path target = Objects.requireNonNull(link.getParent(), "symlink parent")
+                    .resolve(Files.readSymbolicLink(link));
             // Resolve the longest existing prefix for real; the rest cannot contain links.
             Path existing = target;
             List<Path> rest = new ArrayList<>();
@@ -351,7 +352,7 @@ public final class SafeExtractor {
         }
 
         private void createParents(Path target) throws IOException {
-            Path parent = target.getParent();
+            Path parent = Objects.requireNonNull(target.getParent(), "entry parent");
             // createDirectories follows links, so check the deepest existing ancestor before
             // creating anything below it: a link there may already point outside.
             Path existing = parent;
@@ -373,7 +374,8 @@ public final class SafeExtractor {
                 throw new ArchiveException("unsafe entry name: " + name);
             }
             List<String> parts = new ArrayList<>();
-            for (String part : name.split("/")) {
+            for (String part : name.split("/", -1)
+) {
                 if (part.isEmpty() || part.equals(".")) {
                     continue;
                 }

@@ -5,6 +5,7 @@ package net.vectolyn.cloud.privacy;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
+import org.jspecify.annotations.Nullable;
 
 /**
  * One entry of the IP ban list.
@@ -15,7 +16,7 @@ import java.util.Objects;
  * @param createdAt when the entry was written; the retention period counts from here
  * @param expiresAt when the ban ends before the retention period does, or null for none
  */
-public record IpBan(String address, String reason, Instant createdAt, Instant expiresAt) {
+public record IpBan(String address, String reason, Instant createdAt, @Nullable Instant expiresAt) {
 
     /** Longest reason. */
     public static final int MAX_REASON = 200;

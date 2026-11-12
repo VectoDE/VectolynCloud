@@ -30,7 +30,7 @@ class ServiceFilesTest {
         assertEquals(List.of("..x", "a b"), ServiceFiles.parsePath("..x/a b"), "dots inside a name are fine");
         for (String bad : List.of("/etc/passwd", "a/", "a//b", ".", "..", "a/../b", "a/./b", "a\\b", "C:/x", "c:",
                 "a\u0000b", "a\nb", "con", "NUL.txt", "lpt1", "name.", "name ", "a*b", "a?b", "a\"b", "a<b", "a>b",
-                "a|b", "x".repeat(256), ("a/").repeat(300) + "a")) {
+                "a|b", "x".repeat(256), "a/".repeat(300) + "a")) {
             ServiceFiles.FileException e = assertThrows(ServiceFiles.FileException.class, () -> ServiceFiles.parsePath(bad), bad);
             assertEquals(400, e.status());
             assertEquals("invalid-path", e.code());

@@ -24,6 +24,8 @@ import org.yaml.snakeyaml.Yaml;
 class KickSourceTest {
 
     /** A sender of the given type whose permission check answers {@code permitted}. */
+    // Identity is the contract of Object.equals for the proxy; calling proxy.equals here would recurse.
+    @SuppressWarnings("ReferenceEquality")
     private static <T extends CommandSender> T sender(Class<T> type, boolean permitted) {
         Object fake = Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[] {type}, (proxy, method, args) ->
                 switch (method.getName()) {

@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Objects;
 import net.vectolyn.cloud.config.error.ConfigError;
 import net.vectolyn.cloud.config.error.ErrorCode;
+import org.jspecify.annotations.Nullable;
 
 /**
  * An error answer: HTTP status, a stable code and an English message. The message is built by the
@@ -31,11 +32,24 @@ public final class ApiException extends Exception {
      * @param message English text without values from the request
      */
     public ApiException(int status, String code, String message) {
-        this(status, code, message, List.of(), 0);
+        this(status, code, message, List.of(), 0, null);
     }
 
-    private ApiException(int status, String code, String message, List<ConfigError> errors, long retryAfterSeconds) {
-        super(Objects.requireNonNull(message, "message"), null, false, false);
+    /**
+     * Creates an error with the failure behind it. The cause stays on the server and is not sent.
+     *
+     * @param status  HTTP status
+     * @param code    stable code, for example {@code unknown-field}
+     * @param message English text without values from the request
+     * @param cause   the failure behind it
+     */
+    public ApiException(int status, String code, String message, Throwable cause) {
+        this(status, code, message, List.of(), 0, cause);
+    }
+
+    private ApiException(int status, String code, String message, List<ConfigError> errors, long retryAfterSeconds,
+            @Nullable Throwable cause) {
+        super(Objects.requireNonNull(message, "message"), cause, false, false);
         this.status = status;
         this.code = Objects.requireNonNull(code, "code");
         this.errors = List.copyOf(errors);
@@ -50,7 +64,19 @@ public final class ApiException extends Exception {
      */
     public static ApiException invalidConfig(List<ConfigError> errors) {
         return new ApiException(422, "invalid-config", "The configuration was not changed: it would be invalid.",
-                errors, 0);
+                errors, 0, null);
+    }
+
+    /**
+     * 422 with the errors of {@code ConfigService.apply}, and the failure they came from.
+     *
+     * @param errors the configuration errors
+     * @param cause  the failure behind it
+     * @return the exception
+     */
+    public static ApiException invalidConfig(List<ConfigError> errors, Throwable cause) {
+        return new ApiException(422, "invalid-config", "The configuration was not changed: it would be invalid.",
+                errors, 0, cause);
     }
 
     /**
@@ -61,7 +87,7 @@ public final class ApiException extends Exception {
      */
     public static ApiException tooManyRequests(long seconds) {
         return new ApiException(429, "rate-limited", "Too many requests. Try again later.", List.of(),
-                Math.max(1, seconds));
+                Math.max(1, seconds), null);
     }
 
     /** 400 with a code and message. */
@@ -69,21 +95,31 @@ public final class ApiException extends Exception {
         return new ApiException(400, code, message);
     }
 
+    /** 400 with a code and message, and the failure behind it. */
+    static ApiException badRequest(String code, String message, Throwable cause) {
+        return new ApiException(400, code, message, cause);
+    }
+
     /**
      * 400 for a body that cannot be read as the document, with the error of the strict reader
      * (field path, line in the body, a code such as {@code required}). The code of the answer is
      * {@code unknown-field} for an unknown field and {@code invalid-json} for anything else.
      */
-    static ApiException invalidBody(List<ConfigError> errors) {
+    static ApiException invalidBody(List<ConfigError> errors, Throwable cause) {
         boolean unknown = !errors.isEmpty()
                 && errors.getFirst().code() == ErrorCode.UNKNOWN_FIELD;
         return new ApiException(400, unknown ? "unknown-field" : "invalid-json",
-                "The body is not a valid document; see errors.", errors, 0);
+                "The body is not a valid document; see errors.", errors, 0, cause);
     }
 
     /** 404. */
     static ApiException notFound(String what) {
         return new ApiException(404, "not-found", what + " does not exist.");
+    }
+
+    /** 404, with the failure behind it. */
+    static ApiException notFound(String what, Throwable cause) {
+        return new ApiException(404, "not-found", what + " does not exist.", cause);
     }
 
     /**

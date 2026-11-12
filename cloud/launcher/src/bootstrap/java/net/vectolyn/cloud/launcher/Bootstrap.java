@@ -45,12 +45,11 @@ public final class Bootstrap {
         try {
             main.invoke(null, (Object) args);
         } catch (InvocationTargetException e) {
-            Throwable cause = e.getCause();
-            if (cause instanceof Exception) {
-                throw (Exception) cause;
+            if (e.getCause() instanceof Exception) {
+                throw (Exception) e.getCause();
             }
-            if (cause instanceof Error) {
-                throw (Error) cause;
+            if (e.getCause() instanceof Error) {
+                throw (Error) e.getCause();
             }
             throw e;
         }

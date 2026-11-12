@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.concurrent.Semaphore;
 import org.junit.jupiter.api.Test;
 
+@SuppressWarnings("FutureReturnValueIgnored")
 class BodyLimitHandlerTest {
 
     private static HttpRequest post(String uri, long length) {

@@ -68,6 +68,8 @@ final class EventHub {
          * @param status  1008 for a revoked or expired token, 1001 for shutdown
          * @param reason  short reason
          */
+        // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
+        @SuppressWarnings("FutureReturnValueIgnored")
         default void close(Channel channel, WebSocketCloseStatus status, String reason) {
             channel.writeAndFlush(new CloseWebSocketFrame(status, reason)).addListener(f -> channel.close());
         }
@@ -79,6 +81,8 @@ final class EventHub {
      * @param event the event, already redacted
      * @param json  {@code {"type":...,"time":...,"data":...}}
      */
+    // The envelope is the encoded JSON; copying it into a List would cost every event, so the array stays.
+    @SuppressWarnings("ArrayRecordComponent")
     record Delivery(ApiEvent event, byte[] json) {
 
         /**
@@ -138,6 +142,8 @@ final class EventHub {
         return false;
     }
 
+    // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
+    @SuppressWarnings("FutureReturnValueIgnored")
     void publish(ApiEvent event) {
         if (streams.isEmpty()) {
             return;
@@ -229,6 +235,8 @@ final class EventHub {
         }
 
         @Override
+        // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
+        @SuppressWarnings("FutureReturnValueIgnored")
         public void offer(Delivery delivery) {
             if (!matches(types, services, delivery.event())) {
                 return;

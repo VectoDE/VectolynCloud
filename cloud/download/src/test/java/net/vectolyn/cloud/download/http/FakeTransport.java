@@ -23,15 +23,54 @@ public final class FakeTransport implements HttpTransport {
     public sealed interface Answer permits Response, Failure {
     }
 
-    /**
-     * A canned response.
-     *
-     * @param status the status
-     * @param headers the headers
-     * @param body the body
-     */
-    public record Response(int status, Map<String, String> headers, byte[] body) implements Answer {
+    /** A canned response. */
+    public static final class Response implements Answer {
+
+        private final int status;
+        private final Map<String, String> headers;
+        private final byte[] body;
+
+        /**
+         * Creates the response.
+         *
+         * @param status the status
+         * @param headers the headers
+         * @param body the body
+         */
+        public Response(int status, Map<String, String> headers, byte[] body) {
+            this.status = status;
+            this.headers = headers;
+            this.body = body.clone();
+        }
+
+        /**
+         * Returns the status.
+         *
+         * @return the status
+         */
+        public int status() {
+            return status;
+        }
+
+        /**
+         * Returns the headers.
+         *
+         * @return the headers
+         */
+        public Map<String, String> headers() {
+            return headers;
+        }
+
+        /**
+         * Returns a copy of the body.
+         *
+         * @return the body
+         */
+        public byte[] body() {
+            return body.clone();
+        }
     }
+
 
     /**
      * A canned network error.

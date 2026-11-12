@@ -47,6 +47,19 @@ public final class TemplateException extends Exception {
         this(file, NO_LINE, reason);
     }
 
+    /**
+     * Creates the exception with the failure behind it.
+     *
+     * @param file   the template file, or the path of the problem
+     * @param reason what is wrong
+     * @param cause  the failure behind it
+     */
+    public TemplateException(String file, String reason, Throwable cause) {
+        super(location(file, NO_LINE) + ": " + reason, cause);
+        this.file = file;
+        this.line = NO_LINE;
+    }
+
     private static String location(String file, int line) {
         Objects.requireNonNull(file, "file");
         return line > 0 ? file + ":" + line : file;

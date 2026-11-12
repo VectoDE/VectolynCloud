@@ -14,6 +14,7 @@ import java.util.Objects;
 import net.vectolyn.cloud.config.secret.Secret;
 import net.vectolyn.cloud.config.secret.SecretStore;
 import net.vectolyn.cloud.console.Text;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Reads the password of an external database from a file named in the setup file, for example a
@@ -31,7 +32,7 @@ public final class PasswordFile {
      * @param secret  the password, or null
      * @param problem what is wrong, or null
      */
-    public record Result(Secret secret, Text problem) {
+    public record Result(@Nullable Secret secret, @Nullable Text problem) {
 
         /** Exactly one of both is set. */
         public Result {

@@ -11,6 +11,7 @@ import java.util.Optional;
 import java.util.OptionalLong;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Time-based one-time passwords (RFC 6238 over RFC 4226): HMAC-SHA-1, 6 digits, 30-second steps,
@@ -66,7 +67,7 @@ public final class Totp {
      * @param lastStep the last step a code was accepted for, or -1
      * @return the step the code matched, or empty if it is wrong, malformed or already used
      */
-    public static OptionalLong verify(String secret, String code, long epochSec, long lastStep) {
+    public static OptionalLong verify(String secret, @Nullable String code, long epochSec, long lastStep) {
         if (code == null) {
             return OptionalLong.empty();
         }
@@ -143,7 +144,7 @@ public final class Totp {
      * @param text the text
      * @return the bytes, or empty if it has other characters or is longer than 128 characters
      */
-    public static Optional<byte[]> decodeBase32(String text) {
+    public static Optional<byte[]> decodeBase32(@Nullable String text) {
         if (text == null || text.length() > 128) {
             return Optional.empty();
         }

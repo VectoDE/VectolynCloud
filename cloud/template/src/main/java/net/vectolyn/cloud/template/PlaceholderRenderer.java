@@ -134,7 +134,7 @@ public final class PlaceholderRenderer {
             return bytes;
         } catch (CharacterCodingException e) {
             // The template decoded cleanly, so the broken text must come from a value.
-            throw new TemplateException(file, "a placeholder value is not valid Unicode text");
+            throw new TemplateException(file, "a placeholder value is not valid Unicode text", e);
         }
     }
 
@@ -176,7 +176,8 @@ public final class PlaceholderRenderer {
     }
 
     private static void appendWithLineEnding(StringBuilder out, String value, String lineEnding) {
-        for (int i = 0; i < value.length(); i++) {
+        int i = 0;
+        while (i < value.length()) {
             char c = value.charAt(i);
             if (c == '\r') {
                 out.append(lineEnding);
@@ -188,6 +189,7 @@ public final class PlaceholderRenderer {
             } else {
                 out.append(c);
             }
+            i++;
         }
     }
 

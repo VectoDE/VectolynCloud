@@ -6,11 +6,13 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import net.vectolyn.cloud.monitor.alert.RuleCondition.Quantity;
 import net.vectolyn.cloud.monitor.alert.RuleSyntaxException.Reason;
 import net.vectolyn.cloud.monitor.metric.Metric;
 import net.vectolyn.cloud.monitor.metric.MetricUnit;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Parses alert expressions:
@@ -90,12 +92,12 @@ public final class RuleParser {
             if (isLetter(c)) {
                 i++;
                 while (i < text.length() && (isLetter(text.charAt(i))
-                        || text.charAt(i) == '-' && i + 1 < text.length() && isLetter(text.charAt(i + 1)))) {
+                        || (text.charAt(i) == '-' && i + 1 < text.length() && isLetter(text.charAt(i + 1))))) {
                     i++;
                 }
                 kind = Kind.WORD;
             } else if (c >= '0' && c <= '9') {
-                while (i < text.length() && (text.charAt(i) >= '0' && text.charAt(i) <= '9' || text.charAt(i) == '.')) {
+                while (i < text.length() && ((text.charAt(i) >= '0' && text.charAt(i) <= '9') || text.charAt(i) == '.')) {
                     i++;
                 }
                 kind = Kind.NUMBER;
@@ -117,7 +119,7 @@ public final class RuleParser {
     }
 
     private static boolean isLetter(char c) {
-        return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z';
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
     }
 
     private static final class Parser {
@@ -152,13 +154,13 @@ public final class RuleParser {
             Duration holdFor = Duration.ZERO;
             Duration window = Duration.ZERO;
             if (peekWord("for")) {
-                Token word = take();
+                Token word = Objects.requireNonNull(take(), "peekWord saw the token");
                 if (metric.isWindowCount()) {
                     throw new RuleSyntaxException(Reason.HOLD_NOT_ALLOWED, word.position);
                 }
                 holdFor = duration(false);
             } else if (peekWord("within")) {
-                Token word = take();
+                Token word = Objects.requireNonNull(take(), "peekWord saw the token");
                 if (!metric.isWindowCount()) {
                     throw new RuleSyntaxException(Reason.WINDOW_NOT_ALLOWED, word.position);
                 }
@@ -176,7 +178,8 @@ public final class RuleParser {
                 if (at == null || at.kind != Kind.WORD || !at.text.equals("at")) {
                     throw new RuleSyntaxException(Reason.UNEXPECTED_WORD, at == null ? end : at.position);
                 }
-                int position = peek() == null ? end : peek().position;
+                Token next = peek();
+                int position = next == null ? end : next.position;
                 clearAt = quantity(metric);
                 boolean healthySide = comparison.watchesLow()
                         ? clearAt.value() >= threshold.value() : clearAt.value() <= threshold.value();
@@ -208,12 +211,12 @@ public final class RuleParser {
             try {
                 raw = Double.parseDouble(number.text);
             } catch (NumberFormatException e) {
-                throw new RuleSyntaxException(Reason.BAD_NUMBER, number.position);
+                throw new RuleSyntaxException(Reason.BAD_NUMBER, number.position, e);
             }
             String unit = "";
             Token unitToken = peek();
             if (unitToken != null && (unitToken.kind == Kind.PERCENT
-                    || unitToken.kind == Kind.WORD && isUnitWord(unitToken.text))) {
+                    || (unitToken.kind == Kind.WORD && isUnitWord(unitToken.text)))) {
                 take();
                 unit = unitToken.text;
             }
@@ -257,14 +260,14 @@ public final class RuleParser {
             try {
                 amount = Long.parseLong(number.text);
             } catch (NumberFormatException e) {
-                throw new RuleSyntaxException(Reason.BAD_DURATION, number.position);
+                throw new RuleSyntaxException(Reason.BAD_DURATION, number.position, e);
             }
             Duration value = switch (unit.text) {
                 case "s" -> Duration.ofSeconds(amount);
                 case "m" -> Duration.ofMinutes(amount);
                 default -> Duration.ofHours(amount);
             };
-            if (value.compareTo(MAX_DURATION) > 0 || positive && value.isZero()) {
+            if (value.compareTo(MAX_DURATION) > 0 || (positive && value.isZero())) {
                 throw new RuleSyntaxException(Reason.BAD_DURATION, number.position);
             }
             return value;
@@ -282,11 +285,11 @@ public final class RuleParser {
             return token != null && token.kind == Kind.WORD && token.text.equals(word);
         }
 
-        private Token peek() {
+        private @Nullable Token peek() {
             return next < tokens.size() ? tokens.get(next) : null;
         }
 
-        private Token take() {
+        private @Nullable Token take() {
             return next < tokens.size() ? tokens.get(next++) : null;
         }
     }

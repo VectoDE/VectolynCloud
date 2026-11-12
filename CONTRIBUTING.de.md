@@ -60,6 +60,18 @@ abgelaufenen. Meldet ein Scanner trotzdem einen Dummy-Wert, starte lokal
 `gitleaks detect --no-banner` und trage in `.gitleaks.toml` einen Eintrag ein, der die Datei und den
 genauen Wert nennt. Ganze Ordner sind nicht erlaubt.
 
+## Statische Analyse im Build
+
+`./gradlew check` führt für jedes Java-Modul aus: Error Prone und NullAway beim Kompilieren (ein Null,
+das an eine Stelle ohne Null gelangen kann, kompiliert nicht; gewollte Nulls mit
+`org.jspecify.annotations.Nullable` markieren), SpotBugs mit FindSecBugs, Checkstyle, PMD und JaCoCo mit
+einer Mindest-Zeilenabdeckung je Modul (`vectolyn.minimumLineCoverage`, Standard 0,70). Warnungen sind
+Fehler. Die Regelsätze sind kuratiert und liegen in `gradle/checkstyle/checkstyle.xml`,
+`gradle/pmd/ruleset.xml` und `gradle/spotbugs/exclude.xml`; dort steht zu jedem ausgeschlossenen
+SpotBugs-Muster der Grund. Regeln nicht abschwächen, um grün zu werden: den Fund beheben oder eine
+schmale Unterdrückung mit Begründung neben den Code setzen. Mit `-PerrorproneOnly=:cloud:backup` läuft
+Error Prone nur in den genannten Modulen, solange ein Modul bearbeitet wird.
+
 ## Parser brauchen einen Fuzz-Test
 
 Code, der Text oder Bytes von außen liest (Dateien, die ein Betreiber bearbeitet, Netzwerkeingaben,

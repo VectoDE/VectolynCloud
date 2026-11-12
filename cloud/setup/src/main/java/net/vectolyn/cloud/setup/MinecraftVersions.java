@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.regex.Pattern;
 import net.vectolyn.cloud.config.validation.ConfigNames;
 
 /**
@@ -26,6 +27,8 @@ public final class MinecraftVersions {
      * needs Java 25 like the bridges.
      */
     public static final String OLDEST = "26.1";
+
+    private static final Pattern DOT = Pattern.compile("\\.");
 
     private MinecraftVersions() {
     }
@@ -67,8 +70,8 @@ public final class MinecraftVersions {
 
     /** Compares two versions number by number; {@code 26.3} is older than {@code 26.3.1}. */
     static int compare(String a, String b) {
-        String[] x = a.split("\\.");
-        String[] y = b.split("\\.");
+        String[] x = parts(a);
+        String[] y = parts(b);
         for (int i = 0; i < Math.max(x.length, y.length); i++) {
             int left = i < x.length ? Integer.parseInt(x[i]) : 0;
             int right = i < y.length ? Integer.parseInt(y[i]) : 0;
@@ -79,10 +82,14 @@ public final class MinecraftVersions {
         return Integer.compare(x.length, y.length);
     }
 
+    private static String[] parts(String version) {
+        return DOT.splitAsStream(version).toArray(String[]::new);
+    }
+
     /** Compares only the release ({@code major.minor}), so a patch of a supported release counts as supported. */
     private static int compareRelease(String a, String b) {
-        String[] x = a.split("\\.");
-        String[] y = b.split("\\.");
+        String[] x = parts(a);
+        String[] y = parts(b);
         int major = Integer.compare(Integer.parseInt(x[0]), Integer.parseInt(y[0]));
         return major != 0 ? major : Integer.compare(Integer.parseInt(x[1]), Integer.parseInt(y[1]));
     }

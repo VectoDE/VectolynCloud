@@ -34,6 +34,7 @@ import net.vectolyn.protocol.message.ServerCapacity;
 import net.vectolyn.protocol.message.ServiceStatus;
 import net.vectolyn.protocol.message.TransferPlayer;
 import net.vectolyn.protocol.message.UnregisterServer;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Connects the cloud channel with the service core, in both directions.
@@ -87,9 +88,9 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
     static final Duration RETRY_FIRST = Duration.ofSeconds(2);
     /** The longest wait between two moves of the same player; the wait doubles up to it. */
     static final Duration RETRY_MAX = Duration.ofSeconds(8);
-    private volatile Channel channel;
-    private volatile PlayerListener playerListener;
-    private volatile Consumer<ServiceStatus> statusListener;
+    private volatile @Nullable Channel channel;
+    private volatile @Nullable PlayerListener playerListener;
+    private volatile @Nullable Consumer<ServiceStatus> statusListener;
 
     /**
      * Creates the bridge and registers it as listener of the service core.
@@ -388,7 +389,7 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
     }
 
     @Override
-    public void stateChanged(ServiceInfo service, ServiceState previous) {
+    public void stateChanged(ServiceInfo service, @Nullable ServiceState previous) {
         switch (service.state()) {
             case RUNNING -> {
                 if (services.proxyKind(service.id()).isPresent()) {
@@ -627,7 +628,8 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
         for (NetworkPlayers.Player player : on) {
             Sent last = sent.get(player.uuid());
             int[] count = last == null ? null : load.get(last.to());
-            if (count != null && count[0] < slots.get(last.to())) {
+            Integer limit = last == null ? null : slots.get(last.to());
+            if (last != null && count != null && limit != null && count[0] < limit) {
                 count[0]++;
                 moves.put(player.uuid(), last.to());
             } else {
@@ -637,7 +639,8 @@ public final class ChannelBridge implements ChannelListener, ServiceListener {
         if (!rest.isEmpty()) {
             List<TransferPlanner.Target> counted = new ArrayList<>();
             for (TransferPlanner.Target target : targets) {
-                counted.add(new TransferPlanner.Target(target.name(), load.get(target.name())[0], target.slots()));
+                counted.add(new TransferPlanner.Target(target.name(), Objects.requireNonNull(load.get(target.name()), "every target was counted")[0],
+                        target.slots()));
             }
             moves.putAll(TransferPlanner.assign(rest, counted));
         }

@@ -140,9 +140,18 @@ class ConfigArchiveTest {
             assertEquals("monitor.yml", refused(tool, zip(badExtra)).file());
 
             Map<String, byte[]> invalid = new LinkedHashMap<>(base);
-            invalid.put("tasks/orphan.yml", ("schema-version: 2\ngroup: missing\nscaling:\n  static-services: 0\n"
-                    + "  min-services: 0\n  max-services: 1\n  players-per-service: 10\n  scale-up-at: 75\n"
-                    + "  scale-down-after: 5m\n  cooldown: 60s\n").getBytes(StandardCharsets.UTF_8));
+            invalid.put("tasks/orphan.yml", """
+                    schema-version: 2
+                    group: missing
+                    scaling:
+                      static-services: 0
+                      min-services: 0
+                      max-services: 1
+                      players-per-service: 10
+                      scale-up-at: 75
+                      scale-down-after: 5m
+                      cooldown: 60s
+                    """.getBytes(StandardCharsets.UTF_8));
             assertEquals(ErrorCode.UNKNOWN_GROUP, refused(tool, zip(invalid)).code());
 
             // ZipInputStream sees no entry in bytes that are no zip.

@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.file.Files;
@@ -132,7 +133,7 @@ class ManagedMariaDbIT {
     }
 
     private static boolean portOpen(int port) {
-        try (Socket socket = new Socket("127.0.0.1", port)) {
+        try (Socket socket = new Socket(InetAddress.getAllByName("127.0.0.1")[0], port)) {
             return socket.isConnected();
         } catch (IOException e) {
             return false;

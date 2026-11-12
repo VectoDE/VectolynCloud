@@ -117,7 +117,7 @@ public final class BuiltInTemplates {
      * operator's own) are skipped.
      *
      * @param home      the cloud home
-     * @param templates the templates that are wanted, for example the {@code template} of every
+     * @param templates the templates that are wanted, for example the template name of every
      *                  wanted group
      * @return the templates that were written, sorted
      * @throws IOException if the index is malformed, a file does not match it, or writing fails
@@ -132,7 +132,7 @@ public final class BuiltInTemplates {
                 continue;
             }
             Path target = layout.templateDir(folder.getKey());
-            Path parent = target.getParent();
+            Path parent = Objects.requireNonNull(target.getParent(), "template folder has a parent");
             if (Files.exists(target, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(parent)) {
                 continue;
             }
@@ -217,10 +217,10 @@ public final class BuiltInTemplates {
 
     private void write(Entry entry, Path staging) throws IOException {
         Path file = staging;
-        for (String segment : entry.relative().split("/")) {
+        for (String segment : entry.relative().split("/", -1)) {
             file = file.resolve(segment);
         }
-        Files.createDirectories(file.getParent());
+        Files.createDirectories(Objects.requireNonNull(file.getParent(), "template file directory"));
         MessageDigest digest = sha256();
         try (InputStream in = source.open(entry.path());
              OutputStream out = Files.newOutputStream(file, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {

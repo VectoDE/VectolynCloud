@@ -26,6 +26,7 @@ import net.vectolyn.cloud.download.provider.ArtifactRequest;
 import net.vectolyn.cloud.download.provider.MariaDbProvider;
 import net.vectolyn.cloud.download.provider.ResolvedArtifact;
 import net.vectolyn.cloud.download.provider.TargetPlatform;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Downloads the MariaDB server through {@code cloud-download} (MariaDB REST API, checksum checked)
@@ -45,7 +46,7 @@ public final class DownloadingMariaDbBinaries implements MariaDbBinaries {
     private final ArtifactDownloader downloader;
     private final SafeExtractor extractor;
     private final Path home;
-    private final String version;
+    private final @Nullable String version;
 
     /**
      * Creates the installer.
@@ -58,7 +59,7 @@ public final class DownloadingMariaDbBinaries implements MariaDbBinaries {
      *     long-term-support series
      */
     public DownloadingMariaDbBinaries(ArtifactProvider provider, ArtifactDownloader downloader, SafeExtractor extractor,
-            Path home, String version) {
+            Path home, @Nullable String version) {
         this.provider = Objects.requireNonNull(provider, "provider");
         if (!MariaDbProvider.ID.equals(provider.id())) {
             throw new IllegalArgumentException("MariaDB provider expected, got " + provider.id());
@@ -78,7 +79,11 @@ public final class DownloadingMariaDbBinaries implements MariaDbBinaries {
         ResolvedArtifact resolved;
         DownloadedArtifact file;
         try {
-            resolved = provider.resolve(ArtifactRequest.of("mariadb").withVersion(version).withSystem(system(platform)));
+            ArtifactRequest request = ArtifactRequest.of("mariadb");
+            if (version != null) {
+                request = request.withVersion(version);
+            }
+            resolved = provider.resolve(request.withSystem(system(platform)));
             file = downloader.download(resolved, null);
         } catch (DownloadException e) {
             throw new DatabaseException(DatabaseException.Reason.INSTALL, "Downloading MariaDB failed: "
@@ -97,7 +102,7 @@ public final class DownloadingMariaDbBinaries implements MariaDbBinaries {
                         + resolved.fileName());
             }
             Path top = singleFolder(unpack);
-            Path target = home.resolve(top.getFileName().toString());
+            Path target = home.resolve(Objects.requireNonNull(top.getFileName(), "file name").toString());
             if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
                 // Never touch a folder that is already there; it may be a hand-made install.
                 target = home.resolve(top.getFileName() + "-" + file.sha256().hex().substring(0, 12));
@@ -126,28 +131,21 @@ public final class DownloadingMariaDbBinaries implements MariaDbBinaries {
     public static Optional<Path> installed(Path home, TargetPlatform system) {
         try {
             ManagedPlatform platform = ManagedPlatform.of(system);
-            DownloadingMariaDbBinaries reader = new DownloadingMariaDbBinaries(home);
-            return Optional.ofNullable(reader.recordedFolder(platform));
+            Path normalized = Objects.requireNonNull(home, "home").toAbsolutePath().normalize();
+            return Optional.ofNullable(recordedFolder(normalized, platform, null));
         } catch (DatabaseException | IOException | RuntimeException e) {
             return Optional.empty();
         }
     }
 
-    /** Only for {@link #installed}: reads the marker, never downloads. */
-    private DownloadingMariaDbBinaries(Path home) {
-        this.provider = null;
-        this.downloader = null;
-        this.extractor = null;
-        this.home = Objects.requireNonNull(home, "home").toAbsolutePath().normalize();
-        this.version = null;
-    }
-
-    private Path recordedFolder(ManagedPlatform platform) throws IOException {
-        return installedFolder(platform);
-    }
-
     /** Returns the recorded install if it is still usable for the wanted version, else null. */
-    private Path installedFolder(ManagedPlatform platform) throws IOException {
+    private @Nullable Path installedFolder(ManagedPlatform platform) throws IOException {
+        return recordedFolder(home, platform, version);
+    }
+
+    /** Reads the marker below {@code home}, never downloads; null if no usable install is recorded. */
+    private static @Nullable Path recordedFolder(Path home, ManagedPlatform platform, @Nullable String version)
+            throws IOException {
         Path marker = home.resolve(MARKER);
         if (!Files.isRegularFile(marker, LinkOption.NOFOLLOW_LINKS)) {
             return null;
@@ -175,7 +173,7 @@ public final class DownloadingMariaDbBinaries implements MariaDbBinaries {
      * @param installed installed release
      * @return whether no download is needed
      */
-    static boolean versionFits(String wanted, String installed) {
+    static boolean versionFits(@Nullable String wanted, @Nullable String installed) {
         if (installed == null || installed.isEmpty()) {
             return false;
         }
@@ -187,7 +185,7 @@ public final class DownloadingMariaDbBinaries implements MariaDbBinaries {
 
     private void writeMarker(Path folder, String installedVersion, String sha256) throws IOException {
         Properties p = new Properties();
-        p.setProperty("folder", folder.getFileName().toString());
+        p.setProperty("folder", Objects.requireNonNull(folder.getFileName(), "file name").toString());
         p.setProperty("version", installedVersion);
         p.setProperty("sha256", sha256);
         Path marker = home.resolve(MARKER);

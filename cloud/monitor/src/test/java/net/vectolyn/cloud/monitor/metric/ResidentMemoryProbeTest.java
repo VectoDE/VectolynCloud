@@ -71,8 +71,10 @@ class ResidentMemoryProbeTest {
 
     @Test
     void parsesTasklistInEveryLocale() {
-        String english = "\"System Idle Process\",\"0\",\"Services\",\"0\",\"8 K\"\r\n"
-                + "\"java.exe\",\"4242\",\"Console\",\"1\",\"1,234,567 K\"\r\n";
+        String english = """
+                "System Idle Process","0","Services","0","8 K"\r
+                "java.exe","4242","Console","1","1,234,567 K"\r
+                """;
         String german = "\"java.exe\",\"4242\",\"Console\",\"1\",\"1.234.567 K\"\r\n";
         String french = "\"java.exe\",\"4242\",\"Console\",\"1\",\"1\u00a0234\u00a0567 Ko\"\r\n";
         String quoted = "\"my \"\"odd\"\", app.exe\",\"77\",\"Console\",\"1\",\"10 K\"\r\n";

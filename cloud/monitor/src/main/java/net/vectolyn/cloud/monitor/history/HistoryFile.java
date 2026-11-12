@@ -81,6 +81,10 @@ public final class HistoryFile {
         FormatException(String message) {
             super(message);
         }
+
+        FormatException(String message, Throwable cause) {
+            super(message, cause);
+        }
     }
 
     /**
@@ -181,7 +185,7 @@ public final class HistoryFile {
                 try {
                     id = new ServiceId(new String(raw, StandardCharsets.US_ASCII));
                 } catch (IllegalArgumentException e) {
-                    throw new FormatException("invalid service id in history file");
+                    throw new FormatException("invalid service id in history file", e);
                 }
                 if (services.containsKey(id)) {
                     throw new FormatException("service listed twice in history file");
@@ -210,7 +214,7 @@ public final class HistoryFile {
             }
             return new Content(node, services);
         } catch (BufferUnderflowException e) {
-            throw new FormatException("history file ends early");
+            throw new FormatException("history file ends early", e);
         }
     }
 
