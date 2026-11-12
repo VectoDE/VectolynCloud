@@ -76,3 +76,5 @@ include(
 
 // Build tools that are not shipped: tools/release-banner renders the image of every GitHub release.
 include("tools:release-banner")
+// tools/api-compat checks the API of common/protocol and common/client against the newest release.
+include("tools:api-compat")
