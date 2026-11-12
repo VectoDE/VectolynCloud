@@ -9,6 +9,8 @@
 
 plugins {
     id("vectolyn.java-conventions")
+    // The baseline tag and the arguments are parsed (ApiCompatFuzzTest).
+    id("vectolyn.fuzz-conventions")
 }
 
 vectolyn {

@@ -78,6 +78,7 @@ public final class Japicmp {
         }
         Path log = Files.createTempFile("japicmp", ".txt");
         try {
+            // nosemgrep: java.lang.security.audit.command-injection-process-builder.command-injection-process-builder -- the java of the running JDK, the japicmp jar and jar paths from the Gradle task, separate list elements, no shell
             Process process = new ProcessBuilder(command).redirectErrorStream(true).redirectOutput(log.toFile())
                     .start();
             if (!process.waitFor(TIMEOUT_MINUTES, TimeUnit.MINUTES)) {
