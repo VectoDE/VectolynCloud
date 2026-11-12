@@ -6,6 +6,7 @@ import java.util.Objects;
 import net.vectolyn.protocol.AuthToken;
 import net.vectolyn.protocol.PeerId;
 import net.vectolyn.protocol.message.AuthResult;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Decides whether a peer may open a connection. The node implements it with the service tokens
@@ -48,7 +49,7 @@ public interface ServiceAuthenticator {
      * @param ticket the token for the peer's next connection; set exactly when the outcome is
      *     {@link AuthResult.Outcome#ACCEPTED}
      */
-    record Admission(AuthResult.Outcome outcome, AuthToken ticket) {
+    record Admission(AuthResult.Outcome outcome, @Nullable AuthToken ticket) {
 
         /** Checks that a ticket comes with an acceptance and only then. */
         public Admission {

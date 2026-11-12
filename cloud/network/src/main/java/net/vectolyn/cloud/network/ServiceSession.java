@@ -5,11 +5,13 @@ package net.vectolyn.cloud.network;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
+import io.netty.util.concurrent.Future;
 import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -20,12 +22,15 @@ import net.vectolyn.protocol.message.Disconnect;
 import net.vectolyn.protocol.message.Envelope;
 import net.vectolyn.protocol.message.Request;
 import net.vectolyn.protocol.message.Response;
+import org.jspecify.annotations.Nullable;
 
 /**
  * One authenticated connection of a service: its channel and the requests open on it in both
  * directions.
  */
 final class ServiceSession {
+
+    private static final System.Logger LOG = System.getLogger(ServiceSession.class.getName());
 
     private final ServiceId service;
     private final Channel channel;
@@ -35,7 +40,7 @@ final class ServiceSession {
     private final AtomicInteger nextRequestId = new AtomicInteger();
     private final AtomicInteger incoming = new AtomicInteger();
     private volatile boolean replaced;
-    private volatile Disconnect.Reason closedByCloud;
+    private volatile Disconnect.@Nullable Reason closedByCloud;
 
     ServiceSession(ServiceId service, Channel channel, ProtocolVersion version, int maxPendingRequests) {
         this.service = service;
@@ -58,7 +63,7 @@ final class ServiceSession {
     }
 
     /** Returns the peer's address, or {@code null} for a channel without one (embedded tests). */
-    InetSocketAddress remoteAddress() {
+    @Nullable InetSocketAddress remoteAddress() {
         return channel.remoteAddress() instanceof InetSocketAddress address ? address : null;
     }
 
@@ -71,7 +76,7 @@ final class ServiceSession {
     }
 
     /** Returns the reason the cloud closed this connection with, or {@code null}. */
-    Disconnect.Reason closedByCloud() {
+    Disconnect.@Nullable Reason closedByCloud() {
         return closedByCloud;
     }
 
@@ -83,9 +88,9 @@ final class ServiceSession {
         closedByCloud = reason;
         channel.config().setAutoRead(false);
         if (!channel.eventLoop().isShuttingDown()) {
-            channel.eventLoop().schedule(() -> {
-                channel.close();
-            }, ConnectionHandler.CLOSE_GRACE_MILLIS, TimeUnit.MILLISECONDS);
+            observe(channel.eventLoop().schedule(() -> {
+                observe(channel.close());
+            }, ConnectionHandler.CLOSE_GRACE_MILLIS, TimeUnit.MILLISECONDS));
         }
         return channel.writeAndFlush(Envelope.of(new Disconnect(reason))).addListener(ChannelFutureListener.CLOSE);
     }
@@ -109,8 +114,8 @@ final class ServiceSession {
         int id = reserveRequestId();
         // Registered before the timer starts, so a timeout can never miss its entry.
         outgoing.put(id, future);
-        future.orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS)
-                .whenComplete((response, error) -> outgoing.remove(id, future));
+        detach(future.orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS)
+                .whenComplete((response, error) -> outgoing.remove(id, future)));
         channel.writeAndFlush(new Envelope(id, request)).addListener(write -> {
             if (!write.isSuccess()) {
                 fail(id, new ServiceNotConnectedException("request to " + service + " could not be sent"));
@@ -119,7 +124,29 @@ final class ServiceSession {
         return future;
     }
 
+    /**
+     * Watches a write, close or shutdown that nobody waits for, so that a failure is not lost
+     * silently: it is logged at debug level.
+     */
+    static void observe(Future<?> future) {
+        future.addListener(done -> {
+            if (!done.isSuccess() && !done.isCancelled()) {
+                LOG.log(System.Logger.Level.DEBUG, "A network operation failed", done.cause());
+            }
+        });
+    }
+
+    /**
+     * Takes a stage that only follows another future, for example to clean up after it. The
+     * caller gets the outcome from the source future, so the stage has no result of its own to
+     * check.
+     */
+    static void detach(CompletableFuture<?> dependent) {
+        Objects.requireNonNull(dependent, "dependent");
+    }
+
     /** Completes the request with this id; a late or unknown response is dropped. */
+
     void complete(int requestId, Response response) {
         CompletableFuture<Response> future = outgoing.remove(requestId);
         if (future != null) {

@@ -53,10 +53,12 @@ final class EmbeddedConnection implements AutoCloseable {
         }
         List<Envelope> envelopes = new ArrayList<>();
         ByteBuffer view = written.duplicate().flip();
-        Optional<Envelope> next;
-        while ((next = MessageCodec.standard().tryDecode(view)).isPresent()) {
+        Optional<Envelope> next = MessageCodec.standard().tryDecode(view);
+        while (next.isPresent()) {
             envelopes.add(next.get());
+            next = MessageCodec.standard().tryDecode(view);
         }
+
         return envelopes;
     }
 

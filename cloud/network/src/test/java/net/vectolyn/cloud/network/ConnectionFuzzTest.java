@@ -49,8 +49,9 @@ class ConnectionFuzzTest {
             if (!connected.happened) {
                 for (Envelope envelope : sent) {
                     Message message = envelope.message();
-                    assertTrue(message instanceof Disconnect || message instanceof AuthResult result
-                            && result.outcome() != AuthResult.Outcome.ACCEPTED, message.toString());
+                    assertTrue(message instanceof Disconnect || (message instanceof AuthResult result
+                            && result.outcome() != AuthResult.Outcome.ACCEPTED), message.toString());
+
                 }
             } else {
                 assertEquals(new AuthResult(AuthResult.Outcome.ACCEPTED, net.vectolyn.protocol.Protocol.PROTOCOL_VERSION),

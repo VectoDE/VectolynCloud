@@ -108,7 +108,8 @@ class CloudClientEndToEndTest {
         try (ServerSocket probe = new ServerSocket(0, 1, java.net.InetAddress.getLoopbackAddress())) {
             port = probe.getLocalPort();
         }
-        CloudClient client = client(new InetSocketAddress("127.0.0.1", port), LOBBY, lobbyToken);
+        CloudClient client = client(new InetSocketAddress(java.net.InetAddress.getByAddress(new byte[] {127, 0, 0, 1}), port), LOBBY,
+                lobbyToken);
         client.start();
         Thread.sleep(300); // a few refused attempts with backoff
         assertFalse(client.isConnected());
