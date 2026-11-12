@@ -17,6 +17,9 @@ plugins {
     `java-library`
     id("net.ltgt.errorprone")
     id("com.github.spotbugs")
+    checkstyle
+    pmd
+    jacoco
 }
 
 val defaultJavaRelease = 21
@@ -25,6 +28,7 @@ val testJava: Int? = providers.gradleProperty("testJava").orNull?.toInt()
 
 val vectolyn = extensions.create<VectolynJavaExtension>("vectolyn")
 vectolyn.warningsAsErrors.convention(true)
+vectolyn.minimumLineCoverage.convention(0.0)
 vectolyn.artifactName.convention(project.name)
 
 // A build file that sets base.archivesName itself (the plugin jars) keeps its own name.
@@ -160,3 +164,48 @@ spotbugs {
     excludeFilter = rootProject.file("gradle/spotbugs/exclude.xml")
 }
 tasks.named("spotbugsTest") { enabled = false }
+
+// Checkstyle and PMD run on production code with curated rule sets (gradle/checkstyle, gradle/pmd).
+// Any violation fails the build.
+checkstyle {
+    toolVersion = "11.1.0"
+    configFile = rootProject.file("gradle/checkstyle/checkstyle.xml")
+    maxWarnings = 0
+}
+tasks.named("checkstyleTest") { enabled = false }
+
+pmd {
+    toolVersion = "7.17.0"
+    ruleSets = emptyList()
+    ruleSetFiles = files(rootProject.file("gradle/pmd/ruleset.xml"))
+    isConsoleOutput = true
+    isIgnoreFailures = false
+}
+tasks.named("pmdTest") { enabled = false }
+
+// JaCoCo: every module reports line coverage, and `check` fails below the module's minimum.
+jacoco {
+    toolVersion = "0.8.14"
+}
+tasks.withType<Test>().configureEach {
+    finalizedBy(tasks.named("jacocoTestReport"))
+}
+tasks.named<JacocoReport>("jacocoTestReport") {
+    reports {
+        xml.required = true
+        html.required = true
+    }
+}
+tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
+    violationRules {
+        rule {
+            limit {
+                counter = "LINE"
+                minimum = vectolyn.minimumLineCoverage.get().toBigDecimal()
+            }
+        }
+    }
+}
+tasks.named("check") {
+    dependsOn(tasks.named("jacocoTestCoverageVerification"))
+}
