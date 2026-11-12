@@ -72,6 +72,8 @@ final class TemplateSink {
     private final Path stateFile;
     /** Folders not managed by the mirror that were logged already, so each is logged once. */
     private final Set<String> unmanagedLogged = ConcurrentHashMap.newKeySet();
+    /** See {@link #syncedCount()}. */
+    private volatile int syncedCount;
 
     /**
      * Creates the sink.
@@ -87,9 +89,10 @@ final class TemplateSink {
         this.old = workDir.resolve("old");
         this.replaced = workDir.resolve("replaced");
         this.stateFile = Objects.requireNonNull(stateFile, "stateFile");
+        this.syncedCount = synced().size();
     }
 
-    /** The templates synced last, by name with their digest. */
+    /** The templates synced last, by name with their digest, as the state file has them. */
     Map<String, byte[]> synced() {
         try {
             return MirrorState.readTemplates(stateFile);
@@ -97,6 +100,15 @@ final class TemplateSink {
             LOG.log(System.Logger.Level.WARNING, "Cluster: {0}; every template is synced again", e.getMessage());
             return new TreeMap<>();
         }
+    }
+
+    /**
+     * How many templates the last sync recorded (read once at creation before that), for the
+     * status. It never opens the state file: on Windows a reader holding it open makes the sync's
+     * atomic replace fail with an access-denied error, which failed the whole sync.
+     */
+    int syncedCount() {
+        return syncedCount;
     }
 
     /**
@@ -187,6 +199,7 @@ final class TemplateSink {
         }
         int removed = removeOthers(list, synced, now, problems);
         MirrorState.writeTemplates(stateFile, now);
+        syncedCount = now.size();
         if (!problems.isEmpty()) {
             throw new MirrorException(String.join("; ", problems));
         }
