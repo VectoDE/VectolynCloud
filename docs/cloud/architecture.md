@@ -87,7 +87,7 @@ The rules behind it:
 | Library | Version | Used by | Why |
 |---|---|---|---|
 | Netty (`netty-transport`, `netty-handler`, `netty-codec-http`) | 4.2.19.Final | `cloud/network`, `cloud/api` | Non-blocking server for many long-lived connections (every proxy and server keeps one open), and HTTP plus WebSocket for the API from the same stack. Velocity and Paper are built on Netty too, so its behaviour under load is well known. |
-| JLine 3 (`jline-reader`, `jline-terminal`, `jline-terminal-jni`) | 3.30.17 | `cloud/console` | Console with line editing, history and tab completion on Windows, Linux and macOS, as in CloudNet. The terminal provider `jni` works on Java 21. `ffm` (`jline-terminal-ffm`) needs Java 22+ and is chosen only on such runtimes, see [Java compatibility](../java-compatibility.md). |
+| JLine 3 (`jline-reader`, `jline-terminal`, `jline-terminal-jni`) | 3.30.17 | `cloud/console` | Console with line editing, history and tab completion on Windows, Linux and macOS. The terminal provider `jni` works on Java 21. `ffm` (`jline-terminal-ffm`) needs Java 22+ and is chosen only on such runtimes, see [Java compatibility](../java-compatibility.md). |
 | Jackson 3 (`jackson-databind`, `jackson-dataformat-yaml`) | 3.2.4 | `cloud/config`, `cloud/download` | One data model for the YAML files and the JSON API, with explicit `schema-version` handling and exact error positions for broken config files. `cloud/download` also reads the download APIs, `software.lock.yml` and its catalog with it. |
 | JDK `keytool` and JSSE | Java 21 | `cloud/cluster` | The cluster CA and the node keys come from `keytool`, the cluster port is a plain `SSLServerSocket` with TLS 1.3 and a virtual thread per node (at most 64 members, so no event loop is needed). No certificate library is added. |
 | MariaDB Connector/J (`mariadb-java-client`) | 4.0.0 | `cloud/database` | Talks to the managed or external MariaDB/MySQL server: creating databases and users, checking the connection, sizing the pools. |
@@ -98,7 +98,7 @@ Versions live in `gradle/libs.versions.toml`. Dependabot proposes updates.
 
 ## No wrapper jar
 
-CloudNet and similar clouds start each server through an extra wrapper jar that sits between the JVM and the server. VectolynCloud does not. The node starts the server JVM directly with `ProcessBuilder` (the matching JRE, the server jar, the generated arguments) and reads its output.
+VectolynCloud starts each server without an extra wrapper jar between the JVM and the server. The node starts the server JVM directly with `ProcessBuilder` (the matching JRE, the server jar, the generated arguments) and reads its output.
 
 The reasons:
 
