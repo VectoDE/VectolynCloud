@@ -3,9 +3,16 @@
 package net.vectolyn.cloud.api.http;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystemException;
+import java.nio.file.NoSuchFileException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -47,6 +54,7 @@ import net.vectolyn.cloud.config.operation.RemoveGroup;
 import net.vectolyn.cloud.config.operation.RemoveTask;
 import net.vectolyn.cloud.config.operation.SetGroupWanted;
 import net.vectolyn.cloud.config.operation.SetServerWanted;
+import net.vectolyn.cloud.config.template.TemplateFiles;
 import net.vectolyn.cloud.config.validation.ConfigNames;
 import net.vectolyn.cloud.config.validation.JvmFlagPolicy;
 
@@ -88,6 +96,7 @@ public final class ApiRoutes {
     private final ApiBackend backend;
     private final BooleanSupplier shuttingDown;
     private final ApiTokens tokens;
+    private final TemplateFiles templateFiles;
 
     /**
      * Creates the endpoints.
@@ -113,6 +122,7 @@ public final class ApiRoutes {
         this.backend = backend;
         this.shuttingDown = shuttingDown;
         this.tokens = tokens;
+        this.templateFiles = new TemplateFiles(config.home());
     }
 
     /**
@@ -225,6 +235,17 @@ public final class ApiRoutes {
                     body.database() == null || body.database(), body.note())));
         });
 
+        r.add("GET", PREFIX + "/templates", Scope.TEMPLATES_READ, q -> {
+            List<Map<String, Object>> list = new ArrayList<>();
+            for (String name : templates().templates()) {
+                list.add(Map.of("name", name));
+            }
+            return ApiResponse.ok(list);
+        });
+        r.add("GET", PREFIX + "/templates/{template}/files", Scope.TEMPLATES_READ, this::templateFiles);
+        r.add("GET", PREFIX + "/templates/{template}/files/{path}", Scope.TEMPLATES_READ, this::templateFile);
+        r.add("PUT", PREFIX + "/templates/{template}/files/{path}", Scope.TEMPLATES_WRITE, this::putTemplateFile);
+
         r.add("GET", PREFIX + "/tokens/self", null, q -> ApiResponse.ok(describe(q.token(), now())));
 
         r.add("GET", PREFIX + "/admin/tokens", Scope.ADMIN, q -> {
@@ -306,6 +327,131 @@ public final class ApiRoutes {
             throw new ApiException(501, "not-available", "Token management is not available on this server.");
         }
         return tokens;
+    }
+
+    /** {@code GET /templates/{template}/files}: every file the API hands out, by path. */
+    private ApiResponse templateFiles(ApiRequest q) throws ApiException, IOException {
+        String template = q.param("template");
+        TemplateFiles.Listing listing = templateCall(template, null, () -> templates().files(template));
+        List<Map<String, Object>> files = new ArrayList<>();
+        for (TemplateFiles.FileInfo file : listing.files()) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("path", file.path());
+            item.put("size", file.size());
+            files.add(item);
+        }
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("template", template);
+        body.put("files", files);
+        body.put("truncated", listing.truncated());
+        return ApiResponse.ok(body);
+    }
+
+    /**
+     * {@code GET /templates/{template}/files/{path}}: one file, as UTF-8 text when it is valid
+     * UTF-8 without NUL, otherwise as Base64. The {@code ETag} is that of the file's bytes, for
+     * {@code If-Match} on the {@code PUT}.
+     */
+    private ApiResponse templateFile(ApiRequest q) throws ApiException, IOException {
+        String template = q.param("template");
+        String path = q.param("path");
+        byte[] content = templateCall(template, path, () -> templates().file(template, path));
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("template", template);
+        body.put("path", path);
+        body.put("size", content.length);
+        String text = utf8(content);
+        body.put("encoding", text != null ? "utf-8" : "base64");
+        body.put("content", text != null ? text : Base64.getEncoder().encodeToString(content));
+        return new ApiResponse(200, ApiJson.write(body), Map.of("ETag", TemplateFiles.etag(content)));
+    }
+
+    /**
+     * {@code PUT /templates/{template}/files/{path}}: creates a file (without {@code If-Match}) or
+     * replaces one ({@code If-Match} with its ETag or {@code *}). Refused on a cluster member, whose
+     * templates come from the head.
+     */
+    private ApiResponse putTemplateFile(ApiRequest q) throws ApiException, IOException {
+        if (config.mirrorMode()) {
+            throw new ApiException(409, "managed-by-head",
+                    "This node is a cluster member; its templates come from the head. Change them there.");
+        }
+        String template = q.param("template");
+        String path = q.param("path");
+        TemplateFileBody body = q.json(TemplateFileBody.class);
+        if (body.content() == null) {
+            throw ApiException.badRequest("invalid-value", "\"content\" is missing.");
+        }
+        byte[] content;
+        String encoding = body.encoding() == null ? "utf-8" : body.encoding();
+        if (encoding.equals("utf-8")) {
+            content = body.content().getBytes(StandardCharsets.UTF_8);
+        } else if (encoding.equals("base64")) {
+            try {
+                content = Base64.getDecoder().decode(body.content());
+            } catch (IllegalArgumentException e) {
+                throw ApiException.badRequest("invalid-value", "\"content\" is not valid Base64.");
+            }
+        } else {
+            throw ApiException.badRequest("invalid-value", "\"encoding\" must be utf-8 or base64.");
+        }
+        TemplateFiles.Outcome outcome = templateCall(template, path,
+                () -> templates().write(template, path, content, q.ifMatch()));
+        String etag = TemplateFiles.etag(content);
+        Map<String, Object> answer = new LinkedHashMap<>();
+        answer.put("template", template);
+        answer.put("path", path);
+        answer.put("size", content.length);
+        answer.put("etag", etag);
+        return new ApiResponse(outcome == TemplateFiles.Outcome.CREATED ? 201 : 200, ApiJson.write(answer),
+                Map.of("ETag", etag));
+    }
+
+    /** One call of {@link TemplateFiles}; maps its failures to answers. */
+    private static <T> T templateCall(String template, String path, TemplateCall<T> call)
+            throws ApiException, IOException {
+        try {
+            return call.run();
+        } catch (IllegalArgumentException e) {
+            throw ApiException.badRequest("invalid-path", path == null
+                    ? "This is no template name."
+                    : "This path is not handed out: it breaks the path rules or looks like a secret.");
+        } catch (NoSuchFileException e) {
+            throw ApiException.notFound(path == null ? "Template" : "File");
+        } catch (TemplateFiles.TooLargeException e) {
+            throw new ApiException(413, "file-too-large", "The file is larger than " + e.limit() + " bytes.");
+        } catch (TemplateFiles.PreconditionException e) {
+            throw e.required() ? new ApiException(428, "precondition-required", e.getMessage())
+                    : new ApiException(412, "precondition-failed", e.getMessage());
+        } catch (FileSystemException e) {
+            throw new ApiException(409, "not-a-regular-file",
+                    "A link, junction, special file or file is in the way of this path.");
+        }
+    }
+
+    /** A call of {@link TemplateFiles}. */
+    @FunctionalInterface
+    private interface TemplateCall<T> {
+        T run() throws IOException, TemplateFiles.PreconditionException;
+    }
+
+    /** The text of a file if it is valid UTF-8 without NUL, else null. */
+    private static String utf8(byte[] content) {
+        for (byte b : content) {
+            if (b == 0) {
+                return null;
+            }
+        }
+        try {
+            return StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(content)).toString();
+        } catch (CharacterCodingException e) {
+            return null;
+        }
+    }
+
+    private TemplateFiles templates() {
+        return templateFiles;
     }
 
     private ApiResponse startService(ApiRequest q) throws Exception {
@@ -639,6 +785,10 @@ public final class ApiRoutes {
 
     /** Body of {@code POST /admin/tokens}. */
     record CreateTokenBody(String name, List<String> scopes, String expiresIn) {
+    }
+
+    /** Body of {@code PUT /templates/{template}/files/{path}}. */
+    record TemplateFileBody(String content, String encoding) {
     }
 
     /** Body of {@code POST /backups}. */

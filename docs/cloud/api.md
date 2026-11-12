@@ -71,6 +71,8 @@ curl -X POST -H "Authorization: Bearer vcs_..." https://cloud.example.org:8443/a
 | `backups:read` | list backups |
 | `backups:write` | create a backup |
 | `node:read` | node status; metrics events |
+| `templates:read` | list templates and their files, read a file (never secrets) |
+| `templates:write` | create and replace template files |
 | `admin` | everything above, and the token management under `/admin/tokens` |
 
 A write scope does not include the read scope. A missing scope gives `403 missing-scope`. Changing the `api` or `database` section of `cloud.yml` needs `admin`: they decide who can reach the node and which image `docker compose` runs with the database root password.
@@ -110,6 +112,10 @@ All paths start with `/api/v1`. Bodies are `application/json` in UTF-8, with the
 | `GET /setup` | config:read | `eula-accepted`, `setup-complete`, `ready`, `missing` (`eula`, `setup`) |
 | `GET /backups` | backups:read | every backup |
 | `POST /backups` `{"services": ["lobby-1"], "database": true, "note": "before update"}` | backups:write | `201` the backup |
+| `GET /templates` | templates:read | `[{"name": "Lobby-Server"}, ...]` |
+| `GET /templates/{template}/files` | templates:read | `{"template": ..., "files": [{"path": "default/server.properties", "size": 1210}], "truncated": false}` |
+| `GET /templates/{template}/files/{path}` | templates:read | the file as `{"encoding": "utf-8"\|"base64", "content": ...}`, with `ETag` |
+| `PUT /templates/{template}/files/{path}` `{"content": "...", "encoding": "utf-8"}` | templates:write | `201` created or `200` replaced, with `ETag` |
 | `GET /tokens/self` | any | the calling token |
 | `GET /admin/tokens` | admin | every token (never the token or its hash), paged |
 | `POST /admin/tokens` `{"name": "ci", "scopes": ["services:read"], "expires-in": "90d"}` | admin | `201` the token, shown in this answer only |
@@ -136,6 +142,13 @@ Every write goes through `ConfigService.apply`: the whole configuration is valid
 **Groups.** `drain-timeout` is optional (5s to 10m, default 30s), for example `"drain-timeout": "45s"`; outside the range the answer is `422 out-of-range`.
 
 <a id="token-management"></a>**Token management.** `POST /admin/tokens` creates a token like `api token create`: `name` and `scopes` are required, `expires-in` (1h to 3650d) is optional. The answer is the one place the API ever shows a token (`"token": "vct_..."`, with `Cache-Control: no-store` like every answer); the node stores only its SHA-256. A taken name or the 101st token answers `409 conflict`. `DELETE /admin/tokens/{id}` revokes by id or name at once, also the calling token itself. An `admin` token can create another `admin` token, so give `admin` only to whoever may also use the node console.
+
+<a id="templates"></a>**Templates.** The endpoints under `/templates` are what the web panel's file editor uses: it lists the template folders of `local/templates/`, shows a file, and saves it back. `{path}` is the rest of the URL after `/files/`, segments separated by `/` as they are (not percent-encoded), for example `/api/v1/templates/Lobby-Server/files/default/plugins/LuckPerms/config.yml`. The router lets through segments of letters, digits, `_` and `-` in up to eight parts joined by single dots; a file with another name (a space, an umlaut) is listed but cannot be addressed. Then the same rules as the cluster mirror apply (`TemplatePaths` in `cloud/config`): no `..`, `.`, empty segments, backslash, colon or Windows device names, at most 240 bytes and 16 segments, and nothing that looks like a secret (`forwarding.secret`, `*.pem`, `*.key`, `.env`, `secrets/`, `.git/`, ...). Such a path answers `400 invalid-path` before the disk is touched; listings leave those files out. Links, junctions and special files are never followed: one on the way answers `409 not-a-regular-file`.
+
+- **Reading** returns UTF-8 text as it is and anything else (or text with a NUL byte) as Base64, up to 1 MiB (`413 file-too-large` above). The `ETag` is that of the file's bytes.
+- **Writing** is checked against the `ETag`: without `If-Match` only a new file is created, an existing one answers `428 precondition-required`; with the `ETag` of the `GET` (or `*`) the file is replaced, and if it changed in between the answer is `412 precondition-failed`. Check and write run under one lock, so of two editors with the same `ETag` exactly one gets through. A file may be at most 48 KiB (the API reads strings up to 64 KiB, which is 48 KiB in Base64); folders on the way are created; the file is replaced atomically.
+- **Cluster.** On a member the templates come from the head (see [cluster.md](cluster.md)), so `PUT` answers `409 managed-by-head` there; reading works.
+- Services pick a changed template up when they are next prepared from it ([template.md](template.md)); a running service is not touched.
 
 **Shutdown.** While the node shuts down, start, restart, reload and backup creation answer `503 shutting-down`. Reads and stops still work.
 
@@ -174,9 +187,10 @@ File names in `file` and in the `files` of a reload are relative to `config/` (`
 | 403 | `missing-scope`, `origin-not-allowed` |
 | 404 | `not-found` |
 | 405 | `method-not-allowed` (the message lists the allowed methods) |
-| 409 | `conflict` |
+| 409 | `conflict`, `managed-by-head`, `not-a-regular-file` |
 | 412 | `precondition-failed` |
-| 413 | `body-too-large` |
+| 413 | `body-too-large`, `file-too-large` |
+| 428 | `precondition-required` (a template file is replaced without `If-Match`) |
 | 415 | `unsupported-media-type` |
 | 422 | `invalid-config`, `invalid` |
 | 426 | `upgrade-required` (plain `GET /events`) |
