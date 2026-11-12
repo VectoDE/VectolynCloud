@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package net.vectolyn.cloud.bridge;
 
+import java.util.concurrent.CompletableFuture;
 import net.vectolyn.protocol.message.Message;
 
 /**
@@ -22,6 +23,20 @@ public interface CloudLink {
 
     /** Sends a player event ({@code PlayerJoin}, {@code PlayerQuit}, {@code PlayerSwitch}). */
     void send(Message playerEvent);
+
+    /**
+     * Sends a request on a channel and returns the cloud's answer. Like every call, it is made on
+     * the {@link BridgeSender} thread; the future completes later on another thread. The default
+     * fails, for links that cannot ask.
+     *
+     * @param channel channel name, for example {@code vectolyn.privacy}
+     * @param payload request payload
+     * @return the answer's payload; fails if the cloud is not connected, does not answer in time or
+     *         does not handle the channel
+     */
+    default CompletableFuture<byte[]> request(String channel, byte[] payload) {
+        return CompletableFuture.failedFuture(new UnsupportedOperationException("requests are not supported"));
+    }
 
     /** Says goodbye to the cloud and stops the connection. */
     void close();

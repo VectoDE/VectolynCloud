@@ -3,8 +3,11 @@
 package net.vectolyn.cloud.bridge;
 
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 import net.vectolyn.cloud.client.CloudClient;
+import net.vectolyn.protocol.ChannelName;
 import net.vectolyn.protocol.message.Message;
+import net.vectolyn.protocol.message.Response;
 
 /** {@link CloudLink} on top of a {@link CloudClient}. */
 public final class CloudClientLink implements CloudLink {
@@ -34,6 +37,16 @@ public final class CloudClientLink implements CloudLink {
     @Override
     public void send(Message playerEvent) {
         client.send(playerEvent);
+    }
+
+    @Override
+    public CompletableFuture<byte[]> request(String channel, byte[] payload) {
+        return client.request(new ChannelName(channel), payload).thenApply(response -> {
+            if (response.status() != Response.Status.OK) {
+                throw new IllegalStateException("the cloud answered " + response.status());
+            }
+            return response.payload();
+        });
     }
 
     @Override

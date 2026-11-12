@@ -30,14 +30,18 @@ public final class PrivacyRuntime implements AutoCloseable {
     private final IpBanStore ipBans;
     private final StatisticsCollector statistics;
     private final Telemetry telemetry;
+    private final TrackingStore tracking;
+    private final PrivacyRequests requests;
     private ScheduledExecutorService scheduler;
 
     private PrivacyRuntime(PrivacyConfig config, IpBanStore ipBans, StatisticsCollector statistics,
-                           Telemetry telemetry) {
+                           Telemetry telemetry, TrackingStore tracking) {
         this.config = config;
         this.ipBans = ipBans;
         this.statistics = statistics;
         this.telemetry = telemetry;
+        this.tracking = tracking;
+        this.requests = new PrivacyRequests(tracking, config.tracking());
     }
 
     /**
@@ -51,9 +55,11 @@ public final class PrivacyRuntime implements AutoCloseable {
      * @throws IOException                if the ban list cannot be read or written
      * @throws IpBanStore.FormatException if the ban list is damaged
      * @throws StatisticsCollector.FormatException if the statistics file is damaged
+     * @throws TrackingStore.FormatException if the tracking file is damaged
      */
     public static PrivacyRuntime open(Path home, Clock clock, String cloudVersion)
-            throws ConfigException, IOException, IpBanStore.FormatException, StatisticsCollector.FormatException {
+            throws ConfigException, IOException, IpBanStore.FormatException, StatisticsCollector.FormatException,
+            TrackingStore.FormatException {
         PrivacyConfig config = PrivacyConfigLoader.load(home);
         IpBanStore store = IpBanStore.open(CloudHome.of(home).stateDir().resolve("ip-bans.json"),
                 config.ipBans().retentionDays(), Objects.requireNonNull(clock, "clock"));
@@ -64,7 +70,9 @@ public final class PrivacyRuntime implements AutoCloseable {
                 config.statistics().enabled() ? statistics::snapshot : List::of,
                 settings.enabled() && settings.endpoint() != null
                         ? new HttpTelemetrySender(URI.create(settings.endpoint())) : body -> { });
-        return new PrivacyRuntime(config, store, statistics, telemetry);
+        TrackingStore tracking = TrackingStore.open(CloudHome.of(home).stateDir().resolve("tracking.json"),
+                config.tracking().retentionDays(), clock);
+        return new PrivacyRuntime(config, store, statistics, telemetry, tracking);
     }
 
     /**
@@ -104,15 +112,37 @@ public final class PrivacyRuntime implements AutoCloseable {
     }
 
     /**
-     * A player joined the network or moved to a server of a game mode. Does nothing while
-     * {@code statistics.enabled} is false.
+     * The per-player tracking.
+     *
+     * @return the store
+     */
+    public TrackingStore tracking() {
+        return tracking;
+    }
+
+    /**
+     * Answers the {@code /privacy} requests of proxies.
+     *
+     * @return the handler
+     */
+    public PrivacyRequests requests() {
+        return requests;
+    }
+
+    /**
+     * A player joined the network or moved to a server of a game mode. The totals per mode count
+     * it while {@code statistics.enabled} is true; the player's own record only if the player agreed.
      *
      * @param player player id
+     * @param name   player name
      * @param mode   group of the server
      */
-    public void playerArrived(UUID player, String mode) {
+    public void playerArrived(UUID player, String name, String mode) {
         if (config.statistics().enabled()) {
             statistics.arrived(player, mode);
+        }
+        if (config.tracking().enabled()) {
+            tracking.arrived(player, name, mode);
         }
     }
 
@@ -124,6 +154,9 @@ public final class PrivacyRuntime implements AutoCloseable {
     public void playerLeft(UUID player) {
         if (config.statistics().enabled()) {
             statistics.left(player);
+        }
+        if (config.tracking().enabled()) {
+            tracking.left(player);
         }
     }
 
@@ -138,6 +171,14 @@ public final class PrivacyRuntime implements AutoCloseable {
             return t;
         });
         scheduler.scheduleWithFixedDelay(() -> {
+            try {
+                int tracked = tracking.purge();
+                if (tracked > 0) {
+                    LOG.log(Level.INFO, "Deleted {0} tracking records that were due", tracked);
+                }
+            } catch (IOException | RuntimeException e) {
+                LOG.log(Level.WARNING, "Could not delete due tracking records", e);
+            }
             try {
                 int removed = ipBans.purge();
                 if (removed > 0) {
@@ -175,6 +216,12 @@ public final class PrivacyRuntime implements AutoCloseable {
         if (scheduler != null) {
             scheduler.shutdownNow();
             scheduler = null;
+        }
+        tracking.closeAll();
+        try {
+            tracking.save();
+        } catch (IOException e) {
+            LOG.log(Level.WARNING, "Could not save the tracking records", e);
         }
         if (config.statistics().enabled()) {
             statistics.closeAll();

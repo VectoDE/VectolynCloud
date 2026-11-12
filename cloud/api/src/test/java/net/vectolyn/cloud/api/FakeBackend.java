@@ -28,6 +28,8 @@ final class FakeBackend implements ApiBackend, ServiceAccess, NodeAccess {
     final List<BackupOrder> backupOrders = new CopyOnWriteArrayList<>();
     final AtomicBoolean shuttingDown = new AtomicBoolean();
     volatile boolean backupsAvailable;
+    /** The tracking access the privacy endpoints use; null means the node has none (501). */
+    volatile net.vectolyn.cloud.api.backend.PrivacyAccess privacy;
     volatile RedactingFilter filter = RedactingFilter.none();
     volatile String failureMessage;
     /** Runs at the start of {@link #list()}, on the request's thread; tests break a request with it. */
@@ -52,6 +54,11 @@ final class FakeBackend implements ApiBackend, ServiceAccess, NodeAccess {
     @Override
     public NodeAccess node() {
         return this;
+    }
+
+    @Override
+    public Optional<net.vectolyn.cloud.api.backend.PrivacyAccess> privacy() {
+        return Optional.ofNullable(privacy);
     }
 
     @Override
