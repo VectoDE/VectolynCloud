@@ -53,8 +53,8 @@ public final class BuiltinCommands {
      * @param shutdown stops the cloud; runs for {@code shutdown}, {@code exit}, Ctrl+C and Ctrl+D.
      *                 The console stops reading afterwards.
      * @param extras   the other files of {@code config/} that {@code config export} and
-     *                 {@code config import} carry, with their checks (on a node {@code monitor.yml}
-     *                 and {@code backup.yml})
+     *                 {@code config import} carry, with their checks (on a node {@code monitor.yml},
+     *                 {@code privacy.yml} and {@code backup.yml})
      */
     public static void register(Console console, ConfigService config, Runnable shutdown,
                                 List<ConfigArchive.ExtraFile> extras) {

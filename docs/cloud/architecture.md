@@ -21,6 +21,7 @@ This page describes the module layout. Each module gets its content in its own p
 | `cloud/setup` | `net.vectolyn.cloud.setup` | Setup assistant: the questions on the console, the setup file for `--non-interactive`, the `setup` command. Writes through `ConfigService`. See [setup](setup.md). |
 | `cloud/cluster` | `net.vectolyn.cloud.cluster` | Several nodes: cluster CA made with the JDK's `keytool`, one-time join tokens, the cluster port with mutual TLS 1.3 (JSSE, no Netty), membership, revocation, one version per cluster, the `cluster` command. See [cluster.md](cluster.md). |
 | `cloud/backup` | `net.vectolyn.cloud.backup` | Backups of the static services (worlds and configs, consistent through `save-off`/`save-all flush`/`save-on`) and of the database as zip archives in `backups/`, with manifest and SHA-256 per file, retention, schedule, restore of a stopped service and the `backup` console command. `cloud/node` provides the services and their control. See [backup.md](backup.md). |
+| `cloud/privacy` | `net.vectolyn.cloud.privacy` | Data protection: `privacy.yml`, IP ban list with a configurable retention period (default 90 days) and automatic deletion. See [privacy.md](privacy.md). |
 | `cloud/node` | `net.vectolyn.cloud.node` | The node itself: services, groups and tasks, JRE management, console, setup flow, scaling, monitoring, backups, updates, cluster. See [node.md](node.md). |
 | `cloud/launcher` | `net.vectolyn.cloud.launcher` | Entry point of `VectolynCloud.jar`: arguments, refusal to run as root or administrator (unless `--allow-root` or `VECTOLYN_ALLOW_ROOT=true`), node startup. See [launcher.md](launcher.md). |
 | `plugins/bridge/common` | `net.vectolyn.cloud.bridge` | Platform-neutral core of the bridges: send queue on a thread of its own, server registry and player state of the proxy, tick meter, the BungeeGuard check for the 1.8.8 backends. No platform API, runs and is tested on Java 21. See [bridges.md](bridges.md). |
@@ -119,7 +120,7 @@ The shared Gradle setup lives in the included build `build-logic/` as convention
 |---|---|---|
 | `vectolyn.java-conventions` | every Java module | Java 25 toolchain, `--release 21`, `-Xlint:all -Werror` (a module may switch `-Werror` off and has to say why), JUnit, `-PtestJava=21`, reproducible jars. |
 | `vectolyn.java25-api-conventions` | Velocity and Paper bridges, `plugins/lobby/paper`, `plugins/portal/paper` | Everything above, plus `disableAutoTargetJvm()` for the Java 25 server APIs. |
-| `vectolyn.fuzz-conventions` | modules with fuzz tests (`common/protocol`, `common/client`, `cloud/config`, `cloud/template`, `cloud/download`, `cloud/network`, `cloud/database`, `cloud/node`, `cloud/console`, `cloud/setup`, `cloud/backup`, `plugins/bridge/common`, `cloud/monitor`, `cloud/api`) | Adds Jazzer, runs `@FuzzTest` methods in regression mode in every test run; `-Pfuzz` switches to fuzzing mode. |
+| `vectolyn.fuzz-conventions` | modules with fuzz tests (`common/protocol`, `common/client`, `cloud/config`, `cloud/template`, `cloud/download`, `cloud/network`, `cloud/database`, `cloud/node`, `cloud/console`, `cloud/setup`, `cloud/backup`, `plugins/bridge/common`, `cloud/monitor`, `cloud/api`, `cloud/privacy`) | Adds Jazzer, runs `@FuzzTest` methods in regression mode in every test run; `-Pfuzz` switches to fuzzing mode. |
 
 ## Fuzz tests
 
@@ -136,7 +137,7 @@ The cloud keeps its data in files, not in a database. The home is the folder the
 ```
 <home>/
   VectolynCloud.jar
-  config/            cloud.yml, nodes.yml, monitor.yml, backup.yml, software.lock.yml
+  config/            cloud.yml, nodes.yml, monitor.yml, privacy.yml, backup.yml, software.lock.yml
                      (+ <file>.v<N>.bak after a schema migration)
     schema/          JSON Schemas of the files, for editors (written by the cloud)
     groups/          <group>.yml

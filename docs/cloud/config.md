@@ -15,7 +15,7 @@ The cloud home is the folder the cloud runs in (`VECTOLYN_HOME`, by default the 
 <home>/secrets/vectolyn.env       secrets, KEY=VALUE, owner-only
 ```
 
-`config/monitor.yml`, `config/backup.yml`, `config/cluster.yml` ([cluster.md](cluster.md#files)) and `config/software.lock.yml` belong to other modules, as do `local/`, `temp/`, `database/`, `storage/`, `backups/`, `logs/` and `state/`; the whole layout is in [architecture](architecture.md#cloud-home).
+`config/monitor.yml`, `config/privacy.yml` ([privacy.md](privacy.md)), `config/backup.yml`, `config/cluster.yml` ([cluster.md](cluster.md#files)) and `config/software.lock.yml` belong to other modules, as do `local/`, `temp/`, `database/`, `storage/`, `backups/`, `logs/` and `state/`; the whole layout is in [architecture](architecture.md#cloud-home).
 
 File names in this document, in error messages, events, the API and the console are relative to `config/`: `cloud.yml`, `groups/lobby.yml`. A relative path inside a file (for example `api.tls.keystore`) is resolved against the home, not against `config/`. A home from before the `config/` folder is moved by the [home layout migration](node.md#home-layout-migration) at the first start.
 
@@ -282,6 +282,7 @@ Almost every change takes effect while the cloud runs: a change through `apply` 
 | `database` in `cloud.yml` (mode, host, port, name, user, Docker image) | next start of the cloud ([node.md](node.md)) |
 | `node-id`, and `service-ports` of this node in `nodes.yml` | next start of the node ([node.md](node.md#limits-today)) |
 | `monitor.yml` | next start of the cloud ([monitor.md](monitor.md)) |
+| `privacy.yml` | next start of the node ([privacy.md](privacy.md)) |
 | `cluster.yml` | next start of the node ([cluster.md](cluster.md#files)) |
 | `proxy`, `legacy-proxy`, `fallback-group`, `branding` | next start of the proxy or service concerned, since the cloud renders its files and environment then ([bridges.md](bridges.md)) |
 
@@ -297,16 +298,16 @@ config import backups/config-2026-11-12.zip --dry-run
 config import backups/config-2026-11-12.zip
 ```
 
-**What is in it.** `cloud.yml`, `nodes.yml`, `groups/<name>.yml` and `tasks/<name>.yml` as the cloud writes them, plus `monitor.yml` and `backup.yml` byte for byte if they exist. Never secrets: nothing from `secrets/`, no `cluster.yml` (keys and members belong to one machine) and no `software.lock.yml`. The entries have a fixed time stamp, so the same configuration gives the same archive. Export never overwrites an existing file; a relative path in the console starts at the cloud home.
+**What is in it.** `cloud.yml`, `nodes.yml`, `groups/<name>.yml` and `tasks/<name>.yml` as the cloud writes them, plus `monitor.yml`, `privacy.yml` and `backup.yml` byte for byte if they exist. Never secrets: nothing from `secrets/`, no `cluster.yml` (keys and members belong to one machine) and no `software.lock.yml`. The entries have a fixed time stamp, so the same configuration gives the same archive. Export never overwrites an existing file; a relative path in the console starts at the cloud home.
 
 **What an import checks before it writes anything.**
 
 - Only the names above are accepted, exactly; the folders `groups/` and `tasks/` may appear as entries. Anything else (`../x.yml`, an absolute path, `secrets/vectolyn.env`, `cluster.yml`, `groups/a/b.yml`, an upper-case or device name) fails with `not-in-archive`. No other name is ever resolved, so an entry cannot write outside `config/` (no zip slip).
 - A name twice fails with `duplicate-entry`. At most 1024 entries and 32 MiB, for the archive file and for its unpacked content (`archive-too-large`); each file at most 1 MiB (`file-too-large`), counted on the bytes really unpacked, not on what the entry claims.
-- `cloud.yml` and `nodes.yml` must be there (`file-missing`). Every file is read as strictly as a hand-edited one, `monitor.yml` and `backup.yml` with their own checks, and the result is validated as a whole like any change. All problems are reported together.
+- `cloud.yml` and `nodes.yml` must be there (`file-missing`). Every file is read as strictly as a hand-edited one, `monitor.yml`, `privacy.yml` and `backup.yml` with their own checks, and the result is validated as a whole like any change. All problems are reported together.
 - On a cluster member, an archive that would change `nodes.yml`, a group or a task is refused with `managed-by-head`; change those on the head.
 
-**What an import does.** It shows the diff of every file that changes, then replaces the configuration through `ConfigService.apply` (validated once more against the configuration of that moment) and writes `monitor.yml` and `backup.yml` atomically. Groups and tasks that are not in the archive are deleted; a `monitor.yml` or `backup.yml` missing from the archive stays as it is. The import takes the files as they are, `node-id`, `setup-complete` and `eula-accepted` included. Settings from the [restart table](#what-needs-a-restart) take effect as described there.
+**What an import does.** It shows the diff of every file that changes, then replaces the configuration through `ConfigService.apply` (validated once more against the configuration of that moment) and writes `monitor.yml`, `privacy.yml` and `backup.yml` atomically. Groups and tasks that are not in the archive are deleted; a `monitor.yml`, `privacy.yml` or `backup.yml` missing from the archive stays as it is. The import takes the files as they are, `node-id`, `setup-complete` and `eula-accepted` included. Settings from the [restart table](#what-needs-a-restart) take effect as described there.
 
 `ConfigArchiveFuzzTest` feeds arbitrary bytes to the reader: it must either give a plan or fail with `ConfigException`, and never write a file.
 
