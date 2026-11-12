@@ -45,7 +45,7 @@ The cloud home is the folder VectolynCloud runs in. In production it lives outsi
 
 Until stage 2 the existing servers run locally from a `runtime/` folder via the Windows start scripts. VectolynCloud does not use that folder name; its layout is described in [Cloud home](https://github.com/VectoDE/VectolynCloud/blob/main/docs/cloud/architecture.md#cloud-home).
 
-## VectolynCloud (planned, stage 2)
+## VectolynCloud (stage 2, largely built)
 
 A Java node with a console (JLine) and a setup wizard.
 

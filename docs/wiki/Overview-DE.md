@@ -8,11 +8,11 @@ Wir betreiben kein Netzwerk, keine Server und keine Domain und hosten weder Webs
 
 ## Stand
 
-Das Projekt steht bei **Etappe 2 von 8** (VectolynCloud-Kern). Etappe 1, das Fundament, ist fertig und als signiertes Pre-Release [v0.1.1-dev](https://github.com/VectoDE/VectolynCloud/releases/tag/v0.1.1-dev) erschienen. Ein nutzbares Cloud-Release gibt es noch nicht. Fortschritt: [Roadmap](Roadmap-DE) und [#11](https://github.com/VectoDE/VectolynCloud/issues/11).
+Das Projekt steht bei **Etappe 2 von 8** (VectolynCloud-Kern). Etappe 1, das Fundament, ist fertig und als signiertes Pre-Release [v0.1.1-dev](https://github.com/VectoDE/VectolynCloud/releases/tag/v0.1.1-dev) erschienen. Der Cloud-Kern ist weitgehend gebaut: Launcher, Einrichtungsassistent, Konsole, Dienste mit Autoskalierung, Cloud-Kanal und Bridges, REST-/WebSocket-API, Datenbank-Einrichtung, Backups und Monitoring. Das Pre-Release v0.1.1-dev ist zum Ausprobieren gedacht, nicht für den Produktivbetrieb. Mehrere Nodes, das Update-System und der verwaltete Legacy-Proxy sind noch offen. Was es gibt und was geplant ist: [Funktionsstand](Feature-Status-DE). Fortschritt: [Roadmap](Roadmap-DE) und [#11](https://github.com/VectoDE/VectolynCloud/issues/11).
 
 ## Ziel
 
-Du startest `java -jar VectolynCloud.jar` unter Windows, Linux, macOS, in Docker oder auf Pterodactyl. Ein Einrichtungsassistent stellt ein paar Fragen, unter anderem, welche Server und Minigame-Gruppen du willst. Danach läuft das Netzwerk mit Datenbank, Proxy, Lobby, Spielmodi und Minigames ohne weitere Handarbeit. Ein Release wird `VectolynCloud.jar`, Startskripte für Windows, Linux und macOS und ein Docker-Image auf GHCR enthalten; Dockerfile, compose-Datei und Pterodactyl-Egg liegen im Repository. Das ist das Ziel ab Etappe 2, nicht der heutige Stand.
+Du startest `java -jar VectolynCloud.jar` unter Windows, Linux, macOS, in Docker oder auf Pterodactyl. Ein Einrichtungsassistent stellt ein paar Fragen, unter anderem, welche Server und Minigame-Gruppen du willst. Danach lädt die Cloud die Software herunter und betreibt das Netzwerk ohne weitere Handarbeit. Ein Release enthält `VectolynCloud.jar`, Startskripte für Windows, Linux und macOS und ein Docker-Image auf GHCR; Dockerfile, compose-Datei und Pterodactyl-Egg liegen im Repository. Lobby, Spielmodi und Minigames selbst gehören zu späteren Etappen und sind noch nicht gebaut.
 
 ## Grundsätze
 

@@ -2,82 +2,57 @@
 
 [English](Getting-Started)
 
-Es gibt zwei Wege: den heutigen Übergangsaufbau und die Einrichtung über VectolynCloud, geplant für Etappe 2.
+Vom Download bis zum laufenden Netzwerk. Dies ist ein Pre-Release: v0.1.1-dev ist zum Ausprobieren gedacht, nicht für den Produktivbetrieb. Details je Plattform stehen unter [Betrieb](Operations-DE).
 
-## Heute: Übergangsaufbau (Windows)
+## Was du brauchst
 
-Bis es VectolynCloud gibt, laufen die Server lokal aus einem Netzwerk-Ordner außerhalb des Repositorys (zum Beispiel `C:\Vectolyn`, das spätere Cloud-Home) über Windows-Startskripte. Das Startskript startet immer alle Server. Die Auswahl kommt mit VectolynCloud.
+- Java 21 oder neuer. Die Cloud selbst läuft darauf; die Server, die sie startet, bekommen die Java-Version, die ihre Minecraft-Version braucht, und die Cloud lädt eine passende Laufzeit herunter, falls keine installiert ist.
+- Ein normales Benutzerkonto. Die Cloud startet nicht als root oder Administrator.
+- Internetzugang beim ersten Start, damit die Cloud die Server-Software herunterladen kann.
+- Arbeitsspeicher für die gewählten Server. Der Einrichtungsassistent addiert die Heaps und warnt, wenn sie den Rechner übersteigen.
 
-Du brauchst:
+## 1. Herunterladen und prüfen
 
-- Java 25 im `PATH`. Paper 26.3 und der Fabric-Server für 26.3 setzen es voraus, Velocity läuft ebenfalls damit.
-- Die portable MariaDB 11.8.9 für Windows x64 (ZIP-Archiv).
+Nimm das Archiv für dein System vom [neuesten Release](https://github.com/VectoDE/VectolynCloud/releases): `VectolynCloud-<version>-windows.zip` oder `VectolynCloud-<version>-linux-macos.tar.gz`. Prüfe es gegen `SHA256SUMS` und die Signatur, siehe [Download prüfen](Operations-DE#einen-download-prüfen).
 
-### 1. Runtime-Ordner anlegen
+## 2. Entpacken und starten
 
-1. Repository klonen.
-2. Jeden Ordner `templates/<Server>/` nach `<Netzwerk-Ordner>\<Server>\runtime\` kopieren.
-3. `cloud/dist/secrets/vectolyn.env.example` nach `<Netzwerk-Ordner>\secrets\vectolyn.env` kopieren und eigene Werte eintragen. Diese Datei nie committen.
-4. In den `runtime/`-Ordnern jeden Platzhalter `{{VECTOLYN_…}}` durch deine Werte ersetzen. [`placeholders.md`](https://github.com/VectoDE/VectolynCloud/blob/main/templates/placeholders.md) listet jeden Platzhalter mit Fundstellen und lokalem Standardwert auf (Ports, Heap-Größen, Serverliste des Proxys).
-5. Die Dateien anlegen, die nicht aus Templates kommen: `Proxy/runtime/forwarding.secret` (das Forwarding-Secret), die Floodgate-`key.pem` (der Base64-Wert, dekodiert zu 16 Bytes, dieselbe Datei auf dem Proxy und auf jedem Backend) und `eula.txt`, sobald du die Minecraft-EULA akzeptiert hast.
+Entpacke das Archiv in einen leeren Ordner. Dieser Ordner ist das Cloud-Home: Konfiguration, Welten, Datenbank und Downloads landen alle darin.
 
-Die Schritte 2 bis 5 übernimmt ab Etappe 2 VectolynCloud. Diese Ordner (`<Server>\runtime`, `Database\runtime`) gehören nur zu den Startskripten von Hand; VectolynCloud nutzt einen eigenen Aufbau (`config/`, `local/`, `database/`, `storage/`), siehe [Cloud home](https://github.com/VectoDE/VectolynCloud/blob/main/docs/cloud/architecture.md#cloud-home) (Englisch).
-
-### 2. Server-Software einspielen
-
-Das Repository liefert keine Jars mit. Der aktuelle Aufbau läuft mit diesen Versionen. Die Startskripte erwarten die Dateinamen aus der zweiten Spalte.
-
-| Ordner (`runtime/`) | Server-Jar | Plugins oder Mods |
-|---|---|---|
-| `Proxy` | `velocity.jar` (Velocity 4.3.0) | `plugins/`: Geyser-Velocity, Floodgate (Velocity), LuckPerms-Velocity 5.5.71, ViaVersion 5.12.2, ViaBackwards 5.12.2, ViaRewind 4.2.0 |
-| `Lobby-Server`, `Survival-Server`, `Creative-Server`, `End-Server` | `paper.jar` (Paper 26.3) | `plugins/`: Floodgate (Spigot), LuckPerms-Bukkit 5.5.71, TAB 6.2.1, PlaceholderAPI 2.12.3, WorldEdit 7.4.6, WorldGuard 7.0.20 |
-| `Mod-Server` | `fabric-server.jar` (Fabric Loader 0.20.1, MC 26.3) | `mods/`: Fabric API, FabricProxy-Lite 2.12.0, Floodgate-Fabric 2.2.7-b69, LuckPerms-Fabric 5.5.85, Lithium 0.26.2+mc26.3, FerriteCore 9.0.0, ServerCore 1.5.20+26.3, Chunky 1.5.3, spark 1.10.187, ProxyPortal 2.0.0+26.1 |
-| `Database` | MariaDB 11.8.9, entpackt nach `mariadb-11.8.9-winx64/` | keine |
-
-Die Vectolyn-Plugins entstehen in diesem Repository (siehe *Plugins bauen* unten). `VectolynLobby` gehört auf die Lobby, `VectolynPortalBridge` auf Lobby, Survival und Creative.
-
-Vor dem ersten Datenbankstart den Datenordner `Database/runtime/data` mit `mariadb-install-db.exe` aus dem `bin`-Ordner von MariaDB anlegen. Danach das ausgefüllte `init.sql` einmal als MariaDB-root ausführen. Es legt die LuckPerms-Datenbank und den Benutzer an.
-
-### 3. Starten
-
-`start-network.bat` und `start-vectolyn-database.cmd` aus `cloud/dist/manual/` in den Netzwerk-Ordner kopieren, dort `start-network.bat` ausführen und eine Option wählen:
-
-| Option | Startet |
+| System | Start |
 |---|---|
-| `1` | Alles: die Datenbank, nach fünf Sekunden den Proxy und alle fünf Backends |
-| `2` | Nur die Datenbank |
-| `3` | Nur den Proxy |
-| `4` | Nur die Backends: Lobby, Survival, Mod, Creative, End |
-| `5` | Nichts, schließt das Fenster |
+| Windows | `start.bat` in einer normalen Eingabeaufforderung oder PowerShell (nicht „Als Administrator ausführen“) |
+| Linux, macOS | `./start.sh` |
+| Docker | `docker run -it --init -v vectolyn:/data -p 25565:25565 -p 19132:19132/udp ghcr.io/vectode/vectolyn-cloud:<version>` |
+| Pterodactyl | das Egg importieren, siehe [Betrieb](Operations-DE) |
 
-Jeder Server öffnet ein eigenes Fenster und startet fünf Sekunden nach dem Stoppen neu. Zum endgültigen Beenden das Fenster schließen. `start-vectolyn-database.cmd` startet nur die Datenbank, wie Option `2`.
+## 3. Den Einrichtungsassistenten beantworten
 
-Danach mit einem Java-Client zu `localhost:25565` verbinden oder mit einem Bedrock-Client zu `localhost`, Port `19132`.
+Beim ersten Start fragt die Cloud in dieser Reihenfolge: Sprache, Minecraft-EULA, Netzwerkname, welche Server du willst (Proxy, Lobby, Survival, Creative, Mod-Server, End, Minigames, Legacy-Proxy), Ports, Speicher je Server, Anzahl der Dienste und die Datenbank (verwaltete MariaDB, Docker, eine vorhandene MariaDB/MySQL oder H2). Enter übernimmt den Standardwert in Klammern. Am Ende zeigt der Assistent eine Zusammenfassung und schreibt nichts, bis du `save` wählst. Ohne deine Zustimmung zur EULA startet kein Server.
 
-Ports aller Server: [Server-Netzwerk](Server-Network-DE).
+Ohne Terminal (systemd, Docker ohne `-it`, Pterodactyl) liest der Assistent stattdessen eine Setup-Datei: `./start.sh --non-interactive --setup-file setup.yml`. Das Format steht in [docs/cloud/setup.de.md](https://github.com/VectoDE/VectolynCloud/blob/main/docs/cloud/setup.de.md).
 
-## Geplant: VectolynCloud (ab Etappe 2)
+## 4. Laufen lassen
 
-VectolynCloud wird so eingerichtet und konfiguriert:
+Die Cloud erzeugt die Secrets, lädt die Server-Software und Plugins herunter und prüft sie, rendert jeden gewollten Server aus seinem Template in einen eigenen Ordner unter `local/services/` und startet ihn. Der Start zeigt ein Banner und eine Zeile je Schritt. Nicht gewählte Server entstehen nicht, und weder Proxy noch Lobby verweisen auf sie.
 
-1. `java -jar VectolynCloud.jar` unter Windows, Linux, macOS, in Docker oder auf Pterodactyl starten.
-2. Beim ersten Start läuft ein Einrichtungsassistent in der Konsole. Er fragt unter anderem, wie die Datenbank laufen soll (verwaltete MariaDB, Docker oder extern) und welche der sieben Server und Minigame-Gruppen du willst.
-3. Die Cloud erzeugt die Secrets, lädt Server-Software und Java-Laufzeiten herunter und prüft sie, baut jeden gewollten Server aus seiner Vorlage in einen eigenen Ordner unter `local/services/` und startet ihn. Der Start zeigt ein Banner und eine Zeile je Schritt (Konfiguration, Datenbank, Software, Vorlagen, Dienste). Deine Konfiguration liegt in `config/`. Nicht gewählte Server entstehen gar nicht, und weder Proxy noch Lobby verweisen auf sie.
-4. Danach änderst du den Aufbau über Konfigurationsdateien und Konsolenbefehle.
+Verbinde dich mit einem Java-Client zu `localhost:25565` oder mit einem Bedrock-Client zu `localhost`, Port `19132`. Ports aller Server: [Server-Netzwerk](Server-Network-DE).
 
-Ab Etappe 8 soll das Web-Dashboard dasselbe können, auch die Ersteinrichtung und die Server-Auswahl. Assistent, Dateien, Konsolenbefehle und Dashboard arbeiten auf einer gemeinsamen Konfigurationsschicht.
+In der Konsole listet `help` die Befehle, `service list` zeigt die Dienste und `shutdown` beendet alles. Nach der ersten Einrichtung änderst du die Konfiguration über Dateien und Konsolenbefehle, siehe [Konfiguration](Configuration-DE). Skripte können die [API](API-DE) nutzen.
 
-## Aus dem Repository: VectolynCloud lokal starten
+## Wo was liegt
 
-So probierst du den aktuellen Stand von VectolynCloud oder eine eigene Änderung aus:
+Sichere `config/`, `local/` und `secrets/`. Downloads, Java-Laufzeiten und Logs entstehen von selbst neu. Die vollständige Ordnerstruktur: [Betrieb](Operations-DE#wo-die-dateien-liegen).
+
+## Eine Änderung aus dem Repository ausprobieren
+
+So probierst du den aktuellen Stand des Codes oder eine eigene Änderung aus:
 
 ```sh
 ./gradlew :cloud:node:runLocal --console=plain
 ```
 
-Das baut `VectolynCloud.jar` und startet es mit `run/` im Wurzelverzeichnis des Repositorys als Cloud-Home. Der Einrichtungsassistent fragt im selben Terminal. Konfiguration, Secrets, Welten, Logs und Downloads bleiben alle in `run/`, und Git ignoriert den Ordner komplett. Beende das Netzwerk mit `shutdown` in der Konsole; wer neu anfangen will, löscht `run/`. Läuft deine Shell als Administrator oder root, hängst du `-PallowRoot=true` an.
-
-`run/` ist nur zum Entwickeln da. Ein echtes Netzwerk startest du aus einem Release in einem eigenen Cloud-Home außerhalb des Checkouts, siehe [Betrieb](Operations-DE). Details zum Task: [docs/cloud/launcher.md](https://github.com/VectoDE/VectolynCloud/blob/main/docs/cloud/launcher.md#local-start-from-the-repository) (Englisch).
+Das baut `VectolynCloud.jar` und startet sie mit `run/` im Wurzelverzeichnis des Repositorys als Cloud-Home. Der Einrichtungsassistent fragt im selben Terminal; alles bleibt in `run/`, das Git ignoriert. Beende mit `shutdown`, lösche `run/`, um neu anzufangen. Läuft deine Shell als Administrator oder root, hänge `-PallowRoot=true` an. `run/` ist nur zum Entwickeln da. Details: [docs/cloud/launcher.md](https://github.com/VectoDE/VectolynCloud/blob/main/docs/cloud/launcher.md#local-start-from-the-repository) (Englisch).
 
 ## Plugins bauen
 

@@ -49,7 +49,7 @@ Built in stage 2: launcher, configuration, templates, downloads, setup assistant
 | New to Minecraft servers | [Overview](https://github.com/VectoDE/VectolynCloud/wiki/Overview), [Getting Started](https://github.com/VectoDE/VectolynCloud/wiki/Getting-Started) and the [FAQ](https://github.com/VectoDE/VectolynCloud/wiki/FAQ) in the wiki, then the [quick start](#quick-start) below |
 | Owner of a network | [Quick start](#quick-start), then [Server Network](https://github.com/VectoDE/VectolynCloud/wiki/Server-Network) and [Crossplay](https://github.com/VectoDE/VectolynCloud/wiki/Crossplay) in the wiki |
 | Admin | [Running VectolynCloud](docs/cloud/operations.md) (Windows, Linux with systemd, macOS, Docker, Pterodactyl), [setup](docs/cloud/setup.md), [console](docs/cloud/console.md), [backups](docs/cloud/backup.md), [monitoring](docs/cloud/monitor.md), [API](docs/cloud/api.md) |
-| Developer | [Build](#build), [architecture](docs/cloud/architecture.md), [Contributing](CONTRIBUTING.md) |
+| Developer | [Build](#build), [developer documentation](docs/development/README.md), [module reference](docs/development/modules.md), [architecture](docs/cloud/architecture.md), [releasing](docs/development/releasing.md), [Contributing](CONTRIBUTING.md) |
 | Security reviewer | [SECURITY.md](SECURITY.md), [OpenSSF](docs/openssf.md), [dependency verification](docs/dependency-verification.md), [rights audit](docs/cloud/rights-audit.md) |
 
 The README, the contributing guide and the wiki exist in English and German.
