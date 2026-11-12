@@ -1,0 +1,54 @@
+# gitleaks configuration (issue #63). Extends the default rules and allows exactly the fixed test
+# values below, each by file and value, never a whole folder. A real secret in one of these files
+# is still found, because the value has to match as well.
+# Adding a test secret: use a value that is obviously fake, run `gitleaks detect --no-banner`,
+# and if it is flagged, add an entry here (see CONTRIBUTING.md).
+
+title = "VectolynCloud gitleaks configuration"
+
+[extend]
+useDefault = true
+
+# Test sources. The first three paths exist in the history of the project under earlier module
+# names, the history scan in CI reads them as well.
+[[allowlists]]
+description = "Fixed test secret of ClusterMessagesTest"
+condition = "AND"
+paths = ['''^cloud/cluster/src/test/java/net/vectora/cloud/cluster/ClusterMessagesTest\.java$''']
+regexes = ['''^0123456789abcdefghijklmnopqrstuv$''']
+
+[[allowlists]]
+description = "The word X509Certificate in the log text of ClusterCa is not a secret"
+condition = "AND"
+paths = ['''^cloud/cluster/src/main/java/net/vectora/cloud/cluster/ClusterCa\.java$''']
+regexes = ['''^X509Certificate$''']
+
+[[allowlists]]
+description = "Dummy forwarding secrets of ServiceCoreUnitTest"
+condition = "AND"
+paths = ['''^VectoraCloud/cloud-node/src/test/java/net/vectora/cloud/node/service/ServiceCoreUnitTest\.java$''']
+regexes = ['''^(legacy|same)-forwarding-0123456789$''']
+
+[[allowlists]]
+description = "Dummy Floodgate key of RealTemplateSecretsTest"
+condition = "AND"
+paths = ['''^VectoraCloud/cloud-node/src/test/java/net/vectora/cloud/node/service/RealTemplateSecretsTest\.java$''']
+regexes = ['''^floodgate-key-16$''']
+
+[[allowlists]]
+description = "Dummy rendered secret of the backup TestHome"
+condition = "AND"
+paths = ['''^VectoraCloud/cloud-backup/src/test/java/net/vectora/cloud/backup/TestHome\.java$''']
+regexes = ['''^RenderedSecret-0123456789abcdef$''']
+
+[[allowlists]]
+description = "Dummy forwarding secret of the legacy bridge tests"
+condition = "AND"
+paths = ['''^VectoraCloud/cloud-bridge-legacy/src/test/java/net/vectora/cloud/bridge/legacy/(LoginGateTest|HandshakeGuardTest)\.java$''']
+regexes = ['''^legacy-forwarding-secret\.0123456789$''']
+
+[[allowlists]]
+description = "Dummy password of CommandDispatcherTest"
+condition = "AND"
+paths = ['''^VectoraCloud/cloud-console/src/test/java/net/vectora/cloud/console/command/CommandDispatcherTest\.java$''']
+regexes = ['''^S3cretPassw0rd$''']
