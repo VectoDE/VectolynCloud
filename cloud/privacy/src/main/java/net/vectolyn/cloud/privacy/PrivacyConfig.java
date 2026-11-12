@@ -13,10 +13,11 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
  * @param ipBans        IP ban list settings
  * @param statistics    statistics per game mode
  * @param telemetry     telemetry to a server of the operator's choice (off by default)
+ * @param tracking      per-player tracking, only for players who agree in game (off by default)
  */
-@JsonPropertyOrder({"schema-version", "ip-bans", "statistics", "telemetry"})
+@JsonPropertyOrder({"schema-version", "ip-bans", "statistics", "telemetry", "tracking"})
 public record PrivacyConfig(@JsonProperty(required = true) int schemaVersion, IpBans ipBans, Statistics statistics,
-                            Telemetry telemetry) {
+                            Telemetry telemetry, Tracking tracking) {
 
     /** Current format version. */
     public static final int SCHEMA_VERSION = 1;
@@ -26,6 +27,7 @@ public record PrivacyConfig(@JsonProperty(required = true) int schemaVersion, Ip
         ipBans = ipBans == null ? IpBans.defaults() : ipBans;
         statistics = statistics == null ? Statistics.defaults() : statistics;
         telemetry = telemetry == null ? Telemetry.defaults() : telemetry;
+        tracking = tracking == null ? Tracking.defaults() : tracking;
     }
 
     /**
@@ -34,7 +36,7 @@ public record PrivacyConfig(@JsonProperty(required = true) int schemaVersion, Ip
      * @return the defaults
      */
     public static PrivacyConfig defaults() {
-        return new PrivacyConfig(SCHEMA_VERSION, null, null, null);
+        return new PrivacyConfig(SCHEMA_VERSION, null, null, null, null);
     }
 
     /**
@@ -131,5 +133,39 @@ public record PrivacyConfig(@JsonProperty(required = true) int schemaVersion, Ip
 
         /** Version of the telemetry description in the documentation. */
         public static final int CURRENT_TEXT_VERSION = 1;
+    }
+
+    /**
+     * {@code tracking}: activity data per player (name, UUID, first and last visit, logins, playtime
+     * per game mode), kept only for players who agreed with {@code /privacy on} in game. Off by
+     * default because the operator has to name themselves as the responsible party first.
+     *
+     * @param enabled       whether players can agree (default false)
+     * @param retentionDays a record is deleted this many days after the player's last visit, 1 to
+     *                      {@value IpBans#MAX_RETENTION_DAYS} (default {@value #DEFAULT_RETENTION_DAYS})
+     * @param controller    who is responsible, shown to the player (name and contact), at most 200
+     *                      characters; required when {@code enabled} is true
+     */
+    @JsonPropertyOrder({"enabled", "retention-days", "controller"})
+    public record Tracking(Boolean enabled, Integer retentionDays, String controller) {
+
+        /** Default retention period in days. */
+        public static final int DEFAULT_RETENTION_DAYS = 90;
+
+        /** Fills in the defaults. */
+        public Tracking {
+            enabled = enabled == null ? Boolean.FALSE : enabled;
+            retentionDays = retentionDays == null ? DEFAULT_RETENTION_DAYS : retentionDays;
+            controller = controller == null ? "" : controller;
+        }
+
+        /**
+         * The defaults: off.
+         *
+         * @return default settings
+         */
+        public static Tracking defaults() {
+            return new Tracking(null, null, null);
+        }
     }
 }

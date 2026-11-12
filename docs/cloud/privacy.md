@@ -67,6 +67,43 @@ The cloud refuses to start with `telemetry.enabled: true` if the consent record,
 
 That is the whole report: report format, cloud version, name of the operating system, and the three sums per game mode (empty if `statistics.enabled` is false). No IP address of the sender is added by the cloud, but the receiving server sees the address of the connection; the operator who chooses the endpoint is responsible for what it logs. `Telemetry.report()` returns the exact bytes before anything is sent.
 
+## Per-player tracking
+
+**What it is.** Activity data of a single player: name and UUID, time of the first and last visit, logins and playtime, in total and per game mode (the group of the server). It exists only for players who agreed, in game, and only from that moment on. The statistics above are different: they are sums without a player.
+
+**Switch.** Off by default. The operator names themselves as the responsible party first (`config/privacy.yml`); the cloud refuses to start with `tracking.enabled: true` and no `controller`:
+
+```yaml
+schema-version: 1
+tracking:
+  enabled: true
+  retention-days: 90                      # 1 to 3650, counted from the last visit
+  controller: Example Network, privacy@example.org
+```
+
+**Opt-in in game.** On the Velocity proxy the bridge adds `/privacy`:
+
+| Command | Effect |
+| --- | --- |
+| `/privacy` | shows the notice: responsible party, purpose, what is stored, how long, how to withdraw |
+| `/privacy on` | shows the notice and asks for `/privacy on confirm` |
+| `/privacy on confirm` | records the consent (time and notice version) and starts counting from then on |
+| `/privacy off` | withdraws and deletes everything about the player at once |
+| `/privacy data` | access: the full record as JSON |
+| `/privacy status` | whether the player agreed |
+
+The text is in German or English by the player's language. It comes from the cloud (`TrackingNotice`, version `1`) so every place that shows it says the same. Nothing is recorded without `/privacy on confirm`: the store ignores the events of everyone else. The proxy sends the request over the cloud channel `vectolyn.privacy`; the node answers only a proxy and only for a player who is online through exactly that proxy.
+
+**Purpose (as shown to the player).** To analyse how the network and its game modes are used, so they can be improved.
+
+**Retention.** `retention-days` after the last visit; the node deletes due records when it starts and every hour. A player who is online is never due.
+
+**Access and deletion in the panel.** `GET /api/v1/admin/privacy/players/{uuid}` returns the record, `DELETE` removes it (token with `admin`, see [api.md](api.md)). The panel calls these two endpoints. Deleting is the same as `/privacy off`.
+
+**Code.** `TrackingStore` (`state/tracking.json`, atomic writes, strict reader with a fuzz test), `TrackingNotice`, `PrivacyRequests` (the request logic), `NodePrivacy` (checks the sender), `PrivacyCommand` in `plugins/bridge/velocity`, `PrivacyAccess` in `cloud/api`. Only the Velocity proxy has the command so far; the legacy proxy has none.
+
+**Legal basis, draft.** Consent of the player (Art. 6 (1) (a) GDPR), asked for in game, voluntary, withdrawable at any time with `/privacy off`. Whether consent is the right basis for players under 16, whether § 25 TDDDG applies to a server-side record at all, and whether the notice is enough are questions for a lawyer (below).
+
 ## Questions for a lawyer
 
 1. Is the balancing of interests for IP bans by address sufficient under Art. 6 (1) (f) GDPR, and does it need a written record beyond this page?
@@ -76,5 +113,11 @@ That is the whole report: report format, cloud version, name of the operating sy
 5. Are the per-mode sums anonymous data, or does the short-lived in-memory session map make the statistics personal data processing?
 6. Is the consent record in `privacy.yml` (name, time, text version) sufficient as a proof of consent of the operator, and is the operator the right person to consent, or does the data protection law apply at all to a report without personal data?
 7. Which duties come with a telemetry endpoint run by someone else (processor agreement, transfer to third countries, notice in the privacy policy)?
+8. Is consent in game by command (`/privacy on confirm`, after showing the notice) a valid, informed and demonstrable consent under Art. 6 (1) (a), 7 GDPR? Is the stored proof (time, notice version) enough?
+9. What applies to minors (age limit for consent, parental consent)? Must the opt-in check the age?
+10. Does § 25 TDDDG apply to the tracking at all, since nothing is read from or stored on the player's device?
+11. Is the notice text (version 1) complete under Art. 13 GDPR (responsible party, purpose, legal basis, retention, rights, right to withdraw, supervisory authority), and what is missing?
+12. Is 90 days after the last visit an acceptable default retention? Is "deleted at once on withdrawal" enough for Art. 17 GDPR?
+13. Is an administrator with the `admin` API scope a permitted recipient of the access and deletion data, and is access logging needed?
 
 Questions 14 to 20 (legal texts, payments, licences) and the German drafts of the privacy policy, imprint and terms are in [docs/legal](../legal/README.md). All of them are drafts and not checked by a lawyer.

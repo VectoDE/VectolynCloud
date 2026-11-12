@@ -23,7 +23,7 @@ import net.vectolyn.cloud.config.validation.ConfigNames;
  *   <li>no empty segments, no {@code .} or {@code ..}, no percent-encoding in the path; a segment
  *       is letters, digits, {@code _} and {@code -} in up to eight parts joined by single dots;</li>
  *   <li>each parameter matches its pattern ({@code {id}}: service id, {@code {name}}: group or
- *       task name, {@code {kind}}: server kind, {@code {template}}: template folder);</li>
+ *       task name, {@code {kind}}: server kind, {@code {template}}: template folder, {@code {uuid}}: a UUID);</li>
  *   <li>{@code {path}} may only end a route and takes the rest of the path, one or more
  *       segments joined by {@code /}; the handler checks it further;</li>
  *   <li>query parameters are {@code key=value} pairs with lower-case keys, each key once, values
@@ -47,7 +47,8 @@ public final class Router<H> {
             "id", Pattern.compile("[a-z0-9][a-z0-9_-]{0,63}"),
             "name", Pattern.compile("[a-z0-9][a-z0-9_-]{0,31}"),
             "kind", Pattern.compile("[a-z]{1,16}"),
-            "template", Pattern.compile(ConfigNames.TEMPLATE));
+            "template", Pattern.compile(ConfigNames.TEMPLATE),
+            "uuid", Pattern.compile("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"));
     /** The parameter that takes the rest of the path; only as the last segment of a route. */
     private static final String TAIL = "path";
 

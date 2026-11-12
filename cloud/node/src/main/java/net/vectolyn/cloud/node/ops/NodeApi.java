@@ -13,6 +13,7 @@ import net.vectolyn.cloud.api.backend.ApiBackend;
 import net.vectolyn.cloud.api.backend.ApiBackendException;
 import net.vectolyn.cloud.api.backend.BackupAccess;
 import net.vectolyn.cloud.api.backend.NodeAccess;
+import net.vectolyn.cloud.api.backend.PrivacyAccess;
 import net.vectolyn.cloud.api.backend.NodeStatus;
 import net.vectolyn.cloud.api.backend.ServiceAccess;
 import net.vectolyn.cloud.api.backend.ServiceView;
@@ -49,6 +50,7 @@ public final class NodeApi implements ApiBackend, ServiceAccess, NodeAccess, Ser
     private final Instant startedAt;
     private final UnaryOperator<String> redactor;
     private final Optional<BackupAccess> backups;
+    private volatile Optional<PrivacyAccess> privacy = Optional.empty();
     private volatile ApiServer server;
     private volatile boolean shuttingDown;
 
@@ -103,6 +105,20 @@ public final class NodeApi implements ApiBackend, ServiceAccess, NodeAccess, Ser
     @Override
     public Optional<BackupAccess> backups() {
         return backups;
+    }
+
+    @Override
+    public Optional<PrivacyAccess> privacy() {
+        return privacy;
+    }
+
+    /**
+     * Gives the API access to the per-player tracking, once the node has built it.
+     *
+     * @param value the access
+     */
+    public void privacy(PrivacyAccess value) {
+        this.privacy = Optional.of(Objects.requireNonNull(value, "value"));
     }
 
     @Override
