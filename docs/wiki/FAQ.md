@@ -15,7 +15,7 @@ That is a project rule: no game mode ships that Bedrock players cannot enter. Me
 No, once VectolynCloud exists (planned, stage 2). You pick the servers and minigame groups you want in the setup wizard or the config; the cloud only creates those. Until then the transitional setup starts the existing servers.
 
 **How will VectolynCloud be configured?**
-Like CloudNet: a console wizard on first start, then config files and console commands (stage 2). The web dashboard will be able to do all of it as well (stage 8).
+A console wizard on first start, then config files and console commands (stage 2). The web dashboard will be able to do all of it as well (stage 8).
 
 **Which Java version do I need?**
 To run the servers: Java 25, because Paper 26.3 requires it. To build: Gradle starts on Java 17 or newer and compiles with a Java 25 toolchain that it downloads if missing. The plugin bytecode targets Java 21, and anything that needs Java 25 keeps a Java 21 path.
