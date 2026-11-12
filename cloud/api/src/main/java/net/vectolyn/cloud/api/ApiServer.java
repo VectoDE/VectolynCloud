@@ -529,7 +529,7 @@ public final class ApiServer implements AutoCloseable {
      * @return the answer
      * @throws ApiException the error REST would answer (400, 403, 404, 405, 422, ...)
      */
-    public ApiResponse call(ApiToken principal, String method, String target, byte[] body, String ifMatch)
+    public ApiResponse call(ApiToken principal, String method, String target, byte[] body, @Nullable String ifMatch)
             throws ApiException {
         Objects.requireNonNull(principal, "principal");
         if (!principal.id().startsWith(LOCAL_PREFIX)) {
@@ -598,10 +598,10 @@ public final class ApiServer implements AutoCloseable {
      * @param use       the work
      * @param <T>       its result
      * @return the result, or empty for a wrong, used or expired token
-     * @throws java.io.IOException if the work fails; the token stays valid
+     * @throws IOException if the work fails; the token stays valid
      */
     public <T> java.util.Optional<T> useSetupToken(String presented, ApiTokens.SetupUse<T> use)
-            throws java.io.IOException {
+            throws IOException {
         return tokens.useSetupToken(presented, use);
     }
 
