@@ -178,13 +178,24 @@ checkstyle {
 tasks.named("checkstyleTest") { enabled = false }
 
 pmd {
-    toolVersion = "7.17.0"
+    toolVersion = "7.22.0"
     ruleSets = emptyList()
     ruleSetFiles = files(rootProject.file("gradle/pmd/ruleset.xml"))
     isConsoleOutput = true
     isIgnoreFailures = false
 }
 tasks.named("pmdTest") { enabled = false }
+
+// PMD pulls Apache HttpComponents 5.1.3 for its remote rule set loading; that line has advisories
+// (GHSA-hjcp-jmpx-g3qm, GHSA-v3jc-474w-2wm6, GHSA-hf6x-8p5f-cgmf). The tool does not use the
+// affected features here (rule sets are local files); the fixed releases are a drop-in.
+dependencies {
+    constraints {
+        add("pmd", "org.apache.httpcomponents.client5:httpclient5:5.6.3")
+        add("pmd", "org.apache.httpcomponents.core5:httpcore5:5.4.3")
+        add("pmd", "org.apache.httpcomponents.core5:httpcore5-h2:5.4.3")
+    }
+}
 
 // JaCoCo: every module reports line coverage, and `check` fails below the module's minimum.
 jacoco {
