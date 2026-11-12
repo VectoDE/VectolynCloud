@@ -18,10 +18,11 @@ Transitive Abhängigkeiten sind nicht einzeln aufgeführt. Die Verifikation der 
 | org.junit.jupiter:junit-jupiter | 6.1.3 | test | EPL-2.0 | n/a, test only, not distributed |
 | org.junit.platform:junit-platform-launcher | 6.1.3 | test runtime | EPL-2.0 | n/a, test only, not distributed |
 | org.yaml:snakeyaml | 2.7 | implementation, test | Apache-2.0 | yes |
-| io.netty:netty-bom | 4.2.19.Final | platform | Apache-2.0 | yes |
-| io.netty:netty-transport | 4.2.19.Final | implementation, api | Apache-2.0 | yes |
-| io.netty:netty-handler | 4.2.19.Final | implementation | Apache-2.0 | yes |
-| io.netty:netty-codec-http | 4.2.19.Final | implementation | Apache-2.0 | yes |
+| io.netty:netty-bom | 4.2.20.Final | platform | Apache-2.0 | yes |
+| io.netty:netty-transport | 4.2.20.Final | implementation, api | Apache-2.0 | yes |
+| io.netty:netty-handler | 4.2.20.Final | implementation | Apache-2.0 | yes |
+| io.netty:netty-codec-http | 4.2.20.Final | implementation | Apache-2.0 | yes |
+| io.netty:netty-codec-http2 | 4.2.20.Final | implementation | Apache-2.0 | yes |
 | org.jline:jline-terminal | 3.30.17 | implementation | BSD-3-Clause | yes |
 | org.jline:jline-reader | 3.30.17 | implementation | BSD-3-Clause | yes |
 | org.jline:jline-terminal-jni | 3.30.17 | runtimeOnly | BSD-3-Clause | yes |
@@ -29,6 +30,10 @@ Transitive Abhängigkeiten sind nicht einzeln aufgeführt. Die Verifikation der 
 | tools.jackson:jackson-bom | 3.2.4 | platform | Apache-2.0 | yes |
 | tools.jackson.core:jackson-databind | 3.2.4 | implementation, api | Apache-2.0 | yes |
 | tools.jackson.dataformat:jackson-dataformat-yaml | 3.2.4 | implementation, test | Apache-2.0 | yes |
+| com.graphql-java:graphql-java | 26.1 | implementation | MIT | yes |
+| com.graphql-java:java-dataloader | 6.0.0 | runtime (via graphql-java) | Apache-2.0 | yes |
+| org.reactivestreams:reactive-streams | 1.0.3 | runtime (via graphql-java) | MIT-0 | yes |
+| org.jspecify:jspecify | 1.0.0 | runtime (via graphql-java) | Apache-2.0 | yes |
 | org.mariadb.jdbc:mariadb-java-client | 4.0.0 | implementation | LGPL-2.1-or-later | yes (the "or later" clause allows combination under GPL-3.0) |
 | org.postgresql:postgresql | 42.7.14 | implementation | BSD-2-Clause (transitiv: org.checkerframework:checker-qual, MIT) | yes |
 | com.code-intelligence:jazzer-junit | 0.30.0 | test (fuzz) | Apache-2.0 | yes |

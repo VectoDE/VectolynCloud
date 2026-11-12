@@ -61,10 +61,12 @@ api:
   enabled: false
   bind: 127.0.0.1            # anything except loopback needs TLS
   port: 8085
+  # grpc-port: 8086          optional gRPC listener (HTTP/2) on the same bind and TLS; 0 or missing = off
   tls:
     enabled: false
     # keystore: secrets/api.p12  required when enabled, relative to the home
   # cors-origins: [https://dashboard.example.org]   optional, up to 16 origins, off when empty
+  # graphql-introspection: true   optional, answers __schema/__type on /api/v1/graphql; off by default, for development
 branding:
   powered-by: true           # last TAB footer line "Powered by VectolynCloud" and /version on the proxies; false removes both
 ```

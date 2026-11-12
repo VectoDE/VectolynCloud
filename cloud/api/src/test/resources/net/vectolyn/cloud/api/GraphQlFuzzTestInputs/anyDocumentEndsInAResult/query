@@ -1,0 +1,1 @@
+{ services { totalCount items { id state } } nodeStatus { nodeId } }
