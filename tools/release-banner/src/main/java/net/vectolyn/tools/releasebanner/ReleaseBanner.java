@@ -10,7 +10,9 @@ import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Command line entry: renders {@code <name>.png} (1280 x 320) and {@code <name>-2x.png}
@@ -68,7 +70,7 @@ public final class ReleaseBanner {
         Path outDir = Path.of(required(opts, "--out-dir"));
 
         ReleaseVersion version = ReleaseVersion.parse(value(opts, env, "--version", "BANNER_VERSION"));
-        String title = value(opts, env, "--title", "BANNER_TITLE");
+        String title = Objects.requireNonNullElse(value(opts, env, "--title", "BANNER_TITLE"), "");
         LocalDate date = ReleaseDate.parse(value(opts, env, "--date", "BANNER_DATE"));
         String name = opts.getOrDefault("--name", "VectolynCloud-" + version.withoutPrefix() + "-banner");
         if (!name.matches("[0-9A-Za-z][0-9A-Za-z._+-]*")) {
@@ -121,7 +123,7 @@ public final class ReleaseBanner {
     }
 
     /** The option if given, else the environment variable; the title may be missing (no title). */
-    private static String value(Map<String, String> opts, Map<String, String> env, String key, String variable) {
+    private static @Nullable String value(Map<String, String> opts, Map<String, String> env, String key, String variable) {
         String v = opts.containsKey(key) ? opts.get(key) : env.get(variable);
         if (v == null && "--title".equals(key)) {
             return "";

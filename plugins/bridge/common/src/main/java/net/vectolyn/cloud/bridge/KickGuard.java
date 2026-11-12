@@ -15,6 +15,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Keeps a caught kick from turning into a loop.
@@ -162,7 +163,7 @@ public final class KickGuard {
     }
 
     /** The player's incident with expired kicks dropped, or {@code null} if none is running. */
-    private Incident current(UUID player) {
+    private @Nullable Incident current(UUID player) {
         Incident incident = incidents.get(player);
         if (incident == null) {
             return null;

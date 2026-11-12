@@ -19,7 +19,7 @@ class DefaultConfigTest {
         try (InputStream in = getClass().getClassLoader().getResourceAsStream("config.yml")) {
             assertNotNull(in, "config.yml must be on the classpath");
             Map<String, Object> config = new Yaml().load(in);
-            assertEquals(Boolean.FALSE, config.get("built"));
+            assertEquals(false, config.get("built"));
         }
     }
 }

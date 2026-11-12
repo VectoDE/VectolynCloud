@@ -15,6 +15,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
 import java.util.function.ToIntFunction;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Which group each backend of the proxy belongs to, how many players it is meant for, and which
@@ -174,9 +175,9 @@ public final class ServerLoads {
         for (Pending p : pending.values()) {
             counts.computeIfPresent(p.server(), (name, count) -> count + 1);
         }
-        counts.keySet().removeIf(name -> counts.get(name) >= servers.get(name).slots());
+        counts.keySet().removeIf(name -> present(counts, name) >= present(servers, name).slots());
         Optional<String> chosen = counts.keySet().stream().min(Comparator
-                .<String>comparingDouble(name -> (double) counts.get(name) / servers.get(name).slots())
+                .<String>comparingDouble(name -> (double) present(counts, name) / present(servers, name).slots())
                 .thenComparingInt(counts::get)
                 .thenComparing(Comparator.naturalOrder()));
         chosen.ifPresent(name -> pending.put(player, new Pending(name, now.plus(PENDING))));
@@ -204,6 +205,11 @@ public final class ServerLoads {
     }
 
     private record Pending(String server, Instant until) {
+    }
+
+    /** The value of a key that the caller just saw in the map. */
+    private static <V> V present(Map<String, V> map, String key) {
+        return Objects.requireNonNull(map.get(key), key);
     }
 
     private record Gone(String group, Instant until) {

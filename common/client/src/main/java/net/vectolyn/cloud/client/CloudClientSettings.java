@@ -8,6 +8,7 @@ import java.util.function.UnaryOperator;
 import net.vectolyn.protocol.AuthToken;
 import net.vectolyn.protocol.ServiceEnvironment;
 import net.vectolyn.protocol.ServiceId;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Where the client connects to and who it is.
@@ -128,10 +129,10 @@ public record CloudClientSettings(String host, int port, ServiceId service, Auth
      * @param properties looks up a system property, {@code null} if unset
      */
     public static CloudClientSettings from(UnaryOperator<String> environment, UnaryOperator<String> properties) {
-        String host = lookup(environment, properties, ENV_HOST, PROPERTY_HOST);
-        String port = lookup(environment, properties, ENV_PORT, PROPERTY_PORT);
-        String service = lookup(environment, properties, ENV_SERVICE_ID, PROPERTY_SERVICE_ID);
-        String token = lookup(environment, properties, ENV_TOKEN, PROPERTY_TOKEN);
+        @Nullable String host = lookup(environment, properties, ENV_HOST, PROPERTY_HOST);
+        @Nullable String port = lookup(environment, properties, ENV_PORT, PROPERTY_PORT);
+        @Nullable String service = lookup(environment, properties, ENV_SERVICE_ID, PROPERTY_SERVICE_ID);
+        @Nullable String token = lookup(environment, properties, ENV_TOKEN, PROPERTY_TOKEN);
         if (service == null) {
             throw new IllegalStateException(ENV_SERVICE_ID + " is not set; is this server started by VectolynCloud?");
         }
@@ -171,7 +172,7 @@ public record CloudClientSettings(String host, int port, ServiceId service, Auth
                 backoffMax);
     }
 
-    private static String lookup(UnaryOperator<String> environment, UnaryOperator<String> properties, String env,
+    private static @Nullable String lookup(UnaryOperator<String> environment, UnaryOperator<String> properties, String env,
             String property) {
         String value = properties.apply(property);
         if (value == null || value.isBlank()) {

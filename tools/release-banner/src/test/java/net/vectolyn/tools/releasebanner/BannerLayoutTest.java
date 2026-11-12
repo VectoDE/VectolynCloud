@@ -226,7 +226,7 @@ class BannerLayoutTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"Stage\t2", "Stage\u0000", "a‮b", "line two", "zero​width", "bell\u0007"})
+    @ValueSource(strings = {"Stage\t2", "Stage\u0000", "a" + (char) 0x202E + "b", "line two", "zero​width", "bell\u0007"})
     void controlAndFormatCharactersAreRejected(String title) {
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> layout.layout(ReleaseVersion.parse("v1.0.0"), title, DATE));

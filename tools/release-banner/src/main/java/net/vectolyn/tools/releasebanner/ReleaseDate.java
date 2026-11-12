@@ -8,6 +8,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.ResolverStyle;
 import java.util.Locale;
 import java.util.regex.Pattern;
+import org.jspecify.annotations.Nullable;
 
 /** The release date: read as ISO {@code yyyy-MM-dd}, shown in English as {@code Oct 30, 2026}. */
 public final class ReleaseDate {
@@ -27,7 +28,7 @@ public final class ReleaseDate {
      *
      * @throws IllegalArgumentException for any other form or a date that does not exist
      */
-    public static LocalDate parse(String iso) {
+    public static LocalDate parse(@Nullable String iso) {
         if (iso == null || !ISO.matcher(iso).matches()) {
             throw new IllegalArgumentException("release date must be yyyy-MM-dd: "
                     + (iso == null ? "missing" : Text.printable(iso)));

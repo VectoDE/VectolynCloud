@@ -12,6 +12,7 @@ import java.util.UUID;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.vectolyn.cloud.bridge.ProxyPlayers;
+import org.jspecify.annotations.Nullable;
 
 /** {@link ProxyPlayers} on Velocity's players. */
 final class VelocityPlayers implements ProxyPlayers {
@@ -31,7 +32,7 @@ final class VelocityPlayers implements ProxyPlayers {
     }
 
     @Override
-    public Locale locale(UUID player) {
+    public @Nullable Locale locale(UUID player) {
         return proxy.getPlayer(player).map(Player::getEffectiveLocale).orElse(null);
     }
 

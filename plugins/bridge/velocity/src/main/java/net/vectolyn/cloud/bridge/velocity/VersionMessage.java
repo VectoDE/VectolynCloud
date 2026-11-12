@@ -9,6 +9,7 @@ import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextColor;
 import net.vectolyn.cloud.bridge.PoweredBy;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The chat lines of {@code /version} ({@link PoweredBy}) as Adventure components. The address is a
@@ -30,7 +31,7 @@ final class VersionMessage {
      * @param locale  the client's language, or {@code null}
      * @return gray label and cyan version, then gray label and the white, clickable address
      */
-    static List<Component> of(String version, Locale locale) {
+    static List<Component> of(String version, @Nullable Locale locale) {
         List<PoweredBy.Line> lines = PoweredBy.lines(version, locale);
         PoweredBy.Line product = lines.get(0);
         PoweredBy.Line source = lines.get(1);

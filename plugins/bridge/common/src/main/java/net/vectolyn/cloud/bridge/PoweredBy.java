@@ -8,6 +8,7 @@ import java.util.Objects;
 import java.util.function.UnaryOperator;
 import java.util.regex.Pattern;
 import net.vectolyn.protocol.ServiceEnvironment;
+import org.jspecify.annotations.Nullable;
 
 /**
  * {@code /version} on the proxies ({@code branding.powered-by} in {@code cloud.yml}, default on).
@@ -102,7 +103,7 @@ public final class PoweredBy {
      * @param locale  the client's language, or {@code null} for the console and an unknown language
      * @return the version line, then the source code line
      */
-    public static List<Line> lines(String version, Locale locale) {
+    public static List<Line> lines(String version, @Nullable Locale locale) {
         Objects.requireNonNull(version, "version");
         boolean german = locale != null && "de".equals(locale.getLanguage());
         return List.of(
