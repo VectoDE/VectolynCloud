@@ -28,7 +28,7 @@ val testJava: Int? = providers.gradleProperty("testJava").orNull?.toInt()
 
 val vectolyn = extensions.create<VectolynJavaExtension>("vectolyn")
 vectolyn.warningsAsErrors.convention(true)
-vectolyn.minimumLineCoverage.convention(0.0)
+vectolyn.minimumLineCoverage.convention(0.70)
 vectolyn.artifactName.convention(project.name)
 
 // A build file that sets base.archivesName itself (the plugin jars) keeps its own name.
