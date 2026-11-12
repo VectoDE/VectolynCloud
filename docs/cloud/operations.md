@@ -24,8 +24,10 @@ The release workflow ([`release.yml`](../../.github/workflows/release.yml)) runs
 | `VectolynCloud.jar` | the cloud, for `java -jar`, Docker and Pterodactyl |
 | `VectolynCloud-<version>-windows.zip` | `VectolynCloud.jar`, `start.bat`, `start.ps1` |
 | `VectolynCloud-<version>-linux-macos.tar.gz` | `VectolynCloud.jar`, `start.sh` (executable) |
+| `VectolynCloud-<version>-templates.tar.gz` | the server templates of the repository (`templates/`: proxy, lobby, survival, creative, mod, end, minigame, legacy), to read, copy and change. The cloud also carries them inside the jar ([node.md](node.md#built-in-templates)) |
+| `setup.example.yml` | an annotated setup file for `--setup-file` ([setup.md](setup.md#setup-file---setup-file)); a unit test keeps it valid |
 | `VectolynCloud-<version>-banner.png`, `VectolynCloud-<version>-banner-2x.png` | the [release banner](#release-banner) at the top of the release notes, 1280 x 320 and 2560 x 640 |
-| `SHA256SUMS` | SHA-256 of the five files above |
+| `SHA256SUMS` | SHA-256 of the seven files above |
 | `<file>.sigstore.json` | cosign signature bundle for each file and for `SHA256SUMS` |
 | `vectolyn.intoto.jsonl` | SLSA build provenance for every file in `SHA256SUMS`, as the Sigstore bundle of the GitHub attestation |
 
@@ -304,7 +306,7 @@ A cluster is one head and its members; the details, the trust model and the comm
 
 ## Verifying a release
 
-Every file of a release is signed with cosign keyless (Sigstore, the GitHub Actions identity of `release.yml`). The five files in `SHA256SUMS` (the banner images included) also have a GitHub build provenance attestation (SLSA provenance, signed with Sigstore). `vectolyn.intoto.jsonl` is the same attestation as a file, so it can be checked without asking GitHub; `SHA256SUMS` itself is covered by its signature. Replace `v0.2.0-dev` with the tag you downloaded.
+Every file of a release is signed with cosign keyless (Sigstore, the GitHub Actions identity of `release.yml`). The seven files in `SHA256SUMS` (the banner images included) also have a GitHub build provenance attestation (SLSA provenance, signed with Sigstore). `vectolyn.intoto.jsonl` is the same attestation as a file, so it can be checked without asking GitHub; `SHA256SUMS` itself is covered by its signature. Replace `v0.2.0-dev` with the tag you downloaded.
 
 Every release is signed as `VectoDE/VectolynCloud`, as in the commands below. The provenance comes from `actions/attest-build-provenance` in the build job; the release workflow pins every action to a commit SHA. The provenance file is a Sigstore bundle, which `gh attestation verify --bundle` reads.
 
@@ -355,6 +357,27 @@ docker buildx imagetools inspect ghcr.io/vectode/vectolyn-cloud:0.2.0-dev --form
 
 To check that the image carries the released jar: `docker run --rm --entrypoint sha256sum ghcr.io/vectode/vectolyn-cloud:0.2.0-dev /opt/vectolyn/VectolynCloud.jar` must print the line from `SHA256SUMS`.
 
+## Release process
+
+Every release follows the same steps. Nothing in them is manual except pushing the tag.
+
+1. **Plan in the milestones.** The work of a stage lives in its `Stage N` milestone; the pre-release stages `Alpha`, `Beta` and `RC` collect what must be done before that quality level. An issue belongs to exactly one milestone.
+2. **Check the tag** (`bash tools/release-banner/check-tag.sh v1.0.0-rc.1`, see [Versions and tags](#versions-and-tags)) and the cleanup check of [openssf.md](../openssf.md#the-cleanup-check).
+3. **Push the tag.** `release.yml` starts with the tag check and then the **milestone gate**:
+
+   | Channel | Milestones that must have no open issue |
+   |---|---|
+   | `-dev` | none: a snapshot of the work in progress |
+   | `-alpha` | `Alpha` |
+   | `-beta` | `Alpha`, `Beta` |
+   | `-rc` | `Alpha`, `Beta`, `RC` |
+   | `-lts`, stable | `Alpha`, `Beta`, `RC` and every `Stage ...` milestone |
+
+   A milestone that does not exist stops the release too, so the gate cannot pass because somebody renamed it. If the gate is closed, the workflow lists the milestones; close or move the open issues, delete the tag (`git push --delete origin <tag>`) and push it again.
+4. **Build, package, sign, attest.** The full build runs all tests, then `package.sh` writes the release files, `SHA256SUMS` lists them, cosign signs each file keyless, and the provenance is attested. The image follows from the signed jar.
+5. **Changelog.** The release notes start with the banner, the image and the link to the verification steps, followed by the changelog: the commit subjects since the previous release tag, grouped by Conventional Commit type (breaking changes, features, fixes, performance, security, documentation, build and maintenance, other), each with its pull request number, and a link to the full comparison. Write commit titles and pull request titles as Conventional Commits; the `PR title` check enforces it.
+6. **Verify.** `release-verify.yml` runs weekly and checks the newest release as an operator would (see [Verifying a release](#verifying-a-release)). Run it by hand after a release: *Actions → Verify release → Run workflow*.
+
 ## Release banner
 
 Every release starts with a banner: the VectolynCloud wordmark, the tag (`v1.0.0-beta.2`), a badge for the suffix (`-dev` PRE-RELEASE, `-alpha` ALPHA, `-beta` BETA, `-rc` RC, `-lts` LTS, none for a stable version; see [Versions and tags](#versions-and-tags)), the first line of the tag message as title and the tag's date. The build job of `release.yml` renders it with [`tools/release-banner`](../../tools/release-banner) (plain Java, no dependencies) on the pre-rendered background in [`branding/png/`](../../branding/png), using Pixelify Sans Bold from [`branding/fonts/`](../../branding/fonts). Both sizes are release files: they are in `SHA256SUMS`, signed and covered by the provenance like the others, and the release notes show the 2x file.
@@ -386,4 +409,7 @@ To render exactly what the release will show for a tag that already exists local
 | Egg | structure, variables, rules against their defaults, the setup file Wings would write, ShellCheck of the installer | import into a panel, the installer's download, a run under Wings |
 | Release tag | unit tests of every rule; `check-tag.sh` on every allowed form (channel and pre-release flag) and on every rejected form (the reason) | the check on a pushed tag, the pre-release flag and `latest` on GitHub and GHCR |
 | Release banner | unit tests (badge per suffix, title shortening, sizes, byte-identical output); the release script on local tags (every badge, with title, empty message, signature only, lightweight, tags that break the rules), rendered twice and compared | the tag fetch from GitHub and the image in the published notes |
+| Release gate and changelog | the milestone gate for every channel (open, closed, missing and unknown milestones) and the changelog (sections, breaking changes, range, first release) on fixtures | the gate and the changelog on the real milestones and history of a tag |
+| Release files | `package.sh` builds the seven files, twice, byte-identical; every template of the repository is in the templates archive | the upload to the release |
+| Signed release | `release-verify.yml` weekly and on every change of the release workflow: `SHA256SUMS`, the cosign signature of every file, the GitHub provenance of the jar (from GitHub and from `vectolyn.intoto.jsonl`), the image signature, provenance, SBOM, the jar inside the image and the moving `dev` tag, all against the newest published release | the signing and attesting itself, which only runs on a tag |
 | Release workflow | actionlint | signing, provenance and publishing on a tag |

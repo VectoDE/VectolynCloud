@@ -10,6 +10,9 @@
 #   VectolynCloud.jar                              the jar, unchanged
 #   VectolynCloud-<version>-windows.zip            VectolynCloud.jar, start.bat, start.ps1
 #   VectolynCloud-<version>-linux-macos.tar.gz     VectolynCloud.jar, start.sh (executable)
+#   VectolynCloud-<version>-templates.tar.gz       the server templates of the repository (templates/),
+#                                                  to read, copy and change
+#   setup.example.yml                              an annotated setup file for --setup-file
 #
 # Why archives per operating system and not loose scripts: a downloaded start.sh loses its
 # executable bit, while the tar keeps it; the zip keeps the CRLF line ends of the Windows scripts;
@@ -48,13 +51,20 @@ trap 'rm -rf -- "${staging}"' EXIT
 
 windows="VectolynCloud-${version}-windows"
 unix="VectolynCloud-${version}-linux-macos"
-mkdir -- "${staging}/${windows}" "${staging}/${unix}"
+templates="VectolynCloud-${version}-templates"
+repo_root=$(cd -- "${dist_dir}/../.." && pwd -P)
+mkdir -- "${staging}/${windows}" "${staging}/${unix}" "${staging}/${templates}"
 
 install -m 0644 -- "${jar}" "${out}/VectolynCloud.jar"
 install -m 0644 -- "${jar}" "${staging}/${windows}/VectolynCloud.jar"
 install -m 0644 -- "${dist_dir}/start.bat" "${dist_dir}/start.ps1" "${staging}/${windows}/"
 install -m 0644 -- "${jar}" "${staging}/${unix}/VectolynCloud.jar"
 install -m 0755 -- "${dist_dir}/start.sh" "${staging}/${unix}/start.sh"
+install -m 0644 -- "${dist_dir}/setup.example.yml" "${out}/setup.example.yml"
+cp -R -- "${repo_root}/templates" "${staging}/${templates}/templates"
+# Fixed modes, so the archive does not depend on the umask of the build machine.
+find "${staging}/${templates}" -type d -exec chmod 0755 {} +
+find "${staging}/${templates}" -type f -exec chmod 0644 {} +
 
 # The Windows scripts must have CRLF line ends (.gitattributes), start.sh must have LF.
 for script in "${staging}/${windows}/start.bat" "${staging}/${windows}/start.ps1"; do
@@ -74,8 +84,11 @@ find "${staging}" -exec touch -h -d "@${epoch}" {} +
     cd -- "${staging}"
     tar --sort=name --owner=0 --group=0 --numeric-owner --mtime="@${epoch}" --format=gnu \
         -cf - "${unix}" | gzip -n -9 > "${out}/${unix}.tar.gz"
+    tar --sort=name --owner=0 --group=0 --numeric-owner --mtime="@${epoch}" --format=gnu \
+        -cf - "${templates}" | gzip -n -9 > "${out}/${templates}.tar.gz"
     # -X: no extra file attributes (uid/gid, extended time stamps); TZ=UTC: stable DOS times.
     find "${windows}" -print | LC_ALL=C sort | TZ=UTC zip -X -q -@ "${out}/${windows}.zip"
 )
 
-ls -l -- "${out}/VectolynCloud.jar" "${out}/${windows}.zip" "${out}/${unix}.tar.gz"
+ls -l -- "${out}/VectolynCloud.jar" "${out}/${windows}.zip" "${out}/${unix}.tar.gz" \
+    "${out}/${templates}.tar.gz" "${out}/setup.example.yml"
