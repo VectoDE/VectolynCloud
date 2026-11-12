@@ -1,0 +1,19 @@
+{
+  "app.name": "VectolynCloud",
+  "app.panel": "Panel",
+  "a11y.skip": "Zum Inhalt springen",
+  "lang.label": "Sprache",
+  "lang.de": "Deutsch",
+  "lang.en": "English",
+  "nav.label": "Hauptnavigation",
+  "nav.overview": "Übersicht",
+  "start.title": "Panel",
+  "start.lede": "Cloud und Netzwerk dieses Nodes im Browser verwalten.",
+  "start.server": "Panel-Server",
+  "start.version": "Version",
+  "start.reachable": "erreichbar",
+  "start.unreachable": "nicht erreichbar",
+  "start.loading": "Verbindung wird geprüft …",
+  "footer.docs": "Dokumentation",
+  "footer.source": "Quellcode"
+}

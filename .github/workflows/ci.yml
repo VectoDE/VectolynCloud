@@ -57,11 +57,20 @@ jobs:
             repo.papermc.io:443
             repo.hpfxd.com:443
             api.foojay.io:443
+            registry.npmjs.org:443
+            nodejs.org:443
 
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      # The web panel's frontend (cloud/panel/web) is built into the jar on Linux, as in a release.
+      - name: Set up Node.js
+        if: runner.os == 'Linux'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
 
       - name: Set up JDK 25
         uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
@@ -77,7 +86,9 @@ jobs:
 
       - name: Build and test
         shell: bash
-        run: bash ./gradlew build --no-daemon --stacktrace
+        env:
+          PANEL_WEB: ${{ runner.os == 'Linux' }}
+        run: bash ./gradlew build --no-daemon --stacktrace "-Pvectolyn.panel.web=$PANEL_WEB"
 
       - name: Upload test reports
         if: failure()
@@ -97,6 +108,54 @@ jobs:
           path: '**/build/test-results/test/*.xml'
           if-no-files-found: ignore
           retention-days: 14
+
+  # The web panel's frontend on its own: the catalogues of both languages match, the TypeScript
+  # types check, and the static export builds (docs/cloud/panel.md).
+  panel-web:
+    name: Panel frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            nodejs.org:443
+            registry.npmjs.org:443
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+
+      - name: Install
+        working-directory: cloud/panel/web
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Languages
+        working-directory: cloud/panel/web
+        run: npm run check-i18n
+
+      - name: Static export
+        working-directory: cloud/panel/web
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: npm run build
+
+      # After the build: next build writes next-env.d.ts, which the type check needs.
+      - name: Types
+        working-directory: cloud/panel/web
+        run: npm run typecheck
 
   test-java21:
     name: Tests on Java 21
