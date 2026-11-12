@@ -1,0 +1,18 @@
+title: "[Show] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Show what you built with Vectolyn. Do not post secrets, tokens or private player data.
+
+        _DE: Zeig, was du mit Vectolyn gebaut hast. Keine Secrets, Tokens oder privaten Spielerdaten posten._
+  - type: textarea
+    id: what
+    attributes:
+      label: What did you build? / Was hast du gebaut?
+    validations:
+      required: true
+  - type: input
+    id: link
+    attributes:
+      label: Link (optional)

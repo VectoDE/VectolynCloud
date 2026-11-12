@@ -1,0 +1,20 @@
+title: "[Idea] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Loose ideas and feedback on the roadmap are welcome here. A concrete, well-defined feature request belongs in an issue.
+
+        _DE: Lose Ideen und Feedback zur Roadmap sind hier willkommen. Ein konkreter Feature-Wunsch gehört in ein Issue._
+  - type: textarea
+    id: idea
+    attributes:
+      label: Idea / Idee
+      description: What should be possible? / Was soll möglich sein?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it helps / Wozu es nützt
+      description: Who needs it and what do they do today? / Wer braucht es, und was tut er heute stattdessen?
