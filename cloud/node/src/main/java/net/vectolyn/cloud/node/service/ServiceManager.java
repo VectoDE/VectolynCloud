@@ -73,6 +73,7 @@ import net.vectolyn.protocol.GroupName;
 import net.vectolyn.protocol.ServiceEnvironment;
 import net.vectolyn.protocol.ServiceId;
 import net.vectolyn.protocol.message.RegisterServer;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The service core of a node: plans, prepares, starts, watches, stops and restarts the server
@@ -718,7 +719,7 @@ public final class ServiceManager implements AutoCloseable {
             }
             ServiceSpec spec = new ServiceSpec(id, task.group(), taskName, index, group, mode,
                     ServicePlanner.kindOf(group), CloudHome.of(home).templateDir(group.template()), workDirectory, port);
-            Service service = existing != null ? existing : new Service();
+            Service service = existing != null ? existing : new Service(spec);
             int attempts = service.restartAttempts;
             service.reset(spec);
             service.restartAttempts = attempts;
@@ -770,8 +771,8 @@ public final class ServiceManager implements AutoCloseable {
      */
     private void launch(Service service, ConfigSnapshot snapshot) throws ServiceException {
         ServiceSpec spec = service.spec;
-        Writer log = null;
-        AuthToken token = null;
+        @Nullable Writer log = null;
+        @Nullable AuthToken token = null;
         try {
             synchronized (lock) {
                 if (service.stopRequested || closing) {
@@ -853,14 +854,13 @@ public final class ServiceManager implements AutoCloseable {
             Thread pump = new Thread(new ServiceOutput(process.getInputStream(), logWriter, filter,
                     line -> onOutput(service, process, line)), "vectolyn-output-" + spec.id());
             pump.setDaemon(true);
-            service.pump = pump;
             pump.start();
-            process.onExit().whenCompleteAsync((p, e) -> onExit(service, process, pump), workers);
+            watchExit(service, process, pump);
         } catch (IOException | TemplateException | RuntimeException e) {
             fail(service, token, e.getMessage() == null ? e.toString() : e.getMessage());
             throw new ServiceException("cannot start " + spec.id() + ": " + e.getMessage(), e);
         } catch (ServiceException e) {
-            fail(service, token, e.getMessage());
+            fail(service, token, String.valueOf(e.getMessage()));
             throw e;
         } finally {
             if (log != null) {
@@ -896,7 +896,7 @@ public final class ServiceManager implements AutoCloseable {
         }
     }
 
-    private void fail(Service service, AuthToken token, String reason) {
+    private void fail(Service service, @Nullable AuthToken token, String reason) {
         synchronized (lock) {
             if (token != null && service.process == null) {
                 // Only this start's token: a newer start of the same id keeps its own.
@@ -1136,9 +1136,9 @@ public final class ServiceManager implements AutoCloseable {
         }
     }
 
-    private boolean markReady(Service service, Process process) {
+    private boolean markReady(Service service, @Nullable Process process) {
         synchronized (lock) {
-            if (service.process != process || service.state != ServiceState.STARTING) {
+            if (!Objects.equals(service.process, process) || service.state != ServiceState.STARTING) {
                 return false;
             }
             transition(service, ServiceState.RUNNING);
@@ -1192,6 +1192,11 @@ public final class ServiceManager implements AutoCloseable {
         }
     }
 
+    @SuppressWarnings("FutureReturnValueIgnored") // onExit has no result; a failure in it is not recoverable here
+    private void watchExit(Service service, Process process, Thread pump) {
+        process.onExit().whenCompleteAsync((p, e) -> onExit(service, process, pump), workers);
+    }
+
     private void onExit(Service service, Process process, Thread pump) {
         try {
             pump.join(5000);
@@ -1200,7 +1205,7 @@ public final class ServiceManager implements AutoCloseable {
         }
         CompletableFuture<Void> finished;
         synchronized (lock) {
-            if (service.process != process) {
+            if (!Objects.equals(service.process, process)) {
                 return;
             }
             finished = service.finished;
@@ -1251,7 +1256,7 @@ public final class ServiceManager implements AutoCloseable {
             return;
         }
         Instant started = service.startedAt;
-        if (started != null && Duration.between(started, clock.instant()).getSeconds() >= RestartConfig.STABLE_AFTER_SECONDS) {
+        if (started != null && Duration.between(started, clock.instant()).toSeconds() >= RestartConfig.STABLE_AFTER_SECONDS) {
             service.restartAttempts = 0;
         }
         if (service.restartAttempts >= restart.maxAttempts()) {
@@ -1394,7 +1399,7 @@ public final class ServiceManager implements AutoCloseable {
         Duration timeout = settings.stopTimeout().duration();
         if (!waitFor(process, timeout)) {
             LOG.log(System.Logger.Level.WARNING, "{0} did not stop within {1} s, ending the process", id,
-                    timeout.getSeconds());
+                    timeout.toSeconds());
             process.destroy();
             if (!waitFor(process, destroyGrace)) {
                 LOG.log(System.Logger.Level.WARNING, "{0} still runs, killing it", id);
@@ -1482,11 +1487,12 @@ public final class ServiceManager implements AutoCloseable {
     }
 
     private void transition(Service service, ServiceState next) {
-        ServiceState previous = service.state;
+        ServiceState previous = service.announced ? service.state : null;
         if (previous != null && previous != next && !previous.canBecome(next)) {
             throw new IllegalStateException(service.spec.id() + ": " + previous + " -> " + next);
         }
         service.state = next;
+        service.announced = true;
         ServiceInfo info = service.info();
         // The configuration as it is at the change, not at the delivery a moment later.
         ConfigSnapshot at = config.get();
@@ -1624,7 +1630,7 @@ public final class ServiceManager implements AutoCloseable {
     private void checkDynamicRoot() throws IOException {
         Path root = home.resolve(ServicePlanner.DYNAMIC_DIR).normalize();
         if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) {
-            Path temp = root.getParent();
+            Path temp = Objects.requireNonNull(root.getParent(), "the dynamic folder is below the home");
             if (Files.exists(temp, LinkOption.NOFOLLOW_LINKS)
                     && !temp.toRealPath().equals(home.toRealPath().resolve(temp.getFileName()))) {
                 throw new IOException(home.relativize(temp) + " is a link, not a folder of the home");
@@ -1792,7 +1798,7 @@ public final class ServiceManager implements AutoCloseable {
         };
     }
 
-    private Duration stopTimeout(GroupConfig group) {
+    private Duration stopTimeout(@Nullable GroupConfig group) {
         return group == null ? ProcessConfig.defaults().stopTimeout().duration()
                 : group.processOrDefaults().stopTimeout().duration();
     }
@@ -1833,20 +1839,25 @@ public final class ServiceManager implements AutoCloseable {
     /** Mutable state of one service; guarded by {@link #lock}. */
     private static final class Service {
         ServiceSpec spec;
-        ServiceState state;
-        Process process;
+        ServiceState state = ServiceState.PREPARED;
+        /** Whether a state was announced yet; the first {@link #transition} has no previous state. */
+        boolean announced;
+        @Nullable Process process;
         /** Token of the current process; removed from the registry when exactly this process ends. */
-        AuthToken token;
-        OutputStream stdin;
+        @Nullable AuthToken token;
+        @Nullable OutputStream stdin;
         boolean portHeld;
         long pid;
-        Instant startedAt;
-        Integer exitCode;
+        @Nullable Instant startedAt;
+        @Nullable Integer exitCode;
         boolean stopRequested;
         int restartAttempts;
-        Thread pump;
-        ScheduledFuture<?> pendingRestart;
+        @Nullable ScheduledFuture<?> pendingRestart;
         CompletableFuture<Void> finished = CompletableFuture.completedFuture(null);
+
+        Service(ServiceSpec spec) {
+            this.spec = spec;
+        }
 
         void reset(ServiceSpec next) {
             spec = next;
@@ -1877,7 +1888,7 @@ public final class ServiceManager implements AutoCloseable {
         private JavaRuntimeResolver javaRuntimes = JavaRuntimeResolver.current();
         private ServerSoftwareProvider software = ServerSoftwareProvider.existingJar();
         private ProcessControl processes = ProcessControl.system();
-        private PortAllocator.PortProbe portProbe;
+        private PortAllocator.@Nullable PortProbe portProbe;
         private final List<PlaceholderContributor> contributors = new ArrayList<>();
         private Duration destroyGrace = Duration.ofSeconds(10);
         private Clock clock = Clock.systemUTC();

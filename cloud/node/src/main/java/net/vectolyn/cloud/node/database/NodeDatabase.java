@@ -28,6 +28,7 @@ import net.vectolyn.cloud.node.service.PlaceholderContributor;
 import net.vectolyn.cloud.node.service.ServiceException;
 import net.vectolyn.cloud.node.service.ServiceManager;
 import net.vectolyn.cloud.node.service.ServicePlanner;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The network's database as the node runs it.
@@ -73,9 +74,9 @@ public final class NodeDatabase implements ServiceManager.StartGate, Placeholder
     private final ServiceManager.SecretSource secrets;
     private final Factory factory;
     private final Object lock = new Object();
-    private DatabaseProvisioner provisioner;
+    private @Nullable DatabaseProvisioner provisioner;
     private boolean closed;
-    private volatile DatabaseEndpoint endpoint;
+    private volatile @Nullable DatabaseEndpoint endpoint;
     private volatile ConnectionBudget budget = ConnectionBudget.managed();
 
     /**

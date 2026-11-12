@@ -4,6 +4,7 @@ package net.vectolyn.cloud.node.service;
 
 import net.vectolyn.cloud.config.model.ConfigSnapshot;
 import net.vectolyn.protocol.ServiceId;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Receives what happens to the services of the node, for example the console (stage 2 PR 10) or
@@ -20,7 +21,7 @@ public interface ServiceListener {
      * @param service  the service after the change
      * @param previous the state before, or {@code null} when the service was just created
      */
-    void stateChanged(ServiceInfo service, ServiceState previous);
+    void stateChanged(ServiceInfo service, @Nullable ServiceState previous);
 
     /**
      * A service changed its state; with the configuration as it was at the moment of the change,
@@ -31,7 +32,7 @@ public interface ServiceListener {
      * @param previous the state before, or {@code null} when the service was just created
      * @param config   the configuration at the change
      */
-    default void stateChanged(ServiceInfo service, ServiceState previous, ConfigSnapshot config) {
+    default void stateChanged(ServiceInfo service, @Nullable ServiceState previous, ConfigSnapshot config) {
         stateChanged(service, previous);
     }
 

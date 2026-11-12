@@ -22,6 +22,7 @@ import net.vectolyn.cloud.node.service.ServiceManager;
 import net.vectolyn.cloud.node.service.ServiceState;
 import net.vectolyn.protocol.ServiceId;
 import net.vectolyn.protocol.message.ServiceStatus;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code service} command of the console, registered by the node in the same registry as the
@@ -128,10 +129,7 @@ public final class ServiceCommands implements ServiceListener {
                         .executes(context -> {
                             ServiceId target = find(context.argument("service")).id();
                             String line = context.argument("line");
-                            run(() -> {
-                                services.sendCommand(target, line);
-                                return null;
-                            });
+                            runVoid(() -> services.sendCommand(target, line));
                             context.out().println(Text.of("Sent to %1$s.", "An %1$s gesendet."), target.value());
                         }))
                 .subcommand(Command.builder("screen")
@@ -220,6 +218,11 @@ public final class ServiceCommands implements ServiceListener {
     }
 
     @FunctionalInterface
+    private interface Effect {
+        void run() throws ServiceException;
+    }
+
+    @FunctionalInterface
     private interface Call {
         ServiceInfo call() throws ServiceException;
     }
@@ -228,7 +231,15 @@ public final class ServiceCommands implements ServiceListener {
         try {
             return call.call();
         } catch (ServiceException e) {
-            throw new CommandException(Text.of("%1$s", "%1$s"), e.getMessage());
+            throw new CommandException(Text.of("%1$s", "%1$s"), String.valueOf(e.getMessage()));
+        }
+    }
+
+    private static void runVoid(Effect effect) throws CommandException {
+        try {
+            effect.run();
+        } catch (ServiceException e) {
+            throw new CommandException(Text.of("%1$s", "%1$s"), String.valueOf(e.getMessage()));
         }
     }
 
@@ -241,7 +252,7 @@ public final class ServiceCommands implements ServiceListener {
     }
 
     @Override
-    public void stateChanged(ServiceInfo service, ServiceState previous) {
+    public void stateChanged(ServiceInfo service, @Nullable ServiceState previous) {
         if (previous != null && followed.contains(service.id())) {
             out.println("[" + service.id().value() + "] " + state(previous) + " -> " + state(service.state()));
         }

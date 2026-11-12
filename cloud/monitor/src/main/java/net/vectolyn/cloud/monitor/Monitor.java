@@ -41,6 +41,7 @@ import net.vectolyn.cloud.monitor.metric.RingBuffer;
 import net.vectolyn.cloud.monitor.metric.ServiceSample;
 import net.vectolyn.protocol.ServiceId;
 import net.vectolyn.protocol.message.ServiceStatus;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The monitor of one node. Every {@code sample-interval} it takes one sample per service and one of
@@ -72,14 +73,14 @@ public final class Monitor implements AutoCloseable {
     private final Clock clock;
     private final MonitorConfig config;
     private final AlertEngine engine;
-    private final HistoryStore store;
+    private final @Nullable HistoryStore store;
     private final List<AlertListener> listeners = new CopyOnWriteArrayList<>();
     private final Map<ServiceId, Track> tracks = new ConcurrentHashMap<>();
     private final RingBuffer<NodeSample> nodeHistory;
     private final Object sampling = new Object();
     private final Object probing = new Object();
-    private ScheduledExecutorService timer;
-    private ScheduledExecutorService probeTimer;
+    private @Nullable ScheduledExecutorService timer;
+    private @Nullable ScheduledExecutorService probeTimer;
     private volatile ProcessReading lastProbe = ProcessReading.NONE;
     private volatile boolean closed;
 
@@ -89,15 +90,15 @@ public final class Monitor implements AutoCloseable {
      * @param values CPU and memory per pid
      * @param at     when the probe finished, or null before the first one
      */
-    private record ProcessReading(Map<Long, MetricSource.ProcessMetrics> values, Instant at) {
+    private record ProcessReading(Map<Long, MetricSource.ProcessMetrics> values, @Nullable Instant at) {
         static final ProcessReading NONE = new ProcessReading(Map.of(), null);
     }
 
     private static final class Track {
         final RingBuffer<ServiceSample> history;
         final Deque<Instant> crashes = new ArrayDeque<>();
-        volatile ServiceStatus status;
-        volatile Instant statusAt;
+        volatile @Nullable ServiceStatus status;
+        volatile @Nullable Instant statusAt;
         int crashTotal;
 
         Track(int capacity) {
@@ -136,7 +137,7 @@ public final class Monitor implements AutoCloseable {
         private final MonitorConfigLoader.Settings settings;
         private final List<AlertListener> listeners = new ArrayList<>();
         private Clock clock = Clock.systemUTC();
-        private HistoryStore store;
+        private @Nullable HistoryStore store;
 
         private Builder(ServiceDirectory directory, MetricSource source, MonitorConfigLoader.Settings settings) {
             this.directory = Objects.requireNonNull(directory, "directory");
@@ -200,7 +201,7 @@ public final class Monitor implements AutoCloseable {
      * @param now      the new state
      * @param previous the state before, or null for a new service
      */
-    public void serviceStateChanged(ServiceId service, ServicePhase now, ServicePhase previous) {
+    public void serviceStateChanged(ServiceId service, ServicePhase now, @Nullable ServicePhase previous) {
         Objects.requireNonNull(service, "service");
         Objects.requireNonNull(now, "now");
         Track track = track(service);
@@ -231,6 +232,7 @@ public final class Monitor implements AutoCloseable {
      * helper program ({@code tasklist} on Windows) can take up to 30 s on a busy machine, and a
      * round must not wait for it. Does nothing if {@code enabled} is false.
      */
+    @SuppressWarnings("FutureReturnValueIgnored") // the tasks catch their own exceptions; close() shuts the executors down
     public synchronized void start() {
         if (timer != null || closed || !config.enabled()) {
             return;
@@ -365,7 +367,7 @@ public final class Monitor implements AutoCloseable {
         MetricSource.ProcessMetrics process = service.pid().isPresent() && hasProcess(service.phase())
                 ? processes.getOrDefault(service.pid().getAsLong(), MetricSource.ProcessMetrics.UNKNOWN)
                 : MetricSource.ProcessMetrics.UNKNOWN;
-        if (!fresh) {
+        if (!fresh || status == null) {
             return new ServiceSample(now, ServiceSample.UNKNOWN, ServiceSample.UNKNOWN, Double.NaN, Double.NaN,
                     ServiceSample.UNKNOWN, ServiceSample.UNKNOWN, process.cpu(), process.rss());
         }
@@ -383,7 +385,7 @@ public final class Monitor implements AutoCloseable {
         if (metric == Metric.CRASHES) {
             Instant from = now.minus(window);
             synchronized (track) {
-                return OptionalDouble.of(track.crashes.stream().filter(t -> !t.isBefore(from)).count());
+                return OptionalDouble.of((double) track.crashes.stream().filter(t -> !t.isBefore(from)).count());
             }
         }
         if (!running) {

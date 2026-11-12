@@ -44,6 +44,7 @@ final class MirrorClient {
      * @param digest   the digest the head named, checked against the entries
      * @param entries  every entry, sorted by path, paths unique also ignoring case
      */
+    @SuppressWarnings("ArrayRecordComponent") // raw bytes of the wire format; a List<Byte> would only cost memory
     record Listing(long revision, byte[] digest, List<FileEntry> entries) {
     }
 

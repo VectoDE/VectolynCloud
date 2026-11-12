@@ -13,6 +13,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 import net.vectolyn.protocol.NodeId;
+import org.jspecify.annotations.Nullable;
 
 /**
  * {@code config/cluster.yml}: which node is the head and where it listens, the members with the
@@ -71,7 +72,7 @@ public record ClusterConfig(@JsonProperty(required = true) int schemaVersion, He
      * @param bind the address it listens on; null means {@code host}
      */
     @JsonPropertyOrder({"id", "host", "port", "bind"})
-    public record Head(String id, String host, int port, String bind) {
+    public record Head(String id, String host, int port, @Nullable String bind) {
 
         /** The address the head listens on. */
         public String bindAddress() {

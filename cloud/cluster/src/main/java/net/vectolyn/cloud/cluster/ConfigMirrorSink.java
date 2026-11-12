@@ -22,6 +22,7 @@ import net.vectolyn.cloud.config.model.GroupConfig;
 import net.vectolyn.cloud.config.model.Language;
 import net.vectolyn.cloud.config.model.NodesConfig;
 import net.vectolyn.cloud.config.model.TaskConfig;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The member's side of the config mirror. A sync reads the head's manifest, refuses anything
@@ -137,7 +138,11 @@ final class ConfigMirrorSink {
             }
             files.put(entry.path(), content);
         }
-        NodesConfig nodesConfig = parse(CloudHome.NODES_FILE, files.get(CloudHome.NODES_FILE), ConfigFormat.NODES);
+        byte[] nodesFile = files.get(CloudHome.NODES_FILE);
+        if (nodesFile == null) {
+            throw new MirrorException("the head's config has no " + CloudHome.NODES_FILE);
+        }
+        NodesConfig nodesConfig = parse(CloudHome.NODES_FILE, nodesFile, ConfigFormat.NODES);
         Map<String, GroupConfig> groups = new TreeMap<>();
         Map<String, TaskConfig> tasks = new TreeMap<>();
         for (Map.Entry<String, byte[]> file : files.entrySet()) {
@@ -167,7 +172,7 @@ final class ConfigMirrorSink {
     }
 
     /** The file on disk if it has exactly the entry's content, else null. */
-    private static byte[] localCopy(Path local, FileEntry entry) throws IOException {
+    private static byte @Nullable [] localCopy(Path local, FileEntry entry) throws IOException {
         if (RegularPaths.kind(local) != RegularPaths.Kind.FILE || Files.size(local) != entry.size()) {
             return null;
         }

@@ -337,7 +337,7 @@ final class TemplateSink {
     /** Copies the file of the current template if it is a real file with the same content. */
     private static boolean copyIfSame(Path current, FileEntry entry, Path file) throws IOException {
         Path source = current;
-        String[] segments = entry.path().split("/");
+        String[] segments = entry.path().split("/", -1);
         for (int i = 0; i < segments.length; i++) {
             source = source.resolve(segments[i]);
             RegularPaths.Kind kind = RegularPaths.kind(source);
@@ -385,7 +385,7 @@ final class TemplateSink {
             throw new MirrorException("unsafe path");
         }
         Path file = root;
-        for (String segment : path.split("/")) {
+        for (String segment : path.split("/", -1)) {
             file = file.resolve(segment);
         }
         if (!file.normalize().startsWith(root.normalize())) {

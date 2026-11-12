@@ -20,6 +20,7 @@ import net.vectolyn.protocol.ProtocolException;
 import net.vectolyn.protocol.message.Envelope;
 import net.vectolyn.protocol.message.Request;
 import net.vectolyn.protocol.message.Response;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The joining side: one TLS 1.3 connection to the head without a client certificate, the head's
@@ -84,9 +85,9 @@ public final class ClusterJoin {
                 throw new IOException("the head's certificate was not checked");
             }
             java.security.cert.Certificate[] chain = socket.getSession().getPeerCertificates();
-            NodeId certified = chain.length > 0 && chain[0] instanceof X509Certificate leaf
+            @Nullable NodeId certified = chain.length > 0 && chain[0] instanceof X509Certificate leaf
                     ? NodeCertificates.nodeId(leaf).orElse(null) : null;
-            if (!headId.equals(certified)) {
+            if (certified == null || !headId.equals(certified)) {
                 throw new IOException("the peer is not the head " + headId);
             }
             FrameStream stream = new FrameStream(socket.getInputStream(), socket.getOutputStream());

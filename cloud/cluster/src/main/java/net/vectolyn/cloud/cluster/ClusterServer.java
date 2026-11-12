@@ -48,6 +48,7 @@ import net.vectolyn.protocol.message.Ping;
 import net.vectolyn.protocol.message.Pong;
 import net.vectolyn.protocol.message.Request;
 import net.vectolyn.protocol.message.Response;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The cluster port of the head: TLS 1.3, one virtual thread per connection.
@@ -175,7 +176,7 @@ public final class ClusterServer implements AutoCloseable {
     private final AtomicBoolean closed = new AtomicBoolean();
     private final AtomicLong refused = new AtomicLong();
     private final AtomicLong acceptFailures = new AtomicLong();
-    private volatile SSLServerSocket server;
+    private volatile @Nullable SSLServerSocket server;
 
     /**
      * Creates the server; nothing listens until {@link #start()}.
@@ -214,12 +215,17 @@ public final class ClusterServer implements AutoCloseable {
             throw e;
         }
         server = socket;
-        Thread accept = new Thread(this::acceptLoop, "vectolyn-cluster-accept");
+        Thread accept = new Thread(() -> acceptLoop(socket), "vectolyn-cluster-accept");
         accept.setDaemon(true);
         accept.start();
         long ping = settings.pingInterval().toMillis();
-        timer.scheduleAtFixedRate(this::pingAll, ping, ping, TimeUnit.MILLISECONDS);
+        schedulePings(ping);
         return (InetSocketAddress) socket.getLocalSocketAddress();
+    }
+
+    @SuppressWarnings("FutureReturnValueIgnored") // the timer is shut down in close()
+    private void schedulePings(long millis) {
+        timer.scheduleAtFixedRate(this::pingAll, millis, millis, TimeUnit.MILLISECONDS);
     }
 
     /** The members connected now. */
@@ -266,8 +272,7 @@ public final class ClusterServer implements AutoCloseable {
         return true;
     }
 
-    private void acceptLoop() {
-        SSLServerSocket socket = server;
+    private void acceptLoop(SSLServerSocket socket) {
         while (!closed.get()) {
             Socket accepted;
             try {
@@ -593,7 +598,7 @@ public final class ClusterServer implements AutoCloseable {
          * Ends the session without making the caller wait: the reason is sent and the socket closed
          * on a thread of their own, and if that send is stuck the socket is cut after a moment.
          */
-        void end(Disconnect.Reason reason) {
+        void end(Disconnect.@Nullable Reason reason) {
             if (!ended.compareAndSet(false, true)) {
                 return;
             }

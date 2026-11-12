@@ -54,9 +54,8 @@ class PrometheusTest {
             assertTrue(text.contains("vectolyn_alerts_active{severity=\"critical\"} 1\n"), text);
             assertTrue(text.contains("vectolyn_alerts_active{severity=\"warning\"} 0\n"), text);
             assertTrue(text.endsWith("\n"));
-            for (String line : text.split("\n")) {
-                assertTrue(line.startsWith("# ") || line.matches("[a-z_]+(\\{[^}]*\\})? [0-9.]+"), line);
-            }
+            text.lines().forEach(line ->
+                    assertTrue(line.startsWith("# ") || line.matches("[a-z_]+(\\{[^}]*\\})? [0-9.]+"), line));
         }
     }
 

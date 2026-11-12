@@ -95,7 +95,7 @@ public final class JoinTokens {
      * @param node      the node it is for
      * @param expiresAt its expiry
      */
-    public record Info(String id, NodeId node, Instant expiresAt) {
+    public record TokenInfo(String id, NodeId node, Instant expiresAt) {
     }
 
     /**
@@ -104,7 +104,7 @@ public final class JoinTokens {
      * @param info  the listed part
      * @param token {@code <id>.<secret>}
      */
-    public record Created(Info info, Secret token) {
+    public record Created(TokenInfo info, Secret token) {
     }
 
     /** Result of {@link #redeem}. */
@@ -152,7 +152,7 @@ public final class JoinTokens {
         List<Entry> next = new ArrayList<>(open);
         next.add(new Entry(id, node.value(), hash(secret), expires.toString(), 0));
         save(next);
-        return new Created(new Info(id, node, expires), Secret.of(id + "." + secret));
+        return new Created(new TokenInfo(id, node, expires), Secret.of(id + "." + secret));
     }
 
     /**
@@ -162,9 +162,9 @@ public final class JoinTokens {
      * @return the tokens, oldest first
      * @throws IOException if the file cannot be read
      */
-    public synchronized List<Info> list(Instant now) throws IOException {
+    public synchronized List<TokenInfo> list(Instant now) throws IOException {
         return live(load(), now).stream()
-                .map(e -> new Info(e.id(), new NodeId(e.node()), Instant.parse(e.expiresAt())))
+                .map(e -> new TokenInfo(e.id(), new NodeId(e.node()), Instant.parse(e.expiresAt())))
                 .toList();
     }
 

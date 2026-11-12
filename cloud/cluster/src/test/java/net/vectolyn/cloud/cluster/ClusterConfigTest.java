@@ -78,20 +78,28 @@ class ClusterConfigTest {
     @Test
     void invalidContentIsRefused() {
         assertThrows(IOException.class, () -> ClusterFile.parse("schema-version: 1\n".getBytes(StandardCharsets.UTF_8)));
-        assertThrows(IOException.class, () -> ClusterFile.parse(("schema-version: 1\nhead: {id: Node, host: h, port: 7011}\n")
+        assertThrows(IOException.class, () -> ClusterFile.parse("schema-version: 1\nhead: {id: Node, host: h, port: 7011}\n"
                 .getBytes(StandardCharsets.UTF_8)));
-        assertThrows(IOException.class, () -> ClusterFile.parse(("schema-version: 1\nhead: {id: node-1, host: 'a b', port: 7011}\n")
+        assertThrows(IOException.class, () -> ClusterFile.parse("schema-version: 1\nhead: {id: node-1, host: 'a b', port: 7011}\n"
                 .getBytes(StandardCharsets.UTF_8)));
-        assertThrows(IOException.class, () -> ClusterFile.parse(("schema-version: 1\nhead: {id: node-1, host: h, port: 0}\n")
+        assertThrows(IOException.class, () -> ClusterFile.parse("schema-version: 1\nhead: {id: node-1, host: h, port: 0}\n"
                 .getBytes(StandardCharsets.UTF_8)));
-        assertThrows(IOException.class, () -> ClusterFile.parse(("schema-version: 1\nhead: {id: node-1, host: h, port: 7011}\n"
-                + "members: [{id: node-1, fingerprint: xyz, joined-at: '2026-10-30T12:00:00Z'}]\n").getBytes(StandardCharsets.UTF_8)));
-        assertThrows(IOException.class, () -> ClusterFile.parse(("schema-version: 1\nhead: {id: node-1, host: h, port: 7011}\n"
-                + "members: [{id: node-2, fingerprint: " + FP + ", joined-at: '2026-10-30T12:00:00Z'}]\n"
-                + "revoked: [{id: node-2, fingerprint: " + FP + ", revoked-at: '2026-10-30T12:00:00Z'}]\n")
-                .getBytes(StandardCharsets.UTF_8)), "a member with a revoked certificate");
-        assertThrows(IOException.class, () -> ClusterFile.parse(("schema-version: 1\nhead: {id: node-1, host: h, port: 7011}\n"
-                + "extra: 1\n").getBytes(StandardCharsets.UTF_8)), "unknown field");
+        assertThrows(IOException.class, () -> ClusterFile.parse("""
+                schema-version: 1
+                head: {id: node-1, host: h, port: 7011}
+                members: [{id: node-1, fingerprint: xyz, joined-at: '2026-10-30T12:00:00Z'}]
+                """.getBytes(StandardCharsets.UTF_8)));
+        assertThrows(IOException.class, () -> ClusterFile.parse("""
+                schema-version: 1
+                head: {id: node-1, host: h, port: 7011}
+                members: [{id: node-2, fingerprint: %1$s, joined-at: '2026-10-30T12:00:00Z'}]
+                revoked: [{id: node-2, fingerprint: %1$s, revoked-at: '2026-10-30T12:00:00Z'}]
+                """.formatted(FP).getBytes(StandardCharsets.UTF_8)), "a member with a revoked certificate");
+        assertThrows(IOException.class, () -> ClusterFile.parse("""
+                schema-version: 1
+                head: {id: node-1, host: h, port: 7011}
+                extra: 1
+                """.getBytes(StandardCharsets.UTF_8)), "unknown field");
     }
 
     @Test

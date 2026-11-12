@@ -58,8 +58,9 @@ public final class HomeLock implements AutoCloseable {
     public static HomeLock acquire(Path home) throws IOException {
         Objects.requireNonNull(home, "home");
         Path file = home.resolve(FILE);
-        RegularPaths.requireDirectoryOrMissing(file.getParent());
-        Files.createDirectories(file.getParent());
+        Path state = Objects.requireNonNull(file.getParent(), "lock file has a parent folder");
+        RegularPaths.requireDirectoryOrMissing(state);
+        Files.createDirectories(state);
         RegularPaths.requireFileOrMissing(file);
         FileChannel channel = FileChannel.open(file, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
         FileLock lock;

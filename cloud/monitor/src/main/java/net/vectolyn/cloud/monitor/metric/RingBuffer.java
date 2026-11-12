@@ -4,6 +4,7 @@ package net.vectolyn.cloud.monitor.metric;
 
 import java.util.ArrayList;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Fixed-size history: once full, each new entry replaces the oldest. Thread-safe; the monitor
@@ -65,7 +66,7 @@ public final class RingBuffer<T> {
 
     /** The newest entry, or null when empty. */
     @SuppressWarnings("unchecked")
-    public synchronized T latest() {
+    public synchronized @Nullable T latest() {
         return size == 0 ? null : (T) entries[(start + size - 1) % entries.length];
     }
 

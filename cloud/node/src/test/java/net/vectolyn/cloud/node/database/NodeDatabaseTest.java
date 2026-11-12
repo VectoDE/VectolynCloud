@@ -145,7 +145,7 @@ class NodeDatabaseTest {
             database.beforeStart();
             database.beforeStart();
             assertEquals(2, provisioner.provisions.get(), "a failed attempt is repeated, a success is not");
-            assertTrue(records.stream().anyMatch(r -> r.getLevel() == Level.WARNING
+            assertTrue(records.stream().anyMatch(r -> Level.WARNING.equals(r.getLevel())
                     && r.getMessage().contains("max_connections could not be read")), "notice logged as warning");
         } finally {
             logger.removeHandler(handler);

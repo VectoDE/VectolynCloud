@@ -241,7 +241,7 @@ public interface ResidentMemoryProbe {
             if (!line.startsWith("VmRSS:")) {
                 continue;
             }
-            String[] parts = line.substring("VmRSS:".length()).trim().split("\\s+");
+            String[] parts = line.substring("VmRSS:".length()).trim().split("\\s+", -1);
             if (parts.length != 2 || !parts[1].equals("kB")) {
                 return OptionalLong.empty();
             }
@@ -260,8 +260,8 @@ public interface ResidentMemoryProbe {
      */
     static Map<Long, Long> parsePs(String output) {
         Map<Long, Long> result = new HashMap<>();
-        for (String line : output.split("\\R")) {
-            String[] parts = line.trim().split("\\s+");
+        for (String line : output.split("\\R", -1)) {
+            String[] parts = line.trim().split("\\s+", -1);
             if (parts.length != 2) {
                 continue;
             }
@@ -285,7 +285,7 @@ public interface ResidentMemoryProbe {
      */
     static Map<Long, Long> parseTasklistCsv(String output) {
         Map<Long, Long> result = new HashMap<>();
-        for (String line : output.split("\\R")) {
+        for (String line : output.split("\\R", -1)) {
             List<String> fields = csvFields(line);
             if (fields.size() < 5) {
                 continue;

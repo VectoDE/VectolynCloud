@@ -23,6 +23,7 @@ import java.util.Optional;
 import java.util.regex.Pattern;
 import net.vectolyn.cloud.download.FileNames;
 import net.vectolyn.cloud.template.ServerPlatform;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The bridge plugins of the cloud ({@code docs/cloud/bridges.md}) and how a service gets its one.
@@ -99,7 +100,7 @@ public final class BridgePlugins {
     }
 
     private final Source source;
-    private volatile Map<Bridge, Entry> index;
+    private volatile @Nullable Map<Bridge, Entry> index;
 
     /**
      * Creates the installer on a source of jars.

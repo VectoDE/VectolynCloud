@@ -26,6 +26,7 @@ import net.vectolyn.cloud.node.service.ServiceManager;
 import net.vectolyn.cloud.node.service.ServiceState;
 import net.vectolyn.protocol.ServiceId;
 import net.vectolyn.protocol.message.ServiceStatus;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The node behind the API ({@code docs/cloud/api.md#wiring-in-cloud-node}): services over
@@ -46,7 +47,7 @@ public final class NodeApi implements ApiBackend, ServiceAccess, NodeAccess, Ser
     private final Instant startedAt;
     private final UnaryOperator<String> redactor;
     private final Optional<BackupAccess> backups;
-    private volatile ApiServer server;
+    private volatile @Nullable ApiServer server;
     private volatile boolean shuttingDown;
 
     /**
@@ -175,7 +176,7 @@ public final class NodeApi implements ApiBackend, ServiceAccess, NodeAccess, Ser
     // ------------------------------------------------------------------ events
 
     @Override
-    public void stateChanged(ServiceInfo service, ServiceState previous) {
+    public void stateChanged(ServiceInfo service, @Nullable ServiceState previous) {
         ApiServer target = server;
         if (target != null) {
             target.publish(new ApiEvent.ServiceState(view(service), previous == null ? null : lower(previous.name())));
@@ -235,9 +236,9 @@ public final class NodeApi implements ApiBackend, ServiceAccess, NodeAccess, Ser
     static ApiBackendException translate(String what, ServiceException e) {
         String message = e.getMessage() == null ? "" : e.getMessage();
         ApiBackendException.Reason reason = reasonOf(message);
-        boolean safe = reason != null && message.indexOf('/') < 0 && message.indexOf('\\') < 0
+        boolean safe = message.indexOf('/') < 0 && message.indexOf('\\') < 0
                 && message.length() <= 300 && message.chars().noneMatch(c -> c < 0x20);
-        if (safe) {
+        if (reason != null && safe) {
             return new ApiBackendException(reason, message);
         }
         LOG.log(System.Logger.Level.WARNING, "API: cannot {0}: {1}", what, message);
@@ -245,7 +246,7 @@ public final class NodeApi implements ApiBackend, ServiceAccess, NodeAccess, Ser
                 "The node could not " + what + ". The node log has the details.");
     }
 
-    private static ApiBackendException.Reason reasonOf(String message) {
+    private static ApiBackendException.@Nullable Reason reasonOf(String message) {
         if (message.startsWith("unknown service") || message.contains("does not exist")) {
             return ApiBackendException.Reason.NOT_FOUND;
         }

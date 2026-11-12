@@ -61,13 +61,13 @@ public final class TextChart {
         }
         Instant first = points.get(0).at();
         Instant last = points.get(points.size() - 1).at();
-        long span = Math.max(1, Duration.between(first, last).getSeconds() + 1);
+        long span = Math.max(1, Duration.between(first, last).toSeconds() + 1);
         int columns = (int) Math.min(width, span);
         double[] sum = new double[columns];
         int[] count = new int[columns];
         double max = ceiling;
         for (Point p : points) {
-            long offset = Math.max(0, Duration.between(first, p.at()).getSeconds());
+            long offset = Math.max(0, Duration.between(first, p.at()).toSeconds());
             int column = (int) Math.min(columns - 1, offset * columns / span);
             if (Double.isFinite(p.value())) {
                 sum[column] += p.value();
@@ -94,7 +94,7 @@ public final class TextChart {
                 double average = sum[c] / count[c];
                 double level = (average - floor) / (max - floor) * height;
                 // Any value above the floor shows at least in the bottom row.
-                boolean filled = level >= row - 0.5 || row == 1 && average > floor;
+                boolean filled = level >= row - 0.5 || (row == 1 && average > floor);
                 line.append(filled ? '#' : ' ');
             }
             lines.add(stripEnd(line));
@@ -145,7 +145,7 @@ public final class TextChart {
     }
 
     private static String ago(Duration d) {
-        long s = d.getSeconds();
+        long s = d.toSeconds();
         if (s >= 7200) {
             return s / 3600 + "h";
         }

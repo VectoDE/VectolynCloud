@@ -132,11 +132,11 @@ public final class MonitorCommands {
         if (node.isPresent()) {
             NodeSample n = node.get();
             String memory = n.memoryTotal() > 0 && n.memoryUsed() >= 0
-                    ? MetricUnit.bytes(n.memoryUsed()) + " / " + MetricUnit.bytes(n.memoryTotal()) + " ("
+                    ? MetricUnit.bytes((double) n.memoryUsed()) + " / " + MetricUnit.bytes((double) n.memoryTotal()) + " ("
                     + MetricUnit.PERCENT.format(n.value(Metric.NODE_MEMORY).orElse(Double.NaN)) + ")" : "-";
             out.println(Text.of("Node: CPU %1$s, memory %2$s, free in home %3$s",
                             "Node: CPU %1$s, Speicher %2$s, frei im Home %3$s"),
-                    MetricUnit.PERCENT.format(n.cpu()), memory, MetricUnit.bytes(n.diskFree()));
+                    MetricUnit.PERCENT.format(n.cpu()), memory, MetricUnit.bytes((double) n.diskFree()));
         } else {
             out.println(Text.of("Node: no sample yet.", "Node: noch keine Messung."));
         }
@@ -157,10 +157,10 @@ public final class MonitorCommands {
                     s == null || s.playersOnline() < 0 ? "-" : s.playersOnline() + "/" + Math.max(0, s.maxPlayers()),
                     s == null ? "-" : number(s.tps()),
                     s == null ? "-" : number(s.mspt()),
-                    s == null || s.heapUsed() < 0 ? "-" : MetricUnit.bytes(s.heapUsed())
-                            + (s.heapMax() > 0 ? " / " + MetricUnit.bytes(s.heapMax()) : ""),
+                    s == null || s.heapUsed() < 0 ? "-" : MetricUnit.bytes((double) s.heapUsed())
+                            + (s.heapMax() > 0 ? " / " + MetricUnit.bytes((double) s.heapMax()) : ""),
                     s == null ? "-" : MetricUnit.PERCENT.format(s.cpu()),
-                    s == null ? "-" : MetricUnit.bytes(s.rss()),
+                    s == null ? "-" : MetricUnit.bytes((double) s.rss()),
                     Integer.toString(view.service().restartAttempts()),
                     Integer.toString(view.crashes())});
             }

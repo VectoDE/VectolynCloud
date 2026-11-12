@@ -95,6 +95,7 @@ import net.vectolyn.cloud.setup.SetupException;
 import net.vectolyn.cloud.setup.SetupResult;
 import net.vectolyn.cloud.setup.SetupWizard;
 import net.vectolyn.protocol.NodeId;
+import org.jspecify.annotations.Nullable;
 
 /**
  * One running node: home lock, configuration, secrets, the service core, the database, the cloud
@@ -136,37 +137,37 @@ public final class CloudNode implements AutoCloseable {
     private final NodeDatabase database;
     private final CloudNetworkServer network;
     private final ChannelBridge channel;
-    private final Console console;
+    private final @Nullable Console console;
     private final SetupEnvironment setupEnvironment;
     /** Monitoring, backups and the API. */
     private final Ops ops;
     /** The built-in templates, written for the wanted servers. */
     private final BuiltInTemplates templates;
     /** {@code logs/cloud.log} on the root logger, removed in {@link #close()}. */
-    private final LogHandlers.FileHandler fileLog;
-    private BackupScheduler backupScheduler;
-    private volatile SetupResult.Status setupStatus;
+    private final LogHandlers.@Nullable FileHandler fileLog;
+    private @Nullable BackupScheduler backupScheduler;
+    private volatile SetupResult.@Nullable Status setupStatus;
     /** Set once start() has given up on the setup; a later first completion then starts the servers. */
     private volatile boolean startedWithoutSetup;
     /** The configured services have been started once; from then on the autoscaler keeps them. */
     private final AtomicBoolean configuredStarted = new AtomicBoolean();
     /** Set while the {@code setup} command runs; its config changes are reconciled once it ends. */
     private volatile boolean setupRunning;
-    private volatile ConfigSnapshot beforeSetup;
+    private volatile @Nullable ConfigSnapshot beforeSetup;
     private final CountDownLatch closed = new CountDownLatch(1);
     private final CountDownLatch closeDone = new CountDownLatch(1);
     private final Object closeLock = new Object();
     private final List<Handler> removedHandlers = new ArrayList<>();
-    private ConsoleLogHandler logHandler;
-    private ServiceCommands serviceCommands;
-    private ConfigListener reconcile;
+    private @Nullable ConsoleLogHandler logHandler;
+    private @Nullable ServiceCommands serviceCommands;
+    private @Nullable ConfigListener reconcile;
     private boolean closing;
-    private Thread closingThread;
+    private @Nullable Thread closingThread;
 
     private CloudNode(NodeSettings settings, HomeLock homeLock, ConfigService config, SecretStore secrets,
                       ServiceManager services, NodeDatabase database, CloudNetworkServer network,
-                      ChannelBridge channel, Console console, SetupEnvironment setupEnvironment, Ops ops,
-                      BuiltInTemplates templates, LogHandlers.FileHandler fileLog) {
+                      ChannelBridge channel, @Nullable Console console, SetupEnvironment setupEnvironment, Ops ops,
+                      BuiltInTemplates templates, LogHandlers.@Nullable FileHandler fileLog) {
         this.ops = ops;
         this.templates = templates;
         this.fileLog = fileLog;
@@ -191,10 +192,10 @@ public final class CloudNode implements AutoCloseable {
         private final ServiceManager.Builder services;
         private UnaryOperator<NetworkSettings> network = UnaryOperator.identity();
         private NodeDatabase.Factory database;
-        private Console console;
+        private @Nullable Console console;
         private boolean noConsole;
         private Map<String, String> environment = System.getenv();
-        private java.util.function.Supplier<List<String>> minecraftVersions;
+        private java.util.function.@Nullable Supplier<List<String>> minecraftVersions;
 
         private Options(ServiceManager.Builder services, NodeDatabase.Factory database) {
             this.services = services;
@@ -413,7 +414,7 @@ public final class CloudNode implements AutoCloseable {
      *                   {@code config/cluster.yml}
      */
     private record Ops(ApiCommands.TokenFile tokens, MonitorRuntime monitoring, BackupService backups, NodeApi api,
-                       ApiServer apiServer, Autoscaler scaler, ClusterService cluster) {
+                       @Nullable ApiServer apiServer, Autoscaler scaler, ClusterService cluster) {
     }
 
     private static Ops buildOps(NodeSettings settings, CloudHome home, ConfigService config, SecretStore secrets,
@@ -495,7 +496,7 @@ public final class CloudNode implements AutoCloseable {
     }
 
     /** The API server when {@code api.enabled}; a problem leaves the node running without it. */
-    private static ApiServer apiServer(CloudHome home, ConfigService config, SecretStore secrets, NodeApi api,
+    private static @Nullable ApiServer apiServer(CloudHome home, ConfigService config, SecretStore secrets, NodeApi api,
                                        Optional<ApiTokens> tokens) {
         ApiConfig settings = config.snapshot().cloud().api();
         if (settings == null || !settings.enabled() || tokens.isEmpty()) {
@@ -542,7 +543,7 @@ public final class CloudNode implements AutoCloseable {
      * Opens {@code logs/cloud.log} on the root logger, with the secrets taken out of every line. A
      * problem leaves the node without the file, never without its start.
      */
-    private static LogHandlers.FileHandler openCloudLog(CloudHome home, SecretStore secrets) {
+    private static LogHandlers.@Nullable FileHandler openCloudLog(CloudHome home, SecretStore secrets) {
         RedactingFilter redactor;
         try {
             redactor = secrets.redactingFilter();
@@ -755,7 +756,7 @@ public final class CloudNode implements AutoCloseable {
                     .map(e -> e.storageMethod().placeholderValue() + " on " + e.host() + ":" + e.port())
                     .orElse("ready"));
         } catch (ServiceException e) {
-            StartupReport.step(StartupReport.Step.DATABASE, StartupReport.Status.FAILED, e.getMessage());
+            StartupReport.step(StartupReport.Step.DATABASE, StartupReport.Status.FAILED, String.valueOf(e.getMessage()));
             for (StartupReport.Step step : List.of(StartupReport.Step.SOFTWARE, StartupReport.Step.TEMPLATES,
                     StartupReport.Step.SERVICES)) {
                 StartupReport.step(step, StartupReport.Status.SKIPPED, "the database is not ready");
@@ -791,7 +792,7 @@ public final class CloudNode implements AutoCloseable {
         List<String> failed = new ArrayList<>();
         for (String name : groups) {
             try {
-                services.prepareSoftware(name, snapshot.groups().get(name))
+                services.prepareSoftware(name, Objects.requireNonNull(snapshot.groups().get(name), "planned group exists"))
                         .ifPresent(text -> done.add(name + ": " + text));
             } catch (IOException | RuntimeException e) {
                 failed.add(name);
@@ -1186,46 +1187,47 @@ public final class CloudNode implements AutoCloseable {
     /** The download infrastructure of a home, created on first use. */
     private static final class Downloads {
 
+        private record Parts(ProviderRegistry providers, ArtifactDownloader downloader, SoftwareLockStore lockStore,
+                             LockedDownloads software) {
+        }
+
         private final Path home;
-        private ProviderRegistry providers;
-        private ArtifactDownloader downloader;
-        private SoftwareLockStore lockStore;
-        private LockedDownloads software;
+        private @Nullable Parts parts;
 
         Downloads(Path home) {
             this.home = home;
         }
 
         synchronized ProviderRegistry providers() {
-            init();
-            return providers;
+            return init().providers();
         }
 
         synchronized ArtifactDownloader downloader() {
-            init();
-            return downloader;
+            return init().downloader();
         }
 
         synchronized SoftwareLockStore lockStore() {
-            init();
-            return lockStore;
+            return init().lockStore();
         }
 
         synchronized ArtifactSource software() {
-            init();
-            return software;
+            return init().software();
         }
 
-        private void init() {
-            if (providers == null) {
+        private Parts init() {
+            Parts created = parts;
+            if (created == null) {
                 DownloadClient client = DownloadClient.createDefault();
-                providers = ProviderRegistry.standard(client);
+                ProviderRegistry providers = ProviderRegistry.standard(client);
                 ArtifactCache cache = new ArtifactCache(CloudHome.of(home).storageDir());
-                downloader = new ArtifactDownloader(client, providers, cache);
+                ArtifactDownloader downloader = new ArtifactDownloader(client, providers, cache);
                 // One store for every download of the node: JREs, MariaDB and the server software.
-                lockStore = SoftwareLockStore.inHome(home);
-                software = new LockedDownloads(providers, downloader, cache, lockStore);
+                SoftwareLockStore lockStore = SoftwareLockStore.inHome(home);
+                created = new Parts(providers, downloader, lockStore,
+                        new LockedDownloads(providers, downloader, cache, lockStore));
+                parts = created;
             }
+            return created;
         }
     }
 }

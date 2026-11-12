@@ -43,6 +43,7 @@ import net.vectolyn.cloud.node.service.ServiceListener;
 import net.vectolyn.cloud.node.service.ServicePlanner;
 import net.vectolyn.cloud.node.service.ServiceState;
 import net.vectolyn.protocol.ServiceId;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Scales the tasks of this node: every {@link #INTERVAL} it reads the configuration, the services
@@ -90,7 +91,7 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
     private final Clock clock;
     private final String node;
     private final Executor actions;
-    private final ExecutorService ownActions;
+    private final @Nullable ExecutorService ownActions;
 
     private final Object lock = new Object();
     private final Map<String, Instant> lastAction = new HashMap<>();
@@ -111,10 +112,10 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
     private final Map<String, Hold> lastHold = new HashMap<>();
     private boolean suspended;
     private boolean closed;
-    private ScheduledExecutorService scheduler;
+    private @Nullable ScheduledExecutorService scheduler;
 
     private Autoscaler(ScalingTarget target, Supplier<ConfigSnapshot> config, ScalingSignals signals, Clock clock,
-                       Executor actions) {
+                       @Nullable Executor actions) {
         this.target = Objects.requireNonNull(target, "target");
         this.config = Objects.requireNonNull(config, "config");
         this.signals = Objects.requireNonNull(signals, "signals");
@@ -151,15 +152,20 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
         return new Autoscaler(target, config, signals, clock, Objects.requireNonNull(actions, "actions"));
     }
 
+    @SuppressWarnings("FutureReturnValueIgnored") // safeTick catches its own failures; close() shuts the scheduler down
+    private void scheduleRounds(ScheduledExecutorService executor) {
+        executor.scheduleWithFixedDelay(this::safeTick, INTERVAL.toMillis(), INTERVAL.toMillis(), TimeUnit.MILLISECONDS);
+    }
+
     /** Starts the rounds, every {@link #INTERVAL}. A second call does nothing. */
     public void start() {
         synchronized (lock) {
             if (closed || scheduler != null) {
                 return;
             }
-            scheduler = Executors.newSingleThreadScheduledExecutor(daemon("vectolyn-scaling"));
-            scheduler.scheduleWithFixedDelay(this::safeTick, INTERVAL.toMillis(), INTERVAL.toMillis(),
-                    TimeUnit.MILLISECONDS);
+            ScheduledExecutorService created = Executors.newSingleThreadScheduledExecutor(daemon("vectolyn-scaling"));
+            scheduler = created;
+            scheduleRounds(created);
         }
     }
 
@@ -444,7 +450,7 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
         return group == null ? GroupConfig.DEFAULT_DRAIN_TIMEOUT.duration() : group.drainTimeoutOrDefault().duration();
     }
 
-    private static String describe(ScalingPlanner.Reason reason, TaskConfig task) {
+    private static String describe(ScalingPlanner.Reason reason, @Nullable TaskConfig task) {
         ScalingConfig s = task == null ? null : task.scaling();
         return switch (reason) {
             case MIN_SERVICES -> "min-services is " + (s == null ? "?" : s.minServices());
@@ -495,7 +501,7 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
     }
 
     @Override
-    public void stateChanged(ServiceInfo service, ServiceState previous) {
+    public void stateChanged(ServiceInfo service, @Nullable ServiceState previous) {
         stateChanged(service, previous, config.get());
     }
 
@@ -505,7 +511,7 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
      * ({@code at}), not at delivery: a switch flipped back on in between does not hide it.
      */
     @Override
-    public void stateChanged(ServiceInfo service, ServiceState previous, ConfigSnapshot at) {
+    public void stateChanged(ServiceInfo service, @Nullable ServiceState previous, ConfigSnapshot at) {
         switch (service.state()) {
             case CRASHED -> {
                 // PREPARED -> CRASHED is a start that failed before its process ran; the start
