@@ -3,9 +3,12 @@
 package net.vectolyn.cloud.privacy;
 
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -25,29 +28,43 @@ public final class PrivacyRuntime implements AutoCloseable {
 
     private final PrivacyConfig config;
     private final IpBanStore ipBans;
+    private final StatisticsCollector statistics;
+    private final Telemetry telemetry;
     private ScheduledExecutorService scheduler;
 
-    private PrivacyRuntime(PrivacyConfig config, IpBanStore ipBans) {
+    private PrivacyRuntime(PrivacyConfig config, IpBanStore ipBans, StatisticsCollector statistics,
+                           Telemetry telemetry) {
         this.config = config;
         this.ipBans = ipBans;
+        this.statistics = statistics;
+        this.telemetry = telemetry;
     }
 
     /**
      * Reads {@code privacy.yml} and opens the ban list; entries that are due are deleted.
      *
-     * @param home  cloud home
-     * @param clock time source
+     * @param home         cloud home
+     * @param clock        time source
+     * @param cloudVersion version of the cloud, for the telemetry report
      * @return the runtime
      * @throws ConfigException            if {@code privacy.yml} is invalid
      * @throws IOException                if the ban list cannot be read or written
      * @throws IpBanStore.FormatException if the ban list is damaged
+     * @throws StatisticsCollector.FormatException if the statistics file is damaged
      */
-    public static PrivacyRuntime open(Path home, Clock clock)
-            throws ConfigException, IOException, IpBanStore.FormatException {
+    public static PrivacyRuntime open(Path home, Clock clock, String cloudVersion)
+            throws ConfigException, IOException, IpBanStore.FormatException, StatisticsCollector.FormatException {
         PrivacyConfig config = PrivacyConfigLoader.load(home);
         IpBanStore store = IpBanStore.open(CloudHome.of(home).stateDir().resolve("ip-bans.json"),
                 config.ipBans().retentionDays(), Objects.requireNonNull(clock, "clock"));
-        return new PrivacyRuntime(config, store);
+        StatisticsCollector statistics = StatisticsCollector.open(
+                CloudHome.of(home).stateDir().resolve("statistics.json"), clock);
+        PrivacyConfig.Telemetry settings = config.telemetry();
+        Telemetry telemetry = new Telemetry(settings, cloudVersion, System.getProperty("os.name", "unknown"),
+                config.statistics().enabled() ? statistics::snapshot : List::of,
+                settings.enabled() && settings.endpoint() != null
+                        ? new HttpTelemetrySender(URI.create(settings.endpoint())) : body -> { });
+        return new PrivacyRuntime(config, store, statistics, telemetry);
     }
 
     /**
@@ -66,6 +83,48 @@ public final class PrivacyRuntime implements AutoCloseable {
      */
     public IpBanStore ipBans() {
         return ipBans;
+    }
+
+    /**
+     * Statistics per game mode.
+     *
+     * @return the collector
+     */
+    public StatisticsCollector statistics() {
+        return statistics;
+    }
+
+    /**
+     * The telemetry, inactive unless the configuration holds the consent.
+     *
+     * @return the telemetry
+     */
+    public Telemetry telemetry() {
+        return telemetry;
+    }
+
+    /**
+     * A player joined the network or moved to a server of a game mode. Does nothing while
+     * {@code statistics.enabled} is false.
+     *
+     * @param player player id
+     * @param mode   group of the server
+     */
+    public void playerArrived(UUID player, String mode) {
+        if (config.statistics().enabled()) {
+            statistics.arrived(player, mode);
+        }
+    }
+
+    /**
+     * A player left the network. Does nothing while {@code statistics.enabled} is false.
+     *
+     * @param player player id
+     */
+    public void playerLeft(UUID player) {
+        if (config.statistics().enabled()) {
+            statistics.left(player);
+        }
     }
 
     /** Starts the hourly deletion. Calling it twice has no effect. */
@@ -88,6 +147,27 @@ public final class PrivacyRuntime implements AutoCloseable {
                 LOG.log(Level.WARNING, "Could not delete due IP ban entries", e);
             }
         }, 1, 60, TimeUnit.MINUTES);
+        scheduler.scheduleWithFixedDelay(() -> {
+            if (!config.statistics().enabled()) {
+                return;
+            }
+            try {
+                statistics.save();
+            } catch (IOException | RuntimeException e) {
+                LOG.log(Level.WARNING, "Could not save the statistics", e);
+            }
+        }, 5, 5, TimeUnit.MINUTES);
+        if (telemetry.active()) {
+            scheduler.scheduleWithFixedDelay(() -> {
+                try {
+                    telemetry.send();
+                } catch (IOException | RuntimeException e) {
+                    LOG.log(Level.WARNING, "Could not send the telemetry report: {0}", e.toString());
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }, 1, 24, TimeUnit.HOURS);
+        }
     }
 
     @Override
@@ -95,6 +175,14 @@ public final class PrivacyRuntime implements AutoCloseable {
         if (scheduler != null) {
             scheduler.shutdownNow();
             scheduler = null;
+        }
+        if (config.statistics().enabled()) {
+            statistics.closeAll();
+            try {
+                statistics.save();
+            } catch (IOException e) {
+                LOG.log(Level.WARNING, "Could not save the statistics", e);
+            }
         }
     }
 }
