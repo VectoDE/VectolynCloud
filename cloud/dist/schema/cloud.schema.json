@@ -72,6 +72,12 @@
           "items" : {
             "type" : "string"
           }
+        },
+        "graphql-introspection" : {
+          "type" : "boolean"
+        },
+        "grpc-port" : {
+          "type" : "integer"
         }
       },
       "additionalProperties" : false
