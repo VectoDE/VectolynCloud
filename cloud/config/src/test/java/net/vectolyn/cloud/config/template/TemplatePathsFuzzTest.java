@@ -24,6 +24,9 @@ class TemplatePathsFuzzTest {
         boolean safe = TemplatePaths.isSafePath(path);
         TemplatePaths.looksSecret(path.isEmpty() ? "x" : path);
         TemplatePaths.isTemplateName(path);
+        if (TemplatePaths.isEditablePath(path)) {
+            assertTrue(safe, "an editable path is always a safe path: " + path);
+        }
         if (!safe) {
             return;
         }
