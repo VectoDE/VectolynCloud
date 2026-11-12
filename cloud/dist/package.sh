@@ -9,7 +9,8 @@
 # Writes into <output folder>:
 #   VectolynCloud.jar                              the jar, unchanged
 #   VectolynCloud-<version>-windows.zip            VectolynCloud.jar, start.bat, start.ps1
-#   VectolynCloud-<version>-linux-macos.tar.gz     VectolynCloud.jar, start.sh (executable)
+#   VectolynCloud-<version>-linux-macos.tar.gz     VectolynCloud.jar, start.sh (executable), the systemd
+#                                                  unit and install.sh (install, update, uninstall)
 #   VectolynCloud-<version>-templates.tar.gz       the server templates of the repository (templates/),
 #                                                  to read, copy and change
 #   setup.example.yml                              an annotated setup file for --setup-file
@@ -60,6 +61,8 @@ install -m 0644 -- "${jar}" "${staging}/${windows}/VectolynCloud.jar"
 install -m 0644 -- "${dist_dir}/start.bat" "${dist_dir}/start.ps1" "${staging}/${windows}/"
 install -m 0644 -- "${jar}" "${staging}/${unix}/VectolynCloud.jar"
 install -m 0755 -- "${dist_dir}/start.sh" "${staging}/${unix}/start.sh"
+install -m 0644 -- "${dist_dir}/systemd/vectolyn-cloud.service" "${staging}/${unix}/vectolyn-cloud.service"
+install -m 0755 -- "${dist_dir}/systemd/install.sh" "${staging}/${unix}/install.sh"
 install -m 0644 -- "${dist_dir}/setup.example.yml" "${out}/setup.example.yml"
 cp -R -- "${repo_root}/templates" "${staging}/${templates}/templates"
 # Fixed modes, so the archive does not depend on the umask of the build machine.
@@ -73,10 +76,12 @@ for script in "${staging}/${windows}/start.bat" "${staging}/${windows}/start.ps1
         exit 65
     fi
 done
-if grep -q $'\r' "${staging}/${unix}/start.sh"; then
-    echo "start.sh has CR characters; check .gitattributes" >&2
-    exit 65
-fi
+for script in start.sh install.sh vectolyn-cloud.service; do
+    if grep -q $'\r' "${staging}/${unix}/${script}"; then
+        echo "${script} has CR characters; check .gitattributes" >&2
+        exit 65
+    fi
+done
 
 find "${staging}" -exec touch -h -d "@${epoch}" {} +
 
