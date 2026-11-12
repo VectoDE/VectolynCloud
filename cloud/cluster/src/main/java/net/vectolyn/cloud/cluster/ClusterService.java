@@ -707,7 +707,7 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
             case HEAD -> Optional.of(new MirrorStatus(configSource.revision(), templateSource.catalog().size(),
                     Optional.ofNullable(lastSync), headProblem()));
             case MEMBER -> Optional.of(new MirrorStatus(configSink.applied().map(MirrorState.Revision::revision).orElse(0L),
-                    templateSink.synced().size(), Optional.ofNullable(lastSync), Optional.ofNullable(mirrorProblem)));
+                    templateSink.syncedCount(), Optional.ofNullable(lastSync), Optional.ofNullable(mirrorProblem)));
             case STANDALONE -> Optional.empty();
         };
         return new Status(role, current == null ? Optional.empty() : Optional.of(new NodeId(current.head().id())),
