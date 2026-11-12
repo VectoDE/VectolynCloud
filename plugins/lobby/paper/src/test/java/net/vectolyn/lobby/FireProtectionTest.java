@@ -21,8 +21,10 @@ import org.junit.jupiter.api.Test;
 /** No ignition and no burning in the lobby, whatever the cause. */
 class FireProtectionTest {
 
-    private static Block block() {
-        return (Block) Proxy.newProxyInstance(Block.class.getClassLoader(), new Class<?>[] {Block.class},
+    // Object, not Block: no method signature may name a paper-api type (class file version 69), or
+    // JUnit fails to discover the test on Java 21.
+    private static Object block() {
+        return Proxy.newProxyInstance(Block.class.getClassLoader(), new Class<?>[] {Block.class},
                 (proxy, method, args) -> switch (method.getName()) {
                     case "getX" -> 10;
                     case "getY" -> 64;
@@ -55,7 +57,7 @@ class FireProtectionTest {
         });
         FireProtection protection = new FireProtection(logger);
         for (IgniteCause cause : IgniteCause.values()) {
-            BlockIgniteEvent event = new BlockIgniteEvent(block(), cause, (Block) null);
+            BlockIgniteEvent event = new BlockIgniteEvent((Block) block(), cause, (Block) null);
             protection.onIgnite(event);
             assertTrue(event.isCancelled(), cause.name());
         }
@@ -67,7 +69,7 @@ class FireProtectionTest {
     @Test
     @Tag("requires-java25")
     void noBlockBurnsAway() {
-        BlockBurnEvent event = new BlockBurnEvent(block(), null);
+        BlockBurnEvent event = new BlockBurnEvent((Block) block(), null);
         new FireProtection(Logger.getAnonymousLogger()).onBurn(event);
         assertTrue(event.isCancelled());
     }
