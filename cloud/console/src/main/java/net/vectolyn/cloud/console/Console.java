@@ -20,6 +20,7 @@ import net.vectolyn.cloud.console.terminal.ConsoleTerminal;
 import net.vectolyn.cloud.console.terminal.ReadResult;
 import net.vectolyn.cloud.console.terminal.TerminalFactory;
 import net.vectolyn.cloud.console.terminal.TerminalSelector;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The console of the cloud: reads commands, runs them through the {@link CommandRegistry}, and
@@ -63,9 +64,9 @@ public final class Console implements AutoCloseable {
     private final Supplier<String> prompt;
     private final LongSupplier nanoTime;
     private volatile boolean running = true;
-    private Thread thread;
+    private @Nullable Thread thread;
     /** {@link #nanoTime} of the last unconfirmed Ctrl+C, or null. Only used on the read thread. */
-    private Long pendingInterrupt;
+    private @Nullable Long pendingInterrupt;
 
     private Console(Builder builder, CommandRegistry registry, ConsoleTerminal terminal) {
         this.registry = registry;
@@ -145,10 +146,12 @@ public final class Console implements AutoCloseable {
 
     /** Runs {@link #run()} on a daemon thread named {@code vectolyn-console}. Idempotent. */
     public synchronized Thread start() {
-        if (thread == null) {
-            thread = Thread.ofPlatform().daemon().name("vectolyn-console").start(this::run);
+        Thread started = thread;
+        if (started == null) {
+            started = Thread.ofPlatform().daemon().name("vectolyn-console").start(this::run);
+            thread = started;
         }
-        return thread;
+        return started;
     }
 
     /** Stops reading after the current line. */
@@ -195,8 +198,8 @@ public final class Console implements AutoCloseable {
 
         private Supplier<Language> language = () -> Language.EN;
         private Supplier<String> prompt = () -> "vectolyn> ";
-        private ConsoleTerminal terminal;
-        private CloudHome home;
+        private @Nullable ConsoleTerminal terminal;
+        private @Nullable CloudHome home;
         private Predicate<String> historyFilter = line -> true;
         private InputStream in = System.in;
         private PrintStream out = System.out;
@@ -218,7 +221,7 @@ public final class Console implements AutoCloseable {
         }
 
         /** Cloud home; the history goes to {@code state/console.history} there. Without it, no history file. */
-        public Builder home(CloudHome value) {
+        public Builder home(@Nullable CloudHome value) {
             this.home = value;
             return this;
         }
@@ -247,7 +250,7 @@ public final class Console implements AutoCloseable {
         }
 
         /** Uses this terminal instead of choosing one (tests, embedding). */
-        public Builder terminal(ConsoleTerminal value) {
+        public Builder terminal(@Nullable ConsoleTerminal value) {
             this.terminal = value;
             return this;
         }
@@ -259,7 +262,8 @@ public final class Console implements AutoCloseable {
             if (chosen == null) {
                 TerminalSelector.Selection selection = TerminalSelector.detect();
                 LOG.log(System.Logger.Level.DEBUG, "Console selection: {0} ({1})", selection.mode(), selection.reason());
-                Path history = home == null || selection.mode() == TerminalSelector.Mode.PLAIN
+                @Nullable Path history = home == null
+ || selection.mode() == TerminalSelector.Mode.PLAIN
                         ? null : TerminalFactory.prepareHistory(home);
                 Predicate<String> filter = historyFilter;
                 chosen = TerminalFactory.open(selection, line -> CommandDispatcher.complete(registry, line), history,

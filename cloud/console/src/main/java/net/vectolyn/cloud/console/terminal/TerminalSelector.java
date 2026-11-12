@@ -12,6 +12,7 @@ import java.util.Objects;
 import java.util.Set;
 import org.jline.terminal.spi.SystemStream;
 import org.jline.terminal.spi.TerminalProvider;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Chooses how the console talks to the terminal.
@@ -73,7 +74,7 @@ public final class TerminalSelector {
      * @param provider the JLine provider ({@code ffm}, {@code jni}, {@code dumb}); null for plain
      * @param reason   why, for the log
      */
-    public record Selection(Mode mode, String provider, String reason) {
+    public record Selection(Mode mode, @Nullable String provider, String reason) {
         /** Checks the combination. */
         public Selection {
             Objects.requireNonNull(mode, "mode");
@@ -92,7 +93,7 @@ public final class TerminalSelector {
      * @param loadable       providers that loaded and work here
      * @param terminal       whether stdin and stdout are both a terminal
      */
-    public static Selection choose(int javaFeature, String requested, Set<String> loadable, boolean terminal) {
+    public static Selection choose(int javaFeature, @Nullable String requested, Set<String> loadable, boolean terminal) {
         String wish = requested == null ? AUTO : requested.strip().toLowerCase(Locale.ROOT);
         List<String> notes = new ArrayList<>();
         if (!List.of(AUTO, FFM, JNI, DUMB, PLAIN).contains(wish)) {
@@ -139,7 +140,7 @@ public final class TerminalSelector {
      */
     public static Selection detect() {
         int feature = Runtime.version().feature();
-        String requested = System.getProperty(PROPERTY);
+        @Nullable String requested = System.getProperty(PROPERTY);
         if (requested == null) {
             requested = System.getenv(ENVIRONMENT);
         }
@@ -147,10 +148,10 @@ public final class TerminalSelector {
             return choose(feature, requested, Set.of(), false);
         }
         Set<String> loadable = new LinkedHashSet<>();
-        Boolean terminal = null;
+        @Nullable Boolean terminal = null;
         List<String> candidates = feature >= FFM_MIN_JAVA ? List.of(FFM, JNI) : List.of(JNI);
         for (String name : candidates) {
-            Boolean result = probe(name);
+            @Nullable Boolean result = probe(name);
             if (result != null) {
                 loadable.add(name);
                 if (terminal == null) {
@@ -165,7 +166,7 @@ public final class TerminalSelector {
     }
 
     /** Loads a provider and asks it about stdin and stdout; null if it does not work here. */
-    private static Boolean probe(String name) {
+    private static @Nullable Boolean probe(String name) {
         try {
             TerminalProvider provider = TerminalProvider.load(name);
             return provider.isSystemStream(SystemStream.Input) && provider.isSystemStream(SystemStream.Output);
@@ -179,7 +180,10 @@ public final class TerminalSelector {
      * Fallback when no native provider loads: {@link System#console()}. On Java 22+ that returns a
      * console even without a terminal, so {@code Console.isTerminal()} (added in 22) decides there.
      */
+    // Java 21 is still supported and there System.console() returns null without a terminal.
+    @SuppressWarnings("SystemConsoleNull")
     private static boolean consoleIsTerminal() {
+
         Console console = System.console();
         if (console == null) {
             return false;

@@ -10,6 +10,7 @@ import java.util.function.Function;
 import net.vectolyn.cloud.config.secret.Secret;
 import net.vectolyn.cloud.console.Messages;
 import net.vectolyn.cloud.console.Text;
+import org.jspecify.annotations.Nullable;
 
 /**
  * One question of an assistant, immutable. Create it with a factory, refine it with
@@ -58,7 +59,7 @@ public final class Question<T> {
     @FunctionalInterface
     public interface Validator<T> {
         /** A problem with {@code value}, or null if it is fine. The text must not repeat the value. */
-        Text check(T value);
+        @Nullable Text check(T value);
     }
 
     /**
@@ -82,8 +83,8 @@ public final class Question<T> {
 
     private final Kind kind;
     private final Text prompt;
-    private final Text help;
-    private final T defaultValue;
+    private final @Nullable Text help;
+    private final @Nullable T defaultValue;
     private final AnswerParser<T> parser;
     private final Function<T, String> display;
     private final List<Validator<T>> validators;
@@ -91,7 +92,7 @@ public final class Question<T> {
     private final long min;
     private final long max;
 
-    private Question(Kind kind, Text prompt, Text help, T defaultValue, AnswerParser<T> parser,
+    private Question(Kind kind, Text prompt, @Nullable Text help, @Nullable T defaultValue, AnswerParser<T> parser,
                      Function<T, String> display, List<Validator<T>> validators, List<Option<T>> options,
                      long min, long max) {
         this.kind = kind;
@@ -236,12 +237,13 @@ public final class Question<T> {
     }
 
     /** The help line, or null. */
-    public Text helpText() {
+    public @Nullable Text helpText() {
         return help;
     }
 
     /** The default, or null. */
-    public T defaultAnswer() {
+    public @Nullable T defaultAnswer() {
+
         return defaultValue;
     }
 

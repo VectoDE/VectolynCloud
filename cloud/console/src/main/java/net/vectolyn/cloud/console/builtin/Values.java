@@ -8,6 +8,7 @@ import java.util.Locale;
 import net.vectolyn.cloud.config.error.ConfigError;
 import net.vectolyn.cloud.config.error.ConfigException;
 import net.vectolyn.cloud.config.error.ErrorCode;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Turns typed text into values with the same strictness as the YAML files: {@code true} or
@@ -57,8 +58,19 @@ final class Values {
         return Arrays.stream(type.getEnumConstants()).map(Values::name).toList();
     }
 
+    /**
+     * Hands an unset value ({@code null}) to a config model parameter that takes it as "not set".
+     * Those parameters are not annotated {@code @Nullable} in the config module yet; this is the one
+     * place that bridges the gap.
+     */
+    @SuppressWarnings("NullAway") // see above: the config model does not declare the null yet
+    static <T> T unset(@Nullable T value) {
+        return value;
+    }
+
     /** {@code ""} clears an optional text; anything else is kept. */
-    static String optionalText(String text) {
+
+    static @Nullable String optionalText(String text) {
         return text.isEmpty() ? null : text;
     }
 

@@ -10,6 +10,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 import net.vectolyn.cloud.console.Text;
+import org.jspecify.annotations.Nullable;
 
 /**
  * A console command or subcommand: name, aliases, description in English and German, and either
@@ -37,7 +38,7 @@ public final class Command {
     private final Text description;
     private final List<Argument> arguments;
     private final List<Command> subcommands;
-    private final CommandExecutor executor;
+    private final @Nullable CommandExecutor executor;
     private final boolean sensitive;
 
     private Command(Builder builder) {
@@ -154,11 +155,12 @@ public final class Command {
 
         private final String name;
         private final List<String> aliases = new ArrayList<>();
-        private Text description;
+        private @Nullable Text description;
         private final List<Argument> arguments = new ArrayList<>();
         private final List<Command> subcommands = new ArrayList<>();
-        private CommandExecutor executor;
+        private @Nullable CommandExecutor executor;
         private boolean sensitive;
+
 
         private Builder(String name) {
             this.name = checkName(name);

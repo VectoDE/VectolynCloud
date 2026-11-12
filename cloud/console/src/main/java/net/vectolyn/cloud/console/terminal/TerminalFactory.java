@@ -8,12 +8,14 @@ import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import net.vectolyn.cloud.config.CloudHome;
 import net.vectolyn.cloud.config.io.RegularPaths;
 import net.vectolyn.cloud.config.secret.OwnerOnlyPermissions;
 import org.jline.terminal.Terminal;
+import org.jspecify.annotations.Nullable;
 import org.jline.terminal.TerminalBuilder;
 
 /** Creates the {@link ConsoleTerminal} for a {@link TerminalSelector.Selection}. */
@@ -36,7 +38,7 @@ public final class TerminalFactory {
      * @param historyAllowed which command lines may be stored
      */
     public static ConsoleTerminal open(TerminalSelector.Selection selection, Function<String, List<String>> completer,
-                                       Path historyFile, Predicate<String> historyAllowed, InputStream in, PrintStream out) {
+                                       @Nullable Path historyFile, Predicate<String> historyAllowed, InputStream in, PrintStream out) {
         if (selection.mode() == TerminalSelector.Mode.PLAIN) {
             return new PlainTerminal(in, out);
         }
@@ -66,11 +68,13 @@ public final class TerminalFactory {
      * cannot be prepared; the history holds no secrets, but it should not be readable by others or
      * written through a link either.
      */
-    public static Path prepareHistory(CloudHome home) {
+    public static @Nullable Path prepareHistory(CloudHome home) {
         Path file = home.root().resolve(HISTORY_FILE);
         try {
-            RegularPaths.requireDirectoryOrMissing(file.getParent());
-            Files.createDirectories(file.getParent());
+            Path directory = Objects.requireNonNull(file.getParent(), "history directory");
+            RegularPaths.requireDirectoryOrMissing(directory);
+            Files.createDirectories(directory);
+
             RegularPaths.requireFileOrMissing(file);
             if (RegularPaths.kind(file) == RegularPaths.Kind.MISSING) {
                 Files.createFile(file);

@@ -19,6 +19,7 @@ import org.jline.reader.impl.history.DefaultHistory;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.impl.DumbTerminal;
 import org.jline.utils.InfoCmp;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Console on a real terminal with JLine: line editing, history, tab completion, colors.
@@ -55,7 +56,8 @@ public final class JLineTerminal implements ConsoleTerminal {
      * @param historyAllowed decides which command lines may be stored
      * @param description short text for the log
      */
-    public JLineTerminal(Terminal terminal, Function<String, List<String>> completer, Path historyFile,
+    public JLineTerminal(Terminal terminal, Function<String, List<String>> completer, @Nullable Path historyFile,
+
                          Predicate<String> historyAllowed, String description) {
         this.terminal = Objects.requireNonNull(terminal, "terminal");
         this.history = new FilteringHistory(Objects.requireNonNull(historyAllowed, "historyAllowed"));
