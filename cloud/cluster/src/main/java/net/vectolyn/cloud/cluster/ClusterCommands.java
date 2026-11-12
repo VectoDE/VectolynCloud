@@ -144,7 +144,7 @@ public final class ClusterCommands {
             try {
                 ttl = TimeSpan.parse(lifetime.get()).duration();
             } catch (IllegalArgumentException e) {
-                throw new CommandException(Text.of("The lifetime must be 1m to 24h, for example 30m.",
+                throw new CommandException(e, Text.of("The lifetime must be 1m to 24h, for example 30m.",
                         "Die Laufzeit muss 1m bis 24h sein, zum Beispiel 30m."));
             }
         }
@@ -255,7 +255,7 @@ public final class ClusterCommands {
             return;
         } catch (ExecutionException e) {
             Throwable cause = e.getCause() == null ? e : e.getCause();
-            throw new CommandException(Text.of("Sync failed: %1$s", "Abgleich fehlgeschlagen: %1$s"),
+            throw new CommandException(e, Text.of("Sync failed: %1$s", "Abgleich fehlgeschlagen: %1$s"),
                     String.valueOf(cause.getMessage()));
         }
         ClusterService.MirrorStatus mirror = cluster.status().mirror().orElseThrow();
@@ -281,7 +281,7 @@ public final class ClusterCommands {
         try {
             return new NodeId(text);
         } catch (IllegalArgumentException e) {
-            throw new CommandException(Text.of("Not a valid node id.", "Keine gültige Node-ID."));
+            throw new CommandException(e, Text.of("Not a valid node id.", "Keine gültige Node-ID."));
         }
     }
 
@@ -302,10 +302,10 @@ public final class ClusterCommands {
         try {
             return action.run();
         } catch (ClusterException e) {
-            throw new CommandException(Text.of("%1$s", "%2$s"), e.message(net.vectolyn.cloud.config.model.Language.EN),
+            throw new CommandException(e, Text.of("%1$s", "%2$s"), e.message(net.vectolyn.cloud.config.model.Language.EN),
                     e.message(net.vectolyn.cloud.config.model.Language.DE));
         } catch (IOException e) {
-            throw new CommandException(Text.of("Cluster: %1$s", "Cluster: %1$s"), String.valueOf(e.getMessage()));
+            throw new CommandException(e, Text.of("Cluster: %1$s", "Cluster: %1$s"), String.valueOf(e.getMessage()));
         }
     }
 

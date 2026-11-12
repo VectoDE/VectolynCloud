@@ -9,6 +9,7 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -217,7 +218,7 @@ public record ClusterConfig(@JsonProperty(required = true) int schemaVersion, He
             return false;
         }
         try {
-            Instant.parse(value);
+            Objects.requireNonNull(Instant.parse(value));
             return true;
         } catch (DateTimeParseException e) {
             return false;

@@ -65,6 +65,19 @@ public final class EnvFormatException extends Exception {
         this.reason = reason;
     }
 
+    /**
+     * Creates the exception with the failure behind it. The cause must not quote the file.
+     *
+     * @param line   1-based line, or 0 for the whole file
+     * @param reason rule that was broken
+     * @param cause  the failure behind it
+     */
+    public EnvFormatException(int line, Reason reason, Throwable cause) {
+        super(describe(line, Objects.requireNonNull(reason, "reason"), Language.EN), cause);
+        this.line = line;
+        this.reason = reason;
+    }
+
     /** 1-based line, or 0 for the whole file. */
     public int line() {
         return line;

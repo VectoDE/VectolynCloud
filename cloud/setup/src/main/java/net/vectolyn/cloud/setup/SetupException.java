@@ -28,13 +28,25 @@ public final class SetupException extends Exception {
         this.problems = List.copyOf(problems);
     }
 
+    /**
+     * Creates the exception with the failure behind it.
+     *
+     * @param problems what is wrong, for the operator
+     * @param cause    the failure behind it
+     */
+    public SetupException(List<Text> problems, Throwable cause) {
+        super(Objects.requireNonNull(problems, "problems").isEmpty() ? "setup failed" : describe(problems, Language.EN),
+                cause);
+        this.problems = List.copyOf(problems);
+    }
+
     /** From the errors of the strict reader or the validator. */
     public static SetupException of(ConfigException e) {
         List<Text> texts = new ArrayList<>();
         for (ConfigError error : e.errors()) {
             texts.add(Text.of(error.describe(Language.EN), error.describe(Language.DE)));
         }
-        return new SetupException(texts);
+        return new SetupException(texts, e);
     }
 
     /** The problems, in order. */

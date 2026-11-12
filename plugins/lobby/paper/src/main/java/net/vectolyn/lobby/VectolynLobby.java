@@ -72,7 +72,9 @@ public final class VectolynLobby extends JavaPlugin implements Listener {
         world.setGameRule(GameRules.FREEZE_DAMAGE, false);
         world.setGameRule(GameRules.PVP, false);
         for (Entity entity : world.getEntities()) {
-            if (isHostile(entity)) entity.remove();
+            if (isHostile(entity)) {
+                entity.remove();
+            }
         }
     }
 
@@ -84,7 +86,9 @@ public final class VectolynLobby extends JavaPlugin implements Listener {
         for (int x = -27; x <= 27; x++) {
             for (int z = -27; z <= 27; z++) {
                 double distance = Math.sqrt(x * x + z * z);
-                if (distance > 27) continue;
+                if (distance > 27) {
+                    continue;
+                }
                 int top = Y - Math.max(0, (int) ((distance - 15) / 3));
                 for (int y = 87; y <= top; y++) {
                     Material material = y == top ? Material.GRASS_BLOCK : (y < top - 4 ? Material.DEEPSLATE : Material.STONE);
@@ -97,7 +101,9 @@ public final class VectolynLobby extends JavaPlugin implements Listener {
         disk(world, 0, Y + 1, 0, 7, Material.POLISHED_DEEPSLATE);
         disk(world, 0, Y + 2, 0, 5, Material.CALCITE);
         disk(world, 0, Y + 3, 0, 3, Material.SMOOTH_QUARTZ);
-        for (int y = Y + 4; y <= Y + 9; y++) set(world, 0, y, 0, Material.AMETHYST_BLOCK);
+        for (int y = Y + 4; y <= Y + 9; y++) {
+            set(world, 0, y, 0, Material.AMETHYST_BLOCK);
+        }
         set(world, 0, Y + 10, 0, Material.SEA_LANTERN);
 
         // Four intentionally distinct paths, one for each existing backend mode.
@@ -123,7 +129,9 @@ public final class VectolynLobby extends JavaPlugin implements Listener {
             for (int offset = -1; offset <= 1; offset++) {
                 set(world, x + (dz == 0 ? 0 : offset), Y + 2, z + (dx == 0 ? 0 : offset), Material.POLISHED_DEEPSLATE);
             }
-            if (i % 5 == 0) set(world, x, Y + 3, z, Material.SEA_LANTERN);
+            if (i % 5 == 0) {
+                set(world, x, Y + 3, z, Material.SEA_LANTERN);
+            }
         }
         int px = toX - dx * 2;
         int pz = toZ - dz * 2;
@@ -141,9 +149,17 @@ public final class VectolynLobby extends JavaPlugin implements Listener {
     }
 
     private void tree(World world, int x, int y, int z, Material leaves) {
-        for (int trunk = 0; trunk < 6; trunk++) set(world, x, y + trunk, z, Material.DARK_OAK_LOG);
-        for (int lx = -3; lx <= 3; lx++) for (int lz = -3; lz <= 3; lz++) for (int ly = 3; ly <= 7; ly++) {
-            if (Math.abs(lx) + Math.abs(lz) + Math.abs(ly - 5) <= 5) set(world, x + lx, y + ly, z + lz, leaves);
+        for (int trunk = 0; trunk < 6; trunk++) {
+            set(world, x, y + trunk, z, Material.DARK_OAK_LOG);
+        }
+        for (int lx = -3; lx <= 3; lx++) {
+            for (int lz = -3; lz <= 3; lz++) {
+                for (int ly = 3; ly <= 7; ly++) {
+                    if (Math.abs(lx) + Math.abs(lz) + Math.abs(ly - 5) <= 5) {
+                        set(world, x + lx, y + ly, z + lz, leaves);
+                    }
+                }
+            }
         }
     }
 
@@ -156,8 +172,12 @@ public final class VectolynLobby extends JavaPlugin implements Listener {
     }
 
     private void disk(World world, int x, int y, int z, int radius, Material material) {
-        for (int dx = -radius; dx <= radius; dx++) for (int dz = -radius; dz <= radius; dz++) {
-            if (dx * dx + dz * dz <= radius * radius) set(world, x + dx, y, z + dz, material);
+        for (int dx = -radius; dx <= radius; dx++) {
+            for (int dz = -radius; dz <= radius; dz++) {
+                if (dx * dx + dz * dz <= radius * radius) {
+                    set(world, x + dx, y, z + dz, material);
+                }
+            }
         }
     }
 
@@ -182,7 +202,9 @@ public final class VectolynLobby extends JavaPlugin implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onDamage(EntityDamageEvent event) {
-        if (!(event.getEntity() instanceof Player player)) return;
+        if (!(event.getEntity() instanceof Player player)) {
+            return;
+        }
         event.setCancelled(true);
         if (event.getCause() == DamageCause.VOID) {
             player.setFallDistance(0);
@@ -201,13 +223,17 @@ public final class VectolynLobby extends JavaPlugin implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onCreatureSpawn(CreatureSpawnEvent event) {
-        if (SpawnPolicy.blocks(event.getSpawnReason().name())) event.setCancelled(true);
+        if (SpawnPolicy.blocks(event.getSpawnReason().name())) {
+            event.setCancelled(true);
+        }
     }
 
     @EventHandler
     public void onEntitiesLoad(EntitiesLoadEvent event) {
         for (Entity entity : event.getEntities()) {
-            if (isHostile(entity)) entity.remove();
+            if (isHostile(entity)) {
+                entity.remove();
+            }
         }
     }
 }

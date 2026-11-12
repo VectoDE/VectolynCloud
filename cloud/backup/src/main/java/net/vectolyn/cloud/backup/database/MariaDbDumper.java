@@ -172,7 +172,7 @@ public final class MariaDbDumper {
             }
         } catch (IllegalArgumentException e) {
             throw new BackupException(BackupException.Reason.DATABASE, Objects.requireNonNullElse(e.getMessage(),
-                    e.toString()));
+                    e.toString()), e);
         } catch (IOException e) {
             throw new BackupException(BackupException.Reason.DATABASE,
                     tool + " could not run: " + redact.redact(String.valueOf(e.getMessage())), e);

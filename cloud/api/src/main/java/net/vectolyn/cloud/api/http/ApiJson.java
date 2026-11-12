@@ -77,15 +77,15 @@ public final class ApiJson {
         try {
             value = MAPPER.readValue(body, type);
         } catch (UnrecognizedPropertyException e) {
-            throw ApiException.badRequest("unknown-field", "Unknown field \""
+            throw ApiException.badRequest("unknown-field", "Unknown field \"" // NOPMD - the Jackson message can quote the request body
                     + ConfigNames.safeArgument(e.getPropertyName()) + "\" at " + path(e) + ".");
         } catch (DatabindException e) {
-            throw ApiException.badRequest("invalid-json", "Invalid value at " + path(e) + ".");
+            throw ApiException.badRequest("invalid-json", "Invalid value at " + path(e) + "."); // NOPMD - the Jackson message can quote the request body
         } catch (JacksonException e) {
-            throw ApiException.badRequest("invalid-json", "The body is not valid JSON or breaks a limit.");
+            throw ApiException.badRequest("invalid-json", "The body is not valid JSON or breaks a limit."); // NOPMD - the Jackson message can quote the request body
         } catch (RuntimeException e) {
             // a record constructor refused a value (for example null inside a list)
-            throw ApiException.badRequest("invalid-json", "Invalid value in the body.");
+            throw ApiException.badRequest("invalid-json", "Invalid value in the body."); // NOPMD - the Jackson message can quote the request body
         }
         if (value == null) {
             throw ApiException.badRequest("body-required", "A JSON body is required.");
@@ -113,7 +113,7 @@ public final class ApiJson {
         try {
             return ConfigYaml.read(file, body, format, MAPPER).value();
         } catch (ConfigException e) {
-            throw ApiException.invalidBody(e.errors());
+            throw ApiException.invalidBody(e.errors(), e);
         }
     }
 

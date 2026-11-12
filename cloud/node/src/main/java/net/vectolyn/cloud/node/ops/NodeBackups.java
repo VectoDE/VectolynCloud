@@ -154,7 +154,7 @@ public final class NodeBackups implements BackupTargets, ServiceControl, Databas
             ServiceManager.Hold hold = services.holdStopped(id);
             return hold::close;
         } catch (ServiceException e) {
-            throw new BackupException(BackupException.Reason.SERVICE_RUNNING, String.valueOf(e.getMessage()));
+            throw new BackupException(BackupException.Reason.SERVICE_RUNNING, String.valueOf(e.getMessage()), e);
         }
     }
 

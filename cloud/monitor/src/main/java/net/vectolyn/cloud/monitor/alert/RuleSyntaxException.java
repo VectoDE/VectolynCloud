@@ -76,6 +76,19 @@ public final class RuleSyntaxException extends IllegalArgumentException {
         this.position = position;
     }
 
+    /**
+     * Creates the exception with the failure behind it.
+     *
+     * @param reason   what is wrong
+     * @param position zero-based index of the character where it went wrong
+     * @param cause    the failure behind it
+     */
+    public RuleSyntaxException(Reason reason, int position, Throwable cause) {
+        super(Objects.requireNonNull(reason, "reason").text() + " (at character " + (position + 1) + ")", cause);
+        this.reason = reason;
+        this.position = position;
+    }
+
     /** What was wrong. */
     public Reason reason() {
         return reason;

@@ -205,7 +205,7 @@ public final class ServiceCommands implements ServiceListener {
         try {
             id = new ServiceId(text);
         } catch (IllegalArgumentException e) {
-            throw new CommandException(Text.of("Not a service id. \"service list\" shows them.",
+            throw new CommandException(e, Text.of("Not a service id. \"service list\" shows them.",
                     "Keine Dienst-ID. „service list“ zeigt sie."));
         }
         return services.find(id).orElseThrow(() -> new CommandException(Text.of(
@@ -231,7 +231,7 @@ public final class ServiceCommands implements ServiceListener {
         try {
             return call.call();
         } catch (ServiceException e) {
-            throw new CommandException(Text.of("%1$s", "%1$s"), String.valueOf(e.getMessage()));
+            throw new CommandException(e, Text.of("%1$s", "%1$s"), String.valueOf(e.getMessage()));
         }
     }
 
@@ -239,7 +239,7 @@ public final class ServiceCommands implements ServiceListener {
         try {
             effect.run();
         } catch (ServiceException e) {
-            throw new CommandException(Text.of("%1$s", "%1$s"), String.valueOf(e.getMessage()));
+            throw new CommandException(e, Text.of("%1$s", "%1$s"), String.valueOf(e.getMessage()));
         }
     }
 

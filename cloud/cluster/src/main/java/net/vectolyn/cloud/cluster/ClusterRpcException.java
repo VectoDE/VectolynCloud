@@ -51,6 +51,18 @@ public final class ClusterRpcException extends IOException {
         this.code = code;
     }
 
+    /**
+     * Creates the exception with the failure behind it.
+     *
+     * @param code  the code, 1 to 32 characters of {@code [a-z0-9-]}
+     * @param cause the failure behind it; it stays local and is never sent to the peer
+     * @throws IllegalArgumentException if the code is not valid
+     */
+    public ClusterRpcException(String code, Throwable cause) {
+        super(checkCode(code), cause);
+        this.code = code;
+    }
+
     /** The code. */
     public String code() {
         return code;

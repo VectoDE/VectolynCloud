@@ -121,14 +121,12 @@ public final class Router<H> {
             }
             if (params.containsKey(null)) {
                 badParameter = true;
-                continue;
-            }
-            if (!route.method().equals(method)) {
+            } else if (!route.method().equals(method)) {
                 allowed.add(route.method());
-                continue;
+            } else {
+                params.remove(null);
+                return new Resolution.Found<>(route, Collections.unmodifiableMap(params), queryParams);
             }
-            params.remove(null);
-            return new Resolution.Found<>(route, Collections.unmodifiableMap(params), queryParams);
         }
         if (!allowed.isEmpty()) {
             return new Resolution.MethodNotAllowed<>(Set.copyOf(allowed));
@@ -185,7 +183,8 @@ public final class Router<H> {
     /** Percent-decodes ASCII; {@code +} stays {@code +} (and is refused by the value pattern). */
     private static String decode(String value) {
         StringBuilder out = new StringBuilder(value.length());
-        for (int i = 0; i < value.length(); i++) {
+        int i = 0;
+        while (i < value.length()) {
             char c = value.charAt(i);
             if (c == '%') {
                 if (i + 2 >= value.length()) {
@@ -201,6 +200,7 @@ public final class Router<H> {
             } else {
                 out.append(c);
             }
+            i++;
         }
         return out.toString();
     }

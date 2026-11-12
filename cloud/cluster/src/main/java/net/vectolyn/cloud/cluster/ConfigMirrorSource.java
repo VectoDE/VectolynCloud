@@ -174,7 +174,7 @@ final class ConfigMirrorSource {
         try {
             return decoder.get();
         } catch (ProtocolException e) {
-            throw new ClusterRpcException(ClusterRpcException.BAD_REQUEST);
+            throw new ClusterRpcException(ClusterRpcException.BAD_REQUEST, e);
         }
     }
 }

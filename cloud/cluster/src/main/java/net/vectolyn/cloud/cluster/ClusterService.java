@@ -396,10 +396,10 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
         try {
             return tokens.create(node, ttl, clock.instant());
         } catch (IllegalArgumentException e) {
-            throw new ClusterException("The lifetime must be 1m to 24h.", "Die Laufzeit muss 1m bis 24h sein.");
+            throw new ClusterException("The lifetime must be 1m to 24h.", "Die Laufzeit muss 1m bis 24h sein.", e);
         } catch (IllegalStateException e) {
             throw new ClusterException("At most " + JoinTokens.MAX_TOKENS + " join tokens can be open.",
-                    "Höchstens " + JoinTokens.MAX_TOKENS + " Beitritts-Tokens können offen sein.");
+                    "Höchstens " + JoinTokens.MAX_TOKENS + " Beitritts-Tokens können offen sein.", e);
         }
     }
 

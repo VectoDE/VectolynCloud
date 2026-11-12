@@ -61,7 +61,7 @@ final class ApiSupport {
             return client.fetchBytes(uri, hosts, MAX_JSON_BYTES);
         } catch (HttpStatusException e) {
             if (e.status() == 404 || e.status() == 400) {
-                throw new ArtifactNotAvailableException(what + " not found (HTTP " + e.status() + " from " + uri + ")");
+                throw new ArtifactNotAvailableException(what + " not found (HTTP " + e.status() + " from " + uri + ")", e);
             }
             throw e;
         }

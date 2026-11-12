@@ -107,7 +107,7 @@ final class MirrorClient {
         try {
             return Manifest.read(new PacketReader(payload));
         } catch (ProtocolException e) {
-            throw new MirrorException("invalid manifest");
+            throw new MirrorException("invalid manifest", e);
         }
     }
 
@@ -156,15 +156,16 @@ final class MirrorClient {
             return future.get(TIMEOUT.toMillis() * 2, TimeUnit.MILLISECONDS);
         } catch (ExecutionException e) {
             if (e.getCause() instanceof ClusterRpcException rpc) {
+                rpc.addSuppressed(e);
                 throw rpc;
             }
             throw new ClusterRpcException(e.getCause() instanceof TimeoutException ? ClusterRpcException.TIMEOUT
-                    : ClusterRpcException.FAILED);
+                    : ClusterRpcException.FAILED, e);
         } catch (TimeoutException e) {
-            throw new ClusterRpcException(ClusterRpcException.TIMEOUT);
+            throw new ClusterRpcException(ClusterRpcException.TIMEOUT, e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new ClusterRpcException(ClusterRpcException.CLOSED);
+            throw new ClusterRpcException(ClusterRpcException.CLOSED, e);
         }
     }
 }

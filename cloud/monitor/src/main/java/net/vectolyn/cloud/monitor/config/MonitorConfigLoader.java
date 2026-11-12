@@ -91,7 +91,7 @@ public final class MonitorConfigLoader {
         } catch (NoSuchFileException e) {
             return check(MonitorConfig.defaults());
         } catch (IOException e) {
-            throw new ConfigException(ConfigError.of(FILE, "", ErrorCode.FILE_ACCESS));
+            throw new ConfigException(ConfigError.of(FILE, "", ErrorCode.FILE_ACCESS), e);
         }
         return parse(content);
     }

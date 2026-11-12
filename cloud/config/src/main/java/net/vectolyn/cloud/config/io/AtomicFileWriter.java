@@ -117,7 +117,9 @@ public final class AtomicFileWriter {
             Thread.sleep(millis);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new InterruptedIOException("interrupted while retrying a rename");
+            InterruptedIOException failure = new InterruptedIOException("interrupted while retrying a rename");
+            failure.initCause(e);
+            throw failure;
         }
     }
 

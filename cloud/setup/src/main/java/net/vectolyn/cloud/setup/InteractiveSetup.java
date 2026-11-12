@@ -524,7 +524,7 @@ final class InteractiveSetup {
         try {
             return MemorySize.parse(text);
         } catch (IllegalArgumentException e) {
-            throw new InvalidAnswerException(SetupMessages.CHECK_HEAP);
+            throw new InvalidAnswerException(e, SetupMessages.CHECK_HEAP);
         }
     }
 

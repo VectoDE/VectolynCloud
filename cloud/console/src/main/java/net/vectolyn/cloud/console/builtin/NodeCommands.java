@@ -107,7 +107,7 @@ String path, String value) throws ConfigException {
         try {
             return MemorySize.parse(value);
         } catch (IllegalArgumentException e) {
-            throw Values.invalid(CloudHome.NODES_FILE, path, MemorySize.FORMAT + ", or " + keyword);
+            throw Values.invalid(CloudHome.NODES_FILE, path, MemorySize.FORMAT + ", or " + keyword, e);
         }
     }
 

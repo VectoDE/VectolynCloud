@@ -81,7 +81,7 @@ final class RuntimePaths {
             try {
                 path = path.resolve(part);
             } catch (InvalidPathException e) {
-                throw new TemplateException(printable(relative), "path is not valid on this system");
+                throw new TemplateException(printable(relative), "path is not valid on this system", e);
             }
         }
         path = path.normalize();
@@ -195,28 +195,33 @@ final class RuntimePaths {
         FileAttribute<?>[] attributes = secret && posix
                 ? new FileAttribute<?>[] {PosixFilePermissions.asFileAttribute(OWNER_ONLY)}
                 : new FileAttribute<?>[0];
+        Path temp = createUnique(folder, attributes);
+        try {
+            if (secret && posix) {
+                // The umask can only remove bits; set the mode explicitly all the same.
+                Files.setPosixFilePermissions(temp, OWNER_ONLY);
+            } else if (secret) {
+                restrictAcl(temp);
+            }
+        } catch (IOException | RuntimeException e) {
+            Files.deleteIfExists(temp);
+            throw e;
+        }
+        return temp;
+    }
+
+    /** Creates an empty file with a random name; a name that is taken is replaced by a new one, ten times at most. */
+    private static Path createUnique(Path folder, FileAttribute<?>[] attributes) throws IOException {
         for (int attempt = 0; ; attempt++) {
             Path temp = folder.resolve(TEMP_PREFIX + Long.toUnsignedString(RANDOM.nextLong(), 36) + TEMP_SUFFIX);
             try {
                 Files.newByteChannel(temp, CREATE_NEW_OPTIONS, attributes).close();
+                return temp;
             } catch (FileAlreadyExistsException e) {
                 if (attempt >= 10) {
                     throw e;
                 }
-                continue;
             }
-            try {
-                if (secret && posix) {
-                    // The umask can only remove bits; set the mode explicitly all the same.
-                    Files.setPosixFilePermissions(temp, OWNER_ONLY);
-                } else if (secret) {
-                    restrictAcl(temp);
-                }
-            } catch (IOException | RuntimeException e) {
-                Files.deleteIfExists(temp);
-                throw e;
-            }
-            return temp;
         }
     }
 
@@ -256,6 +261,7 @@ final class RuntimePaths {
                     Thread.sleep(50L * attempt);
                 } catch (InterruptedException interrupted) {
                     Thread.currentThread().interrupt();
+                    e.addSuppressed(interrupted);
                     throw e;
                 }
             }
