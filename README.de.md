@@ -20,7 +20,7 @@ Vectolyn ist ein Open-Source-Baukasten (GPL-3.0), mit dem du dein eigenes Minecr
 
 Wir selbst betreiben kein Netzwerk: Es gibt keinen offiziellen Server, keine Domain und keine gehostete Website, keinen Discord-Bot und keinen Store. Website, Discord-Bot und Store liegen als Code in diesem Repository. Du konfigurierst sie mit deinem eigenen Bot-Token und deinem eigenen Stripe-Konto und hostest sie selbst.
 
-Du startest `java -jar VectolynCloud.jar` unter Windows, Linux, macOS, in Docker oder auf Pterodactyl und beantwortest einen Einrichtungsassistenten. Die Cloud lädt danach die Server-Software herunter, richtet die Datenbank ein und startet das Netzwerk, das du gewählt hast: Proxy, Lobby, Spielmodi und Minigames. Ein Release enthält `VectolynCloud.jar`, Startskripte für Windows, Linux und macOS und ein Docker-Image auf GHCR, alles signiert und mit Build-Provenance. Plugin-Jars hängen nicht am Release. Dockerfile, compose-Datei und Pterodactyl-Egg liegen in diesem Repository.
+Du startest `java -jar VectolynCloud.jar` unter Windows, Linux, macOS, in Docker oder auf Pelican oder Pterodactyl und beantwortest einen Einrichtungsassistenten. Die Cloud lädt danach die Server-Software herunter, richtet die Datenbank ein und startet das Netzwerk, das du gewählt hast: Proxy, Lobby, Spielmodi und Minigames. Ein Release enthält `VectolynCloud.jar`, Startskripte für Windows, Linux und macOS und ein Docker-Image auf GHCR, alles signiert und mit Build-Provenance. Plugin-Jars hängen nicht am Release. Dockerfile, compose-Datei und Pterodactyl-Egg liegen in diesem Repository.
 
 ## Stand
 
@@ -93,7 +93,7 @@ VectolynCloud/
   cloud/                  VectolynCloud, je Teil ein Gradle-Modul: launcher, node, config, api,
                           console, setup, database, download, template, network, backup, monitor,
                           cluster
-    dist/                 Startskripte, Docker, Pterodactyl-Egg, systemd-Unit, vectolyn.env.example; manual/ enthält die alten Windows-Skripte
+    dist/                 Startskripte, Docker, Pterodactyl- und Pelican-Egg, systemd-Unit, vectolyn.env.example; manual/ enthält die alten Windows-Skripte
   common/
     protocol/             Leitungsformat des Cloud-Kanals
     client/               Client, über den die Plugins mit der Cloud sprechen
