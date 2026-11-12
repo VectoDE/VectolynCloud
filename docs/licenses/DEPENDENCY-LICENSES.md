@@ -58,6 +58,19 @@ Exakte Versionen in `cloud/panel/web/package-lock.json`. Installiert wird nur mi
 
 Schriften und Design-Tokens im Panel kommen aus `branding/` (OFL-1.1 bzw. CC-BY-SA-4.0, siehe `REUSE.toml`).
 
+## Website (`site/`, published on GitHub Pages)
+
+Everything is vendored into the repository; the website loads nothing from other servers. REUSE annotations are in `REUSE.toml`.
+
+| Component | Version / source | File in the repository | License (SPDX) | GPL-3.0 compatible |
+|---|---|---|---|---|
+| three.js | 0.170.0, npm tarball `sha512-FQK+LEpYc0fBD+J8g6oSEyyNzjp+Q7Ks1C568WWaoMRLW+TkNNWmenWeGgJjV105Gd+p/2ql1ZcjYvNiPZBhuQ==`, `build/three.module.min.js` unchanged (SHA-256 `08fd7545d13d2c7fb65ab691530a802dafefd638596501854f267d0fb13c39e7`) | `site/assets/vendor/three/` | MIT | yes |
+| Inter | google/fonts `ofl/inter` at `0b58fb370093f9a9f4ff785d94405710b79de67c` (`Inter[opsz,wght].ttf`, SHA-256 `29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031`), opsz pinned to 14, Latin subset, WOFF2 | `site/assets/fonts/inter.woff2` | OFL-1.1 | yes (font, not combined into the program) |
+| Pixelify Sans | subset of `branding/fonts/pixelify-sans/PixelifySans-Variable.ttf`, WOFF2 | `site/assets/fonts/pixelify-sans.woff2` | OFL-1.1 | yes |
+| JetBrains Mono | subset of `branding/fonts/jetbrains-mono/JetBrainsMono-Variable.ttf`, WOFF2 | `site/assets/fonts/jetbrains-mono.woff2` | OFL-1.1 | yes |
+
+The subsets were made with fontTools (`pyftsubset`, Latin-1 plus punctuation, € and arrows). The OFL allows modified versions under the same license; none of the three fonts declares a Reserved Font Name. Each license text sits next to the file (`site/assets/fonts/OFL-*.txt`).
+
 ## Build tooling (not shipped)
 
 | Component | License | Note |
