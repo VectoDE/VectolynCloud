@@ -9,7 +9,8 @@
 # Writes into <output folder>:
 #   VectolynCloud.jar                              the jar, unchanged
 #   VectolynCloud-<version>-windows.zip            VectolynCloud.jar, start.bat, start.ps1
-#   VectolynCloud-<version>-linux-macos.tar.gz     VectolynCloud.jar, start.sh (executable)
+#   VectolynCloud-<version>-linux-macos.tar.gz     VectolynCloud.jar, start.sh (executable), the systemd
+#                                                  unit and install.sh (install, update, uninstall)
 #
 # Why archives per operating system and not loose scripts: a downloaded start.sh loses its
 # executable bit, while the tar keeps it; the zip keeps the CRLF line ends of the Windows scripts;
@@ -55,6 +56,8 @@ install -m 0644 -- "${jar}" "${staging}/${windows}/VectolynCloud.jar"
 install -m 0644 -- "${dist_dir}/start.bat" "${dist_dir}/start.ps1" "${staging}/${windows}/"
 install -m 0644 -- "${jar}" "${staging}/${unix}/VectolynCloud.jar"
 install -m 0755 -- "${dist_dir}/start.sh" "${staging}/${unix}/start.sh"
+install -m 0644 -- "${dist_dir}/systemd/vectolyn-cloud.service" "${staging}/${unix}/vectolyn-cloud.service"
+install -m 0755 -- "${dist_dir}/systemd/install.sh" "${staging}/${unix}/install.sh"
 
 # The Windows scripts must have CRLF line ends (.gitattributes), start.sh must have LF.
 for script in "${staging}/${windows}/start.bat" "${staging}/${windows}/start.ps1"; do
@@ -63,10 +66,12 @@ for script in "${staging}/${windows}/start.bat" "${staging}/${windows}/start.ps1
         exit 65
     fi
 done
-if grep -q $'\r' "${staging}/${unix}/start.sh"; then
-    echo "start.sh has CR characters; check .gitattributes" >&2
-    exit 65
-fi
+for script in start.sh install.sh vectolyn-cloud.service; do
+    if grep -q $'\r' "${staging}/${unix}/${script}"; then
+        echo "${script} has CR characters; check .gitattributes" >&2
+        exit 65
+    fi
+done
 
 find "${staging}" -exec touch -h -d "@${epoch}" {} +
 

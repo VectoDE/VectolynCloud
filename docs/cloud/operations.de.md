@@ -11,6 +11,7 @@ Die Dateien liegen in [`cloud/dist/`](../../cloud/dist):
 | `start.sh` | Startskript für Linux und macOS (bash 3.2 oder neuer) |
 | `start.bat`, `start.ps1` | Startskripte für Windows (Eingabeaufforderung, Windows PowerShell 5.1 oder PowerShell 7) |
 | `systemd/vectolyn-cloud.service` | systemd-Unit mit eigenem Benutzer und Härtung |
+| `systemd/install.sh` | installiert, aktualisiert und entfernt Unit und Programmdateien (`install`, `update`, `uninstall`) |
 | `docker/Dockerfile`, `docker/compose.yml`, `docker/setup.example.yml` | Container-Image und eine Compose-Datei mit MariaDB |
 | `pterodactyl/egg-vectolyn-cloud.json` | Pterodactyl-Egg |
 | `package.sh` | baut die Release-Archive (nutzt der Release-Workflow) |
@@ -23,7 +24,7 @@ Der Release-Workflow ([`release.yml`](../../.github/workflows/release.yml)) läu
 |---|---|
 | `VectolynCloud.jar` | die Cloud, für `java -jar`, Docker und Pterodactyl |
 | `VectolynCloud-<version>-windows.zip` | `VectolynCloud.jar`, `start.bat`, `start.ps1` |
-| `VectolynCloud-<version>-linux-macos.tar.gz` | `VectolynCloud.jar`, `start.sh` (ausführbar) |
+| `VectolynCloud-<version>-linux-macos.tar.gz` | `VectolynCloud.jar`, `start.sh` (ausführbar), `vectolyn-cloud.service` und `install.sh` für systemd |
 | `VectolynCloud-<version>-banner.png`, `VectolynCloud-<version>-banner-2x.png` | das [Release-Banner](#release-banner) oben in den Release Notes, 1280 x 320 und 2560 x 640 |
 | `SHA256SUMS` | SHA-256 der fünf Dateien darüber |
 | `<datei>.sigstore.json` | cosign-Signatur-Bundle für jede Datei und für `SHA256SUMS` |
@@ -167,6 +168,21 @@ Für den Dauerbetrieb ein eigenes lokales Konto ohne Administratorrechte nehmen,
 
 ## Linux und VPS mit systemd
 
+Der Installer im Linux-Archiv erledigt alles Folgende für dich: Er legt den Benutzer an, lädt das Release herunter (oder nimmt das Archiv, das du ihm gibst), prüft es gegen `SHA256SUMS` (und gegen die cosign-Signatur, wenn `cosign` installiert ist), legt die Dateien ab, aktiviert den Dienst und lässt bei Updates deine Daten in Ruhe.
+
+```sh
+tar -xzf VectolynCloud-<version>-linux-macos.tar.gz
+cd VectolynCloud-<version>-linux-macos
+sudo ./install.sh install --archive ../VectolynCloud-<version>-linux-macos.tar.gz   # oder ohne --archive: lädt das neueste Release
+sudo ./install.sh update                    # später: ein neueres Release; stoppt den Dienst, behält das Home und das alte Jar als VectolynCloud.jar.previous
+sudo ./install.sh uninstall                 # entfernt Dienst und Programmdateien, behält /opt/vectolyn mit deinen Daten
+sudo ./install.sh uninstall --purge         # entfernt auch das Home und den Benutzer
+```
+
+Optionen: `--version <x.y.z[-dev]>` (ein festes Release statt des neuesten), `--prefix <dir>` (Standard `/opt/vectolyn`), `--user <name>` (Standard `vectolyn`), `--java-home <dir>` (ein Java 21+ außerhalb des `PATH`, als Drop-in geschrieben) und `--no-start`. Nach der Installation ist `/opt/vectolyn/install.sh` dasselbe Skript, `sudo /opt/vectolyn/install.sh update` geht also ohne das Archiv. Ein erster Start braucht ein Setup (einmal die Fragen von Hand oder eine Setup-Datei, siehe unten); ohne eins aktiviert der Installer den Dienst, lässt ihn aber gestoppt und sagt, was du schreiben musst.
+
+Dieselben Schritte von Hand:
+
 ```sh
 # einmalig als root
 useradd --system --user-group --home-dir /opt/vectolyn --create-home --shell /usr/sbin/nologin vectolyn
@@ -204,7 +220,7 @@ Was die Unit tut und warum:
 
 Unter systemd hat die Cloud keine Konsole: stdin ist leer, die Cloud läuft weiter. Befehle ohne Konsole kommen mit der API ([architecture.md](architecture.md)). Bis dahin die Cloud in `tmux` oder `screen` als Benutzer `vectolyn` starten, wenn du die Konsole brauchst.
 
-Die CI installiert diese Unit genau so auf einem echten systemd, startet sie, wartet auf den Cloud-Kanal, prüft den Benutzer und stoppt sie wieder mit sauberem Ergebnis.
+Die CI führt `install.sh` auf einem echten systemd aus (Installation, eine zweite Installation wird abgelehnt, Start, Update bei laufendem und bei gestopptem Dienst, Deinstallation, Purge) und prüft Benutzer, Cloud-Kanal und sauberen Stopp. Außerdem installiert sie frisch mit einer Setup-Datei für `database.mode: managed` und startet den Proxy: Die Cloud lädt MariaDB herunter und startet sie unter der echten Härtung der Unit. Der Job wartet auf `Database ready`, prüft, dass `mariadbd` im Cgroup der Unit als `vectolyn` läuft und dass nach `systemctl stop` kein `mariadbd` übrig bleibt. Die Härtung musste dafür nicht geändert werden.
 
 ## macOS
 
@@ -380,7 +396,7 @@ Genau das, was das Release für einen lokal vorhandenen Tag zeigen wird, erzeugt
 |---|---|---|
 | Startskripte | Linux, macOS, Windows (PowerShell 5.1), alle Fälle oben | |
 | Release-Archive | mit `package.sh` gebaut, zweimal gebaut und verglichen, entpackt und gestartet | den Upload ins Release |
-| systemd-Unit | `systemd-analyze verify`, echter Start und Stopp unter Ubuntu | lang laufende Server und die verwaltete MariaDB unter der Härtung |
+| systemd-Unit und Installer | `systemd-analyze verify`, `install.sh` Installation, Update, Deinstallation und Purge, echter Start und Stopp unter Ubuntu, verwaltete MariaDB hoch und runter unter der Härtung | lang laufende Server, der Download-Weg des Installers (braucht ein veröffentlichtes Release mit dem Installer im Archiv) |
 | Image | aus den Quellen und über den Release-Weg, amd64 und arm64, Start als UID 1000, root abgelehnt, Healthcheck, sauberes `docker stop` | Push nach GHCR, cosign-Signatur, Attestierungen, die `latest`-Regel |
 | compose.yml | `docker compose config` | einen vollständigen Start mit MariaDB |
 | Egg | Struktur, Variablen, Regeln gegen ihre Standardwerte, die Setup-Datei, die Wings schreiben würde, ShellCheck des Installers | Import in ein Panel, den Download des Installers, einen Lauf unter Wings |
