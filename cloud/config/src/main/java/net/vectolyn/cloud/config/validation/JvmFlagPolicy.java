@@ -36,8 +36,9 @@ import net.vectolyn.cloud.config.model.GroupConfig;
  *
  * <p>Where it applies: a flag that is not allowed is an error when a change through the REST API
  * adds it ({@link #refusedChanges}, called by {@code ApiRoutes} inside the operation it hands to
- * {@code ConfigService.apply}). The console, the setup assistant and the files are the operator's
- * own, who can change the node anyway; there and for flags already in a file it is a warning
+ * {@code ConfigService.apply}), and on every cluster member when the head's groups add it
+ * ({@code ConfigService.applyMirror}). The console, the setup assistant and the files are the
+ * operator's own, who can change the node anyway; there and for flags already in a file it is a warning
  * ({@link #warnings}), so files from before the allowlist keep working. The pattern and
  * reserved-flag checks of {@link ConfigValidator} apply everywhere.
  */

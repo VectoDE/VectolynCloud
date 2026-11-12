@@ -105,7 +105,7 @@ process:                     # optional, see docs/cloud/node.md; every key has a
     max-backoff: 300s
 ```
 
-`process.jvm-flags` must not set what the node controls: `-Xms`, `-Xmx`, `-jar`, `-cp`/`-classpath`/`--class-path`, `-XX:Flags=`, `-XX:VMOptionsFile=`, and the version and help switches are rejected. On top of that, a change through the [REST API](api.md) may only add flags from the [allowlist](#jvm-flag-allowlist).
+`process.jvm-flags` must not set what the node controls: `-Xms`, `-Xmx`, `-jar`, `-cp`/`-classpath`/`--class-path`, `-XX:Flags=`, `-XX:VMOptionsFile=`, and the version and help switches are rejected. On top of that, a change through the [REST API](api.md), and a group a cluster member takes over from its head ([cluster.md](cluster.md#config-mirror)), may only add flags from the [allowlist](#jvm-flag-allowlist).
 
 `drain-timeout` is how long a service of the group may take to send its players to other services before the scaler stops it. If players are still on it after that time, the stop is called off and it keeps running; see [scaling.md](scaling.md#rules).
 
@@ -413,7 +413,7 @@ Groups can be written through the [REST API](api.md), so a stolen token must not
 
 **Not listed** (`jvm-flag-not-listed`): everything else.
 
-**Existing configurations.** Files written before the allowlist keep working. Only a change through the REST API is checked, and only for flags it adds: a flag that is already in the group (counted per occurrence) may stay, a new forbidden or unlisted flag is refused with the errors above. Flags in the files that are not allowed are logged as warnings when the node starts and after every reload, and `GET /api/v1/config/warnings` lists them. The console, the setup assistant and hand edits of the files are not refused, because whoever can use them can already change the node itself; their flags show up as warnings like the old ones.
+**Existing configurations.** Files written before the allowlist keep working. Only a change through the REST API is checked, and only for flags it adds: a flag that is already in the group (counted per occurrence) may stay, a new forbidden or unlisted flag is refused with the errors above. Flags in the files that are not allowed are logged as warnings when the node starts and after every reload, and `GET /api/v1/config/warnings` lists them. The console, the setup assistant and hand edits of the files are not refused, because whoever can use them can already change the node itself; their flags show up as warnings like the old ones. That holds for the node they run on only: a cluster member refuses a group from its head that adds a flag outside the allowlist, with the same rule as the REST API ([cluster.md](cluster.md#config-mirror)).
 
 ## JSON API
 
