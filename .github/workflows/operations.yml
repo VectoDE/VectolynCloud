@@ -751,3 +751,24 @@ jobs:
           # 143 = ended by SIGTERM after the shutdown hook ran; 0 = ended normally.
           case "$code" in 0|143) ;; *) echo "::error::unexpected exit code $code"; exit 1 ;; esac
           docker rm vectolyn-ci
+
+      # The compose example as a user runs it: cloud and MariaDB with secrets files, the image
+      # pinned through VECTOLYN_VERSION (here the locally loaded release-path image under the
+      # name compose.yml expects), waiting for both health checks, then a clean "down".
+      - name: Compose stack (up, healthy, down)
+        working-directory: cloud/dist/docker
+        env:
+          VECTOLYN_VERSION: ci
+        run: |
+          set -euo pipefail
+          docker tag vectolyn-cloud:release "ghcr.io/vectode/vectolyn-cloud:${VECTOLYN_VERSION}"
+          mkdir -p secrets
+          openssl rand -base64 32 | tr -d '\n' > secrets/db_password
+          openssl rand -base64 32 | tr -d '\n' > secrets/db_root_password
+          sed 's/^eula: false/eula: true/' setup.example.yml > setup.yml
+          grep -q '^eula: true' setup.yml
+          trap 'docker compose logs --no-color || true; docker compose down --volumes --timeout 120 || true' EXIT
+          docker compose up --detach --no-build --pull missing --wait --wait-timeout 300
+          docker compose ps
+          docker compose exec -T cloud test -f /data/config/cloud.yml
+          test "$(docker compose exec -T cloud stat -c %u /data)" = 1000

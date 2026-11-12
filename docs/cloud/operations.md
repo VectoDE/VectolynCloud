@@ -262,6 +262,7 @@ docker compose up -d
 docker compose logs -f cloud
 ```
 
+- The image tag comes from `VECTOLYN_VERSION` (`.env` next to the file, or the shell). Without it, compose uses `dev`, the newest `-dev` release, because `latest` exists only from the first stable release on. For a network that stays up, pin a fixed version (`VECTOLYN_VERSION=0.1.1-dev`, the release tag without `v`) and change it on purpose: `docker compose pull && docker compose up -d`.
 - Passwords are Docker secrets (files under `/run/secrets/`), not environment variables, because those show up in `docker inspect` and in the environment of every server the cloud starts. MariaDB reads them through `MARIADB_PASSWORD_FILE`, the cloud through `database.password-file` in `setup.yml`.
 - MariaDB publishes no port; only the cloud reaches it over the compose network (host `database`).
 - Ports: Java 25565/tcp and Bedrock 19132/udp are published; the legacy proxy (25564/tcp) is commented out until you turn it on.
@@ -393,7 +394,7 @@ To render exactly what the release will show for a tag that already exists local
 | Release archives | built with `package.sh`, built twice and compared, unpacked and started | the upload to the release |
 | systemd unit | `systemd-analyze verify`, real start and stop on Ubuntu | long-running servers and the managed MariaDB under the hardening |
 | Image | from source and through the release path, amd64 and arm64, start as UID 1000, root refused, health check, clean `docker stop` | push to GHCR, cosign signature, attestations, the `latest` rule |
-| compose.yml | `docker compose config` | a full start with MariaDB |
+| compose.yml | `docker compose config`; a full `up --wait` with MariaDB (both health checks), the volume owner, `down` | the pull from GHCR (CI uses the locally built image) |
 | Eggs (Pterodactyl and Pelican) | structure, variables, rules against their defaults, the setup file Wings would write, both eggs say the same, ShellCheck of the installer; the installer runs in the panel's installer image against the newest release (checks SHA-256, refuses a version that does not exist), and the startup command runs in the panel's Java image until the cloud channel is up and stops cleanly | the import into a panel, the panel's variables form, a run under a real Wings |
 | Release tag | unit tests of every rule; `check-tag.sh` on every allowed form (channel and pre-release flag) and on every rejected form (the reason) | the check on a pushed tag, the pre-release flag and `latest` on GitHub and GHCR |
 | Release banner | unit tests (badge per suffix, title shortening, sizes, byte-identical output); the release script on local tags (every badge, with title, empty message, signature only, lightweight, tags that break the rules), rendered twice and compared | the tag fetch from GitHub and the image in the published notes |
