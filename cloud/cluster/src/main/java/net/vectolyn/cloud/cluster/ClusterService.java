@@ -1065,7 +1065,7 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
         if (from.isLoopbackAddress()) {
             return Optional.empty();
         }
-        boolean loopbackOnly = database.mode() != DatabaseMode.EXTERNAL
+        boolean loopbackOnly = !database.mode().operatorServer()
                 || database.host() == null || isLocalHost(database.host());
         return loopbackOnly ? Optional.of(JoinOutcome.DATABASE_UNREACHABLE) : Optional.empty();
     }
@@ -1101,7 +1101,7 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
             LOG.log(System.Logger.Level.WARNING, "Cluster: the cloud runs the embedded H2 database, which serves one "
                     + "node only; no node can join until database.mode is external, a MariaDB server the nodes "
                     + "reach.");
-        } else if (database.mode() != DatabaseMode.EXTERNAL) {
+        } else if (!database.mode().operatorServer()) {
             LOG.log(System.Logger.Level.WARNING, "Cluster: the {0} MariaDB listens on 127.0.0.1, so only nodes on "
                     + "this machine can join; for nodes on other machines use database.mode external with an address "
                     + "of the cluster network.", database.mode().name().toLowerCase(java.util.Locale.ROOT));

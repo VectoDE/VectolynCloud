@@ -93,6 +93,7 @@ The rules behind it:
 | JDK `keytool` and JSSE | Java 21 | `cloud/cluster` | The cluster CA and the node keys come from `keytool`, the cluster port is a plain `SSLServerSocket` with TLS 1.3 and a virtual thread per node (at most 64 members, so no event loop is needed). No certificate library is added. |
 | GraphQL Java (`graphql-java`, with `java-dataloader`, `reactive-streams`, `jspecify`) | 26.1 | `cloud/api` | Parser, validation, execution and the depth and complexity limits of `POST /api/v1/graphql`. Writing a GraphQL parser and validator ourselves would be a large attack surface of its own; graphql-java is the reference implementation for Java, MIT licensed, and has limits against hostile documents built in. Its fields only call the REST routes, so it holds no logic of its own. |
 | MariaDB Connector/J (`mariadb-java-client`) | 4.0.0 | `cloud/database` | Talks to the managed or external MariaDB/MySQL server: creating databases and users, checking the connection, sizing the pools. |
+| PostgreSQL JDBC (`postgresql`) | 42.7.14 | `cloud/database` | Mode `postgresql`: checks login, rights, version and `max_connections` of the operator's PostgreSQL server. |
 
 Test only: JUnit 6 and Jazzer 0.30.0 (fuzz tests, see below). Compile only: `velocity-api` 4.3.1, `paper-api` 26.3 and `pandaspigot-api` 1.8.8 (with `adventure-api` 4.24.0) in the bridges. The proxy and the server provide them at runtime.
 

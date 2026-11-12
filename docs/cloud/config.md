@@ -51,7 +51,7 @@ legacy-proxy:                # second Velocity (bungeeguard) for the 1.8.8 group
   enabled: false
   port: 25564
 database:
-  mode: managed              # managed, docker, external or h2 (embedded fallback, see database.md)
+  mode: managed              # managed, docker, external, postgresql or h2 (embedded fallback, see database.md)
   host: 127.0.0.1
   port: 3307
   name: luckperms

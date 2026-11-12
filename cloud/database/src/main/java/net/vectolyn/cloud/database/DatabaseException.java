@@ -31,7 +31,9 @@ public final class DatabaseException extends Exception {
         /** More services than the connection limit of the server allows. */
         CONNECTION_BUDGET,
         /** A setting or secret is missing or invalid. */
-        SETTINGS
+        SETTINGS,
+        /** The application user lacks a right it needs on an operator's server. */
+        RIGHTS
     }
 
     private final Reason reason;

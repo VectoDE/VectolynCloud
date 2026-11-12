@@ -70,6 +70,7 @@ The cloud waits for the confirmation line of each command (Paper and the 1.8.8 f
 |---|---|
 | `managed` | `mariadb-dump` (or `mysqldump`) from the installed server's `bin/` folder, as root, with routines, events and triggers |
 | `external` | `mariadb-dump` or `mysqldump` from `PATH` (or `database.dump-executable`), as the application user |
+| `postgresql` | no dump. The cloud writes `status: manual` and a warning; back the server up with `pg_dump` on a machine that can reach it, for example `pg_dump --format=custom --file=luckperms.dump -h db.example.org -U luckperms luckperms` (the password from `PGPASSWORD` or `~/.pgpass`, never as an argument) |
 | `docker` | no dump. The cloud prints the command to run on the host instead (below). `status: manual` |
 | `h2` | per service: when the service is stopped, LuckPerms' H2 file is exported with `SCRIPT TO` through `org.h2.tools.Script` from the driver LuckPerms downloaded (`plugins/LuckPerms/libs/h2*.jar`), read-only. A running service only gets its files copied, with a warning. `status: per-service` |
 
