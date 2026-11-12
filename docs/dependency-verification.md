@@ -32,7 +32,7 @@ git diff -- gradle/verification-metadata.xml
 
 On Windows, run it in Git Bash. The script keeps the `<configuration>` block, drops all entries and lets Gradle write them again (`./gradlew --write-verification-metadata sha256 help`). With this flag the `help` task resolves every configuration that exists after configuration, and `--refresh-dependencies` makes Gradle read the parent and BOM `.pom` files again, which a warm local cache would otherwise skip. Entries of removed dependencies disappear. A configuration that a plugin only creates while a task runs is not covered; CI would then fail with a missing checksum, and that dependency has to be added by running the task in question with `--write-verification-metadata sha256`. Commit the file in the same pull request as the dependency change.
 
-Do not edit checksums by hand and do not run `--write-verification-metadata` alone: the script also contains the PandaSpigot workaround described below.
+Do not edit checksums by hand and do not run `--write-verification-metadata` alone: the script also contains the unique snapshot workaround described below.
 
 ### Review checklist
 
@@ -81,9 +81,14 @@ Gradle can also check PGP signatures and keep the public keys in the repository.
 
 PGP would add one real protection: against an account takeover where someone publishes a new version signed with a different key. We will look at it again when Netty and JLine keys can be fetched and PaperMC signs its artifacts. Until then the protection rests on reviewing the checksums.
 
-## PandaSpigot workaround
+## Unique snapshot workaround
 
-pandaspigot-api is only published as a snapshot, so the build pins one unique snapshot (`1.8.8-R0.1-20251003.170525-12`). Gradle 9.8.2 fails when writing metadata for such a version (`Multiple entries with same key`) as soon as metadata verification is on. Reading works. The script therefore trusts the `.pom` and `.module` of pandaspigot-api during the write and then replaces that entry with their SHA-256 from the Gradle cache. In the committed file they are checked like everything else; CI fails if the temporary entry is left over.
+Two dependencies are only published as moving snapshots, so the build pins one unique snapshot build of each:
+
+- pandaspigot-api `1.8.8-R0.1-20251003.170525-12`, declared directly in `gradle/libs.versions.toml`.
+- velocity-brigadier `1.0.0-20261110.144108-12`. Every released velocity-api (3.5.1 up to 4.3.1) depends on `com.velocitypowered:velocity-brigadier:1.0.0-SNAPSHOT`. Each new PaperMC build of it changes the checksums and broke CI, so a `strictly` constraint in `plugins/bridge/velocity/build.gradle.kts` pins one build (version in `gradle/libs.versions.toml`). Move it on purpose together with velocity-api. PaperMC may delete old snapshot builds; then the build fails to resolve it and the pin has to move to the current build.
+
+Gradle 9.8.2 fails when writing metadata for such a version (`Multiple entries with same key`) as soon as metadata verification is on. Reading works. The script therefore trusts the `.pom` and `.module` of both during the write and then replaces those entries with their SHA-256 from the Gradle cache. In the committed file they are checked like everything else; CI fails if a temporary entry is left over.
 
 ## Vulnerable transitive versions
 
