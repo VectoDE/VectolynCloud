@@ -43,6 +43,7 @@ import net.vectolyn.cloud.api.auth.ApiToken;
 import net.vectolyn.cloud.api.auth.RateLimiter;
 import net.vectolyn.cloud.api.auth.Scope;
 import net.vectolyn.cloud.api.backend.ApiBackendException;
+import net.vectolyn.cloud.api.event.ApiEvent;
 import net.vectolyn.cloud.api.http.ApiException;
 import net.vectolyn.cloud.api.http.ApiJson;
 import net.vectolyn.cloud.api.http.ApiRequest;
@@ -293,6 +294,7 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
         try {
             types = list(request.route().query().get("types"), EventHub.TYPES, "types");
             services = list(request.route().query().get("services"), null, "services");
+            types = permittedTypes(request.token(), types);
         } catch (ApiException e) {
             reject(ctx, request.origin(), e, true);
             return;
@@ -336,6 +338,36 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
                 ctx.channel().close();
             }
         });
+    }
+
+    /**
+     * The event types a stream receives. Asked for explicitly, every type needs its scope, otherwise
+     * the handshake is refused with {@code 403 missing-scope}. Without {@code types} the stream gets
+     * every type the token may see; a token that may see none is refused as well.
+     */
+    static Set<String> permittedTypes(ApiToken token, Set<String> asked) throws ApiException {
+        Set<String> result = new TreeSet<>();
+        if (asked.isEmpty()) {
+            ApiEvent.TYPES.forEach((type, scope) -> {
+                if (token.allows(scope)) {
+                    result.add(type);
+                }
+            });
+            if (result.isEmpty()) {
+                throw new ApiException(403, "missing-scope",
+                        "This token lacks every scope of the event stream (services:read, node:read or admin).");
+            }
+            return result;
+        }
+        for (String type : asked) {
+            Scope scope = ApiEvent.scopeOf(type);
+            if (!token.allows(scope)) {
+                throw new ApiException(403, "missing-scope",
+                        "The event type " + type + " needs the scope " + scope.id() + ".");
+            }
+            result.add(type);
+        }
+        return result;
     }
 
     private static Set<String> list(String value, Set<String> known, String name) throws ApiException {

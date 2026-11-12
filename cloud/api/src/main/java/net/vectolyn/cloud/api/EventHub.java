@@ -30,7 +30,7 @@ import net.vectolyn.cloud.api.http.ApiJson;
 final class EventHub {
 
     /** Event types a client may filter on. */
-    static final Set<String> TYPES = Set.of("service-state", "service-output", "player");
+    static final Set<String> TYPES = ApiEvent.TYPES.keySet();
 
     private final Map<Channel, Stream> streams = new ConcurrentHashMap<>();
     private final UnaryOperator<String> redactor;
@@ -44,6 +44,8 @@ final class EventHub {
     /**
      * Registers a stream unless the limit is reached.
      *
+     * @param types the event types the stream receives: what it asked for, cut down to what its
+     *              token's scopes allow; never empty
      * @return false if there are already {@code max} streams
      */
     synchronized boolean add(Channel channel, String tokenId, Set<String> types, Set<String> services) {
@@ -60,13 +62,31 @@ final class EventHub {
         return streams.size();
     }
 
+    /**
+     * Whether any open stream receives an event type, so a producer can skip work nobody reads.
+     *
+     * @param type the type name
+     * @return whether a stream wants it
+     */
+    boolean anyWants(String type) {
+        for (Stream stream : streams.values()) {
+            if (stream.types.contains(type)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     void publish(ApiEvent event) {
         if (streams.isEmpty()) {
             return;
         }
-        ApiEvent safe = event instanceof ApiEvent.ServiceOutput output
-                ? new ApiEvent.ServiceOutput(output.serviceId(), redactor.apply(output.line()))
-                : event;
+        ApiEvent safe = switch (event) {
+            case ApiEvent.ServiceOutput output -> new ApiEvent.ServiceOutput(output.serviceId(),
+                    redactor.apply(output.line()));
+            case ApiEvent.NodeLog log -> new ApiEvent.NodeLog(log.level(), log.logger(), redactor.apply(log.message()));
+            default -> event;
+        };
         byte[] json = envelope(safe.type(), safe);
         for (Map.Entry<Channel, Stream> entry : streams.entrySet()) {
             Stream stream = entry.getValue();
@@ -138,8 +158,11 @@ final class EventHub {
         }
 
         boolean wants(ApiEvent event) {
-            if (!types.isEmpty() && !types.contains(event.type())) {
+            if (!types.contains(event.type())) {
                 return false;
+            }
+            if (event instanceof ApiEvent.Metrics || event instanceof ApiEvent.NodeLog) {
+                return true; // node-wide: the services filter does not apply
             }
             return services.isEmpty() || (event.service() != null && services.contains(event.service()));
         }

@@ -69,7 +69,7 @@ final class TestApi implements AutoCloseable {
         this.admin = tokens.create("admin", EnumSet.of(Scope.ADMIN)).token().reveal();
         ApiSettings base = new ApiSettings("127.0.0.1", 0, Optional.empty(), List.of(), ApiLimits.defaults());
         this.server = ApiServer.builder(config, backend, tokens).settings(settings.apply(base)).nanoTime(nanos::get)
-                .expiryCheckMillis(200).build();
+                .expiryCheckMillis(200).metricsMillis(200).build();
         this.address = server.start();
     }
 
