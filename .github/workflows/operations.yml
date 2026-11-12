@@ -376,6 +376,8 @@ jobs:
         run: |
           set -euo pipefail
           server="$RUNNER_TEMP/server"
+          # The installer ran as root in its container; the panel user must be able to write.
+          sudo chmod -R a+rwX "$server"
           printf 'schema-version: 1\neula: true\nlanguage: en\nnetwork-name: Vectolyn\nnetwork:\n  bind: 0.0.0.0\n  java-port: 25565\n  bedrock-port: 19132\ndatabase:\n  mode: h2\n' > "$server/setup.yml"
           startup=$(jq -r '.startup // .startup_commands.Default' "$EGG")
           while read -r name value; do
