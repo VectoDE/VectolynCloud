@@ -51,6 +51,7 @@ jobs:
             ghcr.io:443
             pkg-containers.githubusercontent.com:443
             tuf-repo-cdn.sigstore.dev:443
+            tmaproduction.blob.core.windows.net:443
             registry-1.docker.io:443
             auth.docker.io:443
             production.cloudflare.docker.com:443
