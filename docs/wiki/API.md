@@ -25,7 +25,7 @@ Every request needs a token; there is no anonymous endpoint. Create one in the c
 api token create dashboard services:read,config:read,node:read
 ```
 
-The token starts with `vct_`, is shown once and is stored only as a SHA-256 hash. Send it as `Authorization: Bearer vct_...`. `api token list` and `api token revoke <name>` manage tokens; revoking works at once.
+The token starts with `vct_`, is shown once and is stored only as a SHA-256 hash. Send it as `Authorization: Bearer vct_...`. `api token list` and `api token revoke <name>` manage tokens; revoking works at once. A third argument gives the token a lifetime (`api token create ci services:read 90d`, 1h to 3650d); after it the token fails like a revoked one. A token with `admin` can do the same over `/api/v1/admin/tokens`.
 
 | Scope | Allows |
 |---|---|
@@ -35,7 +35,7 @@ The token starts with `vct_`, is shown once and is stored only as a SHA-256 hash
 | `config:write` | change groups, tasks, server switches, `cloud.yml` (not `api` and `database`), reload |
 | `backups:read`, `backups:write` | list backups, create a backup |
 | `node:read` | node status |
-| `admin` | everything, including the `api` and `database` sections |
+| `admin` | everything, including the `api` and `database` sections and token management |
 
 ## Endpoints
 
@@ -58,7 +58,7 @@ Writes are validated as a whole before anything is saved. `DELETE` needs `?confi
 
 ## Limits
 
-Bodies are at most 256 KiB, JSON is read strictly, and there are rate limits per client address and per token (default 600 requests per minute per address and 300 per token). At most 32 event streams run at once. Slow stream clients lose events, which are then reported in one `dropped` event; they never slow the node down.
+Bodies are at most 256 KiB, JSON is read strictly, and there are rate limits per client address and per token (default 600 requests per minute per address and 300 per token). Every answer shows the token's budget in `X-RateLimit-Limit` and `X-RateLimit-Remaining`. Lists can be paged with `?limit=50`; the `Link` header points to the next page and `X-Total-Count` gives the size of the whole list. At most 32 event streams run at once. Slow stream clients lose events, which are then reported in one `dropped` event; they never slow the node down.
 
 ## Example
 
@@ -68,4 +68,4 @@ curl -s -H "Authorization: Bearer $VECTOLYN_TOKEN" http://127.0.0.1:8085/api/v1/
 
 ## Not available yet
 
-gRPC, GraphQL, roles and API keys beyond scopes, and the web panel are planned ([#154](https://github.com/VectoDE/VectolynCloud/issues/154), [#155](https://github.com/VectoDE/VectolynCloud/issues/155), [#156](https://github.com/VectoDE/VectolynCloud/issues/156), [#151](https://github.com/VectoDE/VectolynCloud/issues/151)).
+gRPC, GraphQL and the web panel are planned ([#154](https://github.com/VectoDE/VectolynCloud/issues/154), [#155](https://github.com/VectoDE/VectolynCloud/issues/155), [#151](https://github.com/VectoDE/VectolynCloud/issues/151)).

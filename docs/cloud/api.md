@@ -19,15 +19,16 @@ Changes to `api:` take effect at the next start of the node; the running server 
 
 ## Tokens
 
-Every request needs a token. Without one, with a wrong one or with a revoked one the answer is `401` with `WWW-Authenticate: Bearer`. There is no anonymous endpoint.
+Every request needs a token. Without one, with a wrong, a revoked or an expired one the answer is `401` with `WWW-Authenticate: Bearer`. There is no anonymous endpoint.
 
-Tokens are managed at the node console. The whole `api` command is sensitive, so none of its lines is written to the console history.
+Tokens are managed at the node console, or by a token with `admin` over [`/api/v1/admin/tokens`](#token-management). The whole `api` command is sensitive, so none of its lines is written to the console history.
 
 ```text
 vectolyn> api token create dashboard services:read,config:read,node:read
 Token dashboard (3f9a01c2) created with services:read, config:read, node:read.
   vct_...
 Copy it now: it is shown only this once and is not stored. Lost tokens are revoked and created again.
+vectolyn> api token create ci services:read 90d    # stops working after 90 days
 vectolyn> api token list
 vectolyn> api token revoke dashboard          # or the id; aliases: delete, remove
 vectolyn> api scopes
@@ -38,6 +39,7 @@ vectolyn> api scopes
 - A token file that cannot be read (malformed, a link, too large) does not stop the node. With `api.enabled: false` the node logs a warning; with the API on it logs an error and runs without the API, as with TLS material it cannot use. `api token create`, `list` and `revoke` then fail with the reason (`secrets/api-tokens.json cannot be read (…)`) and try the file again each time: once it is repaired, or deleted to start without tokens, they work. The API itself comes back with the next start of the node.
 - Checking a token compares its hash with every stored hash in constant time (`MessageDigest.isEqual`), without stopping at the first match.
 - Revoking works at once: the next request fails, and open WebSockets of that token are closed with code `1008`.
+- **Lifetime.** A token can be given a lifetime of 1h to 3650d (`12h`, `90d`). From `expires-at` on it fails with `401` like a revoked one, and its open WebSockets are closed with `1008` within 15 seconds. It stays in `list` (marked expired) until it is revoked, so its name is not taken over by accident. Without a lifetime a token works until it is revoked. The expiry is stored with the hash in `api-tokens.json` (`expires-at`, optional, still `schema-version: 1`; an older node refuses a file with an expiring token instead of letting it work forever).
 - At most 100 tokens. Names follow the group name rule `[a-z0-9][a-z0-9_-]{0,31}`.
 - Where the printed token ends up: the command writes to the console, not to the log, so the log files and the journal do not get it. Under systemd the cloud has no console at all; create tokens in a `tmux` or `screen` session ([operations](operations.md)). In Docker, the console of an attached container (`docker attach`) is the container's standard output, so `docker logs` keeps the token. Clear or rotate those logs, or revoke the token and create a new one if the logs are shared.
 
@@ -54,11 +56,13 @@ Send the token as `Authorization: Bearer vct_...`. Browsers cannot set headers o
 | `backups:read` | list backups |
 | `backups:write` | create a backup |
 | `node:read` | node status |
-| `admin` | everything above |
+| `admin` | everything above, and the token management under `/admin/tokens` |
 
 A write scope does not include the read scope. A missing scope gives `403 missing-scope`. Changing the `api` or `database` section of `cloud.yml` needs `admin`: they decide who can reach the node and which image `docker compose` runs with the database root password.
 
-**What the write scopes can reach.** `config:write` is not a shell on the node: JVM flags are limited by the [allowlist](config.md#jvm-flag-allowlist), templates are folders of the cloud home, and software and plugins come only from the download sources with their checksums. `services:write` can send any console command to a server, which is what an operator at the server console can do; with plugins that offer console commands for files or scripts, that reaches further. Give it only to scripts you would also let use the server console. `GET /api/v1/tokens/self` works with any valid token and shows its id, name, scopes and creation time.
+**What the write scopes can reach.** `config:write` is not a shell on the node: JVM flags are limited by the [allowlist](config.md#jvm-flag-allowlist), templates are folders of the cloud home, and software and plugins come only from the download sources with their checksums. `services:write` can send any console command to a server, which is what an operator at the server console can do; with plugins that offer console commands for files or scripts, that reaches further. Give it only to scripts you would also let use the server console. `GET /api/v1/tokens/self` works with any valid token and shows its id, name, scopes, creation time and expiry.
+
+The rights check is tested for every route and every scope against a running server (`ScopeMatrixTest`): a token with one scope gets `403 missing-scope` exactly where the route needs another one, and `admin` gets through everywhere. `RouteScopesTest` checks the table itself: every change needs a write scope, every read a read scope, the admin area `admin`.
 
 ## Endpoints
 
@@ -92,6 +96,9 @@ All paths start with `/api/v1`. Bodies are `application/json` in UTF-8, with the
 | `GET /backups` | backups:read | every backup |
 | `POST /backups` `{"services": ["lobby-1"], "database": true, "note": "before update"}` | backups:write | `201` the backup |
 | `GET /tokens/self` | any | the calling token |
+| `GET /admin/tokens` | admin | every token (never the token or its hash), paged |
+| `POST /admin/tokens` `{"name": "ci", "scopes": ["services:read"], "expires-in": "90d"}` | admin | `201` the token, shown in this answer only |
+| `DELETE /admin/tokens/{id}` | admin | `204`; id or name |
 | `GET /events` (WebSocket) | services:read | live events |
 
 Every write goes through `ConfigService.apply`: the whole configuration is validated (ports, EULA before `setup-complete`, TLS for a public API, the JVM flag allowlist), written atomically, and the listeners of the node see the change as if it was typed at the console. On an error nothing is written and the answer is `422 invalid-config` with the list of errors.
@@ -111,6 +118,8 @@ Every write goes through `ConfigService.apply`: the whole configuration is valid
 **Powered-by line.** `branding.powered-by` in `PUT /config` (for example `"branding": {"powered-by": false}`) switches the "Powered by VectolynCloud" TAB footer line and `/version` on the proxies on or off. Leaving the section or the key out (`"branding": {}`) counts as `true`. Services pick the value up at their next start (see [config.md](config.md#cloudyml)).
 
 **Groups.** `drain-timeout` is optional (5s to 10m, default 30s), for example `"drain-timeout": "45s"`; outside the range the answer is `422 out-of-range`.
+
+<a id="token-management"></a>**Token management.** `POST /admin/tokens` creates a token like `api token create`: `name` and `scopes` are required, `expires-in` (1h to 3650d) is optional. The answer is the one place the API ever shows a token (`"token": "vct_..."`, with `Cache-Control: no-store` like every answer); the node stores only its SHA-256. A taken name or the 101st token answers `409 conflict`. `DELETE /admin/tokens/{id}` revokes by id or name at once, also the calling token itself. An `admin` token can create another `admin` token, so give `admin` only to whoever may also use the node console.
 
 **Shutdown.** While the node shuts down, start, restart, reload and backup creation answer `503 shutting-down`. Reads and stops still work.
 

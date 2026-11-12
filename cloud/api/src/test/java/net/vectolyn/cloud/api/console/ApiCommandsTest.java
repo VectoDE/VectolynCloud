@@ -60,6 +60,18 @@ class ApiCommandsTest {
     }
 
     @Test
+    void createTakesAnOptionalLifetime() {
+        assertEquals(Outcome.DONE, console.dispatcher().execute("api token create ci services:read 90d"));
+        String created = output();
+        assertTrue(created.contains("2027-01-27T10:00:00Z"), created);
+        assertEquals(Instant.parse("2027-01-27T10:00:00Z"), tokens.list().getFirst().expiresAt());
+        assertEquals(Outcome.DONE, console.dispatcher().execute("api token list"));
+        assertTrue(output().contains("2027-01-27T10:00:00Z"));
+        assertFalse(console.dispatcher().execute("api token create bad services:read 30m") == Outcome.DONE);
+        assertEquals(1, tokens.list().size(), "a bad lifetime creates nothing");
+    }
+
+    @Test
     void createShowsTheTokenOnceAndListNever() {
         assertEquals(Outcome.DONE, console.dispatcher().execute("api token create dashboard services:read,config:read"));
         String created = output();

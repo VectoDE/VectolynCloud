@@ -13,12 +13,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.SecureRandom;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 import net.vectolyn.cloud.config.secret.OwnerOnlyPermissions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -119,7 +121,10 @@ class ApiTokensTest {
                 "{\"schema-version\":1,\"tokens\":[{\"id\":\"00000001\",\"name\":\"a\",\"scopes\":[\"root\"],"
                         + "\"created-at\":\"2026-10-29T10:00:00Z\",\"sha256\":\"" + "0".repeat(64) + "\"}]}",
                 "{\"schema-version\":1,\"tokens\":[{\"id\":\"00000001\",\"name\":\"a\",\"scopes\":[\"admin\"],"
-                        + "\"created-at\":\"yesterday\",\"sha256\":\"" + "0".repeat(64) + "\"}]}")) {
+                        + "\"created-at\":\"yesterday\",\"sha256\":\"" + "0".repeat(64) + "\"}]}",
+                "{\"schema-version\":1,\"tokens\":[{\"id\":\"00000001\",\"name\":\"a\",\"scopes\":[\"admin\"],"
+                        + "\"created-at\":\"2026-10-29T10:00:00Z\",\"expires-at\":\"2026-10-29T09:00:00Z\","
+                        + "\"sha256\":\"" + "0".repeat(64) + "\"}]}")) {
             Files.writeString(file, content);
             IOException e = assertThrows(IOException.class, this::open, content);
             assertFalse(e.getMessage().contains(secretLooking));
@@ -127,5 +132,68 @@ class ApiTokensTest {
         // Counter-check: an empty list is fine.
         Files.writeString(file, "{\"schema-version\":1,\"tokens\":[]}");
         assertTrue(open().list().isEmpty());
+    }
+
+    @Test
+    void aTokenWithALifetimeStopsWorkingWhenItExpires() throws Exception {
+        AtomicReference<Instant> now = new AtomicReference<>(Instant.parse("2026-10-29T10:00:00Z"));
+        Clock clock = new Clock() {
+            @Override
+            public ZoneOffset getZone() {
+                return ZoneOffset.UTC;
+            }
+
+            @Override
+            public Clock withZone(java.time.ZoneId zone) {
+                return this;
+            }
+
+            @Override
+            public Instant instant() {
+                return now.get();
+            }
+        };
+        Path file = dir.resolve("secrets/api-tokens.json");
+        ApiTokens tokens = ApiTokens.open(file, clock, new SecureRandom());
+        ApiTokens.Created created = tokens.create("ci", EnumSet.of(Scope.SERVICES_READ), Duration.ofDays(30));
+        String token = created.token().reveal();
+        assertEquals(Instant.parse("2026-11-28T10:00:00Z"), created.info().expiresAt());
+        assertTrue(tokens.authenticate(token).isPresent());
+        assertTrue(tokens.isValid(created.info().id()));
+
+        now.set(Instant.parse("2026-11-28T09:59:59Z"));
+        assertTrue(tokens.authenticate(token).isPresent(), "valid up to the last second");
+        now.set(Instant.parse("2026-11-28T10:00:00Z"));
+        assertTrue(tokens.authenticate(token).isEmpty(), "expired from expires-at on");
+        assertFalse(tokens.isValid(created.info().id()));
+        assertTrue(tokens.list().getFirst().isExpired(now.get()), "still listed, marked expired");
+
+        // The expiry is stored and survives a restart.
+        ApiTokens reopened = ApiTokens.open(file, clock, new SecureRandom());
+        assertTrue(reopened.authenticate(token).isEmpty());
+        assertEquals(created.info(), reopened.list().getFirst());
+        // A token without a lifetime keeps working.
+        String forever = tokens.create("forever", EnumSet.of(Scope.NODE_READ)).token().reveal();
+        now.set(Instant.parse("2036-10-29T10:00:00Z"));
+        assertTrue(tokens.authenticate(forever).isPresent());
+        // Revoking an expired token works as for any other.
+        assertTrue(tokens.revoke("ci").isPresent());
+    }
+
+    @Test
+    void lifetimesAreBounded() throws Exception {
+        assertEquals(Duration.ofHours(1), ApiTokens.parseLifetime("1h"));
+        assertEquals(Duration.ofDays(90), ApiTokens.parseLifetime("90d"));
+        assertEquals(Duration.ofDays(3650), ApiTokens.parseLifetime("3650d"));
+        for (String bad : new String[] {"0h", "0d", "3651d", "87601h", "90", "d", "-1d", "1w", "01d", " 1d", ""}) {
+            assertThrows(IllegalArgumentException.class, () -> ApiTokens.parseLifetime(bad), bad);
+        }
+        assertThrows(IllegalArgumentException.class, () -> ApiTokens.parseLifetime(null));
+        ApiTokens tokens = open();
+        assertThrows(IllegalArgumentException.class,
+                () -> tokens.create("short", EnumSet.of(Scope.NODE_READ), Duration.ofMinutes(59)));
+        assertThrows(IllegalArgumentException.class,
+                () -> tokens.create("long", EnumSet.of(Scope.NODE_READ), Duration.ofDays(3651)));
+        assertTrue(tokens.list().isEmpty(), "nothing was stored");
     }
 }
