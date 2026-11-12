@@ -325,6 +325,9 @@ th{background:var(--c-raised);font-weight:700}
 .f-left{transform:rotateY(-90deg) translateZ(calc(var(--h) / 2))}
 .f-top{transform:rotateX(90deg) translateZ(calc(var(--h) / 2));background:var(--c-primary)}
 .f-bottom{transform:rotateX(-90deg) translateZ(calc(var(--h) / 2))}
+.head-skin .f{background-size:600% 100%;image-rendering:pixelated;border:0}
+.head-skin .f-front{background-position:0 0}.head-skin .f-right{background-position:60% 0}.head-skin .f-back{background-position:40% 0}
+.head-skin .f-left{background-position:20% 0}.head-skin .f-top{background-position:80% 0}.head-skin .f-bottom{background-position:100% 0}
 .head-open .f{background:transparent;border:2px dashed var(--c-border-strong)}
 .motion .team li:not(.open) .cube{animation:turn 9s linear infinite}
 .motion.paused .cube{animation-play-state:paused}

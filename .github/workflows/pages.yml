@@ -36,6 +36,9 @@ jobs:
           allowed-endpoints: >
             github.com:443
             api.github.com:443
+            api.mojang.com:443
+            sessionserver.mojang.com:443
+            textures.minecraft.net:443
 
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
