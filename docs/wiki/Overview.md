@@ -8,11 +8,11 @@ We do not run a network, servers or a domain, and we host no website, Discord bo
 
 ## Status
 
-The project is in **stage 2 of 8** (VectolynCloud core). Stage 1, the foundation, is finished and out as the signed pre-release [v0.1.1-dev](https://github.com/VectoDE/VectolynCloud/releases/tag/v0.1.1-dev). There is no usable cloud release yet. Progress: [Roadmap](Roadmap) and [#11](https://github.com/VectoDE/VectolynCloud/issues/11).
+The project is in **stage 2 of 8** (VectolynCloud core). Stage 1, the foundation, is finished and out as the signed pre-release [v0.1.1-dev](https://github.com/VectoDE/VectolynCloud/releases/tag/v0.1.1-dev). The cloud core is largely built: launcher, setup assistant, console, services with autoscaling, cloud channel and bridges, REST/WebSocket API, database setup, backups and monitoring. The pre-release v0.1.1-dev is for trying things out, not for production. Several nodes, the update system and the managed legacy proxy are still open. What exists and what is planned: [Feature status](Feature-Status). Progress: [Roadmap](Roadmap) and [#11](https://github.com/VectoDE/VectolynCloud/issues/11).
 
 ## Goal
 
-You run `java -jar VectolynCloud.jar` on Windows, Linux, macOS, in Docker or on Pterodactyl. A setup wizard asks a few questions, including which servers and minigame groups you want. After that the network runs with database, proxy, lobby, game modes and minigames, without further manual work. A release will contain `VectolynCloud.jar`, start scripts for Windows, Linux and macOS, and a Docker image on GHCR; the Dockerfile, compose file and Pterodactyl egg live in the repository. This is the target for stage 2 onwards, not the current state.
+You run `java -jar VectolynCloud.jar` on Windows, Linux, macOS, in Docker or on Pterodactyl. A setup assistant asks a few questions, including which servers and minigame groups you want. After that the cloud downloads the software and runs the network without further manual work. A release contains `VectolynCloud.jar`, start scripts for Windows, Linux and macOS, and a Docker image on GHCR; the Dockerfile, compose file and Pterodactyl egg live in the repository. The lobby, game modes and minigames themselves belong to later stages and are not built yet.
 
 ## Principles
 

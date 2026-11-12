@@ -49,7 +49,7 @@ In Etappe 2 gebaut: Launcher, Konfiguration, Templates, Downloads, Einrichtungsa
 | Neu bei Minecraft-Servern | [Übersicht](https://github.com/VectoDE/VectolynCloud/wiki/Overview-DE), [Erste Schritte](https://github.com/VectoDE/VectolynCloud/wiki/Getting-Started-DE) und [FAQ](https://github.com/VectoDE/VectolynCloud/wiki/FAQ-DE) im Wiki, danach der [Schnellstart](#schnellstart) |
 | Betreiber eines Netzwerks | [Schnellstart](#schnellstart), danach [Server-Netzwerk](https://github.com/VectoDE/VectolynCloud/wiki/Server-Network-DE) und [Crossplay](https://github.com/VectoDE/VectolynCloud/wiki/Crossplay-DE) im Wiki |
 | Admin | [Betrieb](docs/cloud/operations.de.md) (Windows, Linux mit systemd, macOS, Docker, Pterodactyl), [Einrichtung](docs/cloud/setup.de.md), [Konsole](docs/cloud/console.de.md), [Skalierung](docs/cloud/scaling.de.md); [Backups](docs/cloud/backup.md), [Monitoring](docs/cloud/monitor.md) und [API](docs/cloud/api.de.md) |
-| Entwickler | [Build](#build), [Architektur](docs/cloud/architecture.md), [Mitmachen](CONTRIBUTING.de.md) |
+| Entwickler | [Build](#build), [Entwicklerdokumentation](docs/development/README.md) (englisch), [Modulübersicht](docs/development/modules.md), [Architektur](docs/cloud/architecture.md), [Releasing](docs/development/releasing.md), [Mitmachen](CONTRIBUTING.de.md) |
 | Sicherheitsprüfer | [SECURITY.md](SECURITY.md), [OpenSSF](docs/openssf.de.md), [Abhängigkeitsprüfung](docs/dependency-verification.de.md), [Rechte-Audit](docs/cloud/rights-audit.md) |
 
 README, Mitmachen-Leitfaden und Wiki gibt es auf Deutsch und Englisch. Die Referenzseiten unter `docs/cloud/` ohne `.de` sind englisch.

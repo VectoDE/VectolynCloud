@@ -2,9 +2,9 @@
 
 **Choose your language / Sprache wählen:** [English](Overview) · [Deutsch](Overview-DE)
 
-Vectolyn is an open-source kit under GPL-3.0 for running your own Minecraft network for Java (1.8 to 26.3) and Bedrock players. We do not run a network ourselves. The project is in stage 2 of 8; see the [Roadmap](Roadmap).
+Vectolyn is an open-source kit under GPL-3.0 for running your own Minecraft network for Java (1.8 to 26.3) and Bedrock players. We do not run a network ourselves. The project is in stage 2 of 8; see the [Roadmap](Roadmap) and the [Feature status](Feature-Status).
 
-Vectolyn ist ein Open-Source-Baukasten unter GPL-3.0, mit dem du dein eigenes Minecraft-Netzwerk für Java- (1.8 bis 26.3) und Bedrock-Spieler betreibst. Wir selbst betreiben kein Netzwerk. Das Projekt steht bei Etappe 2 von 8, siehe [Roadmap](Roadmap-DE).
+Vectolyn ist ein Open-Source-Baukasten unter GPL-3.0, mit dem du dein eigenes Minecraft-Netzwerk für Java- (1.8 bis 26.3) und Bedrock-Spieler betreibst. Wir selbst betreiben kein Netzwerk. Das Projekt steht bei Etappe 2 von 8, siehe [Roadmap](Roadmap-DE) und [Funktionsstand](Feature-Status-DE).
 
 | English | Deutsch |
 |---|---|
@@ -14,6 +14,10 @@ Vectolyn ist ein Open-Source-Baukasten unter GPL-3.0, mit dem du dein eigenes Mi
 | [Server Network](Server-Network) | [Server-Netzwerk](Server-Network-DE) |
 | [Crossplay](Crossplay) | [Crossplay](Crossplay-DE) |
 | [Operations](Operations) | [Betrieb](Operations-DE) |
+| [Configuration](Configuration) | [Konfiguration](Configuration-DE) |
+| [API](API) | [API](API-DE) |
+| [Feature status](Feature-Status) | [Funktionsstand](Feature-Status-DE) |
+| [Performance](Performance) | [Leistung](Performance-DE) |
 | [Roadmap](Roadmap) | [Roadmap](Roadmap-DE) |
 | [FAQ](FAQ) | [FAQ](FAQ-DE) |
 | [Contributing](Contributing) | [Mitmachen](Contributing-DE) |
