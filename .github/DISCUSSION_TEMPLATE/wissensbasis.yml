@@ -1,0 +1,32 @@
+title: "[Wissensbasis] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This category collects documented know-how about VectolynCloud: how-tos, configuration notes, decisions and background. Check the [wiki](https://github.com/VectoDE/VectolynCloud/wiki) and existing posts first. A question that needs an answer belongs in Q&A. Security problems do not belong here, see SECURITY.md.
+
+        _DE: Diese Kategorie sammelt dokumentiertes Wissen zu VectolynCloud: Anleitungen, Konfigurationshinweise, Entscheidungen und Hintergründe. Schau zuerst ins [Wiki](https://github.com/VectoDE/VectolynCloud/wiki) und in bestehende Beiträge. Eine Frage, die eine Antwort braucht, gehört in Q&A. Sicherheitslücken bitte nicht hier melden, siehe SECURITY.md._
+  - type: input
+    id: topic
+    attributes:
+      label: Topic / Thema
+      description: One line on what the article covers. / Eine Zeile dazu, worum es im Beitrag geht.
+    validations:
+      required: true
+  - type: textarea
+    id: content
+    attributes:
+      label: Content / Inhalt
+      description: The knowledge itself, with steps, commands or configuration where useful. / Das Wissen selbst, bei Bedarf mit Schritten, Befehlen oder Konfiguration.
+    validations:
+      required: true
+  - type: textarea
+    id: sources
+    attributes:
+      label: Sources / Quellen
+      description: Links to docs, issues, pull requests or commits that back this up. / Links zu Doku, Issues, Pull Requests oder Commits, die das belegen.
+  - type: input
+    id: version
+    attributes:
+      label: VectolynCloud version / Version
+      description: Release tag the article applies to. / Release-Tag, für den der Beitrag gilt.
