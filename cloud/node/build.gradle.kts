@@ -37,6 +37,8 @@ dependencies {
     // IP ban list with retention (docs/cloud/privacy.md); it does not know the node either.
     implementation(project(":cloud:privacy"))
     implementation(project(":cloud:api"))
+    // The web panel next to the API (docs/cloud/panel.md); it runs the API's routes in-process.
+    implementation(project(":cloud:panel"))
     // Cluster of several nodes: CA, join tokens, mutual TLS on the cluster port (docs/cloud/cluster.md).
     implementation(project(":cloud:cluster"))
 

@@ -26,7 +26,7 @@ import tools.jackson.databind.json.JsonMapper;
 class TemplateApiTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
-    private static final String FILE = "/api/v1/templates/Lobby-Server/files/default/plugins/LuckPerms/config.yml";
+    private static final String FILE = "/api/v1/templates/Lobby-Server/files/default/config/paper-global.yml";
 
     @TempDir
     Path home;
@@ -54,7 +54,7 @@ class TemplateApiTest {
 
     @Test
     void readAndEditAFileWithETags() throws Exception {
-        write("Lobby-Server/default/plugins/LuckPerms/config.yml", "storage-method: h2\n".getBytes(StandardCharsets.UTF_8));
+        write("Lobby-Server/default/config/paper-global.yml", "storage-method: h2\n".getBytes(StandardCharsets.UTF_8));
         write("Lobby-Server/default/forwarding.secret", "s3cret".getBytes(StandardCharsets.UTF_8));
         write("Lobby-Server/default/world/level.dat", new byte[] {0x1f, (byte) 0x8b, 0, 1});
         try (TestApi api = new TestApi(home)) {
@@ -68,7 +68,7 @@ class TemplateApiTest {
             HttpResponse<String> files = api.get("/api/v1/templates/Lobby-Server/files", reader);
             assertEquals(200, files.statusCode(), files.body());
             assertFalse(files.body().contains("forwarding.secret"), "secrets are never listed");
-            assertTrue(files.body().contains("default/plugins/LuckPerms/config.yml"), files.body());
+            assertTrue(files.body().contains("default/config/paper-global.yml"), files.body());
 
             HttpResponse<String> file = api.get(FILE, reader);
             assertEquals(200, file.statusCode(), file.body());
@@ -90,13 +90,61 @@ class TemplateApiTest {
             String next = replaced.headers().firstValue("ETag").orElseThrow();
             assertEquals(412, put(api, FILE, writer, body("storage-method: h2\n"), etag).statusCode(), "stale ETag");
             assertEquals("storage-method: mariadb\n", Files.readString(
-                    CloudHome.of(home).templatesDir().resolve("Lobby-Server/default/plugins/LuckPerms/config.yml")));
+                    CloudHome.of(home).templatesDir().resolve("Lobby-Server/default/config/paper-global.yml")));
 
             HttpResponse<String> created = put(api, "/api/v1/templates/Lobby-Server/files/default/new/file.yml", writer,
-                    JSON.writeValueAsString(java.util.Map.of("content", Base64.getEncoder().encodeToString(new byte[] {1, 2}),
-                            "encoding", "base64")), null);
+                    body("a: 1\n"), null);
             assertEquals(201, created.statusCode(), created.body());
             assertFalse(next.isEmpty());
+        }
+    }
+
+    private static void assertRefused(HttpResponse<String> r, String code) {
+        assertEquals(422, r.statusCode(), r.body());
+        assertEquals(code, JSON.readTree(r.body()).get("code").asString(), r.body());
+    }
+
+    @Test
+    void writesAreLimitedToTextConfigurationWithoutNewSecretPlaceholders() throws Exception {
+        write("Lobby-Server/default/plugins/LuckPerms/config.yml", "storage-method: h2\n".getBytes(StandardCharsets.UTF_8));
+        byte[] paper = "a: 1\nsecret: \"{{VECTOLYN_FORWARDING_SECRET}}\"\n".getBytes(StandardCharsets.UTF_8);
+        write("Lobby-Server/default/config/paper-global.yml", paper);
+        Path templates = CloudHome.of(home).templatesDir();
+        try (TestApi api = new TestApi(home)) {
+            String writer = api.token("writer", Scope.TEMPLATES_WRITE);
+            String base = "/api/v1/templates/Lobby-Server/files/";
+
+            for (String path : new String[] {"default/paper.jar", "default/x.JAR", "default/Main.class",
+                    "default/start.sh", "default/start.bat", "default/new.ini", "default/plugins/evil.yml",
+                    "default/Plugins/x.yml", "default/mods/x.toml", "default/libraries/x.json", "default/CACHE/x.yml"}) {
+                assertRefused(put(api, base + path, writer, body("a: 1\n"), null), "file-not-editable");
+                assertFalse(Files.exists(templates.resolve("Lobby-Server").resolve(path)), path);
+            }
+            assertRefused(put(api, base + "default/plugins/LuckPerms/config.yml", writer, body("x: 1\n"), "*"),
+                    "file-not-editable");
+            assertEquals(200, api.get(base + "default/plugins/LuckPerms/config.yml", api.admin).statusCode(),
+                    "reading a plugin's configuration stays possible");
+
+            for (String path : new String[] {"default/../x.yml", "default/%2e%2e/x.yml", "default/..%2Fx.yml",
+                    "default%5Cx.yml", "default/x%2Eyml"}) {
+                HttpResponse<String> r = put(api, base + path, writer, body("a: 1\n"), null);
+                assertEquals(400, r.statusCode(), path + " " + r.body());
+            }
+
+            assertRefused(put(api, base + "default/bin.yml", writer, JSON.writeValueAsString(java.util.Map.of(
+                    "content", Base64.getEncoder().encodeToString(new byte[] {1, 2}), "encoding", "base64")), null),
+                    "binary-content");
+            assertRefused(put(api, base + "default/zero.yml", writer, body("a\u0000b"), null), "binary-content");
+            assertFalse(Files.exists(templates.resolve("Lobby-Server/default/bin.yml")));
+
+            assertRefused(put(api, base + "default/leak.yml", writer,
+                    body("motd: {{VECTOLYN_FORWARDING_SECRET}}\n"), null), "secret-placeholder");
+            assertRefused(put(api, base + "default/config/paper-global.yml", writer,
+                    body("a: 1\nsecret: \"{{VECTOLYN_FORWARDING_SECRET}}\"\nkey: {{VECTOLYN_FLOODGATE_KEY_B64}}\n"),
+                    TemplateFiles.etag(paper)), "secret-placeholder");
+            HttpResponse<String> kept = put(api, base + "default/config/paper-global.yml", writer,
+                    body("a: 2\nsecret: \"{{VECTOLYN_FORWARDING_SECRET}}\"\n"), TemplateFiles.etag(paper));
+            assertEquals(200, kept.statusCode(), kept.body());
         }
     }
 

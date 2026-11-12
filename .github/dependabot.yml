@@ -105,3 +105,20 @@ updates:
   #   commit-message:
   #     prefix: build(deps)
   #   labels: [type:chore, area:website]
+
+  # The web panel's frontend (cloud/panel/web): Next.js, React, Tailwind and the build tools.
+  - package-ecosystem: npm
+    directory: /cloud/panel/web
+    schedule:
+      interval: weekly
+      day: monday
+    # A new release waits a week before Dependabot proposes it (zizmor: dependabot-cooldown).
+    # Security updates are not delayed by this.
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: build(deps)
+    labels: [type:chore, area:infra]
+    groups:
+      panel-web:
+        update-types: [minor, patch]

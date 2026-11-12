@@ -5,6 +5,9 @@ package net.vectolyn.cloud.config.template;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SeekableByteChannel;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.FileSystemException;
 import java.nio.file.FileVisitOption;
@@ -23,12 +26,17 @@ import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import net.vectolyn.cloud.config.CloudHome;
 import net.vectolyn.cloud.config.io.AtomicFileWriter;
 import net.vectolyn.cloud.config.io.RegularPaths;
+import net.vectolyn.cloud.config.secret.GeneratedSecret;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -41,7 +49,8 @@ import org.jspecify.annotations.Nullable;
  * folder, a folder on the way or the file itself that is one fails with a
  * {@link FileSystemException}. A write replaces the file atomically ({@link AtomicFileWriter}) and
  * is checked against an ETag ({@code If-Match}) under one lock, so two editors cannot overwrite
- * each other unnoticed.
+ * each other unnoticed. Writing is narrower than reading: only text configuration outside code
+ * folders, and never a secret placeholder the file did not already have (see {@link #write}).
  */
 public final class TemplateFiles {
 
@@ -126,6 +135,43 @@ public final class TemplateFiles {
             return limit;
         }
     }
+
+    /** A write {@link #write} refuses for what it would put on disk; nothing is written. */
+    public static final class RefusedException extends IllegalArgumentException {
+
+        private static final long serialVersionUID = 1L;
+
+        /** Why the write was refused. */
+        public enum Reason {
+            /** The path is not one {@link TemplatePaths#isEditablePath} allows. */
+            NOT_EDITABLE,
+            /** The content is not UTF-8 text without NUL. */
+            NOT_TEXT,
+            /** The content adds a secret placeholder the file did not have. */
+            SECRET_PLACEHOLDER
+        }
+
+        private final Reason reason;
+
+        RefusedException(Reason reason, String message) {
+            super(message);
+            this.reason = reason;
+        }
+
+        /**
+         * Why the write was refused.
+         *
+         * @return the reason
+         */
+        public Reason reason() {
+            return reason;
+        }
+    }
+
+    /** A placeholder as the template renderer reads it: {@code {{VECTOLYN_...}}}. */
+    private static final Pattern PLACEHOLDER = Pattern.compile("\\{\\{(VECTOLYN_[A-Z0-9_]+)}}");
+    /** Parts of a placeholder name that mark a secret, beyond the keys of {@link GeneratedSecret}. */
+    private static final List<String> SECRET_MARKS = List.of("SECRET", "PASSWORD", "PASS", "KEY", "TOKEN");
 
     private final Path templatesDir;
     private final AtomicFileWriter writer;
@@ -261,12 +307,27 @@ public final class TemplateFiles {
      * </ul>
      * Folders on the way are created; the template folder itself must exist.
      *
+     * <p>Only text configuration is written, so a token with {@code templates:write} cannot place
+     * code a server would load or pull a secret into a file it can read back:
+     * <ul>
+     *   <li>the path must pass {@link TemplatePaths#isEditablePath}: {@code .yml}, {@code .yaml},
+     *       {@code .toml}, {@code .json}, {@code .properties}, {@code .txt} or {@code .conf}, outside
+     *       {@code plugins/}, {@code mods/}, {@code libraries/}, {@code versions/}, {@code bundler/}
+     *       and {@code cache/}, case ignored;</li>
+     *   <li>the content must be UTF-8 without NUL;</li>
+     *   <li>no secret placeholder ({@link #secretPlaceholders}) may occur more often than in the
+     *       file as it is now. A new file carries none; an edit may keep or drop the ones already
+     *       there, never add one.</li>
+     * </ul>
+     *
      * @param template the template name
      * @param path     the path inside the template
      * @param content  the new content, at most {@link #MAX_WRITE_BYTES}
      * @param ifMatch  the condition, or null
      * @return whether the file was created or replaced
      * @throws IllegalArgumentException if the name or path breaks the rules or looks like a secret
+     * @throws RefusedException         if the path is no editable file, the content is no text or
+     *                                  it adds a secret placeholder
      * @throws NoSuchFileException      if the template does not exist
      * @throws TooLargeException        if the content is larger than {@link #MAX_WRITE_BYTES}
      * @throws PreconditionException    if {@code ifMatch} does not fit
@@ -281,6 +342,14 @@ public final class TemplateFiles {
         }
         Path root = template(template);
         Path target = resolve(root, path);
+        if (!TemplatePaths.isEditablePath(path)) {
+            throw new RefusedException(RefusedException.Reason.NOT_EDITABLE,
+                    "only text configuration outside code folders may be written");
+        }
+        String text = text(content);
+        if (text == null) {
+            throw new RefusedException(RefusedException.Reason.NOT_TEXT, "the content is not UTF-8 text");
+        }
         synchronized (lock) {
             Optional<byte[]> current = readCurrent(root, target);
             if (ifMatch == null) {
@@ -294,6 +363,14 @@ public final class TemplateFiles {
             }
             if (current.isPresent() && Arrays.equals(current.get(), content)) {
                 return Outcome.REPLACED;
+            }
+            Map<String, Integer> before = current.isPresent()
+                    ? secretPlaceholders(new String(current.get(), StandardCharsets.UTF_8)) : Map.of();
+            for (Map.Entry<String, Integer> entry : secretPlaceholders(text).entrySet()) {
+                if (entry.getValue() > before.getOrDefault(entry.getKey(), 0)) {
+                    throw new RefusedException(RefusedException.Reason.SECRET_PLACEHOLDER,
+                            "the content adds a secret placeholder the file did not have");
+                }
             }
             // Folders only after the condition passed, so a refused write leaves nothing behind.
             prepareFolders(root, Objects.requireNonNull(target.getParent(), "parent"));
@@ -315,6 +392,57 @@ public final class TemplateFiles {
             return "\"" + HexFormat.of().formatHex(hash, 0, 16) + "\"";
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 is missing from this JVM", e);
+        }
+    }
+
+    /**
+     * The secret placeholders in a text and how often each occurs. A secret placeholder is
+     * {@code {{VECTOLYN_...}}} whose name is a key of {@link GeneratedSecret} (the secrets of
+     * {@code secrets/vectolyn.env} the renderer fills in) or contains {@code SECRET},
+     * {@code PASSWORD}, {@code PASS}, {@code KEY} or {@code TOKEN}. Escaped placeholders
+     * (<code>&#123;&#123;&#123;&#123;VECTOLYN_X&#125;&#125;</code>) are counted too, which errs on the safe side.
+     *
+     * @param text the text
+     * @return placeholder name to count
+     */
+    public static Map<String, Integer> secretPlaceholders(String text) {
+        Map<String, Integer> found = new TreeMap<>();
+        Matcher m = PLACEHOLDER.matcher(text);
+        while (m.find()) {
+            String name = m.group(1);
+            if (isSecretPlaceholder(name)) {
+                found.merge(name, 1, Integer::sum);
+            }
+        }
+        return found;
+    }
+
+    private static boolean isSecretPlaceholder(String name) {
+        for (GeneratedSecret secret : GeneratedSecret.values()) {
+            if (secret.key().equals(name)) {
+                return true;
+            }
+        }
+        for (String mark : SECRET_MARKS) {
+            if (name.contains(mark)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The content as text if it is valid UTF-8 without NUL, else null. */
+    private static String text(byte[] content) {
+        for (byte b : content) {
+            if (b == 0) {
+                return null;
+            }
+        }
+        try {
+            return StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(content)).toString();
+        } catch (CharacterCodingException e) {
+            return null;
         }
     }
 
