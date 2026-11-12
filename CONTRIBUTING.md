@@ -6,7 +6,7 @@ Thanks for wanting to help. Vectolyn is at an early stage, so the rules below ar
 
 ## Before you start
 
-- Read the [README](README.md) and the [roadmap](https://github.com/users/VectoDE/projects/11).
+- Read the [README](README.md) and the [roadmap](https://github.com/users/VectoDE/projects/11). How to build, test and where code lives: [developer documentation](docs/development/README.md) and the [module reference](docs/development/modules.md).
 - Questions and loose ideas go to [Discussions](https://github.com/VectoDE/VectolynCloud/discussions).
 - For a bug or a concrete feature, open an issue with one of the forms. For anything bigger than a small fix, wait for a reply on the issue before you write code. That saves you work if the change does not fit the plan.
 - Security problems: see [SECURITY.md](SECURITY.md). Never in a public issue.
@@ -55,7 +55,7 @@ Forgot it? `git commit --amend -s` for the last commit, `git rebase --signoff ma
 
 ## Releases
 
-A maintainer releases by pushing a tag, and the tag has to follow the [version rules](docs/cloud/operations.md#versions-and-tags): below 1.0.0 only `-dev` (`v0.2.0-dev`, `v0.2.0-dev.3`); from 1.0.0 also `-alpha`, `-beta` and `-rc` (each with an optional `.N`), `-lts` without a counter, or no suffix for a stable release. Any other tag stops the release before anything is built. Check a tag first with `bash tools/release-banner/check-tag.sh <tag>`.
+A maintainer releases by pushing a tag, and the tag has to follow the [version rules](docs/cloud/operations.md#versions-and-tags): below 1.0.0 only `-dev` (`v0.2.0-dev`, `v0.2.0-dev.3`); from 1.0.0 also `-alpha`, `-beta` and `-rc` (each with an optional `.N`), `-lts` without a counter, or no suffix for a stable release. Any other tag stops the release before anything is built. Check a tag first with `bash tools/release-banner/check-tag.sh <tag>`. The full checklist is in [Releasing](docs/development/releasing.md).
 
 ## Languages
 
