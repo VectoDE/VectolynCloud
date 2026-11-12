@@ -262,6 +262,8 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
         return ApiRoutes.SETUP_CLAIM.equals(uri);
     }
 
+    // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
+    @SuppressWarnings("FutureReturnValueIgnored")
     private void dispatch(ChannelHandlerContext ctx, Pending request) {
         if (!server.requestSlots().tryAcquire()) {
             reject(ctx, request.origin(), new ApiException(503, "busy", "The API is busy. Try again shortly."),
@@ -355,6 +357,8 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
      * a way that left none) the client gets a plain {@code 500} and the connection closes. Whatever
      * happens, the connection is never left waiting with reading switched off.
      */
+    // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
+    @SuppressWarnings("FutureReturnValueIgnored")
     private void finish(ChannelHandlerContext ctx, @Nullable FullHttpResponse response, boolean keepAlive) {
         busy = false;
         boolean close = response == null || closeAfterResponse || !keepAlive;

@@ -21,6 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.RejectedExecutionException;
@@ -30,6 +31,7 @@ import net.vectolyn.cloud.api.auth.ApiToken;
 import net.vectolyn.cloud.api.grpc.Proto;
 import net.vectolyn.cloud.api.grpc.ProtoSchema;
 import net.vectolyn.cloud.api.http.ApiException;
+import org.jspecify.annotations.Nullable;
 
 /**
  * One gRPC call: one HTTP/2 stream of the gRPC listener ({@code api.grpc-port}).
@@ -56,18 +58,19 @@ final class GrpcStreamHandler extends SimpleChannelInboundHandler<Http2StreamFra
 
     private final ApiServer server;
     private final GrpcService service;
-    private ProtoSchema.Method method;
-    private ApiToken token;
-    private ByteArrayOutputStream body;
-    private boolean finished;
-    private volatile Channel channel;
+    private ProtoSchema.@Nullable Method method;
+    private @Nullable ApiToken token;
+    private @Nullable ByteArrayOutputStream body;
+    // Read by the deadline task and the close listener as well as by the stream handler.
+    private volatile boolean finished;
+    private volatile @Nullable Channel channel;
     private final AtomicBoolean ended = new AtomicBoolean();
     private Set<String> types = Set.of();
     private Set<String> services = Set.of();
     private final AtomicLong dropped = new AtomicLong();
-    private GrpcConnection connection;
-    private long reserved;
-    private java.util.concurrent.ScheduledFuture<?> deadline;
+    private @Nullable GrpcConnection connection;
+    private final AtomicLong reserved = new AtomicLong();
+    private java.util.concurrent.@Nullable ScheduledFuture<?> deadline;
 
     GrpcStreamHandler(ApiServer server, GrpcService service) {
         this.server = server;
@@ -79,7 +82,9 @@ final class GrpcStreamHandler extends SimpleChannelInboundHandler<Http2StreamFra
         channel = ctx.channel();
     }
 
+    // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
     @Override
+    @SuppressWarnings("FutureReturnValueIgnored")
     protected void channelRead0(ChannelHandlerContext ctx, Http2StreamFrame frame) {
         if (finished) {
             return;
@@ -109,7 +114,7 @@ final class GrpcStreamHandler extends SimpleChannelInboundHandler<Http2StreamFra
                                 "Too many unfinished requests on this connection. Try again shortly."));
                         return;
                     }
-                    reserved += content.readableBytes();
+                    reserved.addAndGet(content.readableBytes());
                 }
                 byte[] chunk = new byte[content.readableBytes()];
                 content.readBytes(chunk);
@@ -126,7 +131,8 @@ final class GrpcStreamHandler extends SimpleChannelInboundHandler<Http2StreamFra
     }
 
     private void head(ChannelHandlerContext ctx, Http2Headers headers) {
-        String client = ClientAddress.key(ctx.channel().parent() == null ? null : ctx.channel().parent().remoteAddress());
+        Channel parent = ctx.channel().parent();
+        String client = ClientAddress.key(parent == null ? null : parent.remoteAddress());
         long wait = server.addressLimiter().tryAcquire(client);
         if (wait > 0) {
             fail(ctx, ApiException.tooManyRequests(wait));
@@ -192,7 +198,7 @@ final class GrpcStreamHandler extends SimpleChannelInboundHandler<Http2StreamFra
     }
 
     /** {@code application/grpc} or {@code application/grpc+proto}, parameters after {@code ;} allowed. */
-    static boolean isGrpcProto(CharSequence contentType) {
+    static boolean isGrpcProto(@Nullable CharSequence contentType) {
         if (contentType == null) {
             return false;
         }
@@ -204,26 +210,31 @@ final class GrpcStreamHandler extends SimpleChannelInboundHandler<Http2StreamFra
 
     /** Gives the body bytes back to the connection and stops the deadline; safe to call twice. */
     private void releaseBody() {
-        if (connection != null && reserved > 0) {
-            connection.release(reserved);
+        long held = reserved.getAndSet(0);
+        if (connection != null && held > 0) {
+            connection.release(held);
         }
-        reserved = 0;
         if (deadline != null) {
             deadline.cancel(false);
             deadline = null;
         }
     }
 
+    // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
+    @SuppressWarnings("FutureReturnValueIgnored")
     private void complete(ChannelHandlerContext ctx) {
-        if (body == null || finished) {
+        ByteArrayOutputStream pending = body;
+        ProtoSchema.Method m = method;
+        ApiToken caller = token;
+        if (pending == null || m == null || caller == null || finished) {
             return;
         }
         Map<String, Object> request;
-        byte[] received = body.toByteArray();
+        byte[] received = pending.toByteArray();
         body = null;
         releaseBody();
         try {
-            request = Proto.decode(method.request(), GrpcStatus.unframe(received));
+            request = Proto.decode(m.request(), GrpcStatus.unframe(received));
         } catch (GrpcStatus.FramingException e) {
             trailersOnly(ctx, e.status(), e.getMessage(), "invalid-message");
             return;
@@ -232,18 +243,20 @@ final class GrpcStreamHandler extends SimpleChannelInboundHandler<Http2StreamFra
                     "invalid-message");
             return;
         }
-        if (method.name().equals(EVENTS)) {
-            events(ctx, request);
+        if (m.name().equals(EVENTS)) {
+            events(ctx, caller, request);
             return;
         }
-        GrpcCalls.Call call = service.call(method.name());
+        GrpcCalls.Call call = service.call(m.name());
+        if (call == null) {
+            trailersOnly(ctx, GrpcStatus.UNIMPLEMENTED, "Unknown method.", "not-found");
+            return;
+        }
         if (!server.requestSlots().tryAcquire()) {
             fail(ctx, new ApiException(503, "busy", "The API is busy. Try again shortly."));
             return;
         }
         finished = true;
-        ApiToken caller = token;
-        ProtoSchema.Method m = method;
         try {
             server.executor().execute(() -> {
                 try {
@@ -278,7 +291,9 @@ final class GrpcStreamHandler extends SimpleChannelInboundHandler<Http2StreamFra
 
     // ---------------------------------------------------------------- events
 
-    private void events(ChannelHandlerContext ctx, Map<String, Object> request) {
+    // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
+    @SuppressWarnings("FutureReturnValueIgnored")
+    private void events(ChannelHandlerContext ctx, ApiToken caller, Map<String, Object> request) {
         try {
             Set<String> asked = new LinkedHashSet<>();
             for (Object type : list(request.get("types"))) {
@@ -291,25 +306,25 @@ final class GrpcStreamHandler extends SimpleChannelInboundHandler<Http2StreamFra
             for (Object id : list(request.get("services"))) {
                 ids.add(RouteCaller.segment(id, "services"));
             }
-            types = ApiHttpHandler.permittedTypes(token, asked);
+            types = ApiHttpHandler.permittedTypes(caller, asked);
             services = Set.copyOf(ids);
         } catch (ApiException e) {
             fail(ctx, e);
             return;
         }
         finished = true;
-        if (!server.events().add(ctx.channel(), token.id(), this)) {
+        if (!server.events().add(ctx.channel(), caller.id(), this)) {
             sendError(ctx, new ApiException(503, "too-many-streams", "Too many event streams are open."));
             return;
         }
-        if (!server.tokens().isValid(token.id())) {
+        if (!server.tokens().isValid(caller.id())) {
             sendError(ctx, unauthorized());
             return;
         }
         ctx.writeAndFlush(new DefaultHttp2HeadersFrame(responseHeaders()));
     }
 
-    private static List<?> list(Object value) {
+    private static List<?> list(@Nullable Object value) {
         return value instanceof List<?> l ? l : List.of();
     }
 
@@ -318,7 +333,9 @@ final class GrpcStreamHandler extends SimpleChannelInboundHandler<Http2StreamFra
         return types.contains(type);
     }
 
+    // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
     @Override
+    @SuppressWarnings("FutureReturnValueIgnored")
     public void offer(EventHub.Delivery delivery) {
         Channel ch = channel;
         if (ended.get() || ch == null || !EventHub.matches(types, services, delivery.event())) {
@@ -336,16 +353,18 @@ final class GrpcStreamHandler extends SimpleChannelInboundHandler<Http2StreamFra
         ch.writeAndFlush(event(String.valueOf(tree.get("type")), String.valueOf(tree.get("time")), tree.get("data")));
     }
 
-    private DefaultHttp2DataFrame event(String type, String time, Object data) {
+    private DefaultHttp2DataFrame event(String type, String time, @Nullable Object data) {
         Map<String, Object> event = new LinkedHashMap<>();
         event.put("type", type);
         event.put("time", time);
         event.put("json", GrpcCalls.write(data));
         return new DefaultHttp2DataFrame(Unpooled.wrappedBuffer(GrpcStatus.frame(
-                Proto.encode(service.schema().methods().get(EVENTS).response(), event))));
+                Proto.encode(Objects.requireNonNull(service.schema().methods().get(EVENTS), EVENTS).response(), event))));
     }
 
+    // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
     @Override
+    @SuppressWarnings("FutureReturnValueIgnored")
     public void close(Channel ch, WebSocketCloseStatus status, String reason) {
         int code = status.code() == WebSocketCloseStatus.POLICY_VIOLATION.code() ? GrpcStatus.UNAUTHENTICATED
                 : GrpcStatus.UNAVAILABLE;
@@ -373,7 +392,9 @@ final class GrpcStreamHandler extends SimpleChannelInboundHandler<Http2StreamFra
         trailersOnly(ctx, GrpcStatus.of(error.status()), error.getMessage(), error.code());
     }
 
-    private void trailersOnly(ChannelHandlerContext ctx, int status, String message, String code) {
+    // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
+    @SuppressWarnings("FutureReturnValueIgnored")
+    private void trailersOnly(ChannelHandlerContext ctx, int status, @Nullable String message, String code) {
         finished = true;
         body = null;
         if (!ended.compareAndSet(false, true)) {
@@ -385,6 +406,8 @@ final class GrpcStreamHandler extends SimpleChannelInboundHandler<Http2StreamFra
         ctx.writeAndFlush(new DefaultHttp2HeadersFrame(headers, true)).addListener(f -> ctx.channel().close());
     }
 
+    // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
+    @SuppressWarnings("FutureReturnValueIgnored")
     private void httpStatus(ChannelHandlerContext ctx, String status) {
         finished = true;
         body = null;
@@ -402,7 +425,9 @@ final class GrpcStreamHandler extends SimpleChannelInboundHandler<Http2StreamFra
         return new ApiException(500, "internal-error", "Internal error.");
     }
 
+    // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
     @Override
+    @SuppressWarnings("FutureReturnValueIgnored")
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         LOG.log(System.Logger.Level.DEBUG, "gRPC stream failed: {0}", cause.getClass().getSimpleName());
         ctx.close();

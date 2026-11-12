@@ -117,6 +117,11 @@ public final class ApiException extends Exception {
         return new ApiException(404, "not-found", what + " does not exist.");
     }
 
+    /** 404, with the failure behind it. */
+    static ApiException notFound(String what, Throwable cause) {
+        return new ApiException(404, "not-found", what + " does not exist.", cause);
+    }
+
     /**
      * 503 while the node shuts down.
      *

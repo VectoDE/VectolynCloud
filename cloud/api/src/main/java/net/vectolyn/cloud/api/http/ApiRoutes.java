@@ -361,7 +361,7 @@ public final class ApiRoutes {
     /** {@code GET /templates/{template}/files}: every file the API hands out, by path. */
     private ApiResponse templateFiles(ApiRequest q) throws ApiException, IOException {
         String template = q.param("template");
-        TemplateFiles.Listing listing = templateCall(template, null, () -> templates().files(template));
+        TemplateFiles.Listing listing = templateCall(null, () -> templates().files(template));
         List<Map<String, Object>> files = new ArrayList<>();
         for (TemplateFiles.FileInfo file : listing.files()) {
             Map<String, Object> item = new LinkedHashMap<>();
@@ -384,7 +384,7 @@ public final class ApiRoutes {
     private ApiResponse templateFile(ApiRequest q) throws ApiException, IOException {
         String template = q.param("template");
         String path = q.param("path");
-        byte[] content = templateCall(template, path, () -> templates().file(template, path));
+        byte[] content = templateCall(path, () -> templates().file(template, path));
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("template", template);
         body.put("path", path);
@@ -419,12 +419,12 @@ public final class ApiRoutes {
             try {
                 content = Base64.getDecoder().decode(body.content());
             } catch (IllegalArgumentException e) {
-                throw ApiException.badRequest("invalid-value", "\"content\" is not valid Base64.");
+                throw ApiException.badRequest("invalid-value", "\"content\" is not valid Base64.", e);
             }
         } else {
             throw ApiException.badRequest("invalid-value", "\"encoding\" must be utf-8 or base64.");
         }
-        TemplateFiles.Outcome outcome = templateCall(template, path,
+        TemplateFiles.Outcome outcome = templateCall(path,
                 () -> templates().write(template, path, content, q.ifMatch()));
         String etag = TemplateFiles.etag(content);
         Map<String, Object> answer = new LinkedHashMap<>();
@@ -437,24 +437,25 @@ public final class ApiRoutes {
     }
 
     /** One call of {@link TemplateFiles}; maps its failures to answers. */
-    private static <T> T templateCall(String template, String path, TemplateCall<T> call)
+    private static <T> T templateCall(@Nullable String path, TemplateCall<T> call)
             throws ApiException, IOException {
         try {
             return call.run();
         } catch (IllegalArgumentException e) {
             throw ApiException.badRequest("invalid-path", path == null
                     ? "This is no template name."
-                    : "This path is not handed out: it breaks the path rules or looks like a secret.");
+                    : "This path is not handed out: it breaks the path rules or looks like a secret.", e);
         } catch (NoSuchFileException e) {
-            throw ApiException.notFound(path == null ? "Template" : "File");
+            throw ApiException.notFound(path == null ? "Template" : "File", e);
         } catch (TemplateFiles.TooLargeException e) {
-            throw new ApiException(413, "file-too-large", "The file is larger than " + e.limit() + " bytes.");
+            throw new ApiException(413, "file-too-large", "The file is larger than " + e.limit() + " bytes.", e);
         } catch (TemplateFiles.PreconditionException e) {
-            throw e.required() ? new ApiException(428, "precondition-required", e.getMessage())
-                    : new ApiException(412, "precondition-failed", e.getMessage());
+            String message = Objects.requireNonNullElse(e.getMessage(), "The If-Match condition does not fit.");
+            throw e.required() ? new ApiException(428, "precondition-required", message, e)
+                    : new ApiException(412, "precondition-failed", message, e);
         } catch (FileSystemException e) {
             throw new ApiException(409, "not-a-regular-file",
-                    "A link, junction, special file or file is in the way of this path.");
+                    "A link, junction, special file or file is in the way of this path.", e);
         }
     }
 
@@ -465,7 +466,7 @@ public final class ApiRoutes {
     }
 
     /** The text of a file if it is valid UTF-8 without NUL, else null. */
-    private static String utf8(byte[] content) {
+    private static @Nullable String utf8(byte[] content) {
         for (byte b : content) {
             if (b == 0) {
                 return null;

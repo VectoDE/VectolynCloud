@@ -29,6 +29,7 @@ import java.util.Set;
 import net.vectolyn.cloud.config.CloudHome;
 import net.vectolyn.cloud.config.io.AtomicFileWriter;
 import net.vectolyn.cloud.config.io.RegularPaths;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Reads and writes single files of the templates in {@code local/templates/<template>/}, for the
@@ -164,7 +165,7 @@ public final class TemplateFiles {
         List<String> names = new ArrayList<>();
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(templatesDir)) {
             for (Path folder : stream) {
-                String name = folder.getFileName().toString();
+                String name = Objects.requireNonNull(folder.getFileName(), "file name").toString();
                 if (TemplatePaths.isTemplateName(name) && RegularPaths.kind(folder) == RegularPaths.Kind.DIRECTORY) {
                     names.add(name);
                 }
@@ -197,7 +198,8 @@ public final class TemplateFiles {
                             return FileVisitResult.CONTINUE;
                         }
                         String relative = relative(root, dir);
-                        if (TemplatePaths.isSecretFolder(dir.getFileName().toString()) || !attributes.isDirectory()
+                        String folder = Objects.requireNonNull(dir.getFileName(), "file name").toString();
+                        if (TemplatePaths.isSecretFolder(folder) || !attributes.isDirectory()
                                 || attributes.isSymbolicLink() || attributes.isOther()
                                 || !TemplatePaths.isSafePath(relative)) {
                             return FileVisitResult.SKIP_SUBTREE;
@@ -271,7 +273,7 @@ public final class TemplateFiles {
      * @throws FileSystemException      if a link, junction, file or special file is in the way
      * @throws IOException              if it cannot be written
      */
-    public Outcome write(String template, String path, byte[] content, String ifMatch)
+    public Outcome write(String template, String path, byte[] content, @Nullable String ifMatch)
             throws IOException, PreconditionException {
         Objects.requireNonNull(content, "content");
         if (content.length > MAX_WRITE_BYTES) {
@@ -294,7 +296,7 @@ public final class TemplateFiles {
                 return Outcome.REPLACED;
             }
             // Folders only after the condition passed, so a refused write leaves nothing behind.
-            prepareFolders(root, target.getParent());
+            prepareFolders(root, Objects.requireNonNull(target.getParent(), "parent"));
             writer.write(target, content);
             return current.isPresent() ? Outcome.REPLACED : Outcome.CREATED;
         }
@@ -357,7 +359,7 @@ public final class TemplateFiles {
     /** Every folder between the template and {@code dir} must be a real folder or missing (then created). */
     private static void prepareFolders(Path root, Path dir) throws IOException {
         List<Path> chain = new ArrayList<>();
-        for (Path p = dir; !p.equals(root); p = p.getParent()) {
+        for (Path p = dir; !p.equals(root); p = Objects.requireNonNull(p.getParent(), "parent")) {
             chain.add(0, p);
         }
         for (Path p : chain) {
@@ -378,7 +380,8 @@ public final class TemplateFiles {
      */
     private static Optional<byte[]> readCurrent(Path root, Path target) throws IOException {
         List<Path> chain = new ArrayList<>();
-        for (Path p = target.getParent(); !p.equals(root); p = p.getParent()) {
+        for (Path p = Objects.requireNonNull(target.getParent(), "parent"); !p.equals(root);
+                p = Objects.requireNonNull(p.getParent(), "parent")) {
             chain.add(0, p);
         }
         for (Path p : chain) {

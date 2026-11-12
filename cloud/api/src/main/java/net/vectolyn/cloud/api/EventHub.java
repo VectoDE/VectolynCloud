@@ -81,6 +81,8 @@ final class EventHub {
      * @param event the event, already redacted
      * @param json  {@code {"type":...,"time":...,"data":...}}
      */
+    // The envelope is the encoded JSON; copying it into a List would cost every event, so the array stays.
+    @SuppressWarnings("ArrayRecordComponent")
     record Delivery(ApiEvent event, byte[] json) {
 
         /**
@@ -233,6 +235,8 @@ final class EventHub {
         }
 
         @Override
+        // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
+        @SuppressWarnings("FutureReturnValueIgnored")
         public void offer(Delivery delivery) {
             if (!matches(types, services, delivery.event())) {
                 return;

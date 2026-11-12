@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.jspecify.annotations.Nullable;
 
 /**
  * A small Protocol Buffers (proto3) codec driven by message descriptions instead of generated
@@ -60,8 +61,8 @@ public final class Proto {
      * @param message  the message of a {@link Type#MESSAGE} field, or null
      * @param values   the value names of an {@link Type#ENUM} field by number, or null
      */
-    public record Field(int number, String name, Type type, boolean repeated, boolean optional, Message message,
-                        List<String> values) {
+    public record Field(int number, String name, Type type, boolean repeated, boolean optional,
+                        @Nullable Message message, @Nullable List<String> values) {
 
         /** Checks the description. */
         public Field {
@@ -115,7 +116,7 @@ public final class Proto {
             return this;
         }
 
-        Field field(int number) {
+        @Nullable Field field(int number) {
             return byNumber.get(number);
         }
     }
@@ -195,7 +196,7 @@ public final class Proto {
                 }
             }
             case ENUM -> {
-                int n = field.values().indexOf(string(field, v));
+                int n = Objects.requireNonNull(field.values(), "values").indexOf(string(field, v));
                 if (n < 0) {
                     throw new IllegalArgumentException(field.name() + " has an unknown value");
                 }
@@ -211,7 +212,7 @@ public final class Proto {
                 @SuppressWarnings("unchecked")
                 Map<String, ?> nested = (Map<String, ?>) map;
                 ByteArrayOutputStream inner = new ByteArrayOutputStream();
-                write(inner, field.message(), nested, depth + 1);
+                write(inner, Objects.requireNonNull(field.message(), "message"), nested, depth + 1);
                 tag(out, field.number(), 2);
                 varint(out, inner.size());
                 out.writeBytes(inner.toByteArray());
@@ -286,7 +287,7 @@ public final class Proto {
             }
             Object value = switch (field.type()) {
                 case STRING -> in.string();
-                case MESSAGE -> read(field.message(), in.sub(), depth + 1);
+                case MESSAGE -> read(Objects.requireNonNull(field.message(), "message"), in.sub(), depth + 1);
                 default -> scalar(field, in);
             };
             if (field.repeated()) {
@@ -323,7 +324,8 @@ public final class Proto {
             case INT64 -> v;
             case ENUM -> {
                 int n = (int) v;
-                yield n >= 0 && n < field.values().size() ? field.values().get(n) : Integer.toString(n);
+                List<String> values = Objects.requireNonNull(field.values(), "values");
+                yield n >= 0 && n < values.size() ? values.get(n) : Integer.toString(n);
             }
             default -> throw new ProtoException("not a scalar: " + field.name());
         };
@@ -341,6 +343,16 @@ public final class Proto {
          */
         public ProtoException(String message) {
             super(message, null, false, false);
+        }
+
+        /**
+         * Creates the exception with the failure behind it.
+         *
+         * @param message what is wrong (no input in it)
+         * @param cause   the failure behind it
+         */
+        public ProtoException(String message, Throwable cause) {
+            super(message, cause, false, false);
         }
     }
 
@@ -393,7 +405,7 @@ public final class Proto {
                 position += length;
                 return s;
             } catch (CharacterCodingException e) {
-                throw new ProtoException("invalid UTF-8");
+                throw new ProtoException("invalid UTF-8", e);
             }
         }
 

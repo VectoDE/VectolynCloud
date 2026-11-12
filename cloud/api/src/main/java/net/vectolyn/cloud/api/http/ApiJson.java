@@ -16,6 +16,7 @@ import net.vectolyn.cloud.config.io.ConfigMappers;
 import net.vectolyn.cloud.config.io.ConfigYaml;
 import net.vectolyn.cloud.config.model.Language;
 import net.vectolyn.cloud.config.validation.ConfigNames;
+import org.jspecify.annotations.Nullable;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.StreamReadConstraints;
 import tools.jackson.core.json.JsonFactory;
@@ -123,7 +124,7 @@ public final class ApiJson {
      * @param value any value of the model
      * @return UTF-8 JSON
      */
-    public static byte[] write(Object value) {
+    public static byte[] write(@Nullable Object value) {
         return MAPPER.writeValueAsBytes(value);
     }
 

@@ -227,7 +227,7 @@ public final class BuiltinCommands {
                                 context.out().success(Text.of("Exported %1$s files to %2$s", "%1$s Dateien nach %2$s exportiert"),
                                         entries.size(), file);
                             } catch (FileAlreadyExistsException e) {
-                                throw new CommandException(Text.of("%1$s exists already; choose a new file name.",
+                                throw new CommandException(e, Text.of("%1$s exists already; choose a new file name.",
                                         "%1$s gibt es schon; einen neuen Dateinamen wählen."), file);
                             }
                         }))
@@ -276,9 +276,7 @@ public final class BuiltinCommands {
             return;
         }
         for (ConfigPreview.FileChange change : changes) {
-            for (String line : change.diff().split("\n")) {
-                out.println(line);
-            }
+            change.diff().lines().forEach(line -> out.println(line));
         }
         out.println(Text.of("%1$s file(s) change.", "%1$s Datei(en) ändern sich."), changes.size());
     }
@@ -288,7 +286,7 @@ public final class BuiltinCommands {
         try {
             return config.home().root().resolve(name).toAbsolutePath().normalize();
         } catch (InvalidPathException e) {
-            throw new CommandException(Text.of("Not a valid path.", "Kein gültiger Pfad."));
+            throw new CommandException(e, Text.of("Not a valid path.", "Kein gültiger Pfad."));
         }
     }
 

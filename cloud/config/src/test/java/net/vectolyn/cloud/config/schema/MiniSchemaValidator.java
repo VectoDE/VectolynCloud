@@ -3,7 +3,6 @@
 package net.vectolyn.cloud.config.schema;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -120,10 +119,8 @@ final class MiniSchemaValidator {
     }
 
     private static void checkKeywords(JsonNode schema, String path) {
-        Set<String> seen = new HashSet<>();
         for (Map.Entry<String, JsonNode> field : schema.properties()) {
             String key = field.getKey();
-            seen.add(key);
             if (!KEYWORDS.contains(key)) {
                 throw new IllegalStateException("keyword " + key + " at " + path + " is not supported by the test validator");
             }

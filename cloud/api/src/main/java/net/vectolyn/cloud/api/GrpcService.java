@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Set;
 import net.vectolyn.cloud.api.grpc.ProtoSchema;
+import org.jspecify.annotations.Nullable;
 
 /**
  * {@code vectolyn.api.v1.CloudService}: the schema read from the published
@@ -55,7 +56,7 @@ final class GrpcService {
      * @param path {@code /vectolyn.api.v1.CloudService/<Method>}
      * @return the method, or null for an unknown path
      */
-    ProtoSchema.Method method(String path) {
+    ProtoSchema.@Nullable Method method(String path) {
         String prefix = "/" + schema.pkg() + "." + schema.service() + "/";
         if (!path.startsWith(prefix)) {
             return null;
@@ -63,7 +64,7 @@ final class GrpcService {
         return schema.methods().get(path.substring(prefix.length()));
     }
 
-    GrpcCalls.Call call(String method) {
+    GrpcCalls.@Nullable Call call(String method) {
         return calls.get(method);
     }
 }

@@ -330,6 +330,8 @@ public final class ApiServer implements AutoCloseable {
      * at most {@value #GRPC_MAX_STREAMS} calls at once, 8 KiB of headers. {@link GrpcConnection}
      * closes the connection when no authenticated call was open for the idle timeout.
      */
+    // Closing a refused connection is fire-and-forget; there is nobody to report a failure to.
+    @SuppressWarnings("FutureReturnValueIgnored")
     private void initGrpcConnection(SocketChannel ch) {
         String client = ClientAddress.key(ch.remoteAddress());
         if (!acquireConnection(client)) {
@@ -338,8 +340,9 @@ public final class ApiServer implements AutoCloseable {
         }
         ch.closeFuture().addListener(f -> releaseConnection(client));
         ChannelPipeline p = ch.pipeline();
-        if (grpcSslContext != null) {
-            p.addLast("vectolyn-grpc-tls", grpcSslContext.newHandler(ch.alloc()));
+        SslContext tls = grpcSslContext;
+        if (tls != null) {
+            p.addLast("vectolyn-grpc-tls", tls.newHandler(ch.alloc()));
         }
         p.addLast("vectolyn-grpc-h2", Http2FrameCodecBuilder.forServer()
                 .initialSettings(Http2Settings.defaultSettings()

@@ -23,6 +23,7 @@ import net.vectolyn.cloud.config.io.ConfigFormat;
 import net.vectolyn.cloud.config.io.ConfigMappers;
 import net.vectolyn.cloud.config.io.ConfigYaml;
 import net.vectolyn.cloud.config.io.RegularPaths;
+import org.jspecify.annotations.Nullable;
 
 /** Reads and checks {@code privacy.yml} with the same strict YAML reader as the other configuration files. */
 public final class PrivacyConfigLoader {
@@ -59,7 +60,7 @@ public final class PrivacyConfigLoader {
         } catch (NoSuchFileException e) {
             return PrivacyConfig.defaults();
         } catch (IOException e) {
-            throw new ConfigException(ConfigError.of(FILE, "", ErrorCode.FILE_ACCESS));
+            throw new ConfigException(ConfigError.of(FILE, "", ErrorCode.FILE_ACCESS), e);
         }
         return parse(content);
     }
@@ -125,7 +126,7 @@ public final class PrivacyConfigLoader {
         }
     }
 
-    private static boolean pastInstant(String text) {
+    private static boolean pastInstant(@Nullable String text) {
         try {
             return text != null && !Instant.parse(text).isAfter(Instant.now());
         } catch (DateTimeParseException e) {
@@ -133,7 +134,7 @@ public final class PrivacyConfigLoader {
         }
     }
 
-    private static boolean isHttps(String text) {
+    private static boolean isHttps(@Nullable String text) {
         if (text == null || text.length() > 256) {
             return false;
         }

@@ -13,6 +13,7 @@ import net.vectolyn.cloud.api.http.ApiRequest;
 import net.vectolyn.cloud.api.http.ApiResponse;
 import net.vectolyn.cloud.api.http.ApiRoutes;
 import net.vectolyn.cloud.api.http.Router;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Runs a REST route for GraphQL and gRPC, the same way {@link ApiHttpHandler} does after
@@ -43,7 +44,8 @@ final class RouteCaller {
      * @return the answer
      * @throws ApiException the error REST would answer
      */
-    ApiResponse call(ApiToken token, String method, String target, Object body, String ifMatch) throws ApiException {
+    ApiResponse call(ApiToken token, String method, String target, @Nullable Object body, @Nullable String ifMatch)
+            throws ApiException {
         Router.Resolution<ApiRoutes.Handler> resolution = router.resolve(method, ApiRoutes.PREFIX + target);
         if (!(resolution instanceof Router.Resolution.Found<ApiRoutes.Handler> found)) {
             throw new ApiException(400, "invalid-value", "An argument breaks a rule of the API.");
@@ -69,7 +71,7 @@ final class RouteCaller {
      * @return the value
      * @throws ApiException 400 {@code invalid-value}
      */
-    static String segment(Object value, String name) throws ApiException {
+    static String segment(@Nullable Object value, String name) throws ApiException {
         if (!(value instanceof String text) || !SEGMENT.matcher(text).matches()) {
             throw new ApiException(400, "invalid-value", "\"" + name + "\" must be a name or id "
                     + "(lower-case letters, digits, '.', '_', '-').");
@@ -84,7 +86,7 @@ final class RouteCaller {
      * @return the value, null for none or empty
      * @throws ApiException 400 {@code invalid-value}
      */
-    static String ifMatch(String value) throws ApiException {
+    static @Nullable String ifMatch(@Nullable String value) throws ApiException {
         if (value == null || value.isEmpty()) {
             return null;
         }

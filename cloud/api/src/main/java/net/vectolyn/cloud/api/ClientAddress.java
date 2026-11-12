@@ -8,6 +8,7 @@ import java.net.SocketAddress;
 import java.net.InetSocketAddress;
 import java.util.Arrays;
 import java.util.HexFormat;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The key under which rate limits and connection limits count a client: the IPv4 address, or the
@@ -32,7 +33,7 @@ final class ClientAddress {
      * @param remote the remote address of a channel
      * @return the key, {@code unknown} if the address is not an IP address
      */
-    static String key(SocketAddress remote) {
+    static String key(@Nullable SocketAddress remote) {
         if (!(remote instanceof InetSocketAddress socket) || socket.getAddress() == null) {
             return "unknown";
         }

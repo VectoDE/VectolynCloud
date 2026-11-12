@@ -56,6 +56,7 @@ import net.vectolyn.cloud.api.http.ApiRequest;
 import net.vectolyn.cloud.api.http.ApiResponse;
 import net.vectolyn.cloud.api.http.ApiRoutes;
 import net.vectolyn.cloud.api.http.Router;
+import org.jspecify.annotations.Nullable;
 import org.reactivestreams.Publisher;
 
 /**
@@ -171,8 +172,8 @@ final class GraphQlApi {
      * @param subscriptions where a subscription registers, or null over HTTP
      * @return the result; a subscription has a {@link Publisher} as data
      */
-    ExecutionResult execute(ApiToken token, String query, String operation, Map<String, Object> variables,
-                            Subscriptions subscriptions) {
+    ExecutionResult execute(ApiToken token, @Nullable String query, @Nullable String operation,
+                            @Nullable Map<String, Object> variables, @Nullable Subscriptions subscriptions) {
         Map<Object, Object> context = new LinkedHashMap<>();
         context.put(ParserOptions.class, PARSER);
         context.put(ApiToken.class, token);
@@ -212,7 +213,7 @@ final class GraphQlApi {
     }
 
     /** A GraphQL request body. */
-    record Body(String query, String operationName, Map<String, Object> variables) {
+    record Body(String query, @Nullable String operationName, @Nullable Map<String, Object> variables) {
 
         /**
          * Reads and checks a body.
@@ -229,7 +230,7 @@ final class GraphQlApi {
             try {
                 tree = ApiJson.mapper().readValue(json, Object.class);
             } catch (RuntimeException e) {
-                throw bad("invalid-json", "The body is not valid JSON.");
+                throw bad("invalid-json", "The body is not valid JSON."); // NOPMD - the Jackson message can quote the request body
             }
             return of(tree);
         }
@@ -241,7 +242,7 @@ final class GraphQlApi {
          * @return the body
          * @throws ApiException 400 {@code invalid-graphql-request}
          */
-        static Body of(Object tree) throws ApiException {
+        static Body of(@Nullable Object tree) throws ApiException {
             if (!(tree instanceof Map<?, ?> map)) {
                 throw invalid("The body must be a JSON object.");
             }
@@ -355,7 +356,7 @@ final class GraphQlApi {
     }
 
     /** Fields of typed objects read the REST member of the same name in kebab case. */
-    private static Object kebabField(DataFetchingEnvironment env) {
+    private static @Nullable Object kebabField(DataFetchingEnvironment env) {
         if (env.getSource() instanceof Map<?, ?> map) {
             String name = env.getField().getName();
             Object value = map.get(name);
@@ -366,7 +367,8 @@ final class GraphQlApi {
 
     static String kebab(String camel) {
         StringBuilder out = new StringBuilder(camel.length() + 4);
-        for (char c : camel.toCharArray()) {
+        for (int i = 0; i < camel.length(); i++) {
+            char c = camel.charAt(i);
             if (Character.isUpperCase(c)) {
                 out.append('-').append(Character.toLowerCase(c));
             } else {
@@ -385,7 +387,7 @@ final class GraphQlApi {
 
     @FunctionalInterface
     private interface BodyOf {
-        Object of(DataFetchingEnvironment env) throws ApiException;
+        @Nullable Object of(DataFetchingEnvironment env) throws ApiException;
     }
 
     private DataFetcher<Object> get(Target target) {
@@ -464,10 +466,10 @@ final class GraphQlApi {
      * Runs one REST route with the caller's token, the same way {@link ApiHttpHandler} does after
      * routing: resolve, check the scope, run, map a failure to its API error.
      */
-    private ApiResponse call(DataFetchingEnvironment env, String method, String target, Object body, String ifMatch)
-            throws ApiException {
+    private ApiResponse call(DataFetchingEnvironment env, String method, String target, @Nullable Object body,
+                             @Nullable String ifMatch) throws ApiException {
         ApiToken token = token(env);
-        AtomicInteger calls = env.getGraphQlContext().get(AtomicInteger.class);
+        AtomicInteger calls = Objects.requireNonNull(env.getGraphQlContext().get(AtomicInteger.class), "calls");
         int n = calls.incrementAndGet();
         if (n > MAX_CALLS) {
             throw bad("too-many-calls", "A document may run at most " + MAX_CALLS + " fields that "
@@ -548,10 +550,10 @@ final class GraphQlApi {
     }
 
     private static ApiToken token(DataFetchingEnvironment env) {
-        return env.getGraphQlContext().get(ApiToken.class);
+        return Objects.requireNonNull(env.getGraphQlContext().get(ApiToken.class), "token");
     }
 
-    private static String ifMatch(DataFetchingEnvironment env) throws ApiException {
+    private static @Nullable String ifMatch(DataFetchingEnvironment env) throws ApiException {
         return RouteCaller.ifMatch(env.getArgument("ifMatch"));
     }
 
@@ -560,7 +562,7 @@ final class GraphQlApi {
         return checked(env.getArgument(name), name);
     }
 
-    private static String checked(Object value, String name) throws ApiException {
+    private static String checked(@Nullable Object value, String name) throws ApiException {
         return RouteCaller.segment(value, name);
     }
 
@@ -590,13 +592,13 @@ final class GraphQlApi {
 
                 @Override
                 @SuppressWarnings("deprecation")
-                public Object parseLiteral(Object input) {
+                public @Nullable Object parseLiteral(Object input) {
                     return literal((Value<?>) input, 0);
                 }
             })
             .build();
 
-    private static Object literal(Value<?> value, int depth) {
+    private static @Nullable Object literal(Value<?> value, int depth) {
         if (depth > ApiJson.MAX_DEPTH) {
             throw new CoercingParseLiteralException("The JSON literal is nested too deep.");
         }
