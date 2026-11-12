@@ -6,7 +6,7 @@ Danke, dass du helfen willst. Vectolyn steht noch am Anfang, deshalb sind die Re
 
 ## Bevor du anfängst
 
-- Lies das [README](README.de.md) und die [Roadmap](https://github.com/users/VectoDE/projects/11).
+- Lies das [README](README.de.md) und die [Roadmap](https://github.com/users/VectoDE/projects/11). Wie du baust, testest und wo der Code liegt, steht in der [Entwicklerdokumentation](docs/development/README.md) (englisch) und in der [Modulübersicht](docs/development/modules.md).
 - Fragen und lose Ideen gehören in die [Discussions](https://github.com/VectoDE/VectolynCloud/discussions).
 - Für einen Fehler oder ein konkretes Feature öffnest du ein Issue über eines der Formulare. Bei allem, was größer ist als ein kleiner Fix, warte auf eine Antwort im Issue, bevor du Code schreibst. Dann arbeitest du nicht umsonst, falls die Änderung nicht zum Plan passt.
 - Sicherheitslücken: siehe [SECURITY.md](SECURITY.md). Nie in einem öffentlichen Issue.
@@ -54,7 +54,7 @@ Vergessen? `git commit --amend -s` für den letzten Commit, `git rebase --signof
 
 ## Releases
 
-Ein Maintainer veröffentlicht, indem er einen Tag pusht, und der Tag muss den [Versionsregeln](docs/cloud/operations.de.md#versionen-und-tags) folgen: unter 1.0.0 nur `-dev` (`v0.2.0-dev`, `v0.2.0-dev.3`); ab 1.0.0 auch `-alpha`, `-beta` und `-rc` (jeweils mit optionalem `.N`), `-lts` ohne Zähler oder kein Zusatz für ein stabiles Release. Jeder andere Tag bricht das Release ab, bevor etwas gebaut wird. Einen Tag vorher prüfen: `bash tools/release-banner/check-tag.sh <tag>`.
+Ein Maintainer veröffentlicht, indem er einen Tag pusht, und der Tag muss den [Versionsregeln](docs/cloud/operations.de.md#versionen-und-tags) folgen: unter 1.0.0 nur `-dev` (`v0.2.0-dev`, `v0.2.0-dev.3`); ab 1.0.0 auch `-alpha`, `-beta` und `-rc` (jeweils mit optionalem `.N`), `-lts` ohne Zähler oder kein Zusatz für ein stabiles Release. Jeder andere Tag bricht das Release ab, bevor etwas gebaut wird. Einen Tag vorher prüfen: `bash tools/release-banner/check-tag.sh <tag>`. Die vollständige Checkliste steht in [Releasing](docs/development/releasing.md) (englisch).
 
 ## Sprachen
 
