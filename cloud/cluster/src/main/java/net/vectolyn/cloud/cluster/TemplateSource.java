@@ -140,7 +140,7 @@ final class TemplateSource {
             }
             folders.sort(null);
             for (Path folder : folders) {
-                String name = folder.getFileName().toString();
+                String name = Objects.requireNonNull(folder.getFileName(), "file name").toString();
                 if (RegularPaths.kind(folder) != RegularPaths.Kind.DIRECTORY) {
                     continue;
                 }
@@ -223,7 +223,7 @@ final class TemplateSource {
                         }
                         String relative = relative(root, dir);
                         // A Windows junction can report itself as a folder that is also "other".
-                        if (MirrorPaths.isSecretFolder(dir.getFileName().toString())
+                        if (MirrorPaths.isSecretFolder(Objects.requireNonNull(dir.getFileName(), "file name").toString())
                                 || !attributes.isDirectory() || attributes.isSymbolicLink() || attributes.isOther()
                                 || !MirrorPaths.isSafePath(relative)) {
                             skipped[0]++;

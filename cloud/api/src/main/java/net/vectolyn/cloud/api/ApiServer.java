@@ -101,7 +101,7 @@ public final class ApiServer implements AutoCloseable {
     private @Nullable EventLoopGroup bossGroup;
     private @Nullable EventLoopGroup workerGroup;
     private @Nullable Channel serverChannel;
-    private @Nullable SslContext sslContext;
+    private volatile @Nullable SslContext sslContext;
     private int openConnections;
     private boolean closed;
 
@@ -243,8 +243,9 @@ public final class ApiServer implements AutoCloseable {
         }
         ch.closeFuture().addListener(f -> releaseConnection(client));
         ChannelPipeline p = ch.pipeline();
-        if (sslContext != null) {
-            p.addLast("vectolyn-api-tls", sslContext.newHandler(ch.alloc()));
+        SslContext tls = sslContext;
+        if (tls != null) {
+            p.addLast("vectolyn-api-tls", tls.newHandler(ch.alloc()));
         }
         p.addLast("vectolyn-api-http", new HttpServerCodec(new HttpDecoderConfig()
                 .setMaxInitialLineLength(4096)

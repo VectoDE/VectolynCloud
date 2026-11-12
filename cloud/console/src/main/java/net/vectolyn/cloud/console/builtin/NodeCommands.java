@@ -133,7 +133,8 @@ String path, String value) throws ConfigException {
 
     private static void info(ConsoleOutput out, ConfigSnapshot snapshot, String id) throws ConfigException {
         NodeConfig n = snapshot.nodes().nodes().get(index(snapshot.nodes(), id));
-        MemoryReserve raw = n.reserve() == null ? noReserve() : n.reserve();
+        MemoryReserve reserve = n.reserve();
+        MemoryReserve raw = reserve == null ? noReserve() : reserve;
         MemoryReserve full = n.memoryReserve();
         out.heading(CloudHome.NODES_FILE + " " + n.id());
         out.println("  host                         = " + n.host());
@@ -146,7 +147,8 @@ String path, String value) throws ConfigException {
     }
 
     private static String maxMemory(NodeConfig n) {
-        return n.maxMemory() == null ? AUTO : n.maxMemory().toString();
+        MemorySize max = n.maxMemory();
+        return max == null ? AUTO : max.toString();
     }
 
     private static String marker(@Nullable MemorySize raw) {

@@ -283,7 +283,8 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
                 } finally {
                     server.requestSlots().release();
                 }
-                rateLimitHeaders(response, request.token() != null ? request.token().id() : SETUP_LIMIT_KEY);
+                ApiToken limited = request.token();
+                rateLimitHeaders(response, limited != null ? limited.id() : SETUP_LIMIT_KEY);
                 FullHttpResponse answer = response;
                 ctx.channel().eventLoop().execute(() -> finish(ctx, answer, request.keepAlive()));
             });

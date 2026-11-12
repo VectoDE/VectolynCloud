@@ -102,7 +102,7 @@ public final class DownloadingMariaDbBinaries implements MariaDbBinaries {
                         + resolved.fileName());
             }
             Path top = singleFolder(unpack);
-            Path target = home.resolve(top.getFileName().toString());
+            Path target = home.resolve(Objects.requireNonNull(top.getFileName(), "file name").toString());
             if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
                 // Never touch a folder that is already there; it may be a hand-made install.
                 target = home.resolve(top.getFileName() + "-" + file.sha256().hex().substring(0, 12));
@@ -185,7 +185,7 @@ public final class DownloadingMariaDbBinaries implements MariaDbBinaries {
 
     private void writeMarker(Path folder, String installedVersion, String sha256) throws IOException {
         Properties p = new Properties();
-        p.setProperty("folder", folder.getFileName().toString());
+        p.setProperty("folder", Objects.requireNonNull(folder.getFileName(), "file name").toString());
         p.setProperty("version", installedVersion);
         p.setProperty("sha256", sha256);
         Path marker = home.resolve(MARKER);

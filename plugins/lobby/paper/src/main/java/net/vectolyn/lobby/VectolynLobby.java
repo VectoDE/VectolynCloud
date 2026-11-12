@@ -165,9 +165,10 @@ public final class VectolynLobby extends JavaPlugin implements Listener {
         world.getBlockAt(x, y, z).setType(material, false);
     }
 
+    // The future is only watched for failures: a refused teleport is logged, never thrown.
+    @SuppressWarnings("FutureReturnValueIgnored")
     private void teleportToSpawn(Player player) {
-        // The future is only watched for failures: a refused teleport is logged, never thrown.
-        var unused = player.teleportAsync(player.getWorld().getSpawnLocation()).exceptionally(error -> {
+        player.teleportAsync(player.getWorld().getSpawnLocation()).exceptionally(error -> {
             getLogger().log(Level.WARNING, "Could not teleport " + player.getName() + " to the lobby spawn", error);
             return false;
         });

@@ -424,7 +424,7 @@ public final class ManagedMariaDbProvisioner implements DatabaseProvisioner {
 
     /** Creates the file readable by the owner only, then writes it. Fails if it already exists. */
     static void writeOwnerOnly(Path file, String content) throws IOException {
-        boolean posix = Files.getFileStore(file.getParent()).supportsFileAttributeView("posix");
+        boolean posix = Files.getFileStore(Objects.requireNonNull(file.getParent(), "parent folder")).supportsFileAttributeView("posix");
         FileAttribute<?>[] attributes = posix
                 ? new FileAttribute<?>[] {PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------"))}
                 : new FileAttribute<?>[0];

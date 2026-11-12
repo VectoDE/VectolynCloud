@@ -264,13 +264,14 @@ public final class JoinTokens {
         }
         for (Entry entry : store.tokens()) {
             if (entry == null || entry.id() == null || !entry.id().matches("[a-z0-9]{6}") || entry.node() == null
-                    || entry.hash() == null || !entry.hash().matches("[0-9a-f]{64}") || entry.failures() < 0) {
+                    || entry.expiresAt() == null || entry.hash() == null || !entry.hash().matches("[0-9a-f]{64}")
+                    || entry.failures() < 0) {
                 throw new IOException(FILE + " has an invalid entry");
             }
             try {
                 new NodeId(entry.node());
                 Instant.parse(entry.expiresAt());
-            } catch (IllegalArgumentException | DateTimeParseException | NullPointerException e) {
+            } catch (IllegalArgumentException | DateTimeParseException e) {
                 throw new IOException(FILE + " has an invalid entry", e);
             }
         }

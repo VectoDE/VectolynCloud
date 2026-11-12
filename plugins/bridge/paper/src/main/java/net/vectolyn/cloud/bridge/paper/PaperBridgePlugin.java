@@ -352,6 +352,8 @@ public final class PaperBridgePlugin extends JavaPlugin implements Listener {
     }
 
     /** Moves a player who stands inside blocks on top of the column ({@link SafeSpawn}). */
+    // The future is only watched for failures; a refused teleport is logged, never thrown.
+    @SuppressWarnings("FutureReturnValueIgnored")
     private void rescue(Player player) {
         if (!player.isOnline()) {
             return;
@@ -384,8 +386,7 @@ public final class PaperBridgePlugin extends JavaPlugin implements Listener {
             // No player name in the log, like everywhere else in the bridge.
             getLogger().info("A player joined inside blocks at y=" + at.getBlockY() + "; moved on top to y="
                     + target.getAsInt());
-            // The future is only watched for failures; a refused teleport is logged, never thrown.
-            var unused = player.teleportAsync(new Location(world, x + 0.5, target.getAsInt(), z + 0.5, at.getYaw(),
+            player.teleportAsync(new Location(world, x + 0.5, target.getAsInt(), z + 0.5, at.getYaw(),
                     at.getPitch())).exceptionally(error -> {
                         getLogger().log(Level.WARNING, "Could not move a player on top of the blocks", error);
                         return false;

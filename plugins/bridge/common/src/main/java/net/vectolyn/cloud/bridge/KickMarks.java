@@ -148,6 +148,8 @@ public final class KickMarks {
      * @param wait   the longest wait
      * @return the reason, or empty
      */
+    // The callback only cleans up; there is nothing to report from the derived future.
+    @SuppressWarnings("FutureReturnValueIgnored")
     public CompletableFuture<Optional<String>> await(UUID player, Duration wait) {
         CompletableFuture<Optional<String>> waiter;
         CompletableFuture<Optional<String>> before;
@@ -163,8 +165,7 @@ public final class KickMarks {
         if (before != null) {
             before.complete(Optional.empty());
         }
-        // The callback only cleans up; there is nothing to report from the derived future.
-        var unused = waiter.whenComplete((result, error) -> {
+        waiter.whenComplete((result, error) -> {
             synchronized (this) {
                 waiting.remove(player, waiter);
             }

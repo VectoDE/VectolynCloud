@@ -158,6 +158,8 @@ public final class CloudClient implements AutoCloseable {
      *
      * @throws IllegalStateException if the client was closed
      */
+    // ping() handles its own failures; the schedule and the cleanup callbacks need no watching.
+    @SuppressWarnings("FutureReturnValueIgnored")
     public void start() {
         synchronized (lifecycle) {
             if (closed) {
@@ -169,8 +171,7 @@ public final class CloudClient implements AutoCloseable {
             connector = daemon("vectolyn-cloud-client").newThread(this::run);
             connector.start();
             long ping = settings.pingInterval().toMillis();
-            // ping() handles write failures itself, so the schedule needs no watching.
-            var unused = timer.scheduleAtFixedRate(this::ping, ping, ping, TimeUnit.MILLISECONDS);
+            timer.scheduleAtFixedRate(this::ping, ping, ping, TimeUnit.MILLISECONDS);
         }
     }
 
@@ -281,6 +282,8 @@ public final class CloudClient implements AutoCloseable {
      *
      * @throws IllegalArgumentException if the payload exceeds 64 KiB
      */
+    // The callback only cleans up; there is nothing to report from the derived future.
+    @SuppressWarnings("FutureReturnValueIgnored")
     public CompletableFuture<Response> request(ChannelName channel, byte[] payload) {
         Request request = new Request(channel, payload);
         CompletableFuture<Response> future = new CompletableFuture<>();
@@ -299,8 +302,7 @@ public final class CloudClient implements AutoCloseable {
         ScheduledFuture<?> expiry = timer.schedule(() -> {
             future.completeExceptionally(new TimeoutException("no response within " + timeout + " ms"));
         }, timeout, TimeUnit.MILLISECONDS);
-        // The callback only cleans up; it cannot fail in a way that needs reporting.
-        var unused = future.whenComplete((response, error) -> {
+        future.whenComplete((response, error) -> {
             pending.remove(id, future);
             expiry.cancel(false);
         });
