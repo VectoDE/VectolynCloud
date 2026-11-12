@@ -1,0 +1,10 @@
+# Trivy exceptions. Each entry names the file and the reason; nothing is ignored repository-wide.
+misconfigurations:
+  - id: DS-0002
+    paths:
+      - ".clusterfuzzlite/Dockerfile"
+    statement: "Build image of the ClusterFuzzLite fuzzers. The OSS-Fuzz base builder image installs the JDK and compiles as root; it is never run as a service and ships nowhere."
+  - id: DS-0026
+    paths:
+      - ".clusterfuzzlite/Dockerfile"
+    statement: "Same build image: it runs a build script once and exits, so a HEALTHCHECK has nothing to check."

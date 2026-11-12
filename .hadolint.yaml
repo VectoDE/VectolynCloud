@@ -1,0 +1,6 @@
+# Hadolint configuration. Strictest threshold: every finding, including style, fails the check.
+failure-threshold: style
+# Only registries the project pins by digest are trusted.
+trustedRegistries:
+  - docker.io
+  - gcr.io
