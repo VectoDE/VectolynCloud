@@ -8,3 +8,8 @@ misconfigurations:
     paths:
       - ".clusterfuzzlite/Dockerfile"
     statement: "Same build image: it runs a build script once and exits, so a HEALTHCHECK has nothing to check."
+vulnerabilities:
+  - id: CVE-2026-102554
+    purls:
+      - "pkg:maven/com.google.guava/guava@32.1.2-jre"
+    statement: "GHSA-xxph-c9ww-hj94: Guava shaded into graphql-java 26.1 (newest release) under graphql.com.google.common. The flaw needs Java deserialization of attacker data, which neither VectolynCloud nor graphql-java's use here performs. The project's own Guava is 33.7.2-jre (fixed). Same reason in .grype.yaml; remove both once graphql-java ships a newer Guava."
