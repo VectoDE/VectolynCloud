@@ -161,8 +161,9 @@ public final class ConfigValidator {
             }
             c.pattern(f, p + ".host", node.host(), ConfigNames.HOST);
             c.port(f, p + ".port", node.port());
-            if (node.maxMemory() != null) {
-                c.range(f, p + ".max-memory", node.maxMemory().megabytes(), MIN_NODE_MEMORY_MEGABYTES, MemorySize.MAX_MEGABYTES);
+            MemorySize maxMemory = node.maxMemory();
+            if (maxMemory != null) {
+                c.range(f, p + ".max-memory", maxMemory.megabytes(), MIN_NODE_MEMORY_MEGABYTES, MemorySize.MAX_MEGABYTES);
             }
             MemoryReserve reserve = node.reserve();
             if (reserve != null) {
@@ -233,8 +234,9 @@ public final class ConfigValidator {
             }
         }
         validateProcess(c, f, group.process());
-        if (group.drainTimeout() != null) {
-            long seconds = group.drainTimeout().duration().toSeconds();
+        TimeSpan drainTimeout = group.drainTimeout();
+        if (drainTimeout != null) {
+            long seconds = drainTimeout.duration().toSeconds();
             if (seconds < GroupConfig.MIN_DRAIN_TIMEOUT_SECONDS || seconds > GroupConfig.MAX_DRAIN_TIMEOUT_SECONDS) {
                 c.add(ConfigError.of(f, "drain-timeout", ErrorCode.OUT_OF_RANGE,
                         TimeSpan.ofSeconds(GroupConfig.MIN_DRAIN_TIMEOUT_SECONDS),

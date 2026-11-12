@@ -11,6 +11,7 @@ import java.nio.file.WatchEvent;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
 import java.time.Duration;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 
@@ -112,7 +113,7 @@ final class ConfigWatcher implements AutoCloseable {
             if (StandardWatchEventKinds.OVERFLOW.equals(event.kind())) {
                 relevant = true;
             } else if (event.context() instanceof Path path) {
-                String name = path.getFileName().toString();
+                String name = Objects.requireNonNull(path.getFileName(), "file name").toString();
                 relevant |= !name.startsWith(".") && (name.endsWith(".yml") || name.endsWith(".yaml"));
             }
         }
