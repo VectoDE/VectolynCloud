@@ -20,6 +20,7 @@ import net.vectolyn.cloud.console.Text;
 import net.vectolyn.cloud.console.command.Argument;
 import net.vectolyn.cloud.console.command.Command;
 import net.vectolyn.cloud.console.command.CommandException;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code api} command of the console:
@@ -60,7 +61,7 @@ public final class ApiCommands {
                     + " erneut.");
 
     private final TokenFile file;
-    private volatile ApiTokens tokens;
+    private volatile @Nullable ApiTokens tokens;
 
     /** Opens the token store; fails while {@code secrets/api-tokens.json} is broken. */
     @FunctionalInterface
@@ -111,7 +112,7 @@ public final class ApiCommands {
                             "secrets/%1$s kann nicht gelesen werden (%2$s). Die Datei reparieren, oder löschen, um"
                                     + " ohne Tokens neu anzufangen. Die API bleibt aus, bis der Node mit einer lesbaren"
                                     + " Datei startet."),
-                            ApiTokens.FILE_NAME, e.getMessage());
+                            ApiTokens.FILE_NAME, Objects.requireNonNullElse(e.getMessage(), e.toString()));
                 }
             }
             return tokens;
@@ -178,8 +179,9 @@ public final class ApiCommands {
                 .build();
     }
 
-    private void create(ConsoleOutput out, String name, String scopeList, String lifetimeText) throws Exception {
-        Duration lifetime = null;
+    private void create(ConsoleOutput out, String name, String scopeList, @Nullable String lifetimeText)
+            throws Exception {
+        @Nullable Duration lifetime = null;
         if (lifetimeText != null) {
             try {
                 lifetime = ApiTokens.parseLifetime(lifetimeText);

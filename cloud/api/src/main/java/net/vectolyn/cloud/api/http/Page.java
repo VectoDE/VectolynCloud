@@ -11,6 +11,7 @@ import java.util.Optional;
 import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.regex.Pattern;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Cursor paging of the list endpoints ({@code GET /services}, {@code /groups}, {@code /tasks},
@@ -53,7 +54,7 @@ public final class Page {
         List<T> sorted = new ArrayList<>(items);
         sorted.sort(Comparator.comparing(key));
         List<T> page = new ArrayList<>();
-        String last = null;
+        @Nullable String last = null;
         boolean more = false;
         for (T item : sorted) {
             String k = key.apply(item);
@@ -83,7 +84,7 @@ public final class Page {
     public static <V> ApiResponse map(ApiRequest q, String path, Map<String, V> items) throws ApiException {
         Request request = request(q);
         Map<String, V> page = new LinkedHashMap<>();
-        String last = null;
+        @Nullable String last = null;
         boolean more = false;
         for (Map.Entry<String, V> entry : new TreeMap<>(items).entrySet()) {
             if (request.after() != null && entry.getKey().compareTo(request.after()) <= 0) {
@@ -99,7 +100,8 @@ public final class Page {
         return answer(page, items.size(), path, request, more ? last : null);
     }
 
-    private static ApiResponse answer(Object page, int total, String path, Request request, String next) {
+    private static ApiResponse answer(Object page, int total, String path, Request request,
+            @Nullable String next) {
         Map<String, String> headers = new LinkedHashMap<>();
         headers.put("X-Total-Count", Integer.toString(total));
         if (next != null) {
@@ -120,6 +122,6 @@ public final class Page {
         return new Request(limit.map(Integer::parseInt).orElse(Integer.MAX_VALUE), after.orElse(null));
     }
 
-    private record Request(int limit, String after) {
+    private record Request(int limit, @Nullable String after) {
     }
 }

@@ -38,6 +38,7 @@ import net.vectolyn.cloud.database.sql.SqlConnector;
 import net.vectolyn.cloud.database.sql.SqlSession;
 import net.vectolyn.cloud.database.sql.TlsMode;
 import net.vectolyn.cloud.download.provider.TargetPlatform;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Mode {@code managed}: the cloud downloads MariaDB and runs it on this machine.
@@ -113,7 +114,7 @@ public final class ManagedMariaDbProvisioner implements DatabaseProvisioner {
     private final Timeouts timeouts;
     private final ConnectionTarget target;
 
-    private DatabaseProcesses.Running process;
+    private DatabaseProcesses.@Nullable Running process;
     private boolean adopted;
 
     /**
@@ -200,7 +201,7 @@ public final class ManagedMariaDbProvisioner implements DatabaseProvisioner {
 
     /** Returns a root session to a running server, starting it first if needed. */
     private SqlSession runningServer(ManagedPlatform platform) throws DatabaseException, InterruptedException {
-        if (process != null && process.isAlive() || adopted) {
+        if ((process != null && process.isAlive()) || adopted) {
             return openRoot(Duration.ofSeconds(10), () -> true);
         }
         Optional<SqlSession> already = tryRoot();

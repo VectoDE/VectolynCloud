@@ -199,7 +199,7 @@ public final class BackupCommands {
         }
         run(() -> {
             service.delete(backup);
-            return null;
+            return backup;
         });
         context.out().success(Text.of("Deleted backup %1$s.", "Sicherung %1$s gelöscht."), backup);
     }

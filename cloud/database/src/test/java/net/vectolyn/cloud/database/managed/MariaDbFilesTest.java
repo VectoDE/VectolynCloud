@@ -165,7 +165,7 @@ class MariaDbFilesTest {
     static Map<String, String> section(String ini, String name) {
         Map<String, String> values = new LinkedHashMap<>();
         boolean inside = false;
-        for (String raw : ini.split("\\R")) {
+        for (String raw : ini.lines().toList()) {
             String line = raw.strip();
             if (line.isEmpty() || line.startsWith("#")) {
                 continue;

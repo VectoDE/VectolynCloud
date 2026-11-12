@@ -17,6 +17,7 @@ import net.vectolyn.cloud.backup.BackupRequest;
 import net.vectolyn.cloud.backup.BackupService;
 import net.vectolyn.cloud.backup.config.BackupConfig;
 import net.vectolyn.cloud.backup.config.ScheduleConfig;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Runs scheduled backups and the retention cleanup after each of them. cloud-node starts it once
@@ -44,9 +45,9 @@ public final class BackupScheduler implements AutoCloseable {
     private final BackupService service;
     private final ScheduledExecutorService executor;
     private final Instant started;
-    private Instant next;
-    private ScheduleConfig planned;
-    private String lastProblem;
+    private @Nullable Instant next;
+    private @Nullable ScheduleConfig planned;
+    private @Nullable String lastProblem;
 
     /**
      * Creates the scheduler; nothing runs before {@link #start()}.
@@ -64,6 +65,8 @@ public final class BackupScheduler implements AutoCloseable {
     }
 
     /** Starts checking. */
+    // tickSafely catches every RuntimeException, and close() ends the executor.
+    @SuppressWarnings("FutureReturnValueIgnored")
     public void start() {
         executor.scheduleWithFixedDelay(this::tickSafely, TICK_SECONDS, TICK_SECONDS, TimeUnit.SECONDS);
     }
@@ -115,9 +118,10 @@ public final class BackupScheduler implements AutoCloseable {
         }
         lastProblem = null;
         Instant now = service.clock().instant();
-        if (!settings.schedule().equals(planned) || next == null) {
-            planned = settings.schedule();
-            next = nextRun(planned, now, lastScheduled(), started, service.zone()).orElse(null);
+        ScheduleConfig schedule = settings.schedule();
+        if (!schedule.equals(planned) || next == null) {
+            planned = schedule;
+            next = nextRun(schedule, now, lastScheduled(), started, service.zone()).orElse(null);
         }
         if (next == null || now.isBefore(next)) {
             return;
@@ -130,7 +134,7 @@ public final class BackupScheduler implements AutoCloseable {
             LOG.log(System.Logger.Level.WARNING, "Scheduled backup failed: {0}", e.getMessage());
         }
         Instant after = service.clock().instant();
-        next = nextRun(planned, after, Optional.of(now), started, service.zone()).orElse(null);
+        next = nextRun(schedule, after, Optional.of(now), started, service.zone()).orElse(null);
     }
 
     private Optional<Instant> lastScheduled() {

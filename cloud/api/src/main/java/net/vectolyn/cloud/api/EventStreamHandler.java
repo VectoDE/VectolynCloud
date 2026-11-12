@@ -26,7 +26,9 @@ final class EventStreamHandler extends SimpleChannelInboundHandler<Object> {
         this.handshaker = handshaker;
     }
 
+    // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
     @Override
+    @SuppressWarnings("FutureReturnValueIgnored")
     protected void channelRead0(ChannelHandlerContext ctx, Object msg) {
         if (msg instanceof CloseWebSocketFrame close) {
             handshaker.close(ctx.channel(), close.retain());
@@ -39,7 +41,9 @@ final class EventStreamHandler extends SimpleChannelInboundHandler<Object> {
         // anything else (the end of the upgrade request) is dropped
     }
 
+    // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
     @Override
+    @SuppressWarnings("FutureReturnValueIgnored")
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
         if (evt instanceof IdleStateEvent idle) {
             if (idle.state() == IdleState.WRITER_IDLE) {
@@ -53,7 +57,9 @@ final class EventStreamHandler extends SimpleChannelInboundHandler<Object> {
         super.userEventTriggered(ctx, evt);
     }
 
+    // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
     @Override
+    @SuppressWarnings("FutureReturnValueIgnored")
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         ctx.close();
     }

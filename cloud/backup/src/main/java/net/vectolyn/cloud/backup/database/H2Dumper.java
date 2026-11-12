@@ -144,7 +144,8 @@ public final class H2Dumper {
             Files.deleteIfExists(resultFile);
             result = runner.run(arguments(database, resultFile), workDirectory, timeout);
         } catch (IllegalArgumentException e) {
-            throw new BackupException(BackupException.Reason.DATABASE, e.getMessage());
+            throw new BackupException(BackupException.Reason.DATABASE, Objects.requireNonNullElse(e.getMessage(),
+                    e.toString()));
         } catch (IOException e) {
             throw new BackupException(BackupException.Reason.DATABASE, "H2 script tool could not run: "
                     + e.getMessage(), e);

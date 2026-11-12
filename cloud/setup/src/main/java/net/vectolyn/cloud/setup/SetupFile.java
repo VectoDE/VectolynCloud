@@ -27,6 +27,7 @@ import net.vectolyn.cloud.config.model.TimeSpan;
 import net.vectolyn.cloud.config.secret.Secret;
 import net.vectolyn.cloud.config.validation.ConfigNames;
 import net.vectolyn.cloud.console.Text;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The answers of the assistant as a YAML file, for starts that cannot ask (Docker, Pterodactyl, CI):
@@ -288,7 +289,7 @@ public record SetupFile(int schemaVersion, Language language, Boolean eula, Stri
             }
         }
         if (node != null) {
-            MemorySize max = answers.maxMemory();
+            @Nullable MemorySize max = answers.maxMemory();
             if (Node.AUTO.equals(node.maxMemory())) {
                 max = null;
             } else if (node.maxMemory() != null) {
@@ -319,7 +320,7 @@ public record SetupFile(int schemaVersion, Language language, Boolean eula, Stri
                 if (result.problem() != null) {
                     problems.add(result.problem());
                 } else {
-                    password = Optional.of(result.secret());
+                    password = Optional.of(Objects.requireNonNull(result.secret(), "secret"));
                 }
             }
             answers = answers.withDatabase(db, password);

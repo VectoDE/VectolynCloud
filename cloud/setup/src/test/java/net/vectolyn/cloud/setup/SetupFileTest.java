@@ -349,8 +349,14 @@ class SetupFileTest {
 
     @Test
     void badPasswordFilesAreRefused() throws Exception {
-        String external = "schema-version: 1\neula: true\ndatabase:\n  mode: external\n  host: db.example.org\n"
-                + "  password-file: pw\n";
+        String external = """
+                schema-version: 1
+                eula: true
+                database:
+                  mode: external
+                  host: db.example.org
+                  password-file: pw
+                """;
         assertTrue(refused(external, false).describe(Language.EN).contains("cannot be read"));
         Files.writeString(root.resolve("pw"), "two\nlines\n");
         assertTrue(refused(external, false).describe(Language.EN).contains("one line"));
