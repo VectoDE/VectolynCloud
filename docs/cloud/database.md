@@ -1,6 +1,6 @@
 # Database
 
-`cloud/database` (`net.vectolyn.cloud.database`) prepares the database that LuckPerms and later the Vectolyn plugin use. It installs and secures a managed MariaDB, writes a compose file for Docker, checks an external server or picks the embedded H2 fallback. It also decides how many connections each service's pool may open.
+`cloud/database` (`net.vectolyn.cloud.database`) prepares the database that LuckPerms and later the Vectolyn plugin use. It installs and secures a managed MariaDB, writes a compose file for Docker, checks an external MariaDB, MySQL or PostgreSQL server or picks the embedded H2 fallback. It also decides how many connections each service's pool may open.
 
 The module does not start processes itself. In managed mode it says what to run, and `cloud/node` runs it through the `DatabaseProcesses` interface (see below).
 
@@ -8,8 +8,8 @@ The module does not start processes itself. In managed mode it says what to run,
 
 | Package | Content |
 |---|---|
-| `net.vectolyn.cloud.database` | `DatabaseProvisioner` and `DatabaseProvisioners` (one provisioner per mode), `DatabaseEndpoint`, `ConnectionBudget`, `DatabaseProcesses`, `DatabaseSecrets`, `HealthReport`, `StorageMethod`, `DatabaseException`, `ServerSetup`, `ExternalProvisioner`, `EmbeddedProvisioner` |
-| `sql` | `SqlQuoting`, `BootstrapStatements` (all setup SQL), `ConnectionTarget`, `TlsMode`, `ServerVersion`, `SqlConnector`, `SqlSession`, `JdbcConnector` |
+| `net.vectolyn.cloud.database` | `DatabaseProvisioner` and `DatabaseProvisioners` (one provisioner per mode), `DatabaseEndpoint`, `ConnectionBudget`, `DatabaseProcesses`, `DatabaseSecrets`, `HealthReport`, `StorageMethod`, `DatabaseException`, `ServerSetup`, `ExternalProvisioner`, `PostgresProvisioner`, `EmbeddedProvisioner` |
+| `sql` | `SqlQuoting`, `BootstrapStatements` (all setup SQL), `ConnectionTarget`, `TlsMode`, `ServerVersion`, `SqlConnector`, `SqlSession`, `JdbcConnector`, `JdbcSession`, `PostgresConnector`, `PostgresJdbcConnector`, `PostgresQuoting` |
 | `managed` | `ManagedMariaDbProvisioner`, `ManagedPlatform`, `MariaDbLayout`, `MariaDbConfigFile`, `MariaDbCommands`, `MariaDbBinaries`, `DownloadingMariaDbBinaries` |
 | `docker` | `DockerProvisioner`, `DockerComposeFile` |
 
@@ -26,6 +26,7 @@ The module does not start processes itself. In managed mode it says what to run,
 | `managed` | Downloads MariaDB, initialises the data directory, starts the server, secures it, creates database and user | the cloud |
 | `docker` | Writes `compose.database.yml`, then waits for the container and sets up database and user | the operator (Docker) |
 | `external` | Checks that the application user can log in and use its database. Never uses root. | the operator |
+| `postgresql` | Checks that the application user can log in to its PostgreSQL database and has the rights LuckPerms needs. Never uses a superuser. | the operator |
 | `h2` | Nothing to start. LuckPerms keeps its data in a local H2 file. | LuckPerms |
 
 ### Managed MariaDB
@@ -55,11 +56,31 @@ docker compose --env-file ../secrets/vectolyn.env -f compose.database.yml up -d
 
 The cloud then waits 20 seconds for the container. If it does not answer, `provision()` fails with this command in the message. Once it answers, the cloud sets up database and user like in managed mode.
 
-**Pterodactyl:** the cloud already runs inside a container there and has no Docker. Use `managed` (if the egg's image is glibc-based), `external` (a database from the panel) or `h2`. The setup assistant hides `docker` on Pterodactyl (`platform.pterodactyl`, see [launcher](launcher.md)).
+**Pterodactyl:** the cloud already runs inside a container there and has no Docker. Use `managed` (if the egg's image is glibc-based), `external` (a database from the panel), `postgresql` or `h2`. The setup assistant hides `docker` on Pterodactyl (`platform.pterodactyl`, see [launcher](launcher.md)).
 
 ### External
 
 For a MariaDB or MySQL server the operator runs. The cloud only connects as the application user with `VECTOLYN_DB_PASSWORD`, runs `USE <database>` and `SELECT 1`, reads the server version and `SELECT @@max_connections`. The connection budget follows that value (`ConnectionBudget.forServer`: 20 connections kept free, or a fifth on a server with fewer than 100). If the value cannot be read, the managed budget (150) is assumed and `notice()` says so; the node logs it as a warning. A server that allows too few connections for even one pool fails the check with `CONNECTION_BUDGET`. Whether it is MariaDB or MySQL decides `VECTOLYN_DB_STORAGE_METHOD` (`mariadb` or `mysql`). The operator creates database and user with at least the [rights](#rights) below.
+
+### PostgreSQL
+
+For a PostgreSQL server the operator runs (`database.mode: postgresql`). Like `external`, the cloud creates nothing there. `PostgresProvisioner` logs in as `database.user` with `VECTOLYN_DB_PASSWORD` to the database `database.name` and sends one query that reads the schema it works in (`current_schema()`), `has_database_privilege(..., 'CONNECT')`, `has_schema_privilege(..., 'USAGE')` and `'CREATE'` on that schema, whether the user is a superuser, `server_version_num` and `max_connections`. `VECTOLYN_DB_STORAGE_METHOD` becomes `postgresql`, LuckPerms' name for it. The default port in the setup assistant is 5432.
+
+- **Rights.** If a right is missing, the start fails with `RIGHTS` and the message lists the statements the owner of the database runs, with every name quoted (`PostgresQuoting`: `"name"`, `"` doubled, control characters and names over 63 bytes refused). Since PostgreSQL 15 the schema `public` no longer lets every user create tables, so on a fresh database this is usually needed:
+
+  ```sql
+  CREATE ROLE luckperms LOGIN PASSWORD '...';
+  CREATE DATABASE luckperms OWNER luckperms;
+  -- or, for an existing database owned by someone else:
+  GRANT CONNECT ON DATABASE luckperms TO luckperms;
+  GRANT USAGE, CREATE ON SCHEMA public TO luckperms;
+  ```
+
+  A user without a schema in its `search_path` fails with `SETTINGS` and the `ALTER ROLE ... SET search_path` to run.
+- **Notices.** A superuser works but gets a notice to use a user with only these rights. A server older than PostgreSQL 14 gets a notice that it is out of community support. Both go to the log as warnings, like an unknown `max_connections` (then the managed budget of 150 applies).
+- **Budget.** `max_connections` gives the budget as for `external` (`ConnectionBudget.forServer`).
+- **Connection.** `PostgresJdbcConnector` uses the PostgreSQL JDBC driver 42.7.14 (BSD-2-Clause). The URL holds host, port and the URL-encoded database only; user and password go in the connection properties. TLS: `sslmode=disable` only for loopback, `verify-full` for every other host, checked against the Java trust store (`DefaultJavaSSLFactory`) as with MariaDB, so no `~/.postgresql/root.crt` is needed. Connect, login and socket timeout 10 seconds, `preferQueryMode=simple`, `ApplicationName=VectolynCloud`.
+- **Not in this mode.** The cloud does not install, start or back up a PostgreSQL server: no managed or Docker PostgreSQL yet, and backups record the database as `manual` (dump it with `pg_dump`, see [backup.md](backup.md)). A cluster treats it like `external`: every node connects to the operator's server.
 
 ### H2 (embedded)
 
@@ -110,7 +131,7 @@ Result: 4.0.0 is usable. The managed integration test proves it against a real M
 | Placeholder | Value |
 |---|---|
 | `VECTOLYN_DB_HOST`, `VECTOLYN_DB_PORT`, `VECTOLYN_DB_NAME`, `VECTOLYN_DB_USER` | from the endpoint |
-| `VECTOLYN_DB_STORAGE_METHOD` | `mariadb`, `mysql` or `h2` |
+| `VECTOLYN_DB_STORAGE_METHOD` | `mariadb`, `mysql`, `postgresql` or `h2` |
 | `VECTOLYN_DB_POOL_SIZE` | from `ConnectionBudget`, normally `4` |
 
 `minimum-idle` stays at 2 in every LuckPerms config. All placeholders: [`templates/placeholders.md`](../../templates/placeholders.md).
@@ -131,5 +152,5 @@ The program in `arguments` is always an absolute path. Output goes to `logFile` 
 ## Tests
 
 - Unit tests: config file, command lines, platforms, all setup SQL, quoting and injection attempts, connection URL and TLS choice, version parsing, budget, compose file (parsed as YAML), every provisioner against a fake SQL server and fake processes.
-- Fuzz tests: `SqlQuotingFuzzTest`, `ServerVersionFuzzTest` (regression mode in every run, see [architecture](architecture.md#fuzz-tests)).
+- Fuzz tests: `SqlQuotingFuzzTest`, `ServerVersionFuzzTest`, `PostgresQuotingFuzzTest` (regression mode in every run, see [architecture](architecture.md#fuzz-tests)).
 - Integration (`@Tag("mariadb")`, not part of `./gradlew build`): `./gradlew :cloud:database:mariadbTest` downloads MariaDB, starts it in a temp folder on a free port and checks bind address, `max_connections`, removed anonymous users, remote root and `test` database, the exact grants, refused wrong passwords, that the application user cannot create databases or users or read `mysql.user`, clean shutdown, restart with kept data, and that no password reaches the log. `-PmariadbVersion=11.4` picks another series. The workflow `.github/workflows/managed-mariadb.yml` runs it weekly on Linux and Windows with Java 21 and 25, and on pull requests that change this module.

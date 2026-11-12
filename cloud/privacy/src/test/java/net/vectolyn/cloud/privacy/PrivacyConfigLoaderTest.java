@@ -41,7 +41,7 @@ class PrivacyConfigLoaderTest {
     void runtimeReadsTheFileAndDeletesDueEntries(@TempDir Path home) throws Exception {
         Files.createDirectories(home.resolve("config"));
         Files.writeString(home.resolve("config/privacy.yml"), "schema-version: 1\nip-bans:\n  retention-days: 7\n");
-        try (PrivacyRuntime runtime = PrivacyRuntime.open(home, Clock.systemUTC())) {
+        try (PrivacyRuntime runtime = PrivacyRuntime.open(home, Clock.systemUTC(), "0.1.0")) {
             assertEquals(7, runtime.config().ipBans().retentionDays());
             runtime.ipBans().ban("192.0.2.1", "test", null);
             runtime.start();

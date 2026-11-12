@@ -9,7 +9,7 @@ Software: Fabric Loader 0.20.1 on MC 26.3 with Fabric API, FabricProxy-Lite, Flo
 - `{{VECTOLYN_SERVER_PORT}}`, `{{VECTOLYN_SERVER_HOST}}`, `{{VECTOLYN_MANAGEMENT_SECRET}}` in `server.properties`
 - `{{VECTOLYN_FORWARDING_SECRET}}` in `config/FabricProxy-Lite.toml`
 - `{{VECTOLYN_DB_HOST}}`, `{{VECTOLYN_DB_PORT}}`, `{{VECTOLYN_DB_NAME}}`, `{{VECTOLYN_DB_USER}}`, `{{VECTOLYN_DB_PASSWORD}}` in `config/luckperms/luckperms.conf`
-- `{{VECTOLYN_DB_STORAGE_METHOD}}` (`mariadb`, `mysql` or `h2`) and `{{VECTOLYN_DB_POOL_SIZE}}` (pool size set centrally by the cloud, normally 4) in `config/luckperms/luckperms.conf`
+- `{{VECTOLYN_DB_STORAGE_METHOD}}` (`mariadb`, `mysql`, `postgresql` or `h2`) and `{{VECTOLYN_DB_POOL_SIZE}}` (pool size set centrally by the cloud, normally 4) in `config/luckperms/luckperms.conf`
 - `{{VECTOLYN_XMS}}`, `{{VECTOLYN_XMX}}` in `start.bat`
 - Generated file: `config/floodgate/key.pem` from `VECTOLYN_FLOODGATE_KEY_B64`
 

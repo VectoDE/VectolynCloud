@@ -12,6 +12,7 @@ import net.vectolyn.cloud.config.validation.ConfigNames;
  * <pre>
  * &lt;home&gt;/
  *   config/            cloud.yml, nodes.yml, monitor.yml, privacy.yml, backup.yml, software.lock.yml
+ *     schema/          JSON Schemas for editors
  *     groups/          &lt;group&gt;.yml
  *     tasks/           &lt;task&gt;.yml
  *   local/

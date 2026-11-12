@@ -63,7 +63,7 @@ public record DatabaseAccess(DatabaseMode mode, String host, int port, String da
                     secrets.get(GeneratedSecret.DB_ROOT_PASSWORD.key()).orElse(Secret.of("")), managedBase);
             case EXTERNAL -> new DatabaseAccess(DatabaseMode.EXTERNAL, config.host(), config.port(), config.name(),
                     config.user(), secrets.get(GeneratedSecret.DB_PASSWORD.key()).orElse(Secret.of("")), null);
-            case DOCKER, H2 -> new DatabaseAccess(config.mode(), config.host(), config.port(), config.name(), "", null,
+            case DOCKER, H2, POSTGRESQL -> new DatabaseAccess(config.mode(), config.host(), config.port(), config.name(), "", null,
                     null);
         };
     }

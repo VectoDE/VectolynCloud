@@ -116,7 +116,7 @@ public final class SetupChecks {
         if (db.mode() == DatabaseMode.DOCKER && env.pterodactyl()) {
             problems.add(SetupMessages.CHECK_DOCKER_ON_PTERODACTYL);
         }
-        if (db.mode() == DatabaseMode.EXTERNAL) {
+        if (db.mode().operatorServer()) {
             add(problems, host(db.host()));
             add(problems, port(db.port()));
             add(problems, identifier(db.name()));

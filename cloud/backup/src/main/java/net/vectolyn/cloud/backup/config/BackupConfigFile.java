@@ -115,6 +115,23 @@ public final class BackupConfigFile {
     }
 
     /**
+     * Parses and checks the content of {@code backup.yml}, for example from an imported
+     * configuration archive.
+     *
+     * @param content raw bytes (UTF-8)
+     * @return the settings
+     * @throws ConfigException with every problem found
+     */
+    public static BackupConfig parse(byte[] content) throws ConfigException {
+        BackupConfig config = ConfigYaml.read(FILE, content, FORMAT).value();
+        List<ConfigError> errors = validate(config);
+        if (!errors.isEmpty()) {
+            throw new ConfigException(errors);
+        }
+        return config;
+    }
+
+    /**
      * Writes {@link BackupConfig#defaults()} if the file does not exist yet, so operators find
      * every setting in one place.
      *

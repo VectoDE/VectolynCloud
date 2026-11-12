@@ -11,8 +11,10 @@ Die Dateien liegen in [`cloud/dist/`](../../cloud/dist):
 | `start.sh` | Startskript für Linux und macOS (bash 3.2 oder neuer) |
 | `start.bat`, `start.ps1` | Startskripte für Windows (Eingabeaufforderung, Windows PowerShell 5.1 oder PowerShell 7) |
 | `systemd/vectolyn-cloud.service` | systemd-Unit mit eigenem Benutzer und Härtung |
+| `systemd/install.sh` | installiert, aktualisiert und entfernt Unit und Programmdateien (`install`, `update`, `uninstall`) |
 | `docker/Dockerfile`, `docker/compose.yml`, `docker/setup.example.yml` | Container-Image und eine Compose-Datei mit MariaDB |
-| `pterodactyl/egg-vectolyn-cloud.json` | Pterodactyl-Egg |
+| `pterodactyl/egg-vectolyn-cloud.json` | Pterodactyl-Egg (PTDL_v2) |
+| `pelican/egg-vectolyn-cloud.json` | Pelican-Egg (PLCN_v3) |
 | `package.sh` | baut die Release-Archive (nutzt der Release-Workflow) |
 
 ## Was ein Release enthält
@@ -23,9 +25,11 @@ Der Release-Workflow ([`release.yml`](../../.github/workflows/release.yml)) läu
 |---|---|
 | `VectolynCloud.jar` | die Cloud, für `java -jar`, Docker und Pterodactyl |
 | `VectolynCloud-<version>-windows.zip` | `VectolynCloud.jar`, `start.bat`, `start.ps1` |
-| `VectolynCloud-<version>-linux-macos.tar.gz` | `VectolynCloud.jar`, `start.sh` (ausführbar) |
+| `VectolynCloud-<version>-linux-macos.tar.gz` | `VectolynCloud.jar`, `start.sh` (ausführbar), `vectolyn-cloud.service` und `install.sh` für systemd |
+| `VectolynCloud-<version>-templates.tar.gz` | die Server-Vorlagen des Repositorys (`templates/`: Proxy, Lobby, Survival, Creative, Mod, End, Minispiele, Legacy) zum Lesen, Kopieren und Ändern. Die Cloud trägt sie auch im Jar ([node.md](node.md#built-in-templates)) |
+| `setup.example.yml` | eine kommentierte Setup-Datei für `--setup-file` ([setup.de.md](setup.de.md)); ein Unit-Test hält sie gültig |
 | `VectolynCloud-<version>-banner.png`, `VectolynCloud-<version>-banner-2x.png` | das [Release-Banner](#release-banner) oben in den Release Notes, 1280 x 320 und 2560 x 640 |
-| `SHA256SUMS` | SHA-256 der fünf Dateien darüber |
+| `SHA256SUMS` | SHA-256 der sieben Dateien darüber |
 | `<datei>.sigstore.json` | cosign-Signatur-Bundle für jede Datei und für `SHA256SUMS` |
 | `vectolyn.intoto.jsonl` | SLSA-Build-Provenance für jede Datei aus `SHA256SUMS`, als Sigstore-Bundle der GitHub-Attestierung |
 
@@ -167,6 +171,21 @@ Für den Dauerbetrieb ein eigenes lokales Konto ohne Administratorrechte nehmen,
 
 ## Linux und VPS mit systemd
 
+Der Installer im Linux-Archiv erledigt alles Folgende für dich: Er legt den Benutzer an, lädt das Release herunter (oder nimmt das Archiv, das du ihm gibst), prüft es gegen `SHA256SUMS` (und gegen die cosign-Signatur, wenn `cosign` installiert ist), legt die Dateien ab, aktiviert den Dienst und lässt bei Updates deine Daten in Ruhe.
+
+```sh
+tar -xzf VectolynCloud-<version>-linux-macos.tar.gz
+cd VectolynCloud-<version>-linux-macos
+sudo ./install.sh install --archive ../VectolynCloud-<version>-linux-macos.tar.gz   # oder ohne --archive: lädt das neueste Release
+sudo ./install.sh update                    # später: ein neueres Release; stoppt den Dienst, behält das Home und das alte Jar als VectolynCloud.jar.previous
+sudo ./install.sh uninstall                 # entfernt Dienst und Programmdateien, behält /opt/vectolyn mit deinen Daten
+sudo ./install.sh uninstall --purge         # entfernt auch das Home und den Benutzer
+```
+
+Optionen: `--version <x.y.z[-dev]>` (ein festes Release statt des neuesten), `--prefix <dir>` (Standard `/opt/vectolyn`), `--user <name>` (Standard `vectolyn`), `--java-home <dir>` (ein Java 21+ außerhalb des `PATH`, als Drop-in geschrieben) und `--no-start`. Nach der Installation ist `/opt/vectolyn/install.sh` dasselbe Skript, `sudo /opt/vectolyn/install.sh update` geht also ohne das Archiv. Ein erster Start braucht ein Setup (einmal die Fragen von Hand oder eine Setup-Datei, siehe unten); ohne eins aktiviert der Installer den Dienst, lässt ihn aber gestoppt und sagt, was du schreiben musst.
+
+Dieselben Schritte von Hand:
+
 ```sh
 # einmalig als root
 useradd --system --user-group --home-dir /opt/vectolyn --create-home --shell /usr/sbin/nologin vectolyn
@@ -204,7 +223,7 @@ Was die Unit tut und warum:
 
 Unter systemd hat die Cloud keine Konsole: stdin ist leer, die Cloud läuft weiter. Befehle ohne Konsole kommen mit der API ([architecture.md](architecture.md)). Bis dahin die Cloud in `tmux` oder `screen` als Benutzer `vectolyn` starten, wenn du die Konsole brauchst.
 
-Die CI installiert diese Unit genau so auf einem echten systemd, startet sie, wartet auf den Cloud-Kanal, prüft den Benutzer und stoppt sie wieder mit sauberem Ergebnis.
+Die CI führt `install.sh` auf einem echten systemd aus (Installation, eine zweite Installation wird abgelehnt, Start, Update bei laufendem und bei gestopptem Dienst, Deinstallation, Purge) und prüft Benutzer, Cloud-Kanal und sauberen Stopp. Außerdem installiert sie frisch mit einer Setup-Datei für `database.mode: managed` und startet den Proxy: Die Cloud lädt MariaDB herunter und startet sie unter der echten Härtung der Unit. Der Job wartet auf `Database ready`, prüft, dass `mariadbd` im Cgroup der Unit als `vectolyn` läuft und dass nach `systemctl stop` kein `mariadbd` übrig bleibt. Die Härtung musste dafür nicht geändert werden.
 
 ## macOS
 
@@ -268,6 +287,16 @@ docker compose logs -f cloud
 - `stop_grace_period: 5m`, `pids_limit: 8192`, `no-new-privileges` und für die Cloud alle Capabilities entfernt.
 - `secrets/` und `setup.yml` in diesem Ordner stehen in `.gitignore`.
 
+## Pelican
+
+Pelican ist der aktiv weiterentwickelte Nachfolger des Pterodactyl-Panels. Es hat ein eigenes Egg, [`pelican/egg-vectolyn-cloud.json`](../../cloud/dist/pelican/egg-vectolyn-cloud.json) (Format PLCN_v3, mit `startup_commands`, `server.allocations.default.port` sowie den Images und dem Installer des Projekts `pelican-eggs`). Es tut genau dasselbe wie das Pterodactyl-Egg; die CI prüft, dass beide dasselbe sagen (Start, Variablen, Setup-Datei, Installer).
+
+1. Im Admin-Bereich unter Eggs Import wählen und die Datei auswählen (oder die Raw-URL angeben; das Egg hat eine `update_url`).
+2. Einen Server mit dem Egg anlegen und ihm je Port eine Allocation geben, wie unter Pterodactyl beschrieben.
+3. "Accept the Minecraft EULA" auf `true` setzen, wenn du sie akzeptierst, dann den Server starten.
+
+Alles unter Pterodactyl (Variablen, Datenbank, Speicher, PID-Limit) gilt auch für Pelican.
+
 ## Pterodactyl
 
 1. Im Admin-Bereich unter Nests [`egg-vectolyn-cloud.json`](../../cloud/dist/pterodactyl/egg-vectolyn-cloud.json) importieren (PTDL_v2).
@@ -305,7 +334,7 @@ Ein Cluster besteht aus einem Head und seinen Mitgliedern; Ablauf, Vertrauensmod
 
 ## Ein Release prüfen
 
-Jede Datei eines Releases ist mit cosign keyless signiert (Sigstore, die GitHub-Actions-Identität von `release.yml`). Die fünf Dateien aus `SHA256SUMS` (die Banner-Bilder eingeschlossen) haben zusätzlich eine Build-Provenance-Attestierung von GitHub (SLSA-Provenance, mit Sigstore signiert). `vectolyn.intoto.jsonl` ist dieselbe Attestierung als Datei, sie lässt sich also auch ohne Abfrage bei GitHub prüfen; `SHA256SUMS` selbst sichert seine Signatur ab. Ersetze `v0.2.0-dev` durch den Tag, den du heruntergeladen hast.
+Jede Datei eines Releases ist mit cosign keyless signiert (Sigstore, die GitHub-Actions-Identität von `release.yml`). Die sieben Dateien aus `SHA256SUMS` (die Banner-Bilder eingeschlossen) haben zusätzlich eine Build-Provenance-Attestierung von GitHub (SLSA-Provenance, mit Sigstore signiert). `vectolyn.intoto.jsonl` ist dieselbe Attestierung als Datei, sie lässt sich also auch ohne Abfrage bei GitHub prüfen; `SHA256SUMS` selbst sichert seine Signatur ab. Ersetze `v0.2.0-dev` durch den Tag, den du heruntergeladen hast.
 
 Jedes Release ist als `VectoDE/VectolynCloud` signiert, wie in den Befehlen unten. Die Provenance erzeugt `actions/attest-build-provenance` im Build-Job; der Release-Workflow pinnt jede Action auf einen Commit-SHA. Die Provenance-Datei ist ein Sigstore-Bundle, das `gh attestation verify --bundle` liest.
 
@@ -356,6 +385,17 @@ docker buildx imagetools inspect ghcr.io/vectode/vectolyn-cloud:0.2.0-dev --form
 
 Ob das Image das veröffentlichte Jar enthält: `docker run --rm --entrypoint sha256sum ghcr.io/vectode/vectolyn-cloud:0.2.0-dev /opt/vectolyn/VectolynCloud.jar` muss die Zeile aus `SHA256SUMS` ausgeben.
 
+## Release-Ablauf
+
+Jedes Release folgt denselben Schritten. Von Hand ist nur das Pushen des Tags.
+
+1. **In den Meilensteinen planen.** Die Arbeit einer Etappe liegt im Meilenstein `Stage N`; die Vorab-Stufen `Alpha`, `Beta` und `RC` sammeln, was bis zu dieser Qualitätsstufe erledigt sein muss. Ein Issue gehört zu genau einem Meilenstein.
+2. **Tag prüfen** (`bash tools/release-banner/check-tag.sh v1.0.0-rc.1`, siehe [Versionen und Tags](#versionen-und-tags)) und die Aufräum-Prüfung aus [openssf.de.md](../openssf.de.md).
+3. **Tag pushen.** `release.yml` beginnt mit der Tag-Prüfung und dann dem **Meilenstein-Gate**: `-dev` hat keins, `-alpha` verlangt `Alpha` ohne offene Issues, `-beta` zusätzlich `Beta`, `-rc` zusätzlich `RC`, `-lts` und stabile Releases dazu jeden Meilenstein `Stage ...`. Fehlt ein Meilenstein, stoppt das Release ebenfalls. Ist das Gate zu, nennt der Workflow die Meilensteine; Issues schließen oder verschieben, Tag löschen (`git push --delete origin <tag>`) und neu pushen.
+4. **Bauen, packen, signieren, attestieren.** Der volle Build führt alle Tests aus, `package.sh` schreibt die Release-Dateien, `SHA256SUMS` listet sie, cosign signiert jede Datei keyless, die Provenance wird attestiert. Das Image entsteht aus dem signierten Jar.
+5. **Changelog.** Die Release Notes beginnen mit Banner, Image und dem Link zur Prüfanleitung, danach der Changelog: die Commit-Titel seit dem vorigen Release-Tag, gruppiert nach Conventional-Commit-Typ (Breaking Changes, Features, Fixes, Performance, Security, Dokumentation, Build und Wartung, Sonstiges), je mit der Pull-Request-Nummer, und ein Link zum vollen Vergleich. Commit- und PR-Titel als Conventional Commits schreiben; die Prüfung `PR title` erzwingt das.
+6. **Prüfen.** `release-verify.yml` läuft wöchentlich und prüft das neueste Release so, wie ein Betreiber es täte (siehe [Ein Release prüfen](#ein-release-prüfen)). Nach einem Release von Hand starten: *Actions → Verify release → Run workflow*.
+
 ## Release-Banner
 
 Jedes Release beginnt mit einem Banner: die Wortmarke VectolynCloud, der Tag (`v1.0.0-beta.2`), ein Badge für den Zusatz (`-dev` PRE-RELEASE, `-alpha` ALPHA, `-beta` BETA, `-rc` RC, `-lts` LTS, bei stabilen Versionen keins; siehe [Versionen und Tags](#versionen-und-tags)), die erste Zeile der Tag-Nachricht als Titel und das Datum des Tags. Der Build-Job von `release.yml` zeichnet es mit [`tools/release-banner`](../../tools/release-banner) (reines Java, ohne Abhängigkeiten) auf den vorgerenderten Hintergrund aus [`branding/png/`](../../branding/png), in Pixelify Sans Bold aus [`branding/fonts/`](../../branding/fonts). Beide Größen sind Release-Dateien: Sie stehen in `SHA256SUMS`, sind signiert und von der Provenance abgedeckt wie die anderen, und die Release Notes zeigen die 2x-Datei.
@@ -381,10 +421,13 @@ Genau das, was das Release für einen lokal vorhandenen Tag zeigen wird, erzeugt
 |---|---|---|
 | Startskripte | Linux, macOS, Windows (PowerShell 5.1), alle Fälle oben | |
 | Release-Archive | mit `package.sh` gebaut, zweimal gebaut und verglichen, entpackt und gestartet | den Upload ins Release |
-| systemd-Unit | `systemd-analyze verify`, echter Start und Stopp unter Ubuntu | lang laufende Server und die verwaltete MariaDB unter der Härtung |
+| systemd-Unit und Installer | `systemd-analyze verify`, `install.sh` Installation, Update, Deinstallation und Purge, echter Start und Stopp unter Ubuntu, verwaltete MariaDB hoch und runter unter der Härtung | lang laufende Server, der Download-Weg des Installers (braucht ein veröffentlichtes Release mit dem Installer im Archiv) |
 | Image | aus den Quellen und über den Release-Weg, amd64 und arm64, Start als UID 1000, root abgelehnt, Healthcheck, sauberes `docker stop` | Push nach GHCR, cosign-Signatur, Attestierungen, die `latest`-Regel |
 | compose.yml | `docker compose config`; ein vollständiges `up --wait` mit MariaDB (beide Healthchecks), Besitzer des Volumes, `down` | der Pull von GHCR (CI nutzt das lokal gebaute Image) |
-| Egg | Struktur, Variablen, Regeln gegen ihre Standardwerte, die Setup-Datei, die Wings schreiben würde, ShellCheck des Installers | Import in ein Panel, den Download des Installers, einen Lauf unter Wings |
+| Eggs (Pterodactyl und Pelican) | Struktur, Variablen, Regeln gegen ihre Standardwerte, die Setup-Datei, die Wings schreiben würde, beide Eggs sagen dasselbe, ShellCheck des Installers; der Installer läuft im Installer-Image des Panels gegen das neueste Release (prüft SHA-256, lehnt eine nicht vorhandene Version ab), und der Startbefehl läuft im Java-Image des Panels, bis der Cloud-Kanal steht, und endet sauber | der Import in ein Panel, das Variablenformular des Panels, ein Lauf unter echtem Wings |
 | Release-Tag | Unit-Tests jeder Regel; `check-tag.sh` auf jeder erlaubten Form (Kanal und Vorab-Kennzeichen) und jeder abgelehnten Form (der Grund) | die Prüfung eines gepushten Tags, das Vorab-Kennzeichen und `latest` auf GitHub und GHCR |
 | Release-Banner | Unit-Tests (Badge je Zusatz, Kürzen des Titels, Größen, bytegleiche Ausgabe); das Release-Skript auf lokalen Tags (jedes Badge, mit Titel, leere Nachricht, nur Signatur, Lightweight, Tags, die die Regeln verletzen), zweimal erzeugt und verglichen | den Abruf des Tags von GitHub und das Bild in den veröffentlichten Notes |
+| Release-Gate und Changelog | das Meilenstein-Gate für jeden Kanal (offen, geschlossen, fehlend, unbekannt) und der Changelog (Abschnitte, Breaking Changes, Bereich, erstes Release) auf Testdaten | Gate und Changelog auf den echten Meilensteinen und der Historie eines Tags |
+| Release-Dateien | `package.sh` baut die sieben Dateien, zweimal, byte-identisch; jede Vorlage des Repositorys steckt im Vorlagen-Archiv | der Upload zum Release |
+| Signiertes Release | `release-verify.yml` wöchentlich und bei jeder Änderung am Release-Workflow: `SHA256SUMS`, die cosign-Signatur jeder Datei, die GitHub-Provenance des Jars (von GitHub und aus `vectolyn.intoto.jsonl`), Signatur, Provenance und SBOM des Images, das Jar im Image und das bewegliche Tag `dev`, jeweils gegen das neueste veröffentlichte Release | das Signieren und Attestieren selbst, das nur bei einem Tag läuft |
 | Release-Workflow | actionlint | Signieren, Provenance und Veröffentlichen bei einem Tag |

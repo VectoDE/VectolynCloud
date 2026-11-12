@@ -640,7 +640,12 @@ paths:
         428 precondition-required); with the ETag of a GET, or `*`, an existing file is replaced
         (412 precondition-failed if it changed). At most 48 KiB (413 file-too-large). Folders on the
         way are created. Written atomically. On a cluster member 409 managed-by-head: the templates
-        come from the head.
+        come from the head. Only UTF-8 text configuration is written: 422 file-not-editable unless
+        the name ends in .yml, .yaml, .toml, .json, .properties, .txt or .conf (case ignored) and no
+        folder on the way is plugins, mods, libraries, versions, bundler or cache (case ignored);
+        422 binary-content for Base64 or text with NUL; 422 secret-placeholder if the content
+        holds a secret placeholder ({{VECTOLYN_FORWARDING_SECRET}}, any name with SECRET, PASSWORD,
+        PASS, KEY or TOKEN) more often than the file does now.
       operationId: putTemplateFile
       parameters: [{$ref: "#/components/parameters/IfMatch"}]
       requestBody:
@@ -653,7 +658,7 @@ paths:
               additionalProperties: false
               properties:
                 content: {type: string, maxLength: 65536}
-                encoding: {type: string, enum: [utf-8, base64], default: utf-8}
+                encoding: {type: string, enum: [utf-8], default: utf-8, description: "base64 is refused (422 binary-content)"}
       responses:
         "200":
           description: Replaced
@@ -965,7 +970,7 @@ components:
         invalid-query, confirmation-required, subprotocol-required; 401 unauthorized; 403 missing-scope,
         origin-not-allowed; 404 not-found; 405 method-not-allowed; 409 conflict;
         412 precondition-failed; 413 body-too-large; 415 unsupported-media-type; 422 invalid-config,
-        invalid; 426 upgrade-required; 429 rate-limited (Retry-After); 500 io-error,
+        invalid, file-not-editable, binary-content, secret-placeholder; 426 upgrade-required; 429 rate-limited (Retry-After); 500 io-error,
         internal-error; 501 not-available; 503 shutting-down, busy, unavailable.
       content:
         application/json:

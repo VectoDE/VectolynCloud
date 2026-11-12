@@ -37,8 +37,73 @@ public final class TemplatePaths {
     private static final List<String> SECRET_SUFFIXES = List.of(".env", ".secret", ".pem", ".key", ".p12", ".pfx",
             ".jks", ".keystore", ".kdbx");
     private static final Set<String> SECRET_FOLDERS = Set.of("secrets", ".git", ".ssh", ".gnupg");
+    /**
+     * Endings of the files the API may write: text configuration only. {@code .conf} is in because
+     * the shipped templates carry one ({@code config/luckperms/luckperms.conf}); {@code .ini},
+     * scripts, archives and libraries are not.
+     */
+    public static final List<String> EDITABLE_EXTENSIONS = List.of(".yml", ".yaml", ".toml", ".json", ".properties",
+            ".txt", ".conf");
+    /** Folders a server loads code from; nothing inside them is written through the API. */
+    public static final Set<String> CODE_FOLDERS = Set.of("plugins", "mods", "libraries", "versions", "bundler",
+            "cache");
+    /** A Windows short name ({@code LIBRAR~1}) could stand for a code folder. */
+    private static final Pattern SHORT_NAME = Pattern.compile(".*~[0-9].*");
 
     private TemplatePaths() {
+    }
+
+    /**
+     * Whether the API may write a file at this path (the panel's editor): a {@linkplain #isSafePath
+     * safe path} that does not {@linkplain #looksSecret look like a secret}, whose name ends in one
+     * of {@link #EDITABLE_EXTENSIONS} and none of whose folders is one of {@link #CODE_FOLDERS}.
+     * Case is ignored everywhere ({@code Plugins/}, {@code .JAR}, {@code .Yml}). A segment that looks
+     * like a Windows short name ({@code ~} and a digit) is refused too. Reading is not limited by
+     * this; the cluster mirror carries every safe path.
+     *
+     * @param path relative path inside the template
+     * @return whether the API may write it
+     */
+    public static boolean isEditablePath(String path) {
+        if (!isSafePath(path) || looksSecret(path)) {
+            return false;
+        }
+        String[] segments = path.split("/", -1);
+        for (String segment : segments) {
+            if (SHORT_NAME.matcher(segment).matches()) {
+                return false;
+            }
+        }
+        for (int i = 0; i < segments.length - 1; i++) {
+            if (isCodeFolder(segments[i])) {
+                return false;
+            }
+        }
+        String name = fold(segments[segments.length - 1]);
+        for (String extension : EDITABLE_EXTENSIONS) {
+            if (name.endsWith(extension) && name.length() > extension.length()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether a folder is one a server loads code from ({@link #CODE_FOLDERS}), case ignored.
+     *
+     * @param name the folder's name
+     * @return whether it is a code folder
+     */
+    public static boolean isCodeFolder(String name) {
+        return CODE_FOLDERS.contains(fold(name));
+    }
+
+    /**
+     * Case folding that also catches characters whose upper case is ASCII (the long {@code ſ} is
+     * an {@code S}), as file systems that ignore case compare that way.
+     */
+    private static String fold(String text) {
+        return text.toUpperCase(Locale.ROOT).toLowerCase(Locale.ROOT);
     }
 
     /**
