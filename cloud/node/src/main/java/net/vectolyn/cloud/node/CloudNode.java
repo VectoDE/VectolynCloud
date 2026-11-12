@@ -473,8 +473,9 @@ public final class CloudNode implements AutoCloseable {
 
         // Player counts of the bridges and proxies, memory of the node from the monitor
         // (docs/cloud/scaling.md); the configuration is the same one the console and the API change.
-        Autoscaler scaler = Autoscaler.create(ScalingTarget.of(services, channel), config::snapshot,
-                ScalingSignals.of(monitoring.monitor(), channel.players(), channel::proxyWatches, Clock.systemUTC()));
+        ScalingSignals signals = ScalingSignals.of(monitoring.monitor(), channel.players(), channel::proxyWatches,
+                Clock.systemUTC());
+        Autoscaler scaler = Autoscaler.create(ScalingTarget.of(services, channel), config::snapshot, signals);
         services.addListener(scaler);
         // Decisions as data: scaling events for the API, scale-ups and scale-downs for Prometheus.
         scaler.addListener(api);
@@ -489,6 +490,9 @@ public final class CloudNode implements AutoCloseable {
         // come from the head, and console, setup and API cannot change them here.
         ClusterService cluster = ClusterService.openOrStandalone(new ClusterPaths(home), new NodeId(nodeId),
                 settings.launcherVersion(), config, VersionPolicy.sameVersion(), Clock.systemUTC());
+        // What the head places services by: memory budget and services of this node (cluster.md#placement).
+        cluster.statusSource(() -> ClusterStatusReport.of(config.snapshot(), nodeId, services.services(),
+                signals.read().memory()));
         return new Ops(tokenFile, monitoring, privacy, backups, api, apiServer(home, config, secrets, api, tokens), scaler, cluster);
     }
 
