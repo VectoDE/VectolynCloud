@@ -43,6 +43,7 @@ import net.vectolyn.cloud.monitor.config.MonitorConfigLoader;
 import net.vectolyn.cloud.privacy.IpBanStore;
 import net.vectolyn.cloud.privacy.PrivacyConfigLoader;
 import net.vectolyn.cloud.privacy.PrivacyRuntime;
+import net.vectolyn.cloud.privacy.StatisticsCollector;
 import net.vectolyn.cloud.node.ops.NodeApi;
 import net.vectolyn.cloud.node.ops.NodeBackups;
 import net.vectolyn.cloud.node.ops.NodeMonitoring;
@@ -436,9 +437,9 @@ public final class CloudNode implements AutoCloseable {
         directory.attach(monitoring.monitor());
         PrivacyRuntime privacy;
         try {
-            privacy = PrivacyRuntime.open(home.root(), Clock.systemUTC());
-        } catch (IpBanStore.FormatException e) {
-            throw new IOException("state/ip-bans.json is not a valid ban list", e);
+            privacy = PrivacyRuntime.open(home.root(), Clock.systemUTC(), settings.launcherVersion());
+        } catch (IpBanStore.FormatException | StatisticsCollector.FormatException e) {
+            throw new IOException("state/ip-bans.json or state/statistics.json is damaged", e);
         }
         services.addListener(directory);
         channel.statusListener(monitoring.monitor()::statusReported);
@@ -454,7 +455,16 @@ public final class CloudNode implements AutoCloseable {
         NodeApi api = new NodeApi(services, channel, nodeId, settings.launcherVersion(), Instant.now(),
                 redactor::redact, Optional.of(new BackupServiceAccess(backups)));
         services.addListener(api);
-        channel.playerListener(api);
+        // The API hears every player event; the statistics count playtime, logins and players per
+        // game mode (the group of the server the player is on), without keeping who the player is.
+        channel.playerListener((kind, player) -> {
+            api.changed(kind, player);
+            if ("leave".equals(kind)) {
+                privacy.playerLeft(player.uuid());
+            } else {
+                services.find(player.service()).ifPresent(info -> privacy.playerArrived(player.uuid(), info.group()));
+            }
+        });
 
         // Player counts of the bridges and proxies, memory of the node from the monitor
         // (docs/cloud/scaling.md); the configuration is the same one the console and the API change.
