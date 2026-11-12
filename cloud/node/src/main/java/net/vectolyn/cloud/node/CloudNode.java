@@ -7,6 +7,7 @@ import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -335,7 +336,7 @@ public final class CloudNode implements AutoCloseable {
             }
             SecretStore secrets = new SecretStore(home);
             secrets.ensureGenerated(new SecretGenerator());
-            fileLog = openCloudLog(home, secrets);
+            fileLog = openCloudLog(home, secrets, config);
             ConfigSnapshot loaded = config.snapshot();
             StartupReport.step(StartupReport.Step.CONFIGURATION, StartupReport.Status.OK, loaded.groups().size()
                     + " groups, " + loaded.tasks().size() + " tasks, node " + loaded.cloud().nodeId()
@@ -591,7 +592,7 @@ public final class CloudNode implements AutoCloseable {
      * Opens {@code logs/cloud.log} on the root logger, with the secrets taken out of every line. A
      * problem leaves the node without the file, never without its start.
      */
-    private static LogHandlers.@Nullable FileHandler openCloudLog(CloudHome home, SecretStore secrets) {
+    private static LogHandlers.@Nullable FileHandler openCloudLog(CloudHome home, SecretStore secrets, ConfigService config) {
         RedactingFilter redactor;
         try {
             redactor = secrets.redactingFilter();
@@ -608,7 +609,8 @@ public final class CloudNode implements AutoCloseable {
             }
         }
         try {
-            LogHandlers.FileHandler handler = LogHandlers.file(home.logsDir(), redactor::redact);
+            LogHandlers.FileHandler handler = LogHandlers.file(home.logsDir(), redactor::redact,
+                    () -> config.snapshot().cloud().logsOrDefault(), Clock.system(ZoneId.systemDefault()));
             Logger.getLogger("").addHandler(handler);
             return handler;
         } catch (IOException | RuntimeException e) {

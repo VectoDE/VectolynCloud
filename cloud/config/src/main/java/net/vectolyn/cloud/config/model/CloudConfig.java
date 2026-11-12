@@ -23,13 +23,15 @@ import org.jspecify.annotations.Nullable;
  * @param api           REST and WebSocket API
  * @param branding      what the network shows of VectolynCloud; {@code null} (a file from before the
  *                      section existed) for {@link BrandingConfig#defaults()}
+ * @param logs          how long log files are kept; {@code null} (a file from before the section
+ *                      existed) for {@link LogsConfig#defaults()}
  */
 @JsonPropertyOrder({"schema-version", "network-name", "language", "eula-accepted", "setup-complete", "node-id",
-        "fallback-group", "servers", "proxy", "legacy-proxy", "database", "api", "branding"})
+        "fallback-group", "servers", "proxy", "legacy-proxy", "database", "api", "branding", "logs"})
 public record CloudConfig(int schemaVersion, String networkName, Language language, boolean eulaAccepted,
                           boolean setupComplete, String nodeId, @Nullable String fallbackGroup, WantedServers servers,
                           ProxyConfig proxy, LegacyProxyConfig legacyProxy, DatabaseConfig database, ApiConfig api,
-                          BrandingConfig branding) {
+                          BrandingConfig branding, LogsConfig logs) {
 
     /** Current version of the {@code cloud.yml} format. */
     public static final int SCHEMA_VERSION = 1;
@@ -41,7 +43,7 @@ public record CloudConfig(int schemaVersion, String networkName, Language langua
     public static CloudConfig defaults() {
         return new CloudConfig(SCHEMA_VERSION, "Vectolyn", Language.EN, false, false, NodeConfig.DEFAULT_ID, null,
                 WantedServers.all(), ProxyConfig.defaults(), LegacyProxyConfig.defaults(), DatabaseConfig.defaults(),
-                ApiConfig.defaults(), BrandingConfig.defaults());
+                ApiConfig.defaults(), BrandingConfig.defaults(), LogsConfig.defaults());
     }
 
     /** {@code fallback-group}, or {@link #DEFAULT_FALLBACK_GROUP} if the file has none. */
@@ -54,75 +56,86 @@ public record CloudConfig(int schemaVersion, String networkName, Language langua
         return branding == null ? BrandingConfig.defaults() : branding;
     }
 
+    /** {@code logs}, or {@link LogsConfig#defaults()} (14 days) if the file has none. */
+    public LogsConfig logsOrDefault() {
+        return logs == null ? LogsConfig.defaults() : logs;
+    }
+
     /** A copy with another network name. */
     public CloudConfig withNetworkName(String value) {
         return new CloudConfig(schemaVersion, value, language, eulaAccepted, setupComplete, nodeId, fallbackGroup,
-                servers, proxy, legacyProxy, database, api, branding);
+                servers, proxy, legacyProxy, database, api, branding, logs);
     }
 
     /** A copy with another language. */
     public CloudConfig withLanguage(Language value) {
         return new CloudConfig(schemaVersion, networkName, value, eulaAccepted, setupComplete, nodeId, fallbackGroup,
-                servers, proxy, legacyProxy, database, api, branding);
+                servers, proxy, legacyProxy, database, api, branding, logs);
     }
 
     /** A copy with the EULA switch set. */
     public CloudConfig withEulaAccepted(boolean value) {
         return new CloudConfig(schemaVersion, networkName, language, value, setupComplete, nodeId, fallbackGroup,
-                servers, proxy, legacyProxy, database, api, branding);
+                servers, proxy, legacyProxy, database, api, branding, logs);
     }
 
     /** A copy with the setup switch set. */
     public CloudConfig withSetupComplete(boolean value) {
         return new CloudConfig(schemaVersion, networkName, language, eulaAccepted, value, nodeId, fallbackGroup,
-                servers, proxy, legacyProxy, database, api, branding);
+                servers, proxy, legacyProxy, database, api, branding, logs);
     }
 
     /** A copy with another node id. */
     public CloudConfig withNodeId(String value) {
         return new CloudConfig(schemaVersion, networkName, language, eulaAccepted, setupComplete, value, fallbackGroup,
-                servers, proxy, legacyProxy, database, api, branding);
+                servers, proxy, legacyProxy, database, api, branding, logs);
     }
 
     /** A copy with another fallback group; {@code null} for {@link #DEFAULT_FALLBACK_GROUP}. */
     public CloudConfig withFallbackGroup(String value) {
         return new CloudConfig(schemaVersion, networkName, language, eulaAccepted, setupComplete, nodeId, value,
-                servers, proxy, legacyProxy, database, api, branding);
+                servers, proxy, legacyProxy, database, api, branding, logs);
     }
 
     /** A copy with other wanted servers. */
     public CloudConfig withServers(WantedServers value) {
         return new CloudConfig(schemaVersion, networkName, language, eulaAccepted, setupComplete, nodeId, fallbackGroup,
-                value, proxy, legacyProxy, database, api, branding);
+                value, proxy, legacyProxy, database, api, branding, logs);
     }
 
     /** A copy with another proxy listener. */
     public CloudConfig withProxy(ProxyConfig value) {
         return new CloudConfig(schemaVersion, networkName, language, eulaAccepted, setupComplete, nodeId, fallbackGroup,
-                servers, value, legacyProxy, database, api, branding);
+                servers, value, legacyProxy, database, api, branding, logs);
     }
 
     /** A copy with other legacy proxy settings. */
     public CloudConfig withLegacyProxy(LegacyProxyConfig value) {
         return new CloudConfig(schemaVersion, networkName, language, eulaAccepted, setupComplete, nodeId, fallbackGroup,
-                servers, proxy, value, database, api, branding);
+                servers, proxy, value, database, api, branding, logs);
     }
 
     /** A copy with another database. */
     public CloudConfig withDatabase(DatabaseConfig value) {
         return new CloudConfig(schemaVersion, networkName, language, eulaAccepted, setupComplete, nodeId, fallbackGroup,
-                servers, proxy, legacyProxy, value, api, branding);
+                servers, proxy, legacyProxy, value, api, branding, logs);
     }
 
     /** A copy with other API settings. */
     public CloudConfig withApi(ApiConfig value) {
         return new CloudConfig(schemaVersion, networkName, language, eulaAccepted, setupComplete, nodeId, fallbackGroup,
-                servers, proxy, legacyProxy, database, value, branding);
+                servers, proxy, legacyProxy, database, value, branding, logs);
     }
 
     /** A copy with other branding settings; {@code null} for {@link BrandingConfig#defaults()}. */
     public CloudConfig withBranding(BrandingConfig value) {
         return new CloudConfig(schemaVersion, networkName, language, eulaAccepted, setupComplete, nodeId, fallbackGroup,
-                servers, proxy, legacyProxy, database, api, value);
+                servers, proxy, legacyProxy, database, api, value, logs);
+    }
+
+    /** A copy with other log settings; {@code null} for {@link LogsConfig#defaults()}. */
+    public CloudConfig withLogs(LogsConfig value) {
+        return new CloudConfig(schemaVersion, networkName, language, eulaAccepted, setupComplete, nodeId, fallbackGroup,
+                servers, proxy, legacyProxy, database, api, branding, value);
     }
 }

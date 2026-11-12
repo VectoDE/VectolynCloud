@@ -53,7 +53,7 @@ MariaDB publishes no server build for these systems, so `managed` mode falls bac
 Wings limits each container to 512 processes and threads by default. Raise `docker.container_pid_limit` in `/etc/pterodactyl/config.yml`, for example to 4096. Details in [Operations](Operations).
 
 **Where are the logs?**
-`logs/cloud.log` in the cloud home, with the last five runs kept as `cloud.1.log` to `cloud.5.log`, and `logs/services/<id>.log` for each server.
+`logs/cloud.log` in the cloud home, and `logs/services/<id>.log` for each server. Older runs and days are kept as `cloud-<date>.log` and `<id>-<date>.log` for 14 days; `logs.retention-days` in `cloud.yml` changes that.
 
 **Where do I report a security problem?**
 Privately, see [SECURITY.md](https://github.com/VectoDE/VectolynCloud/blob/main/SECURITY.md).

@@ -15,6 +15,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -823,7 +824,8 @@ public final class ServiceManager implements AutoCloseable {
                         snapshot.cloud().fallbackGroupOrDefault(), snapshot.cloud().brandingOrDefault().poweredBy(),
                         cloudVersion);
             }
-            log = ServiceOutput.openLog(home.resolve(ServiceOutput.LOG_DIR), spec.id().value());
+            log = ServiceOutput.openLog(home.resolve(ServiceOutput.LOG_DIR), spec.id().value(),
+                    () -> config.get().cloud().logsOrDefault(), clock.withZone(ZoneId.systemDefault()));
 
             Process process;
             synchronized (lock) {

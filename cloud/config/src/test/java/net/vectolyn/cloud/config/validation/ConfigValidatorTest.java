@@ -24,6 +24,7 @@ import net.vectolyn.cloud.config.model.GroupConfig;
 import net.vectolyn.cloud.config.model.HeapConfig;
 import net.vectolyn.cloud.config.model.Language;
 import net.vectolyn.cloud.config.model.LegacyProxyConfig;
+import net.vectolyn.cloud.config.model.LogsConfig;
 import net.vectolyn.cloud.config.model.MemoryReserve;
 import net.vectolyn.cloud.config.model.MemorySize;
 import net.vectolyn.cloud.config.model.NodeConfig;
@@ -108,6 +109,17 @@ class ConfigValidatorTest {
         for (String flag : List.of("-XX:+UseG1GC", "-Xss1M", "-Dcom.mojang.eula.agree=true", "-javaagent:spark.jar")) {
             assertEquals(false, ProcessConfig.isReservedJvmFlag(flag), flag);
         }
+    }
+
+    @Test
+    void logRetentionAndFileSizeMustBeInRange() {
+        assertEquals(Set.of(), codes(withCloud(valid.cloud().withLogs(LogsConfig.defaults()))));
+        assertEquals(Set.of(), codes(withCloud(valid.cloud().withLogs(null))));
+        assertEquals(Set.of(), codes(withCloud(valid.cloud().withLogs(new LogsConfig(3650, MemorySize.parse("10G"))))));
+        assertEquals(Set.of("cloud.yml logs.retention-days OUT_OF_RANGE", "cloud.yml logs.max-file-size OUT_OF_RANGE"),
+                codes(withCloud(valid.cloud().withLogs(new LogsConfig(0, MemorySize.parse("11G"))))));
+        assertEquals(Set.of("cloud.yml logs.retention-days OUT_OF_RANGE", "cloud.yml logs.max-file-size REQUIRED"),
+                codes(withCloud(valid.cloud().withLogs(new LogsConfig(3651, null)))));
     }
 
     @Test
@@ -467,9 +479,9 @@ class ConfigValidatorTest {
 
     @Test
     void missingSectionsAreRequired() {
-        // branding may be missing: a file from before the section counts as powered-by on.
+        // branding and logs may be missing: a file from before the section gets the defaults.
         CloudConfig empty = new CloudConfig(1, null, null, false, false, null, null, null, null, null, null, null,
-                null);
+                null, null);
         assertEquals(Set.of(
                 "cloud.yml network-name REQUIRED", "cloud.yml language REQUIRED", "cloud.yml node-id REQUIRED",
                 "cloud.yml servers REQUIRED", "cloud.yml proxy REQUIRED", "cloud.yml legacy-proxy REQUIRED",

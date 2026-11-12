@@ -155,7 +155,7 @@ Everything the cloud keeps is below the home ([layout](architecture.md#cloud-hom
 
 **Windows console.** `start.bat` and `start.ps1` switch the console to UTF-8 (`chcp 65001`) and start Java with `-Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8`, so umlauts in the log are right. If you start `java -jar VectolynCloud.jar` by hand in an old console, set the same.
 
-**Logs.** `logs/cloud.log` is the log of the cloud itself, in UTF-8 with the full stack traces (secrets redacted); each start begins a new file and keeps the last five as `cloud.1.log` to `cloud.5.log`. The log of each server is `logs/services/<id>.log`. What a start prints on screen: [node.md](node.md#start-output).
+**Logs.** `logs/cloud.log` is the log of the cloud itself, in UTF-8 with the full stack traces (secrets redacted); each start, each midnight and a file of `logs.max-file-size` (default 100M) begin a new file, and the old one is kept as `cloud-<date>.log` for `logs.retention-days` days (default 14, [config.md](config.md#cloudyml)). The log of each server is `logs/services/<id>.log`, rotated and deleted the same way. What a start prints on screen: [node.md](node.md#start-output).
 
 ## Windows
 

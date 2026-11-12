@@ -221,7 +221,10 @@ class ServiceLifecycleIntegrationTest {
                 TestNetwork.await("lobby-1 running again", WAIT, () -> state(manager, lobby) == ServiceState.RUNNING);
                 assertEquals("fake world of lobby-1", Files.readString(lobbyDir.resolve("world/level.dat")));
                 assertNotEquals(token, Files.readString(lobbyDir.resolve("token.txt")));
-                assertTrue(Files.exists(net.home.resolve("logs/services/lobby-1.1.log")), "previous log is kept");
+                try (java.util.stream.Stream<Path> logs = Files.list(net.home.resolve("logs/services"))) {
+                    assertTrue(logs.anyMatch(p -> p.getFileName().toString().matches(
+                            "lobby-1-\\d{4}-\\d{2}-\\d{2}\\.log")), "previous log is kept, named by its date");
+                }
             }
             assertTrue(recorder.of("lobby-1").getLast().equalsIgnoreCase("stopped"), "close() stops everything");
             assertTrue(recorder.of("proxy-1").getLast().equalsIgnoreCase("stopped"));

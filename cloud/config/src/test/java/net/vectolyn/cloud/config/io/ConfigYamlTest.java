@@ -19,6 +19,8 @@ import net.vectolyn.cloud.config.model.DatabaseConfig;
 import net.vectolyn.cloud.config.model.DatabaseMode;
 import net.vectolyn.cloud.config.model.GroupConfig;
 import net.vectolyn.cloud.config.model.Language;
+import net.vectolyn.cloud.config.model.LogsConfig;
+import net.vectolyn.cloud.config.model.MemorySize;
 import net.vectolyn.cloud.config.model.NodesConfig;
 import net.vectolyn.cloud.config.model.ProcessConfig;
 import net.vectolyn.cloud.config.model.RestartConfig;
@@ -493,6 +495,26 @@ class ConfigYamlTest {
         assertTrue(empty.brandingOrDefault().poweredBy(), "an empty section keeps the line, like a missing one");
         assertEquals(ErrorCode.INVALID_VALUE, assertThrows(ConfigException.class,
                 () -> read(yaml.replace("powered-by: true", "powered-by: \"no\""), ConfigFormat.CLOUD))
+                .errors().getFirst().code());
+    }
+
+    private static final String NL = "\n";
+
+    @Test
+    void logsAreWrittenWithTheirDefaultsAndMissingFieldsTakeThem() throws ConfigException {
+        String yaml = new String(ConfigYaml.write(CloudConfig.defaults()), StandardCharsets.UTF_8);
+        String section = "logs:" + NL + "  retention-days: 14" + NL + "  max-file-size: \"100M\"" + NL;
+        assertTrue(yaml.contains(section), yaml);
+        CloudConfig without = read(yaml.replace(section, ""), ConfigFormat.CLOUD);
+        assertNull(without.logs());
+        assertEquals(LogsConfig.defaults(), without.logsOrDefault());
+        CloudConfig empty = read(yaml.replace(section, "logs: {}" + NL), ConfigFormat.CLOUD);
+        assertEquals(LogsConfig.defaults(), empty.logs());
+        CloudConfig month = read(yaml.replace("retention-days: 14", "retention-days: 30")
+                .replace("  max-file-size: \"100M\"" + NL, ""), ConfigFormat.CLOUD);
+        assertEquals(new LogsConfig(30, MemorySize.ofMegabytes(100)), month.logs());
+        assertEquals(ErrorCode.INVALID_VALUE, assertThrows(ConfigException.class,
+                () -> read(yaml.replace("max-file-size: \"100M\"", "max-file-size: 100K"), ConfigFormat.CLOUD))
                 .errors().getFirst().code());
     }
 }

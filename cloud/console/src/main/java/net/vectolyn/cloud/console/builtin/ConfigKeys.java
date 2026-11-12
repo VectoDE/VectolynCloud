@@ -18,6 +18,7 @@ import net.vectolyn.cloud.config.model.DatabaseConfig;
 import net.vectolyn.cloud.config.model.DatabaseMode;
 import net.vectolyn.cloud.config.model.Language;
 import net.vectolyn.cloud.config.model.LegacyProxyConfig;
+import net.vectolyn.cloud.config.model.MemorySize;
 import net.vectolyn.cloud.config.model.ProxyConfig;
 import net.vectolyn.cloud.config.model.ServerKind;
 import net.vectolyn.cloud.config.model.TlsConfig;
@@ -145,6 +146,21 @@ final class ConfigKeys {
             boolean value = Values.bool(FILE, "branding.powered-by", v);
             return snapshot -> snapshot.withCloud(snapshot.cloud().withBranding(new BrandingConfig(value)));
         }, bool);
+        add("logs.retention-days", c -> String.valueOf(c.logsOrDefault().retentionDays()), (s, v) -> {
+            int days = Values.integer(FILE, "logs.retention-days", v);
+            return snapshot -> snapshot.withCloud(snapshot.cloud().withLogs(
+                    snapshot.cloud().logsOrDefault().withRetentionDays(days)));
+        }, List.of());
+        add("logs.max-file-size", c -> c.logsOrDefault().maxFileSize().toString(), (s, v) -> {
+            MemorySize size;
+            try {
+                size = MemorySize.parse(v);
+            } catch (IllegalArgumentException e) {
+                throw Values.invalid(FILE, "logs.max-file-size", MemorySize.FORMAT, e);
+            }
+            return snapshot -> snapshot.withCloud(snapshot.cloud().withLogs(
+                    snapshot.cloud().logsOrDefault().withMaxFileSize(size)));
+        }, List.of());
     }
 
     private ConfigKeys() {

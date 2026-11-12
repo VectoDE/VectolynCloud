@@ -53,7 +53,7 @@ MariaDB veröffentlicht für diese Systeme keinen Server-Build, deshalb fällt d
 Wings begrenzt jeden Container standardmäßig auf 512 Prozesse und Threads. Erhöhe `docker.container_pid_limit` in `/etc/pterodactyl/config.yml`, zum Beispiel auf 4096. Details unter [Betrieb](Operations-DE).
 
 **Wo liegen die Logs?**
-`logs/cloud.log` im Cloud-Home, wobei die letzten fünf Läufe als `cloud.1.log` bis `cloud.5.log` erhalten bleiben, und `logs/services/<id>.log` für jeden Server.
+`logs/cloud.log` im Cloud-Home, und `logs/services/<id>.log` für jeden Server. Ältere Läufe und Tage bleiben als `cloud-<Datum>.log` und `<id>-<Datum>.log` 14 Tage erhalten; `logs.retention-days` in `cloud.yml` ändert das.
 
 **Wo melde ich eine Sicherheitslücke?**
 Privat, siehe [SECURITY.md](https://github.com/VectoDE/VectolynCloud/blob/main/SECURITY.md).

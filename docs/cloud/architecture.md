@@ -156,7 +156,7 @@ The cloud keeps its data in files, not in a database. The home is the folder the
                      libs/<version>/ (libraries of VectolynCloud.jar, unpacked by the launcher)
   secrets/           vectolyn.env, api-tokens.json, TLS password; owner only
   backups/           default target of backup.yml
-  logs/              cloud.log (+ cloud.1.log to cloud.5.log), services/<id>.log
+  logs/              cloud.log (+ cloud-<date>.log, kept logs.retention-days), services/<id>.log
   state/             cloud.lock, services.json, console.history, monitor-history.bin, home-layout
 ```
 

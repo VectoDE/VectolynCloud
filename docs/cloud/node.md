@@ -71,7 +71,7 @@ Then every step logs one line in the same format (`StartupReport`):
 
 Status is `ok`, `partly` (some groups or services failed), `failed` or `skipped`. While the setup is incomplete (no EULA, `setup-complete: false`) steps 2 to 5 are `skipped` with the reason. If the database fails, steps 3 to 5 are `skipped`: nothing starts without it.
 
-There is one log format everywhere: `HH:mm:ss LEVEL message`, with the level names `ERROR`, `WARN `, `INFO `, `DEBUG` and `TRACE` padded to five characters. They are fixed and do not depend on the system language (no `INFORMATION` or `WARNUNG`). Before the console is up, a handler on standard output prints the lines and encodes them in the console's code page, so umlauts are right on Windows too. Once the console runs, the lines go through it. In addition, `logs/cloud.log` gets every record in UTF-8 with date and milliseconds, the logger name and the full stack traces, secrets redacted. Each start begins a new file; the five before are kept as `cloud.1.log` to `cloud.5.log`.
+There is one log format everywhere: `HH:mm:ss LEVEL message`, with the level names `ERROR`, `WARN `, `INFO `, `DEBUG` and `TRACE` padded to five characters. They are fixed and do not depend on the system language (no `INFORMATION` or `WARNUNG`). Before the console is up, a handler on standard output prints the lines and encodes them in the console's code page, so umlauts are right on Windows too. Once the console runs, the lines go through it. In addition, `logs/cloud.log` gets every record in UTF-8 with date and milliseconds, the logger name and the full stack traces, secrets redacted. Each start, each midnight and a file of `logs.max-file-size` begin a new file; the old one becomes `cloud-<yyyy-MM-dd>.log` and is deleted after `logs.retention-days` days (default 14, [config.md](config.md#cloudyml), `RotatingLogFile`).
 
 On Windows the start scripts switch the console to UTF-8 (`chcp 65001`) and start Java with `-Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8`. If you start the jar by hand in an old console, set the same.
 
@@ -300,7 +300,7 @@ Lines shown by `screen` have passed the secret filter; control characters and Un
 
 ## Logs
 
-The node's own log is `<home>/logs/cloud.log` (format and rotation in [Start output](#start-output)). The output of each service (standard output and standard error together) goes to `<home>/logs/services/<id>.log`. The previous five runs are kept as `<id>.1.log` to `<id>.5.log`. Every line is passed through the secret filter first: values from `vectolyn.env` and the service token are written as `***`, in the log and to listeners. Lines longer than 8192 bytes are split, invalid UTF-8 is replaced.
+The node's own log is `<home>/logs/cloud.log` (format and rotation in [Start output](#start-output)). The output of each service (standard output and standard error together) goes to `<home>/logs/services/<id>.log`. Earlier runs and days are kept as `<id>-<yyyy-MM-dd>.log` and deleted after `logs.retention-days` days, the same rules as for `cloud.log`; the start of any service also deletes the expired files of services that no longer exist. Every line is passed through the secret filter first: values from `vectolyn.env` and the service token are written as `***`, in the log and to listeners. Lines longer than 8192 bytes are split, invalid UTF-8 is replaced.
 
 ## `state/services.json`
 

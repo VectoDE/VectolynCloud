@@ -9,21 +9,22 @@ import java.io.Writer;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.nio.file.StandardOpenOption;
+import java.time.Clock;
+import java.time.ZoneId;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
+import net.vectolyn.cloud.config.model.LogsConfig;
 import net.vectolyn.cloud.config.secret.RedactingFilter;
+import net.vectolyn.cloud.console.RotatingLogFile;
 
 /**
  * Reads the output of a service process line by line, removes secrets, appends each line to the
  * service's log file and hands it to a consumer.
  *
- * <p>Log files live in {@code <home>/logs/services/}: {@code <id>.log} for the current start,
- * {@code <id>.1.log} to {@code <id>.<KEEP>.log} for the starts before (renamed on each start, the
- * oldest is dropped). Lines are decoded as UTF-8 (broken sequences become U+FFFD) and cut at
+ * <p>Log files live in {@code <home>/logs/services/}: {@code <id>.log} for the current start, renamed
+ * to {@code <id>-<yyyy-MM-dd>.log} at the next start, at midnight and at {@code logs.max-file-size};
+ * renamed files older than {@code logs.retention-days} are deleted ({@link RotatingLogFile}). Lines are decoded as UTF-8 (broken sequences become U+FFFD) and cut at
  * {@value #MAX_LINE_BYTES} bytes, so a process that never prints a line break cannot fill the
  * memory of the node. Every line goes through the {@link RedactingFilter} before it is written or
  * passed on.
@@ -32,8 +33,6 @@ public final class ServiceOutput implements Runnable {
 
     /** Folder of the service logs, relative to the home. */
     public static final String LOG_DIR = "logs/services";
-    /** Older log files kept per service. */
-    public static final int KEEP = 5;
     /** Longest line in bytes; longer output is split. */
     public static final int MAX_LINE_BYTES = 8192;
 
@@ -58,7 +57,7 @@ public final class ServiceOutput implements Runnable {
     }
 
     /**
-     * Rotates the logs of a service and opens a new {@code <id>.log}.
+     * Opens a new {@code <id>.log} with the default retention and the system clock.
      *
      * @param logDir  {@code <home>/logs/services}
      * @param service service id
@@ -66,18 +65,32 @@ public final class ServiceOutput implements Runnable {
      * @throws IOException if the folder or file cannot be created
      */
     public static Writer openLog(Path logDir, String service) throws IOException {
-        Files.createDirectories(logDir);
-        for (int i = KEEP; i >= 1; i--) {
-            Path from = i == 1 ? logDir.resolve(service + ".log") : logDir.resolve(service + "." + (i - 1) + ".log");
-            Path to = logDir.resolve(service + "." + i + ".log");
-            if (Files.isRegularFile(from, LinkOption.NOFOLLOW_LINKS)) {
-                Files.move(from, to, StandardCopyOption.REPLACE_EXISTING);
-            }
+        return openLog(logDir, service, LogsConfig::defaults, Clock.system(ZoneId.systemDefault()));
+    }
+
+    /**
+     * Renames the log of the last start of a service, opens a new {@code <id>.log} and deletes the
+     * renamed logs of all services in the folder that are older than the retention.
+     *
+     * @param logDir   {@code <home>/logs/services}
+     * @param service  service id
+     * @param settings {@code logs:} of {@code cloud.yml}, read at each rotation
+     * @param clock    time and time zone of the file dates
+     * @return a writer for the new log file
+     * @throws IOException if the folder or file cannot be created
+     */
+    public static Writer openLog(Path logDir, String service, Supplier<LogsConfig> settings, Clock clock)
+            throws IOException {
+        RotatingLogFile file = RotatingLogFile.open(logDir, service, settings, clock);
+        try {
+            // Services that were removed never open their log again; their old files go here.
+            LogsConfig current = settings.get();
+            RotatingLogFile.prune(logDir, null,
+                    (current == null ? LogsConfig.defaults() : current).retentionDays(), clock);
+        } catch (IOException | RuntimeException e) {
+            // Deleting old files is tried again at the next start of any service.
         }
-        Path current = logDir.resolve(service + ".log");
-        Files.deleteIfExists(current);
-        return Files.newBufferedWriter(current, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW,
-                StandardOpenOption.WRITE);
+        return file;
     }
 
     @Override
