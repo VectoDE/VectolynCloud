@@ -56,7 +56,7 @@ public record DatabaseAccess(DatabaseMode mode, String host, int port, String da
      * @param managedBase the installed MariaDB server, or null when unknown or not managed
      * @return the access data
      */
-    public static DatabaseAccess of(DatabaseConfig config, EnvFile secrets, Path managedBase) {
+    public static DatabaseAccess of(DatabaseConfig config, EnvFile secrets, @Nullable Path managedBase) {
         Objects.requireNonNull(config, "config");
         Objects.requireNonNull(secrets, "secrets");
         return switch (config.mode()) {

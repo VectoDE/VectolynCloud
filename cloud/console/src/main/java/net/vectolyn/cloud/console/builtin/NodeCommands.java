@@ -149,7 +149,7 @@ String path, String value) throws ConfigException {
         return n.maxMemory() == null ? AUTO : n.maxMemory().toString();
     }
 
-    private static String marker(MemorySize raw) {
+    private static String marker(@Nullable MemorySize raw) {
         return raw == null ? " (default)" : "";
     }
 }

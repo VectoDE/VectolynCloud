@@ -58,7 +58,7 @@ public sealed interface ApiEvent {
      * @param previous    the state before, or null when the service was just created
      */
     @JsonPropertyOrder({"service", "previous"})
-    record ServiceState(@JsonProperty("service") ServiceView serviceView, String previous) implements ApiEvent {
+    record ServiceState(@JsonProperty("service") ServiceView serviceView, @Nullable String previous) implements ApiEvent {
 
         /** Checks the service. */
         public ServiceState {

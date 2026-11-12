@@ -182,7 +182,7 @@ public final class ConfigValidator {
     }
 
     /** One field of {@code memory-reserve}: missing is fine (default), otherwise at most 64G. */
-    private static void reserveField(Checks c, String f, String path, MemorySize value) {
+    private static void reserveField(Checks c, String f, String path, @Nullable MemorySize value) {
         if (value != null && value.megabytes() > MemoryReserve.MAX_MEGABYTES) {
             c.add(ConfigError.of(f, path, ErrorCode.OUT_OF_RANGE, MemorySize.ofMegabytes(1),
                     MemorySize.ofMegabytes(MemoryReserve.MAX_MEGABYTES)));

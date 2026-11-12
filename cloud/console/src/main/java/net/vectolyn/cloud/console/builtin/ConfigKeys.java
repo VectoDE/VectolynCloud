@@ -31,6 +31,7 @@ import net.vectolyn.cloud.config.operation.SetLegacyProxy;
 import net.vectolyn.cloud.config.operation.SetNetworkName;
 import net.vectolyn.cloud.config.operation.SetProxy;
 import net.vectolyn.cloud.config.operation.SetServerWanted;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The keys of {@code cloud.yml} that {@code config get/set} know, with the field path of the file
@@ -191,7 +192,7 @@ final class ConfigKeys {
         return api.tls() == null ? TlsConfig.disabled() : api.tls();
     }
 
-    private static String orEmpty(String value) {
+    private static String orEmpty(@Nullable String value) {
         return value == null ? "" : value;
     }
 }
