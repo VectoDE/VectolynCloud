@@ -51,6 +51,9 @@ Exakte Versionen in `cloud/panel/web/package-lock.json`. Installiert wird nur mi
 | postcss | 8.5.32 | build only | MIT | yes |
 | typescript | 5.9.3 | build only | Apache-2.0 | yes |
 | @types/node, @types/react, @types/react-dom | 24.x, 19.3.0 | build only | MIT | yes |
+| @img/sharp-* (optional, transitiv über next) | 0.34.x | nur Bauzeit, wird nicht aufgerufen | LGPL-3.0-or-later, teils mit Apache-2.0/MIT | yes |
+
+`sharp` ist eine optionale Abhängigkeit von Next.js für `next/image`. Der Export läuft mit `images.unoptimized`, sharp wird also nie aufgerufen; npm installiert nur das Paket der Bau-Plattform, und nichts davon kommt ins Jar. Die Trivy-Lizenzprüfung nimmt genau diese Lizenzen für `cloud/panel/web/package-lock.json` aus (`.trivyignore.yaml`).
 
 Schriften und Design-Tokens im Panel kommen aus `branding/` (OFL-1.1 bzw. CC-BY-SA-4.0, siehe `REUSE.toml`).
 
