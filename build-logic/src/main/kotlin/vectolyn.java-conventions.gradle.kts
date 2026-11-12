@@ -1,5 +1,7 @@
 // SPDX-FileCopyrightText: 2026 VectoDE
 // SPDX-License-Identifier: GPL-3.0-or-later
+import net.ltgt.gradle.errorprone.CheckSeverity
+import net.ltgt.gradle.errorprone.errorprone
 // Shared setup for every Java module.
 //
 // Java policy (see docs/java-compatibility.md): bytecode target is Java 21. The compiler always
@@ -13,6 +15,8 @@
 
 plugins {
     `java-library`
+    id("net.ltgt.errorprone")
+    id("com.github.spotbugs")
 }
 
 val defaultJavaRelease = 21
@@ -115,3 +119,37 @@ tasks.withType<Jar>().configureEach {
         )
     }
 }
+
+// ---------------------------------------------------------------------------------------------
+// Static analysis (issue #223). The versions live here because only the build logic uses them.
+val errorProneVersion = "2.52.0"
+val nullAwayVersion = "0.14.3"
+val findSecBugsVersion = "1.14.0"
+
+dependencies {
+    add("errorprone", "com.google.errorprone:error_prone_core:$errorProneVersion")
+    add("errorprone", "com.uber.nullaway:nullaway:$nullAwayVersion")
+    compileOnly("org.jspecify:jspecify:1.0.0")
+    testCompileOnly("org.jspecify:jspecify:1.0.0")
+    add("spotbugsPlugins", "com.h3xstream.findsecbugs:findsecbugs-plugin:$findSecBugsVersion")
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    options.errorprone {
+        // Every Error Prone check at its default severity; warnings fail the build with -Werror.
+        check("NullAway", CheckSeverity.ERROR)
+        option("NullAway:AnnotatedPackages", "net.vectolyn")
+        option("NullAway:JSpecifyMode", "true")
+    }
+    // Test code: Error Prone runs, NullAway does not (fixtures pass null on purpose).
+    if (name == "compileTestJava") {
+        options.errorprone.check("NullAway", CheckSeverity.OFF)
+    }
+}
+
+spotbugs {
+    effort = com.github.spotbugs.snom.Effort.MAX
+    reportLevel = com.github.spotbugs.snom.Confidence.MEDIUM
+    ignoreFailures = false
+}
+tasks.named("spotbugsTest") { enabled = false }
