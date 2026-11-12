@@ -36,6 +36,8 @@ final class TestApi implements AutoCloseable {
     final ApiTokens tokens;
     final FakeBackend backend = new FakeBackend();
     final AtomicLong nanos = new AtomicLong(1_000_000_000L);
+    /** Makes the clock of the rate limiters throw, to break the rate limit headers of a response. */
+    volatile boolean nanosFail;
     /** Wall clock of the token store (expiry); tests move it forward. */
     final AtomicReference<Instant> now = new AtomicReference<>(Instant.parse("2026-11-01T10:00:00Z"));
     final ApiServer server;
@@ -68,7 +70,12 @@ final class TestApi implements AutoCloseable {
         }, new SecureRandom());
         this.admin = tokens.create("admin", EnumSet.of(Scope.ADMIN)).token().reveal();
         ApiSettings base = new ApiSettings("127.0.0.1", 0, Optional.empty(), List.of(), ApiLimits.defaults());
-        this.server = ApiServer.builder(config, backend, tokens).settings(settings.apply(base)).nanoTime(nanos::get)
+        this.server = ApiServer.builder(config, backend, tokens).settings(settings.apply(base)).nanoTime(() -> {
+                    if (nanosFail) {
+                        throw new IllegalStateException("clock failed (test)");
+                    }
+                    return nanos.get();
+                })
                 .expiryCheckMillis(200).metricsMillis(200).build();
         this.address = server.start();
     }

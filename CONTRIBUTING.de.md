@@ -60,6 +60,16 @@ abgelaufenen. Meldet ein Scanner trotzdem einen Dummy-Wert, starte lokal
 `gitleaks detect --no-banner` und trage in `.gitleaks.toml` einen Eintrag ein, der die Datei und den
 genauen Wert nennt. Ganze Ordner sind nicht erlaubt.
 
+## Parser brauchen einen Fuzz-Test
+
+Code, der Text oder Bytes von außen liest (Dateien, die ein Betreiber bearbeitet, Netzwerkeingaben,
+Programmausgaben, Header), braucht im selben Modul einen Jazzer-`@FuzzTest`. Die CI führt
+`.github/scripts/check-fuzz-coverage.py` aus und lässt einen Pull Request fehlschlagen, der eine
+`parse*`-, `decode*`-, `read*`-Methode oder Ähnliches ohne Fuzz-Test hinzufügt. Der Test legt fest,
+welche Ausnahme der Parser werfen darf, und prüft, was er nie tun darf (negative Größe liefern,
+endlos laufen, etwas anderes werfen). Deckt ein anderer Fuzz-Test den Parser schon ab, kommt er mit
+Begründung in `.github/fuzz-exempt.txt`.
+
 ## Releases
 
 Ein Maintainer veröffentlicht, indem er einen Tag pusht, und der Tag muss den [Versionsregeln](docs/cloud/operations.de.md#versionen-und-tags) folgen: unter 1.0.0 nur `-dev` (`v0.2.0-dev`, `v0.2.0-dev.3`); ab 1.0.0 auch `-alpha`, `-beta` und `-rc` (jeweils mit optionalem `.N`), `-lts` ohne Zähler oder kein Zusatz für ein stabiles Release. Jeder andere Tag bricht das Release ab, bevor etwas gebaut wird. Einen Tag vorher prüfen: `bash tools/release-banner/check-tag.sh <tag>`. Die vollständige Checkliste steht in [Releasing](docs/development/releasing.md) (englisch).

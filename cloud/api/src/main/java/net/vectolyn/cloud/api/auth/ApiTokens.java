@@ -98,6 +98,7 @@ public final class ApiTokens {
     private static final Pattern ID = Pattern.compile("[0-9a-f]{8}");
     private static final Pattern HASH = Pattern.compile("[0-9a-f]{64}");
     private static final int MAX_FILE_BYTES = 256 * 1024;
+    private static final System.Logger LOG = System.getLogger(ApiTokens.class.getName());
 
     private static final JsonMapper JSON = ConfigMappers.configure(JsonMapper.builder(JsonFactory.builder()
                     .streamReadConstraints(StreamReadConstraints.builder()
@@ -366,27 +367,41 @@ public final class ApiTokens {
     }
 
     /**
-     * Exchanges the setup token, once, for an API token with {@link Scope#ADMIN}. The setup token
-     * is removed first, so it can never be used twice; if the API token cannot be written afterwards,
-     * a new setup token is needed ({@code api token setup}).
+     * Exchanges the setup token, once, for an API token with {@link Scope#ADMIN}.
+     *
+     * <p>The API token is written first. If that fails, nothing is used up: the setup token stays
+     * valid and the claim can be tried again. Once the API token exists, the setup token stops
+     * working at once (the method holds the lock of the store, so two claims cannot both succeed).
+     * Then its file is deleted; if that fails, the claim still succeeds, the setup token stays
+     * unusable in this process and the failure is logged, because the file would make it valid
+     * again after a restart until it expires or {@code api token setup} replaces it.
      *
      * @param presented the setup token
      * @return the new API token, or empty if {@code presented} is not a valid, unexpired setup token
-     * @throws IOException if a file cannot be written
+     * @throws IOException              if the API token cannot be written; then the setup token is still valid
+     * @throws IllegalArgumentException if the store already holds {@link #MAX_TOKENS} tokens; then the
+     *                                  setup token is still valid
      */
     public synchronized Optional<Created> claimSetupToken(String presented) throws IOException {
         Optional<String> admin = setupAdmin(presented);
         if (admin.isEmpty()) {
             return Optional.empty();
         }
-        setup = null;
-        Files.deleteIfExists(setupFile());
         List<Entry> current = entries;
         String name = admin.get();
         for (int i = 2; taken(current, name); i++) {
             name = candidate(admin.get(), i);
         }
-        return Optional.of(create(name, EnumSet.of(Scope.ADMIN)));
+        Created created = create(name, EnumSet.of(Scope.ADMIN));
+        setup = null;
+        try {
+            Files.deleteIfExists(setupFile());
+        } catch (IOException | RuntimeException e) {
+            LOG.log(System.Logger.Level.ERROR, "The used setup token is invalid now, but " + SETUP_FILE_NAME
+                    + " could not be deleted ({0}). Delete it, or run \"api token setup\" to replace it;"
+                    + " otherwise it is valid again after a restart until it expires.", e.getClass().getSimpleName());
+        }
+        return Optional.of(created);
     }
 
     /**

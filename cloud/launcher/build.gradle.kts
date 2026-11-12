@@ -4,6 +4,7 @@ import java.security.MessageDigest
 
 plugins {
     id("vectolyn.java-conventions")
+    id("vectolyn.fuzz-conventions")
 }
 
 vectolyn {

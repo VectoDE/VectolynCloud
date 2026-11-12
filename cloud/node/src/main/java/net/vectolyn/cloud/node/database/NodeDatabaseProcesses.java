@@ -77,6 +77,7 @@ public final class NodeDatabaseProcesses implements DatabaseProcesses {
         }
         Path log = command.logFile().toAbsolutePath();
         Files.createDirectories(log.getParent());
+        // nosemgrep: java.lang.security.audit.command-injection-process-builder.command-injection-process-builder -- the program path must be absolute (checked above) and the arguments are a list, no shell
         ProcessBuilder builder = new ProcessBuilder(command.arguments())
                 .directory(command.workingDirectory().toFile())
                 .redirectErrorStream(true)

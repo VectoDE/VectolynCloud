@@ -16,6 +16,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -97,6 +98,65 @@ class ApiServerTest {
             assertEquals(200, api.get("/api/v1/config", admin).statusCode(), "the new token has every right");
 
             assertEquals(401, api.send("POST", "/api/v1/setup/claim", setup, null).statusCode(), "used up");
+        }
+    }
+
+    @Test
+    void theClaimShowsTheRateLimitOfTheSetupToken() throws Exception {
+        try (TestApi api = new TestApi(home)) {
+            String setup = api.tokens.issueSetupToken("owner", net.vectolyn.cloud.api.auth.ApiTokens.SETUP_TOKEN_TTL)
+                    .token().reveal();
+            HttpResponse<String> claimed = api.send("POST", "/api/v1/setup/claim", setup, null);
+            assertEquals(201, claimed.statusCode(), claimed.body());
+            int burst = Integer.parseInt(claimed.headers().firstValue("X-RateLimit-Limit").orElseThrow());
+            // The header reads the same bucket the head charged, so one request is gone from it.
+            assertEquals(burst - 1, Integer.parseInt(claimed.headers().firstValue("X-RateLimit-Remaining").orElseThrow()));
+        }
+    }
+
+    @Test
+    void aRequestWhoseHandlerOrAnswerFailsIsStillAnsweredAndTheConnectionGoesOn() throws Exception {
+        try (TestApi api = new TestApi(home)) {
+            Duration limit = Duration.ofSeconds(15);
+            HttpRequest services = HttpRequest.newBuilder(api.uri("/api/v1/services")).timeout(limit)
+                    .header("Authorization", "Bearer " + api.admin).GET().build();
+
+            // The rate limit headers fail: the answer comes without them.
+            api.backend.onList = () -> api.nanosFail = true;
+            HttpResponse<String> headersFailed = api.send(services);
+            api.backend.onList = null;
+            api.nanosFail = false;
+            assertEquals(200, headersFailed.statusCode(), headersFailed.body());
+            assertTrue(headersFailed.headers().firstValue("X-RateLimit-Remaining").isEmpty());
+
+            // The handler throws an Error, which no exception mapping catches: a plain 500, then close.
+            api.backend.onList = () -> {
+                throw new AssertionError("handler failed (test)");
+            };
+            HttpResponse<String> handlerFailed = api.send(services);
+            api.backend.onList = null;
+            assertEquals(500, handlerFailed.statusCode());
+            assertTrue(handlerFailed.body().contains("\"code\":\"internal-error\""), handlerFailed.body());
+            assertEquals("no-store", handlerFailed.headers().firstValue("Cache-Control").orElse(null));
+
+            // The error answer itself fails (the redaction of a backend message throws).
+            api.config.apply(List.of(snapshot -> snapshot.withGroup("lobby", ApiSamples.lobbyGroup())
+                    .withTask("lobby", ApiSamples.lobbyTask()), new SetServerWanted(ServerKind.MOD, false)));
+            api.backend.failureMessage = "cannot start";
+            api.backend.redactFails = true;
+            HttpResponse<String> errorFailed = api.send(HttpRequest.newBuilder(api.uri("/api/v1/services"))
+                    .timeout(limit).header("Authorization", "Bearer " + api.admin)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString("{\"task\":\"lobby\"}")).build());
+            api.backend.redactFails = false;
+            assertEquals(500, errorFailed.statusCode());
+            assertTrue(errorFailed.body().contains("\"code\":\"internal-error\""), errorFailed.body());
+
+            // Nothing hangs: the next requests are answered as usual, with their headers.
+            HttpResponse<String> after = api.send(services);
+            assertEquals(200, after.statusCode(), after.body());
+            assertTrue(after.headers().firstValue("X-RateLimit-Remaining").isPresent());
+            assertEquals(200, api.send(services).statusCode());
         }
     }
 
