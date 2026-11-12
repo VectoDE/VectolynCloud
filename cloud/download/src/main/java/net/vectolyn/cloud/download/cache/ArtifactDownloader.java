@@ -24,6 +24,7 @@ import net.vectolyn.cloud.download.lock.LockedArtifact;
 import net.vectolyn.cloud.download.lock.Trust;
 import net.vectolyn.cloud.download.provider.ProviderRegistry;
 import net.vectolyn.cloud.download.provider.ResolvedArtifact;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Downloads an artifact into the {@link ArtifactCache} and verifies it.
@@ -97,15 +98,15 @@ public final class ArtifactDownloader {
      * @throws IOException on other download errors
      * @throws InterruptedException if interrupted
      */
-    public DownloadedArtifact download(ResolvedArtifact artifact, LockedArtifact locked)
+    public DownloadedArtifact download(ResolvedArtifact artifact, @Nullable LockedArtifact locked)
             throws IOException, InterruptedException {
-        LockedArtifact sameCoordinate = locked != null && locked.coordinate().equals(artifact.coordinate())
+        @Nullable LockedArtifact sameCoordinate = locked != null && locked.coordinate().equals(artifact.coordinate())
                 ? locked : null;
         String label = artifact.coordinate().toString();
-        Checksum expected;
-        Checksum pinnedSha256 = null;
+        @Nullable Checksum expected;
+        @Nullable Checksum pinnedSha256 = null;
         Trust trust;
-        Trust pinTrust = null;
+        @Nullable Trust pinTrust = null;
         if (artifact.checksum().isPresent()) {
             expected = artifact.checksum().get();
             trust = Trust.SOURCE;
@@ -145,10 +146,10 @@ public final class ArtifactDownloader {
                 locked.checksum(), locked.sha256(), locked.trust(), locked.trust(), locked.size());
     }
 
-    private DownloadedArtifact fetch(String label, URI url, HostAllowlist hosts, Checksum expected,
-            Checksum expectedSha256, Trust trust, Trust pinTrust, long maxBytes)
+    private DownloadedArtifact fetch(String label, URI url, HostAllowlist hosts, @Nullable Checksum expected,
+            @Nullable Checksum expectedSha256, Trust trust, Trust pinTrust, long maxBytes)
             throws IOException, InterruptedException {
-        Checksum knownSha256 = expectedSha256;
+        @Nullable Checksum knownSha256 = expectedSha256;
         if (knownSha256 == null && expected != null && expected.algorithm() == HashAlgorithm.SHA256) {
             knownSha256 = expected;
         }
@@ -176,10 +177,14 @@ public final class ArtifactDownloader {
                 }
                 return digest.finish();
             });
-            Checksum sha256 = actual.get(HashAlgorithm.SHA256);
-            if (expected != null && !actual.get(expected.algorithm()).matches(expected)) {
-                throw mismatch(label, trust, expected, actual.get(expected.algorithm()));
+            Checksum sha256 = Objects.requireNonNull(actual.get(HashAlgorithm.SHA256), "SHA-256 digest");
+            if (expected != null) {
+                Checksum actualExpected = Objects.requireNonNull(actual.get(expected.algorithm()), "digest");
+                if (!actualExpected.matches(expected)) {
+                    throw mismatch(label, trust, expected, actualExpected);
+                }
             }
+
             if (knownSha256 != null && !sha256.matches(knownSha256)) {
                 throw mismatch(label, pinTrust, knownSha256, sha256);
             }

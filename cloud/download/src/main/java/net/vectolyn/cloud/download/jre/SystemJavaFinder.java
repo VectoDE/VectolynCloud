@@ -16,6 +16,7 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.regex.Pattern;
 import net.vectolyn.cloud.download.provider.TargetPlatform;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Finds Java runtimes that are already installed: {@code JAVA_HOME} first, then every {@code java}
@@ -180,7 +181,7 @@ public final class SystemJavaFinder {
         return platform.os() == TargetPlatform.Os.WINDOWS;
     }
 
-    private String variable(String name) {
+    private @Nullable String variable(String name) {
         if (windows()) {
             // Windows treats environment names case-insensitively ("Path").
             for (Map.Entry<String, String> entry : environment.entrySet()) {
@@ -193,7 +194,8 @@ public final class SystemJavaFinder {
         return environment.get(name);
     }
 
-    private static Optional<Path> path(String text) {
+    private static Optional<Path> path(@Nullable String text) {
+
         if (text == null || text.isBlank()) {
             return Optional.empty();
         }

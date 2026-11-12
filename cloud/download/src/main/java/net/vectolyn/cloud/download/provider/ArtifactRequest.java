@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.TreeMap;
+import org.jspecify.annotations.Nullable;
 
 /**
  * What to resolve. Only {@code project} is always required; which other fields a provider reads
@@ -22,11 +23,11 @@ import java.util.TreeMap;
  */
 public record ArtifactRequest(
         String project,
-        String version,
-        String build,
-        String platform,
-        String gameVersion,
-        String channel,
+        @Nullable String version,
+        @Nullable String build,
+        @Nullable String platform,
+        @Nullable String gameVersion,
+        @Nullable String channel,
         TargetPlatform system,
         Map<String, String> options) {
 
@@ -55,7 +56,8 @@ public record ArtifactRequest(
      * @return the request
      */
     public static ArtifactRequest of(String project) {
-        return new ArtifactRequest(project, null, null, null, null, null, null, Map.of());
+        return new ArtifactRequest(project, null, null, null, null, null, TargetPlatform.current(), Map.of());
+
     }
 
     /**
@@ -64,7 +66,7 @@ public record ArtifactRequest(
      * @param value the version, or {@code null} for the newest
      * @return the new request
      */
-    public ArtifactRequest withVersion(String value) {
+    public ArtifactRequest withVersion(@Nullable String value) {
         return new ArtifactRequest(project, value, build, platform, gameVersion, channel, system, options);
     }
 
@@ -74,7 +76,7 @@ public record ArtifactRequest(
      * @param value the build, or {@code null} for the newest
      * @return the new request
      */
-    public ArtifactRequest withBuild(String value) {
+    public ArtifactRequest withBuild(@Nullable String value) {
         return new ArtifactRequest(project, version, value, platform, gameVersion, channel, system, options);
     }
 
@@ -84,7 +86,7 @@ public record ArtifactRequest(
      * @param value the platform
      * @return the new request
      */
-    public ArtifactRequest withPlatform(String value) {
+    public ArtifactRequest withPlatform(@Nullable String value) {
         return new ArtifactRequest(project, version, build, value, gameVersion, channel, system, options);
     }
 
@@ -94,7 +96,7 @@ public record ArtifactRequest(
      * @param value the Minecraft version
      * @return the new request
      */
-    public ArtifactRequest withGameVersion(String value) {
+    public ArtifactRequest withGameVersion(@Nullable String value) {
         return new ArtifactRequest(project, version, build, platform, value, channel, system, options);
     }
 
@@ -104,7 +106,7 @@ public record ArtifactRequest(
      * @param value the channel
      * @return the new request
      */
-    public ArtifactRequest withChannel(String value) {
+    public ArtifactRequest withChannel(@Nullable String value) {
         return new ArtifactRequest(project, version, build, platform, gameVersion, value, system, options);
     }
 

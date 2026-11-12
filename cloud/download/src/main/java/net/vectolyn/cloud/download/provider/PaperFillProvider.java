@@ -86,7 +86,7 @@ public final class PaperFillProvider implements ArtifactProvider {
                     : ApiSupport.apiSegment(version, "Fill project version");
             FillBuild build;
             if (request.buildOpt().isPresent()) {
-                String b = ApiSupport.segment(request.build(), "build");
+                String b = ApiSupport.segment(request.buildOpt().get(), "build");
                 build = parseBuild(ApiSupport.fetchJson(client, URI.create(base + v + "/builds/" + b), HOSTS,
                         "Fill build " + project + " " + version + " #" + request.build()));
             } else {

@@ -75,7 +75,7 @@ public final class MariaDbProvider implements ArtifactProvider {
     @Override
     public ResolvedArtifact resolve(ArtifactRequest request) throws IOException, InterruptedException {
         TargetPlatform system = request.system();
-        Package wanted = packageFor(system);
+        MariaDbPackage wanted = packageFor(system);
 
         String version = request.version();
         Release release;
@@ -107,7 +107,7 @@ public final class MariaDbProvider implements ArtifactProvider {
     }
 
     /** The archive types the cloud can use. */
-    enum Package {
+    enum MariaDbPackage {
         /** Windows x64 zip. */
         WINDOWS_ZIP("Windows x64 zip"),
         /** Linux x86_64 glibc tar.gz (the systemd build). */
@@ -115,7 +115,7 @@ public final class MariaDbProvider implements ArtifactProvider {
 
         private final String description;
 
-        Package(String description) {
+        MariaDbPackage(String description) {
             this.description = description;
         }
 
@@ -135,13 +135,13 @@ public final class MariaDbProvider implements ArtifactProvider {
         }
     }
 
-    static Package packageFor(TargetPlatform system) throws ArtifactNotAvailableException {
+    static MariaDbPackage packageFor(TargetPlatform system) throws ArtifactNotAvailableException {
         if (system.os() == TargetPlatform.Os.WINDOWS && system.arch() == TargetPlatform.Arch.X64) {
-            return Package.WINDOWS_ZIP;
+            return MariaDbPackage.WINDOWS_ZIP;
         }
         if (system.os() == TargetPlatform.Os.LINUX && system.arch() == TargetPlatform.Arch.X64
                 && system.libc() == TargetPlatform.Libc.GLIBC) {
-            return Package.LINUX_TAR_GZ;
+            return MariaDbPackage.LINUX_TAR_GZ;
         }
         throw new ArtifactNotAvailableException("A managed MariaDB server is not available for " + system
                 + ". MariaDB publishes server archives only for Windows x64 and Linux x86_64 with glibc."

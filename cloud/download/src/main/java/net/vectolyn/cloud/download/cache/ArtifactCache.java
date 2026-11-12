@@ -24,6 +24,7 @@ import net.vectolyn.cloud.download.ChecksumMismatchException;
 import net.vectolyn.cloud.download.hash.Checksum;
 import net.vectolyn.cloud.download.hash.HashAlgorithm;
 import net.vectolyn.cloud.download.hash.MultiDigest;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Content-addressed store under {@code storage/artifacts/}: each file is named by its SHA-256.
@@ -95,14 +96,16 @@ public final class ArtifactCache {
      * @return the file if it exists and matches; empty otherwise (a mismatching file is deleted)
      * @throws IOException if the file cannot be read or deleted
      */
-    public Optional<Path> lookup(Checksum sha256, Checksum also) throws IOException {
+    public Optional<Path> lookup(Checksum sha256, @Nullable Checksum also) throws IOException {
         Path file = pathFor(sha256);
         if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) {
             return Optional.empty();
         }
         List<HashAlgorithm> algorithms = also == null ? List.of() : List.of(also.algorithm());
         Map<HashAlgorithm, Checksum> actual = MultiDigest.of(file, algorithms);
-        if (actual.get(HashAlgorithm.SHA256).matches(sha256) && (also == null || actual.get(also.algorithm()).matches(also))) {
+        Checksum actualSha256 = Objects.requireNonNull(actual.get(HashAlgorithm.SHA256), "SHA-256 digest");
+        if (actualSha256.matches(sha256)
+                && (also == null || Objects.requireNonNull(actual.get(also.algorithm()), "digest").matches(also))) {
             return Optional.of(file);
         }
         Files.deleteIfExists(file);
@@ -230,7 +233,8 @@ public final class ArtifactCache {
                     out.write(buffer, 0, read);
                 }
             }
-            Checksum actual = digest.finish().get(HashAlgorithm.SHA256);
+            Checksum actual = Objects.requireNonNull(digest.finish().get(HashAlgorithm.SHA256), "SHA-256 digest");
+
             if (!actual.matches(sha256)) {
                 Files.deleteIfExists(source);
                 throw new ChecksumMismatchException("cache file " + sha256.hex() + " has changed on disk (now "
