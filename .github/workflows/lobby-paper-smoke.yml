@@ -27,6 +27,8 @@ jobs:
     name: Lobby on Paper (real server)
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
@@ -87,6 +89,13 @@ jobs:
           sha=$(jq -r '.downloads["server:default"].checksums.sha256' "$RUNNER_TEMP/build.json")
           curl -fsS -o "$RUNNER_TEMP/paper/paper.jar" "$url"
           echo "$sha  $RUNNER_TEMP/paper/paper.jar" | sha256sum -c -
+          # Negative control: the check must fail for a wrong hash, otherwise it proves nothing.
+          if echo "0000000000000000000000000000000000000000000000000000000000000000  $RUNNER_TEMP/paper/paper.jar" \
+              | sha256sum -c - >/dev/null 2>&1; then
+            echo "The SHA-256 check accepted a wrong hash; it is not a check."
+            exit 1
+          fi
+          echo "ok   the SHA-256 check rejects a wrong hash"
           cp plugins/lobby/paper/build/libs/VectolynLobby-*.jar "$RUNNER_TEMP/paper/plugins/"
 
       - name: Start Paper with the lobby and query the world rules
@@ -102,6 +111,12 @@ jobs:
               grep -q 'Done (' server.log 2>/dev/null && break
               sleep 2
             done
+            # The lobby sets the rules a moment after it enabled; ask only once it said so.
+            for i in $(seq 1 60); do
+              grep -q 'sky lobby has been created' server.log 2>/dev/null && break
+              sleep 1
+            done
+            sleep 2
             for r in $rules; do echo "gamerule $r"; sleep 1; done
             echo "plugins"; sleep 2
             echo "stop"
@@ -118,6 +133,7 @@ jobs:
           }
           check "server started" 'Done \('
           check "plugin enabled" 'Enabling VectolynLobby'
+          check "lobby world configured" 'sky lobby has been created'
           if grep -E 'Could not load|Error occurred while enabling|VectolynLobby.*(Exception|SEVERE)' "$log"; then
             echo "FAIL plugin reported an error"; fail=1
           else
