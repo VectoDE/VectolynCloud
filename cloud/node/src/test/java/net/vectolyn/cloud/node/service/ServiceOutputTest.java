@@ -12,8 +12,13 @@ import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import net.vectolyn.cloud.config.model.LogsConfig;
 import net.vectolyn.cloud.config.secret.RedactingFilter;
 import net.vectolyn.cloud.config.secret.Secret;
 import org.junit.jupiter.api.Test;
@@ -52,17 +57,22 @@ class ServiceOutputTest {
     }
 
     @Test
-    void logsAreRotatedAndOnlyFiveOldOnesAreKept(@TempDir Path dir) throws Exception {
-        for (int run = 1; run <= 7; run++) {
-            try (Writer w = ServiceOutput.openLog(dir, "lobby-1")) {
-                w.write("run " + run);
+    void eachStartBeginsANewLogAndOldLogsOfEveryServiceAreDeleted(@TempDir Path dir) throws Exception {
+        Instant now = Instant.parse("2026-11-12T12:00:00Z");
+        Clock clock = Clock.fixed(now, ZoneOffset.UTC);
+        // A service that no longer exists: its old log goes when any service starts.
+        Files.writeString(dir.resolve("removed-1-2026-10-01.log"), "old");
+        Files.writeString(dir.resolve("removed-1-2026-11-10.log"), "recent");
+        for (int run = 1; run <= 3; run++) {
+            try (Writer w = ServiceOutput.openLog(dir, "lobby-1", LogsConfig::defaults, clock)) {
+                w.write("run " + run + "\n");
             }
+            Files.setLastModifiedTime(dir.resolve("lobby-1.log"), FileTime.from(now));
         }
-        assertEquals("run 7", Files.readString(dir.resolve("lobby-1.log")));
-        for (int i = 1; i <= ServiceOutput.KEEP; i++) {
-            assertEquals("run " + (7 - i), Files.readString(dir.resolve("lobby-1." + i + ".log")));
-        }
-        assertFalse(Files.exists(dir.resolve("lobby-1.6.log")));
-        assertTrue(Files.isDirectory(dir));
+        assertEquals("run 3\n", Files.readString(dir.resolve("lobby-1.log")));
+        assertEquals("run 1\n", Files.readString(dir.resolve("lobby-1-2026-11-12.log")));
+        assertEquals("run 2\n", Files.readString(dir.resolve("lobby-1-2026-11-12.1.log")));
+        assertFalse(Files.exists(dir.resolve("removed-1-2026-10-01.log")));
+        assertTrue(Files.exists(dir.resolve("removed-1-2026-11-10.log")));
     }
 }

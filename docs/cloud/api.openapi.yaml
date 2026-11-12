@@ -1229,6 +1229,21 @@ components:
               description: >-
                 Whether the TAB footer ends with "Powered by VectolynCloud" and the proxies answer /version
                 with the cloud's version. Services pick it up when they are rendered and started.
+        logs:
+          type: object
+          description: "Optional; a missing section or field takes its default. Applies from the next log rotation on."
+          properties:
+            retention-days:
+              type: integer
+              minimum: 1
+              maximum: 3650
+              default: 14
+              description: Days a renamed log file (logs/cloud-<date>.log, logs/services/<id>-<date>.log) is kept.
+            max-file-size:
+              type: string
+              pattern: "^[1-9][0-9]{0,6}[MmGg]$"
+              default: 100M
+              description: Size at which the current log file is renamed and a new one begins, 1M to 10G.
     NodeStatus:
       type: object
       properties:

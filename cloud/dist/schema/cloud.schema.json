@@ -47,6 +47,9 @@
     },
     "branding" : {
       "$ref" : "#/$defs/BrandingConfig"
+    },
+    "logs" : {
+      "$ref" : "#/$defs/LogsConfig"
     }
   },
   "required" : [ "schema-version" ],
@@ -124,6 +127,20 @@
         },
         "port" : {
           "type" : "integer"
+        }
+      },
+      "additionalProperties" : false
+    },
+    "LogsConfig" : {
+      "type" : "object",
+      "properties" : {
+        "retention-days" : {
+          "type" : "integer"
+        },
+        "max-file-size" : {
+          "type" : "string",
+          "pattern" : "^[1-9][0-9]{0,6}[MmGg]$",
+          "description" : "<number>M or <number>G, for example 512M"
         }
       },
       "additionalProperties" : false

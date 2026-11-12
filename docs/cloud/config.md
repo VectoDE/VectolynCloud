@@ -69,11 +69,16 @@ api:
   # graphql-introspection: true   optional, answers __schema/__type on /api/v1/graphql; off by default, for development
 branding:
   powered-by: true           # last TAB footer line "Powered by VectolynCloud" and /version on the proxies; false removes both
+logs:                        # log files of the cloud and of every service, see below
+  retention-days: 14         # 1 to 3650; renamed log files older than this are deleted
+  max-file-size: 100M        # 1M to 10G; a bigger file is renamed and a new one begins
 ```
 
 Passwords are not in `cloud.yml`. They are in `secrets/vectolyn.env`.
 
 `branding.powered-by` is on by default, and a `cloud.yml` without the `branding` section, or with an empty one (`branding: {}`), counts as on. While it is on, the cloud fills `{{VECTOLYN_TAB_POWERED_BY}}` in the TAB footer of the backend templates with the dark gray line "Powered by VectolynCloud" ([template.md](template.md#powered-by-line)), and both proxies answer `/version` with the cloud's version and the address of its source code ([bridges.md](bridges.md#version-on-the-proxy)). With `false` the footer line is left out and `/version` reaches the backend as before. A service picks up a change at its next start, because the cloud renders the template and sets the proxy's environment only then. At the console: `config set branding.powered-by false`.
+
+`logs` controls `logs/cloud.log` and `logs/services/<id>.log`. The current file is renamed to `<name>-<yyyy-MM-dd>.log` at every start, at the first line after midnight (local time of the machine) and at the first line after it reached `max-file-size`; a second file of the same day gets `.1`, `.2` and so on before `.log`. A line is never split, so a file can exceed the limit by one line. Renamed files whose date lies more than `retention-days` days back are deleted, files of the former scheme (`cloud.1.log` to `cloud.5.log`) by their last change. The current file is never deleted. A missing section or field takes the default (14 days, 100M). A change takes effect at the next rotation, without a restart. At the console: `config set logs.retention-days 30`.
 
 ### `groups/<name>.yml`
 
@@ -233,6 +238,7 @@ Besides types and patterns, `ConfigValidator` checks the configuration as a whol
 - `docker-image` only and always with `mode: docker`.
 - An enabled API on a non-loopback address needs TLS.
 - `setup-complete: true` needs `eula-accepted: true`.
+- `logs.retention-days` lies between 1 and 3650, `logs.max-file-size` between 1M and 10G (`out-of-range`).
 - A group's `drain-timeout`, if set, lies between 5s and 10m (`out-of-range`).
 - `process`: flag count, flag pattern and reserved flags, `stop-command` pattern, `stop-timeout` from 1 s to 600 s, `max-attempts` from 1 to 1000, `backoff` ≤ `max-backoff`.
 

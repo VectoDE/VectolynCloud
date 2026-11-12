@@ -155,7 +155,7 @@ Alles, was die Cloud ablegt, liegt unter dem Home ([Aufbau](architecture.md#clou
 
 **Windows-Konsole.** `start.bat` und `start.ps1` stellen die Konsole auf UTF-8 um (`chcp 65001`) und starten Java mit `-Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8`, damit Umlaute im Log stimmen. Startest du `java -jar VectolynCloud.jar` von Hand in einer alten Konsole, setze dasselbe.
 
-**Logs.** `logs/cloud.log` ist das Log der Cloud selbst, in UTF-8 und mit vollen Stacktraces (Secrets geschwärzt). Jeder Start beginnt eine neue Datei, die letzten fünf bleiben als `cloud.1.log` bis `cloud.5.log`. Das Log jedes Servers ist `logs/services/<id>.log`. Was ein Start auf dem Bildschirm zeigt, steht in [node.md](node.md#start-output).
+**Logs.** `logs/cloud.log` ist das Log der Cloud selbst, in UTF-8 und mit vollen Stacktraces (Secrets geschwärzt). Jeder Start, jede Mitternacht und eine Datei ab `logs.max-file-size` (Standard 100M) beginnen eine neue Datei; die alte bleibt als `cloud-<Datum>.log` für `logs.retention-days` Tage erhalten (Standard 14, [config.md](config.md#cloudyml)). Das Log jedes Servers ist `logs/services/<id>.log` und wird genauso rotiert und gelöscht. Was ein Start auf dem Bildschirm zeigt, steht in [node.md](node.md#start-output).
 
 ## Windows
 

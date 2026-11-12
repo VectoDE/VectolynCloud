@@ -24,6 +24,7 @@ import net.vectolyn.cloud.config.model.DatabaseConfig;
 import net.vectolyn.cloud.config.model.DatabaseMode;
 import net.vectolyn.cloud.config.model.GroupConfig;
 import net.vectolyn.cloud.config.model.HeapConfig;
+import net.vectolyn.cloud.config.model.LogsConfig;
 import net.vectolyn.cloud.config.model.MemoryReserve;
 import net.vectolyn.cloud.config.model.MemorySize;
 import net.vectolyn.cloud.config.model.NodeConfig;
@@ -104,6 +105,19 @@ public final class ConfigValidator {
         }
         validateDatabase(c, f, cloud.database());
         validateApi(c, f, cloud.api());
+        validateLogs(c, f, cloud.logs());
+    }
+
+    /** {@code logs} may be missing (a file from before the section): the defaults apply. */
+    private static void validateLogs(Checks c, String f, LogsConfig logs) {
+        if (logs == null) {
+            return;
+        }
+        c.range(f, "logs.retention-days", logs.retentionDays(), LogsConfig.MIN_RETENTION_DAYS,
+                LogsConfig.MAX_RETENTION_DAYS);
+        if (c.required(f, "logs.max-file-size", logs.maxFileSize())) {
+            c.range(f, "logs.max-file-size", logs.maxFileSize().megabytes(), 1, LogsConfig.MAX_FILE_SIZE_MEGABYTES);
+        }
     }
 
     private static void validateDatabase(Checks c, String f, DatabaseConfig db) {
