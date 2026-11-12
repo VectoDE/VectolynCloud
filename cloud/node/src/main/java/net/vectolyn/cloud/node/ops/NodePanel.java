@@ -42,10 +42,11 @@ public final class NodePanel {
      * @param apiServer the started API server, or null while the API is off or did not start
      * @param version   the version of the cloud
      * @param secrets   the secret store, for the client secret of single sign-on
+     * @param node      players, service consoles and the configuration archive
      * @return the running panel, or empty
      */
     public static Optional<PanelServer> start(Path home, @Nullable ApiServer apiServer, String version,
-                                              SecretStore secrets) {
+                                              SecretStore secrets, net.vectolyn.cloud.panel.PanelNode node) {
         PanelConfigLoader.Settings settings;
         try {
             settings = PanelConfigLoader.load(home);
@@ -69,6 +70,7 @@ public final class NodePanel {
             OidcClient oidc = oidc(settings, secrets);
             PanelApi api = new PanelApi(users, audit, NodeAccess.of(apiServer), oidc, Clock.systemUTC(), System::nanoTime,
                     new net.vectolyn.cloud.panel.files.ServiceFiles(home));
+            api.node(node);
             panel = PanelServer.builder(settings).tls(apiServer.tls()).version(version).api(api).build();
             InetSocketAddress address = panel.start();
             LOG.log(System.Logger.Level.INFO, "Panel listens on {0}:{1,number,#}", address.getHostString(),

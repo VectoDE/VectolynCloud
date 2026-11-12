@@ -172,6 +172,34 @@ Links, junctions and other special entries below the service folder are never fo
 
 The editor opens UTF-8 text up to 1 MiB; anything else is offered as a download. An upload may be 8 MiB; every other request body stays at 256 KiB, and at most four uploads are read at the same time on the whole panel (`503 busy` for a fifth), so the memory a stranger can make the panel hold stays small.
 
+## Players and configuration
+
+### Players
+
+**Players** lists everyone online on the network with their server and proxy (needs `services:read`), and updates when someone joins, switches or leaves. With `players:manage` a player can be messaged, kicked or banned. The cloud keeps no ban list of its own and the protocol has no kick the cloud starts, so each action is a console line on the backend server the player is on:
+
+| Action | Endpoint | Console line |
+|---|---|---|
+| Message | `POST /api/panel/players/message` `{"uuid", "text"}` | `tell <name> <text>` |
+| Kick | `POST /api/panel/players/kick` `{"uuid", "reason"}` | `kick <name> [reason]` |
+| Ban | `POST /api/panel/players/ban` `{"uuid", "reason"}` | `ban <name> [reason]`, the server's own ban list |
+
+The name comes from the node's list of players, never from the request, and must be a plain name (`[A-Za-z0-9_]`, with the dot of Bedrock players). The text may have at most 256 characters and no line break or other control character, so it can never start a second command. A player between two servers gets `409`. Every action goes into the audit log.
+
+### Groups, tasks and templates
+
+**Configuration** edits groups and tasks as JSON with the same fields as their YAML files and templates' text files, through the REST routes of the [API](api.md#endpoints). The validation is the node's own: a wrong value answers `422` with the field, shown under the editor. Every save sends the `ETag` of the opened document as `If-Match`, so a change someone else saved in between is never overwritten (`412`). Template files need `templates:read` and `files:read`, saving them `templates:write` and `files:write`.
+
+### Export and import
+
+| Endpoint | Right | Does |
+|---|---|---|
+| `GET /api/panel/config/export` | config:read | the configuration as a zip (`cloud.yml`, `nodes.yml`, groups, tasks, `monitor.yml`, `privacy.yml`, `backup.yml`), never secrets |
+| `POST /api/panel/config/import/preview` (zip as body) | config:write | checks the whole archive as the console's `config import` does and returns the changed files, their diff and `confirm`, the SHA-256 of the archive |
+| `POST /api/panel/config/import?confirm=<sha256>` (the same zip) | config:write | applies it; any other archive than the previewed one gets `409 preview-required` |
+
+An archive may be 8 MiB here (bigger ones through the console). An invalid one answers `422 invalid-import` with what is wrong; nothing is written. Export and import go into the audit log.
+
 ## Building the frontend
 
 The frontend is built by Gradle when `-Pvectolyn.panel.web=true` is set; this needs Node.js 20.9 or newer with npm on the `PATH`:
@@ -203,5 +231,5 @@ The panel aims at WCAG 2.2 AA and AAA where it is reachable: a skip link to the 
 - `PanelServerTest` runs the server on `127.0.0.1` with a random port: CSP with the page's hash and no `unsafe-inline`, the security headers, `ETag` and `304`, immutable caching of hashed files, gzip, the redirect of a folder without slash, the 404 page, `405`, the info endpoint, refused `Host` names, refused targets (`..`, `.`, `%2e`, backslash, empty segments), and that a public address without TLS does not start.
 - `PanelConfigLoaderTest`: defaults without a file, strict reading, port and `public-url` rules.
 - Fuzz targets (Jazzer, see [architecture](architecture.md#fuzz-tests)) in `PanelInputFuzzTest`: request targets are clean or refused, `panel.yml` is settings or configuration errors, public URLs are origins or refused.
-- `ServiceFilesTest`: path rules, atomic writes, listing order, the 8 MiB read limit, links never followed. `PanelApiTest`: rights of the file endpoints, CSRF on uploads, refused paths (`..`, `%2E%2E`, backslash, drive letter, device name), audit entries, and the checks of the event stream (session, origin, end with the session). `BodyLimitHandlerTest`: the body limits and the upload limit. `PanelStreamTest`: a real WebSocket against the running server, refused for another origin and without a session, 20 events each within a second (the worst delay is printed, about 10 ms on a desktop), closed with `1008` after sign-out. Fuzz target `filePathsStayInsideTheServiceFolder`.
+- `ServiceFilesTest`: path rules, atomic writes, listing order, the 8 MiB read limit, links never followed. `PanelApiTest`: rights of the file endpoints, CSRF on uploads, refused paths (`..`, `%2E%2E`, backslash, drive letter, device name), audit entries, and the checks of the event stream (session, origin, end with the session). `BodyLimitHandlerTest`: the body limits and the upload limit. `PanelApiTest` also covers players (rights, the console lines, refused line breaks and odd names) and the import that runs only after its preview; `NodePanelBridgeTest` exports, previews and imports through a real `ConfigService`. `PanelStreamTest`: a real WebSocket against the running server, refused for another origin and without a session, 20 events each within a second (the worst delay is printed, about 10 ms on a desktop), closed with `1008` after sign-out. Fuzz target `filePathsStayInsideTheServiceFolder`.
 - The **Panel frontend** job of `ci.yml` checks that both languages have the same keys, type-checks the TypeScript and builds the static export.

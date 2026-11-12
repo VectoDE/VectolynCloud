@@ -62,6 +62,12 @@ Jede Anfrage muss das Panel im `Host`-Header nennen (`localhost`, `127.0.0.1`, `
 
 **Dateien** öffnet den Ordner eines Dienstes (`temp/services/<id>` oder `local/services/<id>`). Lesen braucht `files:read`, Schreiben, Hochladen, neue Ordner und Löschen brauchen `files:write`. Pfade sind relativ, ohne `.`, `..`, `\ : * ? " < > |`, Steuerzeichen und Windows-Gerätenamen, höchstens 512 Zeichen. Verknüpfungen werden nie verfolgt. Dateien werden atomar ersetzt, Downloads immer als Anhang ausgeliefert, jede Änderung landet im Audit-Log. Uploads bis 8 MiB, höchstens vier gleichzeitig; alle anderen Anfragen bis 256 KiB. Details in [panel.md](panel.md#services-console-and-files).
 
+## Spieler und Konfiguration
+
+**Spieler** zeigt alle Spieler im Netzwerk mit Server und Proxy (`services:read`). Mit `players:manage` lassen sie sich anschreiben, kicken oder bannen. Jede Aktion ist eine Konsolenzeile auf dem Backend-Server des Spielers (`tell`, `kick`, `ban`, der Bann steht in der Bann-Liste dieses Servers). Der Name kommt aus der Spielerliste des Knotens. Der Text hat höchstens 256 Zeichen und keine Zeilenumbrüche, damit nie ein zweiter Befehl entsteht. Jede Aktion steht im Audit-Log.
+
+**Konfiguration** bearbeitet Gruppen und Aufgaben als JSON und Textdateien von Vorlagen über die REST-Routen der API, mit derselben Validierung (`422` mit Feld) und `If-Match`, damit keine fremde Änderung überschrieben wird. **Export** liefert die Konfiguration als Zip, ohne Secrets. Ein **Import** zeigt zuerst Dateien und Diff und wird nur mit der Prüfsumme genau dieser Vorschau angewendet. Details in [panel.md](panel.md#players-and-configuration).
+
 ## Oberfläche bauen
 
 ```sh

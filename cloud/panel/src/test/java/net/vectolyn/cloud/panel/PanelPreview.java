@@ -107,6 +107,39 @@ public final class PanelPreview {
         Path lobby = Files.createDirectories(home.resolve("temp/services/lobby-1/plugins"));
         Files.writeString(lobby.getParent().resolve("server.properties"), "motd=Preview\nmax-players=50\n");
         Files.writeString(lobby.resolve("config.yml"), "greeting: hello\n");
+        api.node(new PanelNode() {
+            @Override
+            public java.util.List<Player> players() {
+                return java.util.List.of(new Player("6f1c0a1e-0000-4000-8000-000000000001", "Alex", "proxy-1", "lobby-1", false),
+                        new Player("6f1c0a1e-0000-4000-8000-000000000002", ".Kiri", "proxy-1", "survival-1", true));
+            }
+
+            @Override
+            public boolean command(String serviceId, String line) {
+                System.out.println("[preview] " + serviceId + ": " + line);
+                return true;
+            }
+
+            @Override
+            public byte[] exportConfig() {
+                return new byte[] {'P', 'K', 5, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+            }
+
+            @Override
+            public ImportPlan planImport(byte[] archive) {
+                return new ImportPlan(java.util.List.of(new FileChange("cloud.yml", "changed"),
+                        new FileChange("groups/lobby.yml", "added")), "--- cloud.yml
++++ cloud.yml
+-language: en
++language: de
+");
+            }
+
+            @Override
+            public java.util.Set<String> applyImport(byte[] archive) {
+                return java.util.Set.of("cloud.yml", "groups/lobby.yml");
+            }
+        });
         PanelServer server = PanelServer.builder(settings).version("preview").api(api).build();
         InetSocketAddress address = server.start();
         System.out.println("Panel preview on http://localhost:" + address.getPort() + "/");

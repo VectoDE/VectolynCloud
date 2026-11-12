@@ -51,37 +51,52 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
   return json as T;
 }
 
-/** Sends raw bytes (a file upload); the answer is JSON like {@link api}. */
-export async function upload(path: string, content: Blob | string): Promise<void> {
+async function fail(response: Response): Promise<never> {
+  let json: Record<string, unknown> = {};
+  try {
+    json = (await response.json()) as Record<string, unknown>;
+  } catch {
+    // not JSON
+  }
+  throw new ApiError(response.status, String(json.code ?? "http-" + response.status), String(json.message ?? ""), json);
+}
+
+/** Sends raw bytes (a file upload or an archive); returns the JSON answer. */
+export async function upload<T = Record<string, unknown>>(path: string, content: Blob | string): Promise<T> {
   const response = await fetch(path, {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/octet-stream", "X-Vectolyn-CSRF": csrfToken ?? "1" },
     credentials: "same-origin",
     body: content,
   });
-  if (!response.ok) {
-    let json: Record<string, unknown> = {};
-    try {
-      json = (await response.json()) as Record<string, unknown>;
-    } catch {
-      // not JSON
-    }
-    throw new ApiError(response.status, String(json.code ?? "http-" + response.status), String(json.message ?? ""), json);
-  }
+  if (!response.ok) await fail(response);
+  return (await response.json()) as T;
+}
+
+/** A document of the API with its ETag, for an edit that must not overwrite someone else's. */
+export async function getDocument<T>(path: string): Promise<{ body: T; etag: string | null }> {
+  const response = await fetch(path, { headers: { Accept: "application/json" }, credentials: "same-origin" });
+  if (!response.ok) await fail(response);
+  return { body: (await response.json()) as T, etag: response.headers.get("ETag") };
+}
+
+/** Writes a document with If-Match; returns the new ETag. */
+export async function putDocument(path: string, body: unknown, etag: string | null): Promise<string | null> {
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+    "X-Vectolyn-CSRF": csrfToken ?? "1",
+  };
+  if (etag) headers["If-Match"] = etag;
+  const response = await fetch(path, { method: "PUT", headers, credentials: "same-origin", body: JSON.stringify(body) });
+  if (!response.ok) await fail(response);
+  return response.headers.get("ETag");
 }
 
 /** Reads raw bytes (a file of a service). */
 export async function download(path: string): Promise<ArrayBuffer> {
   const response = await fetch(path, { credentials: "same-origin" });
-  if (!response.ok) {
-    let json: Record<string, unknown> = {};
-    try {
-      json = (await response.json()) as Record<string, unknown>;
-    } catch {
-      // not JSON
-    }
-    throw new ApiError(response.status, String(json.code ?? "http-" + response.status), String(json.message ?? ""), json);
-  }
+  if (!response.ok) await fail(response);
   return response.arrayBuffer();
 }
 
