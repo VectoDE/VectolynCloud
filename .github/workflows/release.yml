@@ -63,6 +63,8 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
+          # No dependency cache: a poisoned cache must not reach a build (zizmor cache-poisoning).
+          package-manager-cache: false
 
       # The version rules, checked before anything is built or signed (docs/cloud/operations.md#versions-and-tags):
       # v<MAJOR>.<MINOR>.<PATCH> with -dev[.N] (the only choice below 1.0.0), -alpha[.N], -beta[.N],

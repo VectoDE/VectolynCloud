@@ -31,6 +31,8 @@ dependencies {
     // Wired in CloudNode (docs/cloud/backup.md, monitor.md, api.md): none of them knows the node.
     implementation(project(":cloud:backup"))
     implementation(project(":cloud:monitor"))
+    // IP ban list with retention (docs/cloud/privacy.md); it does not know the node either.
+    implementation(project(":cloud:privacy"))
     implementation(project(":cloud:api"))
     // The web panel next to the API (docs/cloud/panel.md); it runs the API's routes in-process.
     implementation(project(":cloud:panel"))

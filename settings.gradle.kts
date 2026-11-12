@@ -61,6 +61,7 @@ include(
     "cloud:monitor",
     "cloud:cluster",
     "cloud:panel",
+    "cloud:privacy",
 )
 
 // Plugins: plugins/<feature>/<platform>, shared logic of a feature in plugins/<feature>/common.

@@ -37,6 +37,8 @@ import net.vectolyn.cloud.cluster.VersionPolicy;
 import net.vectolyn.cloud.config.CloudHome;
 import net.vectolyn.cloud.config.model.ApiConfig;
 import net.vectolyn.cloud.monitor.MonitorRuntime;
+import net.vectolyn.cloud.privacy.IpBanStore;
+import net.vectolyn.cloud.privacy.PrivacyRuntime;
 import net.vectolyn.cloud.node.ops.NodeApi;
 import net.vectolyn.cloud.node.ops.NodeBackups;
 import net.vectolyn.cloud.node.ops.NodeMonitoring;
@@ -409,6 +411,7 @@ public final class CloudNode implements AutoCloseable {
      *                   store the API server uses, or, if the file could not be read at the start,
      *                   another attempt to open it each time
      * @param monitoring the monitor
+     * @param privacy    data protection: the IP ban list and its deletion (docs/cloud/privacy.md)
      * @param backups    the backups
      * @param api        the node behind the API
      * @param apiServer  the API server, or null while {@code api.enabled} is off or it cannot be prepared
@@ -416,8 +419,8 @@ public final class CloudNode implements AutoCloseable {
      * @param cluster    the cluster of this node (docs/cloud/cluster.md); standalone without
      *                   {@code config/cluster.yml}
      */
-    private record Ops(ApiCommands.TokenFile tokens, MonitorRuntime monitoring, BackupService backups, NodeApi api,
-                       ApiServer apiServer, Autoscaler scaler, ClusterService cluster) {
+    private record Ops(ApiCommands.TokenFile tokens, MonitorRuntime monitoring, PrivacyRuntime privacy,
+                       BackupService backups, NodeApi api, ApiServer apiServer, Autoscaler scaler, ClusterService cluster) {
     }
 
     private static Ops buildOps(NodeSettings settings, CloudHome home, ConfigService config, SecretStore secrets,
@@ -431,6 +434,12 @@ public final class CloudNode implements AutoCloseable {
         // An invalid monitor.yml fails here with every error, like the other configuration files.
         MonitorRuntime monitoring = MonitorRuntime.open(home.root(), directory, secrets, redactor::redact, nodeId);
         directory.attach(monitoring.monitor());
+        PrivacyRuntime privacy;
+        try {
+            privacy = PrivacyRuntime.open(home.root(), Clock.systemUTC());
+        } catch (IpBanStore.FormatException e) {
+            throw new IOException("state/ip-bans.json is not a valid ban list", e);
+        }
         services.addListener(directory);
         channel.statusListener(monitoring.monitor()::statusReported);
 
@@ -458,7 +467,7 @@ public final class CloudNode implements AutoCloseable {
         // come from the head, and console, setup and API cannot change them here.
         ClusterService cluster = ClusterService.openOrStandalone(new ClusterPaths(home), new NodeId(nodeId),
                 settings.launcherVersion(), config, VersionPolicy.sameVersion(), Clock.systemUTC());
-        return new Ops(tokenFile, monitoring, backups, api, apiServer(home, config, secrets, api, tokens), scaler, cluster);
+        return new Ops(tokenFile, monitoring, privacy, backups, api, apiServer(home, config, secrets, api, tokens), scaler, cluster);
     }
 
     /**
@@ -633,6 +642,7 @@ public final class CloudNode implements AutoCloseable {
         // After the channel, before the first service: the monitor sees every start, and a backup
         // or restore that a crash interrupted is put right before a start renders into its folder.
         ops.monitoring().start();
+        ops.privacy().start();
         // The cluster port of a head or the link of a member; a problem leaves the node running alone.
         try {
             ops.cluster().start();
@@ -1116,6 +1126,7 @@ public final class CloudNode implements AutoCloseable {
         step(errors, "stopping the services", services::close);
         // After the last service: writes the history file and sends what is queued.
         step(errors, "closing the monitoring", ops.monitoring()::close);
+        step(errors, "closing data protection", ops.privacy()::close);
         step(errors, "stopping the database", database::shutdown);
         step(errors, "closing the cluster", ops.cluster()::close);
         step(errors, "closing the cloud channel", network::close);

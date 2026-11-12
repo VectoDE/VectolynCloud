@@ -13,3 +13,16 @@ vulnerabilities:
     purls:
       - "pkg:maven/com.google.guava/guava@32.1.2-jre"
     statement: "GHSA-xxph-c9ww-hj94: Guava shaded into graphql-java 26.1 (newest release) under graphql.com.google.common. The flaw needs Java deserialization of attacker data, which neither VectolynCloud nor graphql-java's use here performs. The project's own Guava is 33.7.2-jre (fixed). Same reason in .grype.yaml; remove both once graphql-java ships a newer Guava."
+licenses:
+  - id: "LGPL-3.0-or-later"
+    paths:
+      - "cloud/panel/web/package-lock.json"
+    statement: "Optional prebuilt image libraries of sharp (@img/sharp-*), an optional dependency of Next.js for next/image. The panel frontend is a static export with images.unoptimized, so sharp is never called; npm installs only the package of the build machine, it is used at build time only and nothing of it reaches the jar or the release. LGPL-3.0-or-later is compatible with the project's GPL-3.0-or-later. Listed in docs/licenses/DEPENDENCY-LICENSES.md."
+  - id: "Apache-2.0 AND LGPL-3.0-or-later AND MIT"
+    paths:
+      - "cloud/panel/web/package-lock.json"
+    statement: "Optional prebuilt image libraries of sharp (@img/sharp-*), an optional dependency of Next.js for next/image. The panel frontend is a static export with images.unoptimized, so sharp is never called; npm installs only the package of the build machine, it is used at build time only and nothing of it reaches the jar or the release. LGPL-3.0-or-later is compatible with the project's GPL-3.0-or-later. Listed in docs/licenses/DEPENDENCY-LICENSES.md."
+  - id: "Apache-2.0 AND LGPL-3.0-or-later"
+    paths:
+      - "cloud/panel/web/package-lock.json"
+    statement: "Optional prebuilt image libraries of sharp (@img/sharp-*), an optional dependency of Next.js for next/image. The panel frontend is a static export with images.unoptimized, so sharp is never called; npm installs only the package of the build machine, it is used at build time only and nothing of it reaches the jar or the release. LGPL-3.0-or-later is compatible with the project's GPL-3.0-or-later. Listed in docs/licenses/DEPENDENCY-LICENSES.md."

@@ -32,6 +32,10 @@ RenderReport report = TemplateInstaller.install(
         ServerPlatform.VELOCITY, values, eulaAccepted);
 ```
 
+## Editing through the API
+
+The web panel's editor reads and writes template files through the REST API: `GET /api/v1/templates`, `GET /api/v1/templates/{template}/files`, `GET` and `PUT /api/v1/templates/{template}/files/{path}` with the scopes `templates:read` and `templates:write`. A write is checked against the `ETag` of the file (`If-Match`), limited to 48 KiB, refused for anything that looks like a secret and on a cluster member, and replaces the file atomically. `TemplateFiles` and `TemplatePaths` in `cloud/config` (package `net.vectolyn.cloud.config.template`) implement it; the cluster mirror uses the same path rules. Details in [api.md](api.md#templates).
+
 ## Placeholder syntax
 
 - `{{VECTOLYN_NAME}}` is replaced by the value of `VECTOLYN_NAME`. The name is `VECTOLYN_` followed by upper-case letters, digits and underscores, with no spaces inside the braces.
