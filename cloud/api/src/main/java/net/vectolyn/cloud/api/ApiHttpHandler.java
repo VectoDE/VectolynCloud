@@ -30,6 +30,7 @@ import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.util.ReferenceCountUtil;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.Locale;
@@ -100,6 +101,9 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
 
     /** Key of the setup token in the token rate limiter; API token ids are 8 hex characters. */
     private static final String SETUP_LIMIT_KEY = "setup";
+
+    private static final byte[] INTERNAL_ERROR_BODY =
+            "{\"code\":\"internal-error\",\"message\":\"Internal error.\"}".getBytes(StandardCharsets.UTF_8);
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, HttpObject msg) {
@@ -262,18 +266,23 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
         String client = ClientAddress.key(ctx.channel().remoteAddress());
         try {
             server.executor().execute(() -> {
-                FullHttpResponse response;
+                FullHttpResponse answer = null;
                 try {
-                    response = respond(request.setupToken() != null ? claim(request.setupToken(), client)
-                            : request.route().route().handler().handle(apiRequest), request.origin());
-                } catch (Exception e) {
-                    response = error(map(e), request.origin());
+                    answer = answer(request, apiRequest, client);
+                } catch (Throwable t) {
+                    // answer() maps every exception; this is an Error, or a failure of the error path itself.
+                    LOG.log(System.Logger.Level.ERROR, "API request failed", t);
                 } finally {
                     server.requestSlots().release();
+                    FullHttpResponse response = answer;
+                    try {
+                        ctx.channel().eventLoop().execute(() -> finish(ctx, response, request.keepAlive()));
+                    } catch (RuntimeException e) {
+                        // The event loop is gone (shutdown); the connection cannot be answered any more.
+                        ReferenceCountUtil.release(response);
+                        ctx.channel().close();
+                    }
                 }
-                rateLimitHeaders(response, request.token() != null ? request.token().id() : SETUP_LIMIT_KEY);
-                FullHttpResponse answer = response;
-                ctx.channel().eventLoop().execute(() -> finish(ctx, answer, request.keepAlive()));
             });
         } catch (RejectedExecutionException e) {
             server.requestSlots().release();
@@ -298,10 +307,49 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
         return ApiRoutes.claimed(created.get(), server.tokens().clock().instant());
     }
 
+    /**
+     * Runs the handler (or the setup claim) and builds the response with its rate limit headers.
+     * An exception of the handler becomes its error answer; a failure while building the error answer
+     * becomes a plain {@code 500}. Rate limit headers that cannot be computed are left out.
+     */
+    private FullHttpResponse answer(Pending request, ApiRequest apiRequest, String client) {
+        FullHttpResponse response;
+        try {
+            response = respond(request.setupToken() != null ? claim(request.setupToken(), client)
+                    : request.route().route().handler().handle(apiRequest), request.origin());
+        } catch (Exception e) {
+            try {
+                response = error(map(e), request.origin());
+            } catch (RuntimeException inner) {
+                LOG.log(System.Logger.Level.ERROR, "API request failed, and so did its error answer", inner);
+                response = internalError();
+            }
+        }
+        try {
+            rateLimitHeaders(response, request.setupToken() != null ? SETUP_LIMIT_KEY : request.token().id());
+        } catch (RuntimeException e) {
+            response.headers().remove("X-RateLimit-Limit").remove("X-RateLimit-Remaining");
+            LOG.log(System.Logger.Level.WARNING, "API: the rate limit headers could not be set: {0}",
+                    e.getClass().getSimpleName());
+        }
+        return response;
+    }
+
+    /**
+     * Sends the answer of a request and reads the next one. Without an answer (the handler failed in
+     * a way that left none) the client gets a plain {@code 500} and the connection closes. Whatever
+     * happens, the connection is never left waiting with reading switched off.
+     */
     private void finish(ChannelHandlerContext ctx, FullHttpResponse response, boolean keepAlive) {
         busy = false;
-        boolean close = closeAfterResponse || !keepAlive;
-        send(ctx, response, close);
+        boolean close = response == null || closeAfterResponse || !keepAlive;
+        try {
+            send(ctx, response == null ? internalError() : response, close);
+        } catch (RuntimeException e) {
+            LOG.log(System.Logger.Level.WARNING, "API: the answer could not be sent: {0}", e.getClass().getSimpleName());
+            ctx.close();
+            return;
+        }
         if (!close) {
             ctx.channel().config().setAutoRead(true);
             ctx.read();
@@ -309,8 +357,25 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
     }
 
     /**
+     * A {@code 500 internal-error} built from constants only, for when building the real answer failed.
+     */
+    private static FullHttpResponse internalError() {
+        FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1,
+                HttpResponseStatus.INTERNAL_SERVER_ERROR, Unpooled.wrappedBuffer(INTERNAL_ERROR_BODY));
+        HttpHeaders h = response.headers();
+        h.set(HttpHeaderNames.CONTENT_TYPE, "application/json; charset=utf-8");
+        h.setInt(HttpHeaderNames.CONTENT_LENGTH, INTERNAL_ERROR_BODY.length);
+        h.set(HttpHeaderNames.CACHE_CONTROL, "no-store");
+        h.set("X-Content-Type-Options", "nosniff");
+        h.set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
+        h.set("Referrer-Policy", "no-referrer");
+        return response;
+    }
+
+    /**
      * {@code X-RateLimit-Limit} (the bucket of the token) and {@code X-RateLimit-Remaining} (what
-     * it holds now), so a script can slow down before it gets {@code 429}.
+     * it holds now), so a script can slow down before it gets {@code 429}. {@code limitKey} is the
+     * key {@link #head} charged: the token id, or {@link #SETUP_LIMIT_KEY} for the setup token.
      */
     private void rateLimitHeaders(FullHttpResponse response, String limitKey) {
         RateLimiter<String> limiter = server.tokenLimiter();

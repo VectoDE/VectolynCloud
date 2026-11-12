@@ -54,7 +54,7 @@ curl -X POST -H "Authorization: Bearer vcs_..." https://cloud.example.org:8443/a
 ```
 
 - Der Einrichtungs-Token gilt nur für diese eine Anfrage. An jedem anderen Endpunkt oder mit Query-String ist er ein falsches Token (`401`, zählt für die Sperre nach falschen Tokens). Ein API-Token bekommt an diesem Endpunkt `403 setup-token-required`.
-- Der Tausch entfernt den Einrichtungs-Token, bevor er das API-Token schreibt. Zweimal geht also nie, ein zweiter Versuch bekommt `401`. Das API-Token hat den Scope `admin` und den Namen des Administrators, mit `-2`, `-3`, … falls es diesen Namen schon gibt.
+- Der Tausch schreibt zuerst das API-Token. Scheitert das (`500 io-error`), bleibt der Einrichtungs-Token gültig und der Tausch lässt sich wiederholen. Sobald das API-Token existiert, ist der Einrichtungs-Token sofort ungültig. Zweimal geht also nie, ein zweiter Versuch bekommt `401`. Danach wird seine Datei gelöscht. Scheitert das Löschen, gelingt der Tausch trotzdem und der Node protokolliert einen Fehler, denn mit der Datei wäre der Einrichtungs-Token nach einem Neustart wieder gültig (Datei löschen oder den Token mit `api token setup` ersetzen). Das API-Token hat den Scope `admin` und den Namen des Administrators, mit `-2`, `-3`, … falls es diesen Namen schon gibt.
 - Nur diese Antwort enthält das API-Token (`Cache-Control: no-store`). Geht es verloren: an der Konsole widerrufen und einen neuen Einrichtungs-Token erstellen.
 - Das Web-Panel (Stufe 8) nutzt später dieselbe Anfrage für die erste Anmeldung.
 

@@ -85,6 +85,42 @@ class ApiTokensTest {
     }
 
     @Test
+    void aClaimThatCannotWriteTheAdminTokenKeepsTheSetupToken() throws Exception {
+        ApiTokens tokens = open();
+        String token = tokens.issueSetupToken("owner", ApiTokens.SETUP_TOKEN_TTL).token().reveal();
+        Path setupFile = dir.resolve("secrets/" + ApiTokens.SETUP_FILE_NAME);
+        // The token file cannot be written: a directory sits where it belongs.
+        Files.createDirectories(tokens.file());
+        assertThrows(IOException.class, () -> tokens.claimSetupToken(token));
+        assertTrue(tokens.list().isEmpty(), "no admin token exists");
+        assertEquals("owner", tokens.setupAdmin(token).orElseThrow(), "the setup token still works");
+        assertTrue(Files.exists(setupFile), "and its file is still there");
+
+        Files.delete(tokens.file());
+        assertEquals("owner", open().setupAdmin(token).orElseThrow(), "also after a restart");
+        ApiTokens.Created admin = tokens.claimSetupToken(token).orElseThrow();
+        assertEquals(admin.info(), tokens.authenticate(admin.token().reveal()).orElseThrow(), "the retry works");
+        assertTrue(tokens.setupAdmin(token).isEmpty());
+        assertFalse(Files.exists(setupFile));
+    }
+
+    @Test
+    void aSetupTokenWhoseFileCannotBeDeletedIsStillUsedUp() throws Exception {
+        ApiTokens tokens = open();
+        String token = tokens.issueSetupToken("owner", ApiTokens.SETUP_TOKEN_TTL).token().reveal();
+        Path setupFile = dir.resolve("secrets/" + ApiTokens.SETUP_FILE_NAME);
+        // A directory with content in place of the file: deleting it fails.
+        Files.delete(setupFile);
+        Files.createDirectories(setupFile.resolve("keep"));
+
+        ApiTokens.Created admin = tokens.claimSetupToken(token).orElseThrow();
+        assertEquals(admin.info(), tokens.authenticate(admin.token().reveal()).orElseThrow(), "the claim succeeds");
+        assertTrue(tokens.setupAdmin(token).isEmpty(), "the setup token is used up anyway");
+        assertTrue(tokens.claimSetupToken(token).isEmpty(), "a second claim gets nothing");
+        assertEquals(1, tokens.list().size());
+    }
+
+    @Test
     void anExpiredOrReplacedSetupTokenFailsAndATakenNameGetsANumber() throws Exception {
         ApiTokens tokens = open();
         String first = tokens.issueSetupToken("admin", java.time.Duration.ofMinutes(5)).token().reveal();
