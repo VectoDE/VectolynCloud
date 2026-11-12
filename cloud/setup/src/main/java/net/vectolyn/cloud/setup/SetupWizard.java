@@ -178,6 +178,15 @@ public final class SetupWizard {
 
         /** The run ended: saved, unchanged, cancelled or rolled back after a failure. Always called. */
         void finished();
+
+        /**
+         * The run completed the first setup ({@link SetupResult#firstAdmin()} is present); called
+         * after {@link #finished()}. The node issues the one-time setup token here.
+         *
+         * @param result the result of the run
+         */
+        default void completed(SetupResult result) {
+        }
     }
 
     /** The {@code setup} command. */
@@ -190,12 +199,16 @@ public final class SetupWizard {
                 .description(SetupMessages.COMMAND_DESCRIPTION)
                 .executes(context -> {
                     hooks.started();
+                    SetupResult result;
                     try {
-                        run(console, config, env.withLanguage(context.language()));
+                        result = run(console, config, env.withLanguage(context.language()));
                     } catch (IOException e) {
                         throw new CommandException(SetupMessages.WRITE_FAILED, String.valueOf(e.getMessage()));
                     } finally {
                         hooks.finished();
+                    }
+                    if (result.firstAdmin().isPresent()) {
+                        hooks.completed(result);
                     }
                 })
                 .build();

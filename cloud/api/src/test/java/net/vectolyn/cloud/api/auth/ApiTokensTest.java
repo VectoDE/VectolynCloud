@@ -57,6 +57,65 @@ class ApiTokensTest {
     }
 
     @Test
+    void theSetupTokenIsShownOnceStoredAsHashAndClaimedExactlyOnce() throws Exception {
+        ApiTokens tokens = open();
+        ApiTokens.SetupToken issued = tokens.issueSetupToken("owner", ApiTokens.SETUP_TOKEN_TTL);
+        String token = issued.token().reveal();
+        assertTrue(token.matches("vcs_[A-Za-z0-9_-]{43}"), "format");
+        assertEquals(Instant.parse("2026-10-30T10:00:00Z"), issued.expiresAt(), "24 hours by default");
+        Path file = dir.resolve("secrets/" + ApiTokens.SETUP_FILE_NAME);
+        String stored = Files.readString(file, StandardCharsets.UTF_8);
+        assertFalse(stored.contains(token) || stored.contains(token.substring(4)), "only the hash is stored");
+        assertTrue(stored.contains("\"sha256\"") && stored.contains("\"admin\" : \"owner\""), stored);
+        assertTrue(OwnerOnlyPermissions.isOwnerOnly(file));
+
+        assertTrue(tokens.authenticate(token).isEmpty(), "the setup token is no API token");
+        assertEquals("owner", tokens.setupAdmin(token).orElseThrow());
+        assertEquals("owner", open().setupAdmin(token).orElseThrow(), "it survives a restart");
+        assertTrue(tokens.setupAdmin("vcs_" + "A".repeat(43)).isEmpty());
+
+        ApiTokens.Created admin = tokens.claimSetupToken(token).orElseThrow();
+        assertEquals("owner", admin.info().name());
+        assertEquals(Set.of(Scope.ADMIN), admin.info().scopes());
+        assertEquals(admin.info(), tokens.authenticate(admin.token().reveal()).orElseThrow());
+        assertTrue(tokens.claimSetupToken(token).isEmpty(), "used up");
+        assertTrue(tokens.setupAdmin(token).isEmpty());
+        assertFalse(Files.exists(file), "the file is gone");
+        assertTrue(open().setupAdmin(token).isEmpty(), "also after a restart");
+    }
+
+    @Test
+    void anExpiredOrReplacedSetupTokenFailsAndATakenNameGetsANumber() throws Exception {
+        ApiTokens tokens = open();
+        String first = tokens.issueSetupToken("admin", java.time.Duration.ofMinutes(5)).token().reveal();
+        String second = tokens.issueSetupToken("admin", java.time.Duration.ofMinutes(5)).token().reveal();
+        assertTrue(tokens.setupAdmin(first).isEmpty(), "a new setup token replaces the old one");
+        tokens.create("admin", EnumSet.of(Scope.SERVICES_READ));
+        assertEquals("admin-2", tokens.claimSetupToken(second).orElseThrow().info().name());
+
+        ApiTokens later = ApiTokens.open(dir.resolve("secrets/api-tokens.json"),
+                Clock.fixed(Instant.parse("2026-10-29T10:05:00Z"), ZoneOffset.UTC), new SecureRandom());
+        String expiring = later.issueSetupToken("admin", java.time.Duration.ofMinutes(5)).token().reveal();
+        ApiTokens afterExpiry = ApiTokens.open(dir.resolve("secrets/api-tokens.json"),
+                Clock.fixed(Instant.parse("2026-10-29T10:10:00Z"), ZoneOffset.UTC), new SecureRandom());
+        assertTrue(afterExpiry.setupAdmin(expiring).isEmpty(), "expired");
+        assertTrue(afterExpiry.claimSetupToken(expiring).isEmpty());
+
+        assertThrows(IllegalArgumentException.class, () -> tokens.issueSetupToken("Not Valid", ApiTokens.SETUP_TOKEN_TTL));
+        assertThrows(IllegalArgumentException.class, () -> tokens.issueSetupToken("admin", java.time.Duration.ZERO));
+        assertThrows(IllegalArgumentException.class, () -> tokens.issueSetupToken("admin", java.time.Duration.ofDays(8)));
+    }
+
+    @Test
+    void aMalformedSetupTokenFileIsRefusedWithoutItsContent() throws Exception {
+        Path file = dir.resolve("secrets/" + ApiTokens.SETUP_FILE_NAME);
+        Files.createDirectories(file.getParent());
+        Files.writeString(file, "{\"schema-version\":1,\"token\":{\"admin\":\"owner\",\"expires-at\":\"x\",\"sha256\":\"secret-ish\"}}");
+        IOException e = assertThrows(IOException.class, this::open);
+        assertFalse(e.getMessage().contains("secret-ish"), e.getMessage());
+    }
+
+    @Test
     void wrongAndRevokedTokensFail() throws Exception {
         ApiTokens tokens = open();
         String token = tokens.create("script", EnumSet.of(Scope.SERVICES_WRITE)).token().reveal();

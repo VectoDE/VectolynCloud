@@ -60,6 +60,11 @@ public final class ApiRoutes {
 
     /** Prefix of every endpoint. */
     public static final String PREFIX = "/api/v1";
+    /**
+     * Exchanges the one-time setup token for the first administrator's API token. Only the setup
+     * token itself is accepted as bearer here ({@code ApiHttpHandler}); an API token gets 403.
+     */
+    public static final String SETUP_CLAIM = PREFIX + "/setup/claim";
     /** Path of the WebSocket. */
     public static final String EVENTS = PREFIX + "/events";
     /** Longest console command sent to a service. */
@@ -233,6 +238,11 @@ public final class ApiRoutes {
                 throw ApiException.notFound("Token \"" + q.param("id") + "\"");
             }
             return ApiResponse.noContent();
+        });
+        // Reached with an API token only; the setup token is answered by ApiHttpHandler before routing.
+        r.add("POST", SETUP_CLAIM, null, q -> {
+            throw new ApiException(403, "setup-token-required",
+                    "This endpoint takes the one-time setup token (vcs_...), not an API token.");
         });
         // The WebSocket is answered by ApiHttpHandler before routing. It checks the scope per event
         // type (ApiEvent.TYPES) on the handshake, so the route itself needs none.
@@ -586,6 +596,20 @@ public final class ApiRoutes {
             list.add(item);
         }
         return list;
+    }
+
+    /**
+     * The answer to a successful {@value #SETUP_CLAIM}: the new API token with its description. The
+     * only place the token leaves the node.
+     *
+     * @param created the new token
+     * @param now     the time its expiry is judged against
+     * @return 201 with id, name, scopes, created-at and token
+     */
+    public static ApiResponse claimed(net.vectolyn.cloud.api.auth.ApiTokens.Created created, Instant now) {
+        Map<String, Object> body = describe(created.info(), now);
+        body.put("token", created.token().reveal());
+        return ApiResponse.of(201, body);
     }
 
     private static Map<String, Object> describe(ApiToken token, Instant now) {

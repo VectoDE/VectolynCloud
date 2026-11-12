@@ -19,7 +19,7 @@ api:
 
 ## Tokens
 
-Jede Anfrage braucht ein Token. Ohne Token, mit einem falschen, widerrufenen oder abgelaufenen kommt `401` mit `WWW-Authenticate: Bearer`. Einen Endpunkt ohne Anmeldung gibt es nicht.
+Jede Anfrage braucht ein Token. Ohne Token, mit einem falschen, widerrufenen oder abgelaufenen kommt `401` mit `WWW-Authenticate: Bearer`. Einen Endpunkt ohne Anmeldung gibt es nicht, ein Standardpasswort auch nicht. Das erste Token kommt von der Konsole oder aus dem einmaligen [Einrichtungs-Token](#erster-administrator).
 
 Tokens verwaltet man an der Konsole des Nodes oder mit einem `admin`-Token über `/api/v1/admin/tokens` (`GET` listet, `POST` erstellt, `DELETE /admin/tokens/{id}` widerruft). Der ganze Befehl `api` gilt als sensibel, keine seiner Zeilen landet in der History.
 
@@ -28,6 +28,7 @@ vectolyn> api token create dashboard services:read,config:read,node:read
 vectolyn> api token create ci services:read 90d    # gilt 90 Tage
 vectolyn> api token list
 vectolyn> api token revoke dashboard          # oder die ID; Aliase: delete, remove
+vectolyn> api token setup owner               # neuer einmaliger Einrichtungs-Token für den ersten Administrator
 vectolyn> api scopes
 ```
 
@@ -42,6 +43,20 @@ vectolyn> api scopes
 - Wo das angezeigte Token landet: Der Befehl schreibt auf die Konsole, nicht ins Log. Logdateien und Journal bekommen es also nicht. Unter systemd hat die Cloud gar keine Konsole, lege Tokens dann in einer `tmux`- oder `screen`-Sitzung an ([Betrieb](operations.de.md)). In Docker ist die Konsole eines angehängten Containers (`docker attach`) seine Standardausgabe, `docker logs` behält das Token also. Leere oder rotiere diese Logs, oder widerrufe das Token und lege ein neues an, wenn die Logs geteilt werden.
 
 Das Token geht als `Authorization: Bearer vct_...` mit. Browser können am WebSocket keine Header setzen. Deshalb nimmt der Event-Stream das Token auch als Subprotokoll `vectolyn.bearer.<token>` neben `vectolyn.v1` an. Der Server antwortet nur mit `vectolyn.v1` und gibt das Token nie zurück. Bietet ein Upgrade Subprotokolle an, aber nicht `vectolyn.v1`, kommt `400 subprotocol-required`.
+
+### Erster Administrator
+
+Am Ende der ersten Einrichtung zeigt die Konsole einen einmaligen Einrichtungs-Token für den dort genannten Administrator ([Einrichtung](setup.de.md#erster-administrator)). `api token setup [name]` erstellt einen neuen (Standardname `admin`). Er besteht aus `vcs_` und 43 Zeichen aus 32 Bytes `SecureRandom`, gilt 24 Stunden und genau einmal. Gespeichert werden nur sein SHA-256, der Name und das Ablaufdatum, in `<home>/secrets/setup-token.json` (nur für den Besitzer, atomar, keine Links). Ein neuer Einrichtungs-Token ersetzt den alten.
+
+```sh
+curl -X POST -H "Authorization: Bearer vcs_..." https://cloud.example.org:8443/api/v1/setup/claim
+# 201 {"id":"a1b2c3d4","name":"owner","scopes":["admin"],"created-at":"...","token":"vct_..."}
+```
+
+- Der Einrichtungs-Token gilt nur für diese eine Anfrage. An jedem anderen Endpunkt oder mit Query-String ist er ein falsches Token (`401`, zählt für die Sperre nach falschen Tokens). Ein API-Token bekommt an diesem Endpunkt `403 setup-token-required`.
+- Der Tausch entfernt den Einrichtungs-Token, bevor er das API-Token schreibt. Zweimal geht also nie, ein zweiter Versuch bekommt `401`. Das API-Token hat den Scope `admin` und den Namen des Administrators, mit `-2`, `-3`, … falls es diesen Namen schon gibt.
+- Nur diese Antwort enthält das API-Token (`Cache-Control: no-store`). Geht es verloren: an der Konsole widerrufen und einen neuen Einrichtungs-Token erstellen.
+- Das Web-Panel (Stufe 8) nutzt später dieselbe Anfrage für die erste Anmeldung.
 
 ### Scopes
 

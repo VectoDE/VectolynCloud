@@ -58,7 +58,8 @@ import net.vectolyn.cloud.config.error.ConfigException;
  * <ol>
  *   <li>rate limit of the client address (429);</li>
  *   <li>CORS preflight from an allowed origin (204, the only answer without a token);</li>
- *   <li>too many wrong tokens from this address (429), then the token (401);</li>
+ *   <li>too many wrong tokens from this address (429), then the token (401); the one-time setup
+ *       token counts only for {@code POST /api/v1/setup/claim};</li>
  *   <li>rate limit of the token (429);</li>
  *   <li>routing (400, 404, 405), then the scope (403);</li>
  *   <li>body size (413) and content type (415).</li>
@@ -93,8 +94,12 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
 
     /** A request whose head passed every check and whose body is being collected. */
     private record Pending(HttpRequest head, Router.Resolution.Found<ApiRoutes.Handler> route, ApiToken token,
-                           String origin, boolean keepAlive, boolean upgrade, ByteArrayOutputStream body) {
+                           String origin, boolean keepAlive, boolean upgrade, ByteArrayOutputStream body,
+                           String setupToken) {
     }
+
+    /** Key of the setup token in the token rate limiter; API token ids are 8 hex characters. */
+    private static final String SETUP_LIMIT_KEY = "setup";
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, HttpObject msg) {
@@ -168,12 +173,15 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
             return;
         }
         Optional<ApiToken> token = server.tokens().authenticate(presented.get());
-        if (token.isEmpty()) {
+        // The setup token works for exactly one endpoint; anywhere else it is a wrong token.
+        String setupToken = token.isEmpty() && method.equals("POST") && isSetupClaim(request.uri())
+                && server.tokens().setupAdmin(presented.get()).isPresent() ? presented.get() : null;
+        if (token.isEmpty() && setupToken == null) {
             server.authFailureLimiter().tryAcquire(client);
             reject(ctx, responseOrigin, unauthorized(), true);
             return;
         }
-        wait = server.tokenLimiter().tryAcquire(token.get().id());
+        wait = server.tokenLimiter().tryAcquire(setupToken != null ? SETUP_LIMIT_KEY : token.get().id());
         if (wait > 0) {
             reject(ctx, responseOrigin, ApiException.tooManyRequests(wait), true);
             return;
@@ -198,7 +206,7 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
             }
         }
         Scope scope = found.route().scope();
-        if (scope != null && !token.get().allows(scope)) {
+        if (setupToken == null && scope != null && !token.get().allows(scope)) {
             reject(ctx, responseOrigin, new ApiException(403, "missing-scope",
                     "This token lacks the scope " + scope.id() + "."), true);
             return;
@@ -231,8 +239,13 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
                 ctx.writeAndFlush(new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.CONTINUE));
             }
         }
-        pending = new Pending(request, found, token.get(), responseOrigin, HttpUtil.isKeepAlive(request), upgrade,
-                new ByteArrayOutputStream());
+        pending = new Pending(request, found, token.orElse(null), responseOrigin, HttpUtil.isKeepAlive(request), upgrade,
+                new ByteArrayOutputStream(), setupToken);
+    }
+
+    /** Whether the request target is {@value ApiRoutes#SETUP_CLAIM}, without a query. */
+    private static boolean isSetupClaim(String uri) {
+        return ApiRoutes.SETUP_CLAIM.equals(uri);
     }
 
     private void dispatch(ChannelHandlerContext ctx, Pending request) {
@@ -246,17 +259,19 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
         ApiRequest apiRequest = new ApiRequest(request.head().method().name(), request.route().params(),
                 request.route().query(), request.body().toByteArray(), request.token(),
                 request.head().headers().get(HttpHeaderNames.IF_MATCH));
+        String client = ClientAddress.key(ctx.channel().remoteAddress());
         try {
             server.executor().execute(() -> {
                 FullHttpResponse response;
                 try {
-                    response = respond(request.route().route().handler().handle(apiRequest), request.origin());
+                    response = respond(request.setupToken() != null ? claim(request.setupToken(), client)
+                            : request.route().route().handler().handle(apiRequest), request.origin());
                 } catch (Exception e) {
                     response = error(map(e), request.origin());
                 } finally {
                     server.requestSlots().release();
                 }
-                rateLimitHeaders(response, request.token());
+                rateLimitHeaders(response, request.token() != null ? request.token().id() : SETUP_LIMIT_KEY);
                 FullHttpResponse answer = response;
                 ctx.channel().eventLoop().execute(() -> finish(ctx, answer, request.keepAlive()));
             });
@@ -266,6 +281,21 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
             ctx.channel().config().setAutoRead(true);
             reject(ctx, request.origin(), ApiException.shuttingDown(), true);
         }
+    }
+
+    /**
+     * Exchanges the setup token for the administrator's API token. A token that was used or expired
+     * between the check of the head and now counts as a wrong token.
+     */
+    private ApiResponse claim(String setupToken, String client) throws Exception {
+        Optional<net.vectolyn.cloud.api.auth.ApiTokens.Created> created = server.tokens().claimSetupToken(setupToken);
+        if (created.isEmpty()) {
+            server.authFailureLimiter().tryAcquire(client);
+            throw unauthorized();
+        }
+        LOG.log(System.Logger.Level.INFO, "API: the setup token was exchanged for the admin token {0} ({1})",
+                created.get().info().name(), created.get().info().id());
+        return ApiRoutes.claimed(created.get(), server.tokens().clock().instant());
     }
 
     private void finish(ChannelHandlerContext ctx, FullHttpResponse response, boolean keepAlive) {
@@ -282,10 +312,10 @@ final class ApiHttpHandler extends SimpleChannelInboundHandler<HttpObject> {
      * {@code X-RateLimit-Limit} (the bucket of the token) and {@code X-RateLimit-Remaining} (what
      * it holds now), so a script can slow down before it gets {@code 429}.
      */
-    private void rateLimitHeaders(FullHttpResponse response, ApiToken token) {
+    private void rateLimitHeaders(FullHttpResponse response, String limitKey) {
         RateLimiter<String> limiter = server.tokenLimiter();
         response.headers().set("X-RateLimit-Limit", Integer.toString(limiter.burst()));
-        response.headers().set("X-RateLimit-Remaining", Integer.toString(limiter.remaining(token.id())));
+        response.headers().set("X-RateLimit-Remaining", Integer.toString(limiter.remaining(limitKey)));
     }
 
     private void upgrade(ChannelHandlerContext ctx, Pending request) {

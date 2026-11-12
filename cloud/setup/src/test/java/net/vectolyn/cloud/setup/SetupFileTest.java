@@ -124,6 +124,44 @@ class SetupFileTest {
     }
 
     @Test
+    void minecraftVersionAndAdministratorComeFromTheFileOrTheirDefaults() throws Exception {
+        SetupResult defaults = SetupWizard.nonInteractive(config, env("schema-version: 1\neula: true\n", false), null);
+        assertEquals(java.util.Optional.of(SetupPlan.DEFAULT_ADMIN), defaults.firstAdmin());
+        assertEquals(NetworkServer.MINECRAFT_VERSION, config.snapshot().groups().get("lobby").minecraftVersion(),
+                "offline: the compiled-in version");
+    }
+
+    @Test
+    void anOlderSupportedVersionAndAnAdministratorNameAreTaken() throws Exception {
+        SetupResult result = SetupWizard.nonInteractive(config, env("""
+                schema-version: 1
+                eula: true
+                minecraft-version: "26.1"
+                admin-name: owner
+                servers:
+                  legacy-proxy: true
+                  legacy-server: true
+                """, false), null);
+        assertEquals(java.util.Optional.of("owner"), result.firstAdmin());
+        var groups = config.snapshot().groups();
+        assertEquals("26.1", groups.get("lobby").minecraftVersion());
+        assertEquals("26.1", groups.get("mod").minecraftVersion());
+        assertEquals("1.8.8", groups.get("legacy-server").minecraftVersion(), "the 1.8.8 server keeps 1.8.8");
+    }
+
+    @Test
+    void unsupportedMinecraftVersionsAndBadAdministratorNamesAreRefused() throws Exception {
+        for (String version : List.of("26.4", "1.21.11", "25.9", "latest")) {
+            String problems = refused("schema-version: 1\neula: true\nminecraft-version: \"" + version + "\"\n", false)
+                    .describe(Language.EN);
+            assertTrue(problems.contains("from " + MinecraftVersions.OLDEST + " to " + NetworkServer.MINECRAFT_VERSION),
+                    problems);
+        }
+        assertTrue(refused("schema-version: 1\neula: true\nadmin-name: Admin User\n", false).describe(Language.EN)
+                .contains("lower-case letters"));
+    }
+
+    @Test
     void missingOrFalseEulaIsRefused() throws Exception {
         assertTrue(refused("schema-version: 1\n", false).describe(Language.EN).contains("eula: true"));
         assertTrue(refused("schema-version: 1\neula: false\n", false).describe(Language.EN).contains(SetupMessages.EULA_URL));
