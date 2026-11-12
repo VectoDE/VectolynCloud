@@ -226,6 +226,22 @@ The scope is checked per type on the handshake. Asking with `types` for a type t
 - At most 32 streams at once.
 - **Load test.** `EventStreamLoadTest` opens 260 streams in waves of 40 against a limit of 200, then publishes 10,000 events from 4 threads at once to all of them. It checks that exactly 200 open, the other 60 get `503`, the REST API keeps answering, every stream accounts for every event (received or counted in `dropped`), and that every stream closes. Its figures are printed into the JUnit XML of each CI run and written to `cloud/api/build/reports/api-load/event-streams.md`; on a Windows desktop: 200 streams in 0.8 s, about 95,000 deliveries a second, 72 % delivered and the rest reported as dropped while the test clients were busy.
 
+## GraphQL: `POST /api/v1/graphql`
+
+A second way into the same endpoints, for clients that want several areas in one request or a typed schema. The schema is in [`schema.graphqls`](../../cloud/api/src/main/resources/net/vectolyn/cloud/api/schema.graphqls): queries for every area (services, groups, tasks, nodes, servers, `cloud.yml`, node status, setup, backups, tokens), a mutation for every change, and the subscription `events`.
+
+```sh
+curl -s -H "Authorization: Bearer $VECTOLYN_TOKEN" -H "Content-Type: application/json" \
+  -d '{"query":"{ services { totalCount items { id state } } nodeStatus { servicesRunning } }"}' \
+  http://127.0.0.1:8085/api/v1/graphql
+```
+
+- **Same rules as REST.** Every field builds the REST request named in its description and runs that route with the caller's token: its scope, its validation, `If-Match` (`ifMatch` argument) and its errors. A refused or failed field is `null` and has an error with `extensions.code` and `extensions.status` (for example `missing-scope`, `403`); the other fields of the document are still answered, so the root fields are nullable. Arguments that become part of a path (ids, names, `after`) must be lower-case names, otherwise `invalid-value`.
+- **Shapes.** Typed objects use camelCase (`startedAt`, `heapUsedBytes`); configuration documents keep their REST shape as the scalar `JSON` (kebab-case keys) together with their `etag`. Lists take `limit` and `after` and answer `totalCount`, `next` and `items`.
+- **Limits**, all checked before a field runs: 16,384 characters, 2,000 parser tokens, selection depth 8, complexity 200 (one per field), and at most 20 fields that read or change data. The request itself takes one request from the token's rate limit, every such field after the first takes one more (`extensions.retryAfter` when it is used up).
+- **Introspection** (`__schema`, `__type`) is off unless `api.graphql-introspection: true` is set in `cloud.yml` (console: `config set api.graphql-introspection true`). Switch it on for development, leave it off in production; the schema file is public anyway.
+- **Subscriptions** run over the WebSocket `GET /api/v1/graphql` with the subprotocol `graphql-transport-ws` (the protocol of the `graphql-ws` client library). The token is checked on the handshake as for `/events` (header, or subprotocol `vectolyn.bearer.<token>` from a browser). Send `connection_init` within 10 s, then `subscribe` with for example `subscription { events(types: ["service-state"]) { type time data } }`. Every event type needs its scope, as on `/events`. Queries and mutations work on the socket too. At most 16 operations per socket, each `subscribe` takes one request from the rate limit. The socket counts against the 32 WebSockets and closes with `1008` when its token is revoked or expires. Protocol errors close with the codes of the protocol (`4400`, `4401`, `4408`, `4409`, `4429`).
+
 ## Transport security
 
 ### Bind and TLS
@@ -305,6 +321,10 @@ Groups can be written through the API, so `process.jvm-flags` has an allowlist: 
 
 - `RouterFuzzTest.resolveNeverThrowsAndOnlyPassesCleanValues`: against the real table of `ApiRoutes.router()`, any request target resolves without an exception, and a found route only carries parameters and query values from the strict alphabets.
 - `ApiJsonFuzzTest.readFailsOnlyWithBadRequest`: any body becomes a value or fails with a `400` whose message has no control characters.
+- `GraphQlFuzzTest.anyDocumentEndsInAResult`: any GraphQL document runs to a result (data, errors or both) without an exception, against the real routes with a read-only token.
+- `GraphQlFuzzTest.anyBodyIsARequestOrABadRequest`: any body of `POST /graphql` is a GraphQL request or a `400`.
+
+`GraphQlTest` covers the endpoint against a real server: several areas in one document, the scope of every field, arguments that try to leave their path segment, the `ETag` round trip, the limits, introspection on and off, the rate limit per field, and subscriptions over `graphql-transport-ws` with their scopes, protocol errors and revocation.
 
 ```sh
 ./gradlew :cloud:api:test --tests 'net.vectolyn.cloud.api.http.RouterFuzzTest.resolveNeverThrowsAndOnlyPassesCleanValues' -Pfuzz -PfuzzMaxDuration=5m

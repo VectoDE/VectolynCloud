@@ -87,6 +87,7 @@ public final class ApiServer implements AutoCloseable {
     private final RateLimiter<String> authFailureLimiter;
     private final Semaphore requestSlots;
     private final EventHub events;
+    private final GraphQlApi graphQl;
     /** Guards {@link #connections} and {@link #openConnections}; never the server monitor (event loops take it). */
     private final Object connectionLock = new Object();
     private final Map<String, Integer> connections = new HashMap<>();
@@ -109,13 +110,16 @@ public final class ApiServer implements AutoCloseable {
         this.tokens = builder.tokens;
         this.backend = builder.backend;
         ApiLimits limits = settings.limits();
-        this.router = new ApiRoutes(builder.config, backend, () -> shuttingDown, tokens).router();
+        this.router = new ApiRoutes(builder.config, backend, () -> shuttingDown, tokens)
+                .graphql(q -> graphQl().handle(q)).router();
         this.addressLimiter = new RateLimiter<>(limits.burstPerIp(), limits.requestsPerMinutePerIp(), builder.nanoTime);
         this.tokenLimiter = new RateLimiter<>(limits.burstPerToken(), limits.requestsPerMinutePerToken(), builder.nanoTime);
         this.authFailureLimiter = new RateLimiter<>(limits.authFailuresPerMinute(), limits.authFailuresPerMinute(),
                 builder.nanoTime);
         this.requestSlots = new Semaphore(limits.maxConcurrentRequests());
         this.events = new EventHub(this::redact, limits.maxWebSockets());
+        this.graphQl = new GraphQlApi(router, e -> ApiHttpHandler.toApiException(e, this::redact),
+                tokenLimiter::tryAcquire, settings.graphqlIntrospection());
         this.expiryCheckMillis = builder.expiryCheckMillis;
         this.metricsMillis = builder.metricsMillis;
         this.logHandler = new ApiLogHandler(this::publish, events::anyWants);
@@ -419,6 +423,10 @@ public final class ApiServer implements AutoCloseable {
 
     EventHub events() {
         return events;
+    }
+
+    GraphQlApi graphQl() {
+        return graphQl;
     }
 
     String redact(String text) {

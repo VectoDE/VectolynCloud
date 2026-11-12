@@ -131,6 +131,10 @@ final class ConfigKeys {
         }, List.of());
         add("api.cors-origins", c -> String.join(",", api(c).corsOrigins()), (s, v) -> new SetApi(api(s.cloud())
                 .withCorsOrigins(v.isEmpty() ? List.of() : List.of(v.split(",", -1)))), List.of());
+        add("api.graphql-introspection", c -> String.valueOf(api(c).graphqlIntrospection()), (s, v) -> {
+            boolean value = Values.bool(FILE, "api.graphql-introspection", v);
+            return new SetApi(api(s.cloud()).withGraphqlIntrospection(value));
+        }, bool);
         add("branding.powered-by", c -> String.valueOf(c.brandingOrDefault().poweredBy()), (s, v) -> {
             boolean value = Values.bool(FILE, "branding.powered-by", v);
             return snapshot -> snapshot.withCloud(snapshot.cloud().withBranding(new BrandingConfig(value)));

@@ -3,7 +3,7 @@
 // REST and WebSocket API of VectolynCloud: services, groups, tasks, configuration, node status,
 // backups and live events, for scripts and later the dashboard (stage 8). Every change goes through
 // ConfigService.apply of cloud-config, the same layer the console and the files use.
-// Reads requests from the network, so routing and JSON parsing have Jazzer fuzz tests.
+// Reads requests from the network, so routing, JSON parsing and GraphQL documents have Jazzer fuzz tests.
 // cloud-node implements ApiBackend and starts the ApiServer. Details: docs/cloud/api.md
 
 plugins {
@@ -26,6 +26,8 @@ dependencies {
     implementation(libs.netty.transport)
     implementation(libs.netty.handler)
     implementation(libs.netty.codec.http)
+    // POST /api/v1/graphql and the graphql-transport-ws subscriptions (GraphQlEndpoint).
+    implementation(libs.graphql.java)
 }
 
 dependencies {

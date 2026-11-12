@@ -53,6 +53,7 @@ All paths start with `/api/v1`.
 | `GET /node`, `GET /setup` | node status, setup status |
 | `GET/POST /backups` | list and create backups |
 | `GET /events` (WebSocket) | live events: service state, service output, players, metrics (`node:read`), node log (`admin`) |
+| `POST /graphql`, `GET /graphql` (WebSocket) | GraphQL over all of the above, subscriptions with `graphql-transport-ws` |
 
 Writes are validated as a whole before anything is saved. `DELETE` needs `?confirm=<name>`. `GET` returns an `ETag`; send it back as `If-Match` to avoid overwriting someone else's change (`412` otherwise). Errors have one body shape with a `code`, a message and, for configuration problems, the file, path and line.
 
@@ -66,6 +67,15 @@ Bodies are at most 256 KiB, JSON is read strictly, and there are rate limits per
 curl -s -H "Authorization: Bearer $VECTOLYN_TOKEN" http://127.0.0.1:8085/api/v1/services
 ```
 
+## GraphQL
+
+`POST /api/v1/graphql` answers queries and mutations for every area; each field checks the scope of the REST endpoint it stands for. Limits: depth 8, complexity 200, at most 20 data fields per document. Introspection is off unless you set `api.graphql-introspection: true`. Subscriptions (`events`) run over the WebSocket of the same path with `graphql-transport-ws`. Details: [API reference, GraphQL](https://github.com/VectoDE/VectolynCloud/blob/main/docs/cloud/api.md#graphql-post-apiv1graphql).
+
+```sh
+curl -s -H "Authorization: Bearer $VECTOLYN_TOKEN" -H "Content-Type: application/json" \
+  -d '{"query":"{ services { items { id state } } }"}' http://127.0.0.1:8085/api/v1/graphql
+```
+
 ## Not available yet
 
-gRPC, GraphQL and the web panel are planned ([#154](https://github.com/VectoDE/VectolynCloud/issues/154), [#155](https://github.com/VectoDE/VectolynCloud/issues/155), [#151](https://github.com/VectoDE/VectolynCloud/issues/151)).
+gRPC and the web panel are planned ([#154](https://github.com/VectoDE/VectolynCloud/issues/154), [#151](https://github.com/VectoDE/VectolynCloud/issues/151)).

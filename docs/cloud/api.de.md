@@ -159,6 +159,22 @@ Der Scope wird beim Handshake je Typ geprüft. Fragt `types` einen Typ an, den d
 - Höchstens 32 Streams gleichzeitig.
 - **Lasttest:** `EventStreamLoadTest` öffnet 260 Streams in Wellen zu je 40 gegen ein Limit von 200 und schickt dann von 4 Threads gleichzeitig 10.000 Events an alle. Geprüft wird, dass genau 200 aufgehen, die übrigen 60 `503` bekommen, die REST-API weiter antwortet, jeder Stream jedes Event verbucht (empfangen oder in `dropped` gezählt) und sich jeder Stream sauber schließt. Die Messwerte stehen im JUnit-XML jedes CI-Laufs und in `cloud/api/build/reports/api-load/event-streams.md`.
 
+## GraphQL: `POST /api/v1/graphql`
+
+Ein zweiter Weg zu denselben Endpunkten, für Clients, die mehrere Bereiche in einer Anfrage oder ein typisiertes Schema wollen. Das Schema steht in [`schema.graphqls`](../../cloud/api/src/main/resources/net/vectolyn/cloud/api/schema.graphqls): Queries für jeden Bereich (Dienste, Gruppen, Tasks, Nodes, Server, `cloud.yml`, Node-Status, Setup, Backups, Tokens), eine Mutation für jede Änderung und die Subscription `events`.
+
+```sh
+curl -s -H "Authorization: Bearer $VECTOLYN_TOKEN" -H "Content-Type: application/json" \
+  -d '{"query":"{ services { totalCount items { id state } } nodeStatus { servicesRunning } }"}' \
+  http://127.0.0.1:8085/api/v1/graphql
+```
+
+- **Dieselben Regeln wie REST.** Jedes Feld baut die REST-Anfrage, die in seiner Beschreibung steht, und führt diese Route mit dem Token des Aufrufers aus: mit ihrem Scope, ihrer Prüfung, `If-Match` (Argument `ifMatch`) und ihren Fehlern. Ein abgelehntes oder fehlgeschlagenes Feld ist `null` und hat einen Fehler mit `extensions.code` und `extensions.status` (zum Beispiel `missing-scope`, `403`); die übrigen Felder des Dokuments werden trotzdem beantwortet, deshalb sind die Wurzelfelder nullable. Argumente, die Teil eines Pfads werden (IDs, Namen, `after`), müssen kleingeschriebene Namen sein, sonst `invalid-value`.
+- **Formen.** Typisierte Objekte nutzen camelCase (`startedAt`, `heapUsedBytes`); Konfigurationsdokumente behalten ihre REST-Form als Skalar `JSON` (Schlüssel in kebab-case) zusammen mit ihrem `etag`. Listen nehmen `limit` und `after` und antworten mit `totalCount`, `next` und `items`.
+- **Grenzen**, alle geprüft, bevor ein Feld läuft: 16.384 Zeichen, 2.000 Parser-Tokens, Tiefe 8, Komplexität 200 (eins je Feld) und höchstens 20 Felder, die Daten lesen oder ändern. Die Anfrage selbst kostet eine Anfrage aus dem Ratenlimit des Tokens, jedes solche Feld nach dem ersten eine weitere (`extensions.retryAfter`, wenn es aufgebraucht ist).
+- **Introspection** (`__schema`, `__type`) ist aus, solange in `cloud.yml` nicht `api.graphql-introspection: true` steht (Konsole: `config set api.graphql-introspection true`). Für die Entwicklung einschalten, im Betrieb aus lassen; die Schema-Datei ist ohnehin öffentlich.
+- **Subscriptions** laufen über den WebSocket `GET /api/v1/graphql` mit dem Subprotokoll `graphql-transport-ws` (das Protokoll der Client-Bibliothek `graphql-ws`). Der Token wird beim Handshake geprüft wie bei `/events` (Header, oder aus dem Browser als Subprotokoll `vectolyn.bearer.<token>`). Innerhalb von 10 s `connection_init` senden, dann `subscribe` mit zum Beispiel `subscription { events(types: ["service-state"]) { type time data } }`. Jeder Ereignistyp braucht seinen Scope wie bei `/events`. Queries und Mutations gehen auf dem Socket auch. Höchstens 16 Operationen je Socket, jedes `subscribe` kostet eine Anfrage aus dem Ratenlimit. Der Socket zählt zu den 32 WebSockets und schließt mit `1008`, wenn sein Token widerrufen wird oder abläuft. Protokollfehler schließen mit den Codes des Protokolls (`4400`, `4401`, `4408`, `4409`, `4429`).
+
 ## Transportsicherheit
 
 ### Bind und TLS

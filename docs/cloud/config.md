@@ -65,6 +65,7 @@ api:
     enabled: false
     # keystore: secrets/api.p12  required when enabled, relative to the home
   # cors-origins: [https://dashboard.example.org]   optional, up to 16 origins, off when empty
+  # graphql-introspection: true   optional, answers __schema/__type on /api/v1/graphql; off by default, for development
 branding:
   powered-by: true           # last TAB footer line "Powered by VectolynCloud" and /version on the proxies; false removes both
 ```
