@@ -161,7 +161,7 @@ public final class MariaDbDumper {
         }
         Secret password = Objects.requireNonNull(access.password(), "password of the " + access.mode() + " database");
         RedactingFilter redact = RedactingFilter.of(List.of(password));
-        String tool = executable.getFileName().toString();
+        String tool = Objects.requireNonNull(executable.getFileName(), "file name of the dump executable").toString();
         OptionFile.removeLeftovers(workDirectory);
         ToolRunner.Result result;
         try {

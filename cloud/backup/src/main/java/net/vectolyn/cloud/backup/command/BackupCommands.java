@@ -161,8 +161,9 @@ public final class BackupCommands {
             for (BackupManifest.ServiceEntry entry : manifest.services()) {
                 services.add(entry.hasFiles() ? entry.id() : entry.id() + " (" + entry.consistency() + ")");
             }
-            if (manifest.database() != null) {
-                services.add("db:" + manifest.database().status());
+            BackupManifest.DatabaseEntry database = manifest.database();
+            if (database != null) {
+                services.add("db:" + database.status());
             }
             context.out().println(String.format(Locale.ROOT, "%-21s %-16s %-11s %10s  %s", info.id(),
                     TIME.format(ZonedDateTime.ofInstant(manifest.created(), service.zone())), manifest.reason(),

@@ -541,7 +541,9 @@ public final class BackupService {
                         .dump(access, executable.get(), dump, run.work);
                 String entry = ManifestPaths.DATABASE + access.database() + ".sql";
                 run.files.add(writer.add(entry, dump));
-                return new DatabaseEntry(mode, "dumped", entry, executable.get().getFileName().toString());
+                return new DatabaseEntry(mode, "dumped", entry,
+                        Objects.requireNonNull(executable.get().getFileName(), "file name of the dump executable")
+                                .toString());
             } finally {
                 deleteQuietly(dump);
             }
@@ -579,7 +581,7 @@ public final class BackupService {
         List<BackupInfo> result = new ArrayList<>();
         try (DirectoryStream<Path> files = Files.newDirectoryStream(dir, FILE_PREFIX + "*" + FILE_SUFFIX)) {
             for (Path file : files) {
-                String name = file.getFileName().toString();
+                String name = Objects.requireNonNull(file.getFileName(), "file name of a backup").toString();
                 String id = name.substring(FILE_PREFIX.length(), name.length() - FILE_SUFFIX.length());
                 if (!ID.matcher(id).matches() || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) {
                     continue;
@@ -844,7 +846,8 @@ public final class BackupService {
                 }
                 Path relative = old.relativize(dir);
                 if (attrs.isSymbolicLink() || attrs.isOther() || BackupFilter.excludesFolder(relative)
-                        || !ManifestPaths.isSafePart(relative.getFileName().toString())) {
+                        || !ManifestPaths.isSafePart(Objects.requireNonNull(relative.getFileName(),
+                                "file name of a preserved folder").toString())) {
                     move(dir, relative);
                     return FileVisitResult.SKIP_SUBTREE;
                 }
@@ -873,7 +876,7 @@ public final class BackupService {
                     if (Files.exists(to, LinkOption.NOFOLLOW_LINKS)) {
                         return;
                     }
-                    Files.createDirectories(to.getParent());
+                    Files.createDirectories(Objects.requireNonNull(to.getParent(), "parent of a kept path"));
                     Files.move(from, to, StandardCopyOption.ATOMIC_MOVE);
                 } catch (IOException e) {
                     warnings.add("cannot keep " + relative + ": " + e.getMessage());
@@ -940,7 +943,7 @@ public final class BackupService {
         }
         leftovers.sort(Comparator.naturalOrder());
         for (Path child : leftovers) {
-            String name = child.getFileName().toString();
+            String name = Objects.requireNonNull(child.getFileName(), "file name of a leftover").toString();
             if (!Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)) {
                 continue;
             }

@@ -17,6 +17,7 @@ import net.vectolyn.cloud.backup.BackupRequest;
 import net.vectolyn.cloud.backup.BackupService;
 import net.vectolyn.cloud.backup.config.BackupConfig;
 import net.vectolyn.cloud.backup.config.ScheduleConfig;
+import net.vectolyn.cloud.config.model.TimeSpan;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -91,15 +92,17 @@ public final class BackupScheduler implements AutoCloseable {
         if (!schedule.enabled()) {
             return Optional.empty();
         }
-        if (schedule.cron() != null) {
-            return CronExpression.parse(schedule.cron()).next(ZonedDateTime.ofInstant(now, zone))
+        String cron = schedule.cron();
+        if (cron != null) {
+            return CronExpression.parse(cron).next(ZonedDateTime.ofInstant(now, zone))
                     .map(ZonedDateTime::toInstant);
         }
-        if (schedule.interval() == null) {
+        TimeSpan interval = schedule.interval();
+        if (interval == null) {
             return Optional.empty();
         }
         Instant base = lastScheduled.orElse(startedAt);
-        return Optional.of(base.plus(schedule.interval().duration()));
+        return Optional.of(base.plus(interval.duration()));
     }
 
     /** One check; package-private so tests can drive it without waiting. */
