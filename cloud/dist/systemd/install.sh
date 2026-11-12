@@ -215,7 +215,7 @@ case "$action" in
         fi
         ;;
     update)
-        [ -f "$UNIT_PATH" ] && [ -f "$prefix/VectolynCloud.jar" ] || die "VectolynCloud is not installed under ${prefix}; use install"
+        if ! { [ -f "$UNIT_PATH" ] && [ -f "$prefix/VectolynCloud.jar" ]; }; then die "VectolynCloud is not installed under ${prefix}; use install"; fi
         fetch_archive
         unpack
         was_active=no
@@ -249,7 +249,7 @@ case "$action" in
             rm -rf -- "$prefix"
             if id -u "$svc_user" >/dev/null 2>&1; then
                 userdel "$svc_user" || true
-                getent group "$svc_user" >/dev/null && groupdel "$svc_user" 2>/dev/null || true
+                if getent group "$svc_user" >/dev/null; then groupdel "$svc_user" 2>/dev/null || true; fi
             fi
             say "Purged ${prefix} and the user ${svc_user}."
         fi
