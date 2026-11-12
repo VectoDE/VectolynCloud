@@ -25,6 +25,10 @@ public enum Scope {
     BACKUPS_WRITE("backups:write"),
     /** Read the node status. */
     NODE_READ("node:read"),
+    /** List templates and read their files (not secrets). */
+    TEMPLATES_READ("templates:read"),
+    /** Create and replace template files. */
+    TEMPLATES_WRITE("templates:write"),
     /** Everything above. */
     ADMIN("admin");
 

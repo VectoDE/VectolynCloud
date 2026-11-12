@@ -261,6 +261,7 @@ docker compose up -d
 docker compose logs -f cloud
 ```
 
+- Das Image-Tag kommt aus `VECTOLYN_VERSION` (`.env` neben der Datei oder die Shell). Ohne Angabe nimmt Compose `dev`, das neueste `-dev`-Release, weil `latest` erst ab dem ersten stabilen Release existiert. Für ein Netzwerk, das laufen soll, eine feste Version setzen (`VECTOLYN_VERSION=0.1.1-dev`, das Release-Tag ohne `v`) und sie bewusst ändern: `docker compose pull && docker compose up -d`.
 - Passwörter sind Docker-Secrets (Dateien unter `/run/secrets/`), keine Umgebungsvariablen. Die würden in `docker inspect` und in der Umgebung jedes Servers auftauchen, den die Cloud startet. MariaDB liest sie über `MARIADB_PASSWORD_FILE`, die Cloud über `database.password-file` in `setup.yml`.
 - MariaDB veröffentlicht keinen Port. Nur die Cloud erreicht sie über das Compose-Netz (Host `database`).
 - Ports: Java 25565/tcp und Bedrock 19132/udp sind veröffentlicht. Der Legacy-Proxy (25564/tcp) ist auskommentiert, bis du ihn einschaltest.
@@ -382,7 +383,7 @@ Genau das, was das Release für einen lokal vorhandenen Tag zeigen wird, erzeugt
 | Release-Archive | mit `package.sh` gebaut, zweimal gebaut und verglichen, entpackt und gestartet | den Upload ins Release |
 | systemd-Unit | `systemd-analyze verify`, echter Start und Stopp unter Ubuntu | lang laufende Server und die verwaltete MariaDB unter der Härtung |
 | Image | aus den Quellen und über den Release-Weg, amd64 und arm64, Start als UID 1000, root abgelehnt, Healthcheck, sauberes `docker stop` | Push nach GHCR, cosign-Signatur, Attestierungen, die `latest`-Regel |
-| compose.yml | `docker compose config` | einen vollständigen Start mit MariaDB |
+| compose.yml | `docker compose config`; ein vollständiges `up --wait` mit MariaDB (beide Healthchecks), Besitzer des Volumes, `down` | der Pull von GHCR (CI nutzt das lokal gebaute Image) |
 | Egg | Struktur, Variablen, Regeln gegen ihre Standardwerte, die Setup-Datei, die Wings schreiben würde, ShellCheck des Installers | Import in ein Panel, den Download des Installers, einen Lauf unter Wings |
 | Release-Tag | Unit-Tests jeder Regel; `check-tag.sh` auf jeder erlaubten Form (Kanal und Vorab-Kennzeichen) und jeder abgelehnten Form (der Grund) | die Prüfung eines gepushten Tags, das Vorab-Kennzeichen und `latest` auf GitHub und GHCR |
 | Release-Banner | Unit-Tests (Badge je Zusatz, Kürzen des Titels, Größen, bytegleiche Ausgabe); das Release-Skript auf lokalen Tags (jedes Badge, mit Titel, leere Nachricht, nur Signatur, Lightweight, Tags, die die Regeln verletzen), zweimal erzeugt und verglichen | den Abruf des Tags von GitHub und das Bild in den veröffentlichten Notes |
