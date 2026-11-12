@@ -8,7 +8,7 @@ Alle Log-Zeilen haben ein Format: `HH:mm:ss LEVEL Nachricht`, mit den festen Stu
 
 ## Bedienung
 
-**Im Terminal** (JLine): Prompt `vectolyn> `, Zeilenbearbeitung, Tab vervollständigt Befehle, Unterbefehle und Werte. Farben gibt es nur, wenn das Terminal mindestens 8 Farben meldet und `NO_COLOR` nicht gesetzt ist. Log-Zeilen erscheinen über dem Prompt, die angefangene Eingabe bleibt stehen. Strg+C oder Strg+D am Prompt fragen erst nach („Zum Stoppen aller Dienste und der Cloud innerhalb von 3 Sekunden erneut Strg+C drücken oder shutdown eingeben.“). Erst ein zweites Strg+C oder Strg+D innerhalb von 3 Sekunden führt `shutdown` aus. Ein einzelner Tastendruck stoppt also nicht das ganze Netzwerk. Während ein Befehl läuft, wird Strg+C ignoriert.
+**Im Terminal** (JLine): Prompt `vectolyn> `, Zeilenbearbeitung, Tab vervollständigt Befehle, Unterbefehle und Werte: Schlüssel aus `cloud.yml`, Dienst-IDs, Gruppen-, Task- und Node-Namen, IDs offener Beitritts-Tokens, Cluster-Mitglieder, Enum-Werte und feste Auswahlen (`on`/`off`, `--yes`). Die Vorschläge kommen bei jedem Tab aus dem aktuellen Stand; passt nichts, gibt es keinen Vorschlag. Farben gibt es nur, wenn das Terminal mindestens 8 Farben meldet und `NO_COLOR` nicht gesetzt ist. Log-Zeilen erscheinen über dem Prompt, die angefangene Eingabe bleibt stehen. Strg+C oder Strg+D am Prompt fragen erst nach („Zum Stoppen aller Dienste und der Cloud innerhalb von 3 Sekunden erneut Strg+C drücken oder shutdown eingeben.“). Erst ein zweites Strg+C oder Strg+D innerhalb von 3 Sekunden führt `shutdown` aus. Ein einzelner Tastendruck stoppt also nicht das ganze Netzwerk. Während ein Befehl läuft, wird Strg+C ignoriert.
 
 Die History liegt in `<home>/state/console.history` (höchstens 500 Zeilen, nur für den Besitzer lesbar). Nicht gespeichert werden Antworten auf Fragen, Secrets, Zeilen von Befehlen, die als sensibel markiert sind, und Zeilen, die mit einem Leerzeichen beginnen.
 
@@ -61,8 +61,9 @@ Leert den Bildschirm, wenn das Terminal ANSI kann.
 | `config list` | Alle Schlüssel mit Wert. |
 | `config reload` | Liest alle Konfigurationsdateien neu. Eine fehlerhafte Datei lässt die aktuelle Konfiguration aktiv und zeigt die Fehler. |
 | `config set <Schlüssel> <Wert> --dry-run` | Prüft die Änderung wie `config set` und zeigt den Zeilen-Diff von `cloud.yml`, schreibt aber nichts ([Vorschau](config.md#preview-of-a-change)). |
-| `config export <datei.zip>` | Schreibt die ganze Konfiguration (`cloud.yml`, `nodes.yml`, Gruppen, Tasks, `monitor.yml`, `backup.yml`) in eine neue Zip-Datei, nie Secrets. Ein relativer Pfad beginnt im Cloud-Home; eine vorhandene Datei wird nie überschrieben ([Import und Export](config.md#import-and-export)). |
+| `config export <datei.zip>` | Schreibt die ganze Konfiguration (`cloud.yml`, `nodes.yml`, Gruppen, Tasks, `monitor.yml`, `privacy.yml`, `backup.yml`) in eine neue Zip-Datei, nie Secrets. Ein relativer Pfad beginnt im Cloud-Home; eine vorhandene Datei wird nie überschrieben ([Import und Export](config.md#import-and-export)). |
 | `config import <datei.zip> [--dry-run]` | Prüft jede Datei des Archivs, zeigt den Diff jeder Datei, die sich ändert, und übernimmt dann alles; mit `--dry-run` endet der Befehl nach dem Diff. Auf einem Cluster-Mitglied wird ein Archiv abgelehnt, das Dateien des Heads ändert. |
+| `config warnings` | Listet, was zwar lädt, aber riskant ist, etwa ein JVM-Flag in einer Gruppendatei außerhalb der Erlaubnisliste. Dieselbe Liste wie `GET /api/v1/config/warnings`. |
 
 Schlüssel: `network-name`, `language`, `eula-accepted`, `setup-complete`, `node-id`, `fallback-group`, `servers.<proxy|lobby|survival|creative|mod|end|database|minigame|legacy-server>`, `proxy.bind`, `proxy.port`, `proxy.bedrock-port`, `legacy-proxy.enabled`, `legacy-proxy.port`, `database.mode`, `database.host`, `database.port`, `database.name`, `database.user`, `database.docker-image`, `api.enabled`, `api.bind`, `api.port`, `api.grpc-port`, `api.tls.enabled`, `api.tls.keystore`, `api.cors-origins`, `api.graphql-introspection`, `branding.powered-by`, `logs.retention-days`, `logs.max-file-size`.
 
@@ -79,7 +80,7 @@ Startet den Einrichtungsassistenten erneut. Die aktuellen Werte sind die Vorschl
 | `group list` | Alle Gruppen mit Template, Software, Version und ob ihre Serverart gewünscht ist. |
 | `group info <Name>` | Alle Felder einer Gruppe. |
 | `group create <Name> <Template> <Software> <Minecraft-Version>` | Neue `groups/<Name>.yml` mit `java: auto`, Heap 512M bis 1G, Kampfsystem `legacy` bei `pandaspigot`, sonst `modern`. Scheitert, wenn es die Gruppe schon gibt. |
-| `group set <Name> <Feld> <Wert>` | Felder: `template`, `software`, `minecraft-version`, `java`, `heap.min`, `heap.max`, `combat`, `drain-timeout` (5s bis 10m, `default` entfernt den Wert, dann gelten 30s), zum Beispiel `group set lobby drain-timeout 45s`. |
+| `group set <Name> <Feld> <Wert>` | Felder: `template`, `software`, `minecraft-version`, `java`, `heap.min`, `heap.max`, `combat`, `wanted` (`on` oder `off`, der eigene Schalter der Gruppe, etwa für ein Minispiel von mehreren; `on` entfernt den Eintrag, weil es der Standard ist), `drain-timeout` (5s bis 10m, `default` entfernt den Wert, dann gelten 30s), zum Beispiel `group set lobby drain-timeout 45s`. |
 | `group delete <Name> [--yes]`, `group remove <Name> [--yes]` | Löscht die Datei nach Rückfrage. Scheitert, solange ein Task die Gruppe nutzt. |
 | `group wanted <Name> <on\|off>` | Schaltet die Serverart der Gruppe in `cloud.yml` (`servers:`) ein oder aus. |
 
@@ -96,7 +97,7 @@ Startet den Einrichtungsassistenten erneut. Die aktuellen Werte sind die Vorschl
 
 Vor dem Löschen prüft die Konsole, ob es nach denselben Regeln wie `ConfigService.apply` klappen würde, und fragt dann `groups/<Name>.yml wirklich löschen? [j/N]`. Enter, `n` oder Strg+C lassen die Datei stehen. Ohne Terminal gilt die nächste Zeile von stdin als Antwort. In Skripten entfällt die Frage mit `--yes` oder `-y` hinter dem Namen.
 
-`wanted` gilt je Serverart, nicht je Gruppe. Eine Gruppe gehört zu der Serverart, deren Template-Ordner sie nutzt (`Lobby-Server` ist `lobby`). Der Schalter wirkt also auf alle Gruppen mit diesem Template. Für eine Gruppe mit anderem Template gibt es keinen Schalter, der Befehl meldet das.
+Es gibt zwei Schalter, eine Gruppe läuft nur, wenn beide an sind. `group set <Name> wanted off` schaltet eine einzelne Gruppe ab (`wanted: false` in ihrer Datei); `group info` zeigt `wanted` (Schalter der Gruppe) und `server kind` (Schalter der Serverart). `group wanted` und `task wanted` schalten die Serverart: Eine Gruppe gehört zu der Serverart, deren Template-Ordner sie nutzt (`Lobby-Server` ist `lobby`). Der Schalter wirkt also auf alle Gruppen mit diesem Template. Für eine Gruppe mit anderem Template gibt es keinen Schalter, der Befehl meldet das.
 
 Den Katalog einer Gruppe (Plugins und Mods) ändert man vorerst in der Datei. Befehle für Dienste (`start`, `stop`, `screen` usw.) bringt cloud-node mit.
 
@@ -106,9 +107,12 @@ Den Katalog einer Gruppe (Plugins und Mods) ändert man vorerst in der Datei. Be
 |---|---|
 | `node list` | Alle Nodes aus `nodes.yml` mit Host, Kanal-Port, `max-memory` und dem Hinweis, welcher Node dieser ist. |
 | `node info <ID>` | Alle Felder eines Nodes samt Speicherreserve. Ein nicht gesetztes Feld zeigt seinen Default und `(default)`. |
-| `node set <ID> <Feld> <Wert>` | Felder: `max-memory` (mindestens 512M, `auto` entfernt den Wert, dann rechnet der Node selbst), `memory-reserve.system`, `memory-reserve.node-overhead`, `memory-reserve.database` (je 1M bis 64G, `default` entfernt den Wert, dann gilt der Default: 1G, 256M, 512M). Zum Beispiel `node set node-1 memory-reserve.system 2G`. |
+| `node status` | Der laufende Node: Version, Java, Betriebssystem, Laufzeit, Heap und wie viele Dienste laufen. Kommt von cloud-node, dieselben Werte wie `GET /api/v1/node`. |
+| `node create <ID> <Host> <Port> <Dienst-Ports>` | Trägt einen Node in `nodes.yml` ein, zum Beispiel `node create node-2 10.0.0.2 7010 30000-30999`. Die Speichereinstellungen starten mit ihren Standards. Scheitert, wenn es die ID schon gibt. |
+| `node set <ID> <Feld> <Wert>` | Felder: `host`, `port` (Cloud-Kanal), `service-ports` (`erster-letzter`), `max-memory` (mindestens 512M, `auto` entfernt den Wert, dann rechnet der Node selbst), `memory-reserve.system`, `memory-reserve.node-overhead`, `memory-reserve.database` (je 1M bis 64G, `default` entfernt den Wert, dann gilt der Default: 1G, 256M, 512M). Zum Beispiel `node set node-1 memory-reserve.system 2G`. |
+| `node delete <ID> [--yes]`, `node remove <ID> [--yes]` | Entfernt den Node nach Rückfrage aus `nodes.yml`, wie `group delete`. Scheitert, solange `cloud.yml` (`node-id`) oder ein Task (`nodes`) ihn nennt. |
 
-Host, Ports sowie neue oder entfernte Nodes ändert man weiter in `nodes.yml`. Siehe [config.md](config.md#nodesyml).
+Jede Änderung wird wie eine Änderung von Hand an `nodes.yml` geprüft (Ports 1 bis 65535, `first` nicht über `last`, Kanal-Port außerhalb der Dienst-Ports, gültiger Host). Bei einem Fehler wird nichts geschrieben. Siehe [config.md](config.md#nodesyml).
 
 ### `api`
 
@@ -121,6 +125,16 @@ Kommt aus `cloud/api` ([api.de.md](api.de.md)). Der ganze Befehl gilt als sensib
 | `api token revoke <ID\|Name>` | Widerruft sofort; offene Event-Streams des Tokens werden geschlossen. Aliase: `delete`, `remove`. |
 | `api token setup [Name]` | Erstellt einen neuen einmaligen Einrichtungs-Token für den ersten Administrator (Standard `admin`), 24 Stunden gültig, und zeigt ihn einmal an; er ersetzt einen früheren. Siehe [Einrichtung](setup.de.md#erster-administrator). |
 | `api scopes` | Listet die Scopes auf. |
+
+### `cluster`
+
+Kommt aus `cloud/cluster`, die Unterbefehle stehen in [cluster.md](cluster.md). Tab ergänzt nach `cluster token revoke` die IDs offener Beitritts-Tokens und nach `cluster remove` die Mitglieder, beides nur auf dem Head.
+
+## Konsole und REST-API
+
+Jede lesende und schreibende Funktion der [REST-API](api.de.md) gibt es auch als Konsolenbefehl. Die Zuordnung steht in [console.md](console.md#console-and-rest-api); `ConsoleParityTest` in cloud-node schlägt fehl, sobald ein Endpunkt dort fehlt oder sein Befehl nicht existiert. Kurz: `service ...` für Dienste, `group`/`task`/`node` für die Dateien, `config ...` für `cloud.yml`, Server-Schalter, Neuladen und Warnungen, `node status` für `GET /node`, `backup list|create` für die Backups.
+
+Noch in den Dateien geändert werden der Plugin- und Mod-Katalog einer Gruppe, Templates, `monitor.yml` und `backup.yml`, weil es dafür in der Cloud noch gar keine Schreib-Operation gibt. Funktionen, die die Cloud noch nicht hat (Updates, Wartungsmodus, Platzierungsregeln, Templates bearbeiten), bekommen ihre Konsolenbefehle zusammen mit der Funktion in eigenen Issues.
 
 ## Fragen von Assistenten
 

@@ -85,6 +85,7 @@ import net.vectolyn.cloud.download.provider.TargetPlatform;
 import net.vectolyn.cloud.network.CloudNetworkServer;
 import net.vectolyn.cloud.network.NetworkSettings;
 import net.vectolyn.cloud.node.channel.ChannelBridge;
+import net.vectolyn.cloud.node.console.NodeStatusCommand;
 import net.vectolyn.cloud.node.console.ServiceCommands;
 import net.vectolyn.cloud.node.database.NodeDatabase;
 import net.vectolyn.cloud.node.database.NodeDatabaseProcesses;
@@ -1027,7 +1028,8 @@ public final class CloudNode implements AutoCloseable {
         BuiltinCommands.register(console, config, this::close, List.of(
                 new ConfigArchive.ExtraFile(CloudHome.MONITOR_FILE, MonitorConfigLoader::parse),
                 new ConfigArchive.ExtraFile(CloudHome.PRIVACY_FILE, PrivacyConfigLoader::parse),
-                new ConfigArchive.ExtraFile(CloudHome.BACKUP_FILE, BackupConfigFile::parse)));
+                new ConfigArchive.ExtraFile(CloudHome.BACKUP_FILE, BackupConfigFile::parse)),
+                List.of(NodeStatusCommand.command(ops.api()::status)));
         serviceCommands = new ServiceCommands(services, config, channel::status, console.output());
         services.addListener(serviceCommands);
         console.commands().register(serviceCommands.command());

@@ -43,6 +43,8 @@ public final class ClusterCommands {
     public static final int DEFAULT_PORT = 7011;
     /** How long {@code cluster sync} waits before it leaves the sync to the background. */
     private static final Duration SYNC_WAIT = Duration.ofSeconds(30);
+    /** Completion candidates for the lifetime of a join token. */
+    private static final List<String> LIFETIMES = List.of("10m", "30m", "1h", "24h");
 
     private final ClusterService cluster;
 
@@ -71,7 +73,7 @@ public final class ClusterCommands {
                         .argument(Argument.required("host", Text.of("Address the other nodes reach this node at",
                                 "Adresse, unter der die anderen Nodes diesen Node erreichen")))
                         .argument(Argument.optional("port", Text.of("Cluster port, default 7011",
-                                "Cluster-Port, Standard 7011")))
+                                "Cluster-Port, Standard 7011")).suggest(List.of(String.valueOf(DEFAULT_PORT))))
                         .argument(Argument.optional("bind", Text.of("Address to listen on, default the host",
                                 "Adresse zum Lauschen, Standard der Host")))
                         .executes(c -> init(c.out(), c.argument("host"), c.optional("port"), c.optional("bind"))))
@@ -84,7 +86,7 @@ public final class ClusterCommands {
                                 .argument(Argument.required("node-id", Text.of("node-id in the cloud.yml of the new node",
                                         "node-id in der cloud.yml des neuen Nodes")))
                                 .argument(Argument.optional("lifetime", Text.of("1m to 24h, default 1h",
-                                        "1m bis 24h, Standard 1h")))
+                                        "1m bis 24h, Standard 1h")).suggest(LIFETIMES))
                                 .executes(c -> createToken(c.out(), c.argument("node-id"), c.optional("lifetime"))))
                         .subcommand(Command.builder("list")
                                 .description(Text.of("Shows the open join tokens without their secret.",
@@ -94,7 +96,7 @@ public final class ClusterCommands {
                                 .aliases("delete", "remove")
                                 .description(Text.of("Deletes a join token.", "Löscht ein Beitritts-Token."))
                                 .argument(Argument.required("id", Text.of("Id of the token (the part before the dot)",
-                                        "ID des Tokens (der Teil vor dem Punkt)")))
+                                        "ID des Tokens (der Teil vor dem Punkt)")).suggest(previous -> tokenIds()))
                                 .executes(c -> revokeToken(c.out(), c.argument("id")))))
                 .subcommand(Command.builder("join")
                         .description(Text.of("Joins the cluster of a head; the head's \"cluster token create\" "
@@ -120,9 +122,35 @@ public final class ClusterCommands {
                 .subcommand(Command.builder("remove")
                         .description(Text.of("Removes a member: revokes its certificate and ends its session.",
                                 "Entfernt ein Mitglied: widerruft sein Zertifikat und beendet seine Sitzung."))
-                        .argument(Argument.required("node-id", Text.of("The member", "Das Mitglied")))
+                        .argument(Argument.required("node-id", Text.of("The member", "Das Mitglied"))
+                                .suggest(previous -> memberIds()))
                         .executes(c -> remove(c.out(), c.argument("node-id"))))
                 .build();
+    }
+
+    /**
+     * Ids of the open join tokens, for tab completion. Empty on a node that is not the head or
+     * whose token file cannot be read; completion never fails.
+     */
+    List<String> tokenIds() {
+        if (cluster.role() != ClusterService.Role.HEAD) {
+            return List.of();
+        }
+        try {
+            return cluster.tokens().stream().map(JoinTokens.Info::id).toList();
+        } catch (ClusterException | IOException | RuntimeException e) {
+            return List.of();
+        }
+    }
+
+    /** Ids of the members other than the head, for tab completion of {@code cluster remove}. */
+    List<String> memberIds() {
+        ClusterService.Status status = cluster.status();
+        if (status.role() != ClusterService.Role.HEAD) {
+            return List.of();
+        }
+        return status.members().stream().map(ClusterService.MemberStatus::id)
+                .filter(id -> !status.head().map(id::equals).orElse(false)).map(NodeId::value).toList();
     }
 
     private void init(ConsoleOutput out, String host, Optional<String> port, Optional<String> bind) throws Exception {

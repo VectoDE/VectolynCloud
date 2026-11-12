@@ -56,7 +56,7 @@ final class GroupCommands {
     static final MemorySize DEFAULT_HEAP_MAX = MemorySize.ofMegabytes(1024);
 
     private static final List<String> GROUP_FIELDS = List.of("template", "software", "minecraft-version", "java",
-            "heap.min", "heap.max", "combat", "drain-timeout");
+            "heap.min", "heap.max", "combat", "drain-timeout", "wanted");
     /** Value of {@code group set <name> drain-timeout} that removes the field, so the default applies. */
     static final String DEFAULT_VALUE = "default";
     private static final List<String> TASK_FIELDS = List.of("group", "mode", "static-services", "min-services",
@@ -105,7 +105,9 @@ final class GroupCommands {
                         .argument(name)
                         .argument(Argument.required("field", Text.of(String.join(", ", GROUP_FIELDS),
                                 String.join(", ", GROUP_FIELDS))).suggest(GROUP_FIELDS))
-                        .argument(Argument.required("value", Text.of("New value", "Neuer Wert")))
+                        .argument(Argument.required("value", Text.of("New value; wanted: on or off",
+                                "Neuer Wert; wanted: on oder off")).suggest(previous ->
+                                previous.size() >= 4 && "wanted".equals(previous.get(3)) ? ON_OFF : List.of()))
                         .executes(context -> {
                             String group = context.argument("name");
                             String field = context.argument("field");
@@ -227,7 +229,7 @@ final class GroupCommands {
     // ---- deleting -------------------------------------------------------------------------------
 
     /** The optional {@code --yes} after the name of {@code group delete} and {@code task delete}. */
-    private static Argument confirmation() {
+    static Argument confirmation() {
         return Argument.optional("confirm", Text.of("--yes or -y deletes without asking (for scripts)",
                 "--yes oder -y löscht ohne Rückfrage (für Skripte)")).suggest(YES_FLAGS);
     }
@@ -261,7 +263,7 @@ final class GroupCommands {
         return delete;
     }
 
-    private static void reportDeleted(ConsoleOutput out, ConfigChanged change, String file) {
+    static void reportDeleted(ConsoleOutput out, ConfigChanged change, String file) {
         if (change.isEmpty()) {
             out.println(Text.of("Unchanged: %1$s", "Unverändert: %1$s"), file);
         } else {
@@ -283,6 +285,8 @@ final class GroupCommands {
             case "combat" -> g.withCombat(Values.enumValue(file, field, value, CombatSystem.class));
             case "drain-timeout" -> g.withDrainTimeout(Values.unset(DEFAULT_VALUE.equals(value) ? null
                     : parse(file, field, TimeSpan.FORMAT + ", or " + DEFAULT_VALUE, () -> TimeSpan.parse(value))));
+            // The group's own switch (since #44); on removes the entry, because wanted is the default.
+            case "wanted" -> g.withWanted(Values.onOff(file, field, value));
             default -> throw unknownField(file, GROUP_FIELDS);
         };
     }
@@ -430,7 +434,8 @@ final class GroupCommands {
         out.println("  combat            = " + (g.combat() == null ? "" : Values.name(g.combat())));
         out.println("  drain-timeout     = " + g.drainTimeoutOrDefault() + (g.drainTimeout() == null ? " (default)" : ""));
         out.println("  catalog           = " + String.join(", ", g.catalog().stream().map(c -> c.id()).toList()));
-        out.println("  wanted            = " + wantedLabel(snapshot, g, out));
+        out.println("  wanted            = " + (g.wantedOrDefault() ? "on" : "off"));
+        out.println("  server kind       = " + wantedLabel(snapshot, g, out));
     }
 
     private static void listTasks(ConsoleOutput out, ConfigSnapshot snapshot) {
