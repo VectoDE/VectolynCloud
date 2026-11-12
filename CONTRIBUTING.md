@@ -45,6 +45,7 @@ Forgot it? `git commit --amend -s` for the last commit, `git rebase --signoff ma
 
 - Java, built with Gradle (Kotlin DSL). The toolchain is Java 25 and the bytecode target Java 21. CI builds and tests with JDK 25 and runs the tests again on Java 21 (`./gradlew test -PtestJava=21`). Tests that load Paper or Velocity classes carry `@Tag("requires-java25")`. Shared build settings live in the convention plugins under `build-logic/`.
 - Code that needs Java 25 gets `@RequiresJava25`, a runtime check and a Java 21 path. See `docs/java-compatibility.md`.
+- An incompatible change to the public API of `common/protocol` or `common/client` needs a breaking version step in `gradle.properties` (new minor below 1.0.0, new major from 1.0.0). CI checks it, see [docs/api-compatibility.md](docs/api-compatibility.md).
 - No formatter is configured yet. Match the surrounding code: 4 spaces, no wildcard imports, clear names over comments.
 - New logic needs tests. Bug fixes get a test that fails without the fix where that is practical.
 - Code that parses untrusted input (network frames, config files, downloads, API requests) also gets a Jazzer `@FuzzTest`. See [docs/cloud/architecture.md](docs/cloud/architecture.md#fuzz-tests).

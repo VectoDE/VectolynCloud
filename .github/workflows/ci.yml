@@ -9,6 +9,9 @@ name: CI
 #   must pass on 21.
 # - "Tests on Java 27 (newest GA)" runs the same unit tests on the newest Java release, so a
 #   change of a later JDK (removed API, stricter checks) shows up before users run into it.
+# - "API compatibility" compares the public API of common/protocol and common/client with the
+#   newest release tag (japicmp) and fails on an incompatible change unless the version in
+#   gradle.properties is a breaking step (docs/api-compatibility.md).
 # - "Integration" covers VectolynCloud end to end. It does real work only when cloud-related paths
 #   change (or on the nightly schedule), but it always reports a result, so it can become a
 #   required check without blocking unrelated pull requests. See the "changes" job.
@@ -335,6 +338,92 @@ jobs:
           path: '**/build/test-results/test/*.xml'
           if-no-files-found: ignore
           retention-days: 14
+
+  # Public API of common/protocol and common/client against the newest release tag
+  # (docs/api-compatibility.md). The baseline jars are built from that tag with its own build.
+  api-compat:
+    name: API compatibility
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            api.adoptium.net:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            services.gradle.org:443
+            downloads.gradle.org:443
+            plugins.gradle.org:443
+            plugins-artifacts.gradle.org:443
+            repo.maven.apache.org:443
+            repo.papermc.io:443
+            repo.hpfxd.com:443
+            api.foojay.io:443
+
+      # The whole history, so the release tags are there.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      # Newest vX.Y.Z[-suffix] tag in the history of this commit; versionsort.suffix sorts
+      # v1.0.0-rc.1 before v1.0.0.
+      - name: Find the baseline release
+        id: baseline
+        run: |
+          tag=$(git -c versionsort.suffix=- tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname --merged HEAD | head -n 1)
+          if [ -z "$tag" ]; then
+            echo "No release tag yet, nothing to compare against." >> "$GITHUB_STEP_SUMMARY"
+          elif ! printf '%s' "$tag" | grep -Eq '^v[0-9]+[.][0-9]+[.][0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::unexpected tag name"
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Build the baseline jars
+        if: steps.baseline.outputs.tag != ''
+        env:
+          TAG: ${{ steps.baseline.outputs.tag }}
+        run: |
+          base="$RUNNER_TEMP/baseline"
+          git worktree add --detach "$base" "refs/tags/$TAG"
+          bash "$base/gradlew" -p "$base" --no-daemon --no-build-cache --no-configuration-cache :common:protocol:jar :common:client:jar
+          mkdir -p "$RUNNER_TEMP/baseline-jars"
+          for module in protocol client; do
+            set -- "$base/common/$module/build/libs/"*.jar
+            if [ "$#" -ne 1 ]; then echo "::error::expected one jar for $module, found: $*"; exit 1; fi
+            cp "$1" "$RUNNER_TEMP/baseline-jars/$module.jar"
+          done
+
+      - name: Compare the API
+        if: steps.baseline.outputs.tag != ''
+        env:
+          TAG: ${{ steps.baseline.outputs.tag }}
+        run: >-
+          bash ./gradlew :tools:api-compat:apiCompat --no-daemon --stacktrace
+          "-PapiBaselineDir=$RUNNER_TEMP/baseline-jars" "-PapiBaselineTag=$TAG"
+
+      - name: Report
+        if: always() && steps.baseline.outputs.tag != ''
+        run: |
+          report=tools/api-compat/build/reports/api-compat/report.md
+          if [ -f "$report" ]; then cat "$report" >> "$GITHUB_STEP_SUMMARY"; fi
 
   # Path filter for the integration job. A workflow-level `on.paths` filter would leave the
   # check without any result on unrelated pull requests, and a required check without a result

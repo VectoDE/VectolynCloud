@@ -28,6 +28,9 @@ checker-qual = "3.55.1"
 graphql-java = "26.1"
 # Fuzz tests (test scope only), see build-logic/src/main/kotlin/vectolyn.fuzz-conventions.gradle.kts.
 jazzer = "0.30.0"
+# API compatibility check of common/protocol and common/client (build tool, Apache-2.0, not shipped),
+# see docs/api-compatibility.md. Used as the command-line jar with its dependencies inside.
+japicmp = "0.27.0"
 
 [libraries]
 paper-api = { module = "io.papermc.paper:paper-api", version.ref = "paper-api" }
@@ -63,3 +66,5 @@ postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" 
 checker-qual = { module = "org.checkerframework:checker-qual", version.ref = "checker-qual" }
 
 jazzer-junit = { module = "com.code-intelligence:jazzer-junit", version.ref = "jazzer" }
+
+japicmp = { module = "com.github.siom79.japicmp:japicmp", version.ref = "japicmp" }

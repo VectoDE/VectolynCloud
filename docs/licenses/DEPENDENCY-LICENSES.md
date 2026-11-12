@@ -77,6 +77,7 @@ The subsets were made with fontTools (`pyftsubset`, Latin-1 plus punctuation, �
 |---|---|---|
 | org.gradle.toolchains.foojay-resolver-convention 1.0.0 | Apache-2.0 | settings plugin |
 | Gradle `kotlin-dsl` (build-logic) | Apache-2.0 | build only |
+| com.github.siom79.japicmp:japicmp 0.27.0 (`jar-with-dependencies`) | Apache-2.0 (eingebettet: Javassist MPL-1.1/LGPL-2.1/Apache-2.0; Guava, FastInfoset, error-prone- und j2objc-Annotations Apache-2.0; Jakarta XML Binding und Activation, JAXB-Runtime, istack, stax-ex BSD-3-Clause/EDL-1.0) | API-Kompatibilitätsprüfung in `tools/api-compat`, nur CI, nicht ausgeliefert ([docs/api-compatibility.md](../api-compatibility.md)) |
 
 ## Bewusste Ausnahmen: externe Server-Software
 
@@ -92,6 +93,6 @@ Geyser, Floodgate, ViaVersion, ViaBackwards und ViaRewind bleiben extern und sin
 
 ## Summary
 
-- Direct Gradle dependencies: 22 (davon 3 BOMs), plus 2 Build-Werkzeuge und 5 externe Ausnahmen.
+- Direct Gradle dependencies: 22 (davon 3 BOMs), plus 3 Build-Werkzeuge und 5 externe Ausnahmen.
 - Unknown licenses: 0.
 - Conflicts with GPL-3.0: none found. Hinweise: JUnit (EPL-2.0) ist nur Testabhängigkeit und wird nicht ausgeliefert. MariaDB Connector/J (LGPL-2.1-or-later) ist mit GPL-3.0 kombinierbar. Der PostgreSQL-JDBC-Treiber (BSD-2-Clause) ebenso.
