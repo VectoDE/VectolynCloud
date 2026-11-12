@@ -134,7 +134,12 @@ dependencies {
     add("spotbugsPlugins", "com.h3xstream.findsecbugs:findsecbugs-plugin:$findSecBugsVersion")
 }
 
+// Developer aid: -PerrorproneOnly=:cloud:backup,:cloud:api runs Error Prone and NullAway only in
+// those modules, so one module can be fixed without its upstream modules blocking the build.
+// CI never sets it.
+val errorproneOnly: List<String>? = providers.gradleProperty("errorproneOnly").orNull?.split(',')
 tasks.withType<JavaCompile>().configureEach {
+    options.errorprone.enabled.set(errorproneOnly == null || project.path in errorproneOnly)
     options.errorprone {
         // Every Error Prone check at its default severity; warnings fail the build with -Werror.
         check("NullAway", CheckSeverity.ERROR)
