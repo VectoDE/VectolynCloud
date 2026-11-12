@@ -135,6 +135,19 @@ public final class PanelPreview {
             public java.util.Set<String> applyImport(byte[] archive) {
                 return java.util.Set.of("cloud.yml", "groups/lobby.yml");
             }
+
+            @Override
+            public java.util.List<ModeStatistics> statistics() {
+                return java.util.List.of(new ModeStatistics("bedwars", 1284, 512_400, 87),
+                        new ModeStatistics("skywars", 642, 190_800, 41));
+            }
+
+            @Override
+            public LogSearch searchLog(String text, int limit) {
+                return new LogSearch(java.util.List.of(
+                        new LogHit("cloud.log", 812, "[INFO] Service lobby-1 started (" + text + ")"),
+                        new LogHit("cloud.1.log", 77, "[WARN] Service bedwars-2 stopped (" + text + ")")), false);
+            }
         });
         PanelServer server = PanelServer.builder(settings).version("preview").api(api).build();
         InetSocketAddress address = server.start();
