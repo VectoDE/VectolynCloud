@@ -132,7 +132,7 @@ Kommt aus `cloud/cluster`, die Unterbefehle stehen in [cluster.md](cluster.md). 
 
 ## Konsole und REST-API
 
-Jede lesende und schreibende Funktion der [REST-API](api.de.md) gibt es auch als Konsolenbefehl. Die Zuordnung steht in [console.md](console.md#console-and-rest-api); `ConsoleParityTest` in cloud-node schlägt fehl, sobald ein Endpunkt dort fehlt oder sein Befehl nicht existiert. Kurz: `service ...` für Dienste, `group`/`task`/`node` für die Dateien, `config ...` für `cloud.yml`, Server-Schalter, Neuladen und Warnungen, `node status` für `GET /node`, `backup list|create` für die Backups.
+Jede lesende und schreibende Funktion der [REST-API](api.de.md) gibt es auch als Konsolenbefehl. Die Zuordnung steht in [console.md](console.md#console-and-rest-api); `ConsoleParityTest` in cloud-node schlägt fehl, sobald ein Endpunkt dort fehlt oder sein Befehl nicht existiert. Kurz: `service ...` für Dienste, `group`/`task`/`node` für die Dateien, `config ...` für `cloud.yml`, Server-Schalter, Neuladen und Warnungen, `node status` für `GET /node`, `backup list|create` für die Backups, `api token list|create|revoke` für die Tokens.
 
 Noch in den Dateien geändert werden der Plugin- und Mod-Katalog einer Gruppe, Templates, `monitor.yml` und `backup.yml`, weil es dafür in der Cloud noch gar keine Schreib-Operation gibt. Funktionen, die die Cloud noch nicht hat (Updates, Wartungsmodus, Platzierungsregeln, Templates bearbeiten), bekommen ihre Konsolenbefehle zusammen mit der Funktion in eigenen Issues.
 

@@ -187,9 +187,10 @@ Every read and write of the [REST API](api.md) has a console command. `ConsolePa
 | `GET /setup` | `config get setup-complete`, `config get eula-accepted`; `setup` runs the assistant |
 | `GET /backups`, `POST /backups` | `backup list`, `backup create` |
 | `GET /tokens/self` | `api token list` (the console sees every token) |
+| `GET /admin/tokens`, `POST /admin/tokens`, `DELETE /admin/tokens/{id}` | `api token list`, `api token create`, `api token revoke` |
 | `GET /events` (WebSocket) | the log lines above the prompt and `service screen <id>` |
 
-The console also has commands the API does not offer: `node delete`, `backup restore` and `backup delete`, `api token create|revoke`, `cluster ...`, `monitor`, `alerts`, `setup`, `shutdown`.
+The console also has commands the API does not offer: `node delete`, `backup restore` and `backup delete`, `cluster ...`, `monitor`, `alerts`, `setup`, `shutdown`.
 
 Still edited in the files, because no write operation exists for them yet in the cloud at all: the plugin and mod catalog of a group, templates, `monitor.yml` and `backup.yml`. Functions the cloud does not have yet (updates, maintenance mode, placement rules, template editing) get their console commands together with the function, in their own issues.
 

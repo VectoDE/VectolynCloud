@@ -74,6 +74,9 @@ class ConsoleParityTest {
             Map.entry("POST /api/v1/backups", List.of("backup create")),
             // The token asks about itself; on the console the operator sees every token.
             Map.entry("GET /api/v1/tokens/self", List.of("api token list")),
+            Map.entry("GET /api/v1/admin/tokens", List.of("api token list")),
+            Map.entry("POST /api/v1/admin/tokens", List.of("api token create")),
+            Map.entry("DELETE /api/v1/admin/tokens/{id}", List.of("api token revoke")),
             // The event stream; on the console the log lines and "service screen" show the same live.
             Map.entry("GET /api/v1/events", List.of("service screen"))));
 
