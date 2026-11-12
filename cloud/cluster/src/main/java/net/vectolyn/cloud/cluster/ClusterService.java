@@ -14,16 +14,20 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.SSLContext;
@@ -33,6 +37,7 @@ import net.vectolyn.cloud.cluster.ClusterMessages.JoinReply;
 import net.vectolyn.cloud.cluster.ClusterMessages.JoinRequest;
 import net.vectolyn.cloud.cluster.ClusterMessages.NodeHello;
 import net.vectolyn.cloud.cluster.ClusterMessages.NodeWelcome;
+import net.vectolyn.cloud.cluster.PlacementMessages.NodeStatus;
 import net.vectolyn.cloud.config.ConfigListener;
 import net.vectolyn.cloud.config.ConfigService;
 import net.vectolyn.cloud.config.error.ConfigException;
@@ -75,6 +80,10 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
     private static final Pattern IP_LITERAL = Pattern.compile("[0-9.]{1,15}|[0-9A-Fa-f.]{0,40}:[0-9A-Fa-f:.]{1,44}");
     /** How often the head looks for changed templates. */
     static final Duration TEMPLATE_RESCAN = Duration.ofSeconds(60);
+    /** How often a member reports its {@link NodeStatus} to the head. */
+    static final Duration STATUS_INTERVAL = Duration.ofSeconds(10);
+    /** A status older than this does not count for the placement (three missed reports). */
+    static final Duration STATUS_STALE = Duration.ofSeconds(30);
 
     /** The role of this node. */
     public enum Role {
@@ -166,8 +175,22 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
                                Optional<String> problem) {
     }
 
+    /**
+     * The last {@link NodeStatus} of a node, as the head knows it.
+     *
+     * @param status    what the node reported
+     * @param received  when the head got it (for the head itself: now)
+     * @param connected whether the node has a session with the head now (the head itself counts as
+     *                  connected)
+     */
+    public record NodeReport(NodeStatus status, Instant received, boolean connected) {
+    }
+
     private final ClusterPaths paths;
     private final NodeId self;
+    /** Head: the last status of every member that reported, kept after its session ended. */
+    private final Map<NodeId, NodeReport> reports = new ConcurrentHashMap<>();
+    private volatile Supplier<NodeStatus> statusSource = () -> NodeStatus.UNKNOWN;
     private final String version;
     private final ConfigService config;
     private final VersionPolicy versions;
@@ -225,6 +248,7 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
                 .request(MirrorMessages.TEMPLATE_LIST, (peer, payload) -> templateSource.list(payload))
                 .request(MirrorMessages.TEMPLATE_MANIFEST, (peer, payload) -> templateSource.manifest(payload))
                 .request(MirrorMessages.TEMPLATE_CHUNK, (peer, payload) -> templateSource.chunk(payload))
+                .push(PlacementMessages.NODE_STATUS, this::statusReceived)
                 .build();
         this.memberHandlers = ClusterHandlers.builder()
                 .push(MirrorMessages.CONFIG_CHANGED,
@@ -656,6 +680,7 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
                         LOG.log(System.Logger.Level.INFO, "Cluster: connected to the head {0}", node);
                         // on the mirror's worker: this thread reads the answers
                         requestSync();
+                        Thread.ofVirtual().name("vectolyn-cluster-status").start(ClusterService.this::reportStatus);
                     }
 
                     @Override
@@ -678,6 +703,110 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
                 }, memberHandlers);
         created.start();
         link = created;
+        long interval = STATUS_INTERVAL.toMillis();
+        mirrorTimer.scheduleWithFixedDelay(this::reportStatus, interval, interval, TimeUnit.MILLISECONDS);
+    }
+
+    // ---------------------------------------------------------------- placement
+
+    /**
+     * Sets where this node's {@link NodeStatus} comes from: a member reports it to the head every
+     * {@link #STATUS_INTERVAL} and right after its session starts, the head uses its own for the
+     * placement. Without a source a node reports {@link NodeStatus#UNKNOWN}, which no placement
+     * chooses.
+     *
+     * @param source called on a timer thread; must not block
+     */
+    public void statusSource(Supplier<NodeStatus> source) {
+        this.statusSource = Objects.requireNonNull(source, "source");
+    }
+
+    /** This node's status now; a source that fails counts as {@link NodeStatus#UNKNOWN}. */
+    private NodeStatus ownStatus() {
+        try {
+            return Objects.requireNonNull(statusSource.get(), "status");
+        } catch (RuntimeException e) {
+            LOG.log(System.Logger.Level.WARNING, "Cluster: the status of this node cannot be read", e);
+            return NodeStatus.UNKNOWN;
+        }
+    }
+
+    /** Member: sends the status to the head, if there is a session. */
+    private void reportStatus() {
+        ClusterLink running = link;
+        Optional<ClusterSession> session = running == null ? Optional.empty() : running.session();
+        if (closed || session.isEmpty()) {
+            return;
+        }
+        try {
+            session.get().push(PlacementMessages.NODE_STATUS, ownStatus().write());
+        } catch (RuntimeException e) {
+            // A failure must not end the timer: the next report tries again.
+            LOG.log(System.Logger.Level.WARNING, "Cluster: the status of this node cannot be sent", e);
+        }
+    }
+
+    /** Head: a member reported its status. */
+    private void statusReceived(NodeId peer, byte[] payload) throws ClusterRpcException {
+        NodeStatus status = ConfigMirrorSource.read(() -> NodeStatus.read(new PacketReader(payload)));
+        reports.put(peer, new NodeReport(status, clock.instant(), true));
+    }
+
+    /**
+     * The last status of every node, the head first (its own, now), then the members in the order
+     * of {@code cluster.yml}. A member that never reported since the head started is missing; one
+     * whose session ended keeps its last status with {@code connected} false.
+     *
+     * @return the reports by node, empty outside the head
+     */
+    public Map<NodeId, NodeReport> nodeReports() {
+        Map<NodeId, NodeReport> all = new LinkedHashMap<>();
+        ClusterConfig current = cluster;
+        if (role() != Role.HEAD || current == null) {
+            return all;
+        }
+        all.put(self, new NodeReport(ownStatus(), clock.instant(), true));
+        ClusterServer running = server;
+        Set<NodeId> connected = running == null ? Set.of() : running.connected();
+        for (ClusterConfig.Member member : current.members()) {
+            NodeId id = new NodeId(member.id());
+            NodeReport report = reports.get(id);
+            if (!id.equals(self) && report != null) {
+                all.put(id, new NodeReport(report.status(), report.received(), connected.contains(id)));
+            }
+        }
+        return all;
+    }
+
+    /**
+     * Head: chooses a node for one more service of {@code task} by the rules of
+     * {@link PlacementPlanner}, from the nodes that are connected and reported within
+     * {@link #STATUS_STALE}.
+     *
+     * @param task the task
+     * @return the node, or why none
+     * @throws ClusterException if this node is not the head or the task does not exist
+     */
+    public PlacementPlanner.Result place(String task) throws ClusterException {
+        requireHead();
+        try {
+            return PlacementPlanner.place(config.snapshot(), task, reachable(), Set.of());
+        } catch (IllegalArgumentException e) {
+            throw new ClusterException("The task cannot be placed: " + e.getMessage(),
+                    "Der Task lässt sich nicht platzieren: " + e.getMessage());
+        }
+    }
+
+    /** Head: the status of every node that counts for the placement now. */
+    Map<NodeId, NodeStatus> reachable() {
+        Instant oldest = clock.instant().minus(STATUS_STALE);
+        Map<NodeId, NodeStatus> reachable = new LinkedHashMap<>();
+        nodeReports().forEach((node, report) -> {
+            if (report.connected() && !report.received().isBefore(oldest)) {
+                reachable.put(node, report.status());
+            }
+        });
+        return reachable;
     }
 
     /** The state of the cluster. */
