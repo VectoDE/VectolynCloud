@@ -21,10 +21,11 @@ import org.jspecify.annotations.Nullable;
  *                      differs are refused, passkeys are bound to its host, and the sign-in with
  *                      an identity provider returns to it. Without it the panel accepts only its
  *                      own bind address and {@code localhost}.
+ * @param oidc          sign-in with an OpenID Connect provider; optional, needs {@code public-url}
  */
-@JsonPropertyOrder({"schema-version", "enabled", "bind", "port", "public-url"})
+@JsonPropertyOrder({"schema-version", "enabled", "bind", "port", "public-url", "oidc"})
 public record PanelConfig(@JsonProperty(required = true) int schemaVersion, Boolean enabled, String bind,
-                          Integer port, @Nullable String publicUrl) {
+                          Integer port, @Nullable String publicUrl, @Nullable Oidc oidc) {
 
     /** Current format version. */
     public static final int SCHEMA_VERSION = 1;
@@ -45,6 +46,41 @@ public record PanelConfig(@JsonProperty(required = true) int schemaVersion, Bool
      * @return the defaults
      */
     public static PanelConfig defaults() {
-        return new PanelConfig(SCHEMA_VERSION, Boolean.FALSE, "127.0.0.1", DEFAULT_PORT, null);
+        return new PanelConfig(SCHEMA_VERSION, Boolean.FALSE, "127.0.0.1", DEFAULT_PORT, null, null);
+    }
+
+    /**
+     * Shorter form without OpenID Connect.
+     *
+     * @param schemaVersion format version
+     * @param enabled       whether the panel runs
+     * @param bind          address
+     * @param port          port
+     * @param publicUrl     public address, or null
+     */
+    public PanelConfig(int schemaVersion, Boolean enabled, String bind, Integer port, @Nullable String publicUrl) {
+        this(schemaVersion, enabled, bind, port, publicUrl, null);
+    }
+
+    /**
+     * {@code oidc}: sign-in with an OpenID Connect provider (authorization code flow with PKCE).
+     * The client secret is not in this file: it is {@code VECTOLYN_PANEL_OIDC_SECRET} in
+     * {@code secrets/vectolyn.env}. A provider account signs in only after a panel user linked it.
+     *
+     * @param issuer   the provider's issuer URL, {@code https://...} (its discovery document must
+     *                 name the same issuer)
+     * @param clientId the client id registered at the provider
+     * @param name     the label of the sign-in button (default {@code Single sign-on})
+     * @param scopes   scopes to ask for; {@code openid} is always added (default {@code openid profile email})
+     */
+    @JsonPropertyOrder({"issuer", "client-id", "name", "scopes"})
+    public record Oidc(@JsonProperty(required = true) String issuer, @JsonProperty(required = true) String clientId,
+                       String name, java.util.List<String> scopes) {
+
+        /** Fills in the defaults. */
+        public Oidc {
+            name = name == null ? "Single sign-on" : name;
+            scopes = scopes == null ? java.util.List.of("openid", "profile", "email") : java.util.List.copyOf(scopes);
+        }
     }
 }

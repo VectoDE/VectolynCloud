@@ -12,9 +12,10 @@ import org.jspecify.annotations.Nullable;
  * A request target ({@code /path?query}) checked before anything uses it.
  *
  * <p>Rules: at most {@value #MAX_LENGTH} characters of printable ASCII, starts with {@code /}, no
- * {@code %} (no percent-encoding at all, so nothing can be decoded twice), no backslash, no empty,
- * {@code .} or {@code ..} segment. The query is split into keys and values of the same alphabet
- * without decoding; a key may appear once.
+ * backslash. The path has no {@code %} (no percent-encoding at all, so nothing can be decoded twice)
+ * and no empty, {@code .} or {@code ..} segment. The query is split into keys and values without
+ * decoding; a key may appear once. Only the query may hold {@code %}, as a single sign-on provider
+ * sends codes percent-encoded; an endpoint that reads such a value decodes it once.
  *
  * @param path  the path, starting with {@code /}
  * @param query the query parameters in order
@@ -41,12 +42,15 @@ public record RequestTarget(String path, Map<String, String> query) {
         }
         for (int i = 0; i < uri.length(); i++) {
             char c = uri.charAt(i);
-            if (c <= 0x20 || c >= 0x7f || c == '%' || c == '\\' || c == '#') {
+            if (c <= 0x20 || c >= 0x7f || c == '\\' || c == '#') {
                 return Optional.empty();
             }
         }
         int q = uri.indexOf('?');
         String path = q < 0 ? uri : uri.substring(0, q);
+        if (path.indexOf('%') >= 0) {
+            return Optional.empty();
+        }
         String rawQuery = q < 0 ? "" : uri.substring(q + 1);
         String[] segments = path.split("/", -1);
         // segments[0] is the empty text before the leading slash; a trailing slash leaves one empty last segment.

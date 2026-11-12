@@ -698,7 +698,7 @@ public final class CloudNode implements AutoCloseable {
             } catch (IOException e) {
                 LOG.log(System.Logger.Level.ERROR, "The API cannot start ({0}); the node runs without it.", e.getMessage());
             }
-            panelServer = NodePanel.start(settings.home(), apiServer, settings.launcherVersion()).orElse(null);
+            panelServer = NodePanel.start(settings.home(), apiServer, settings.launcherVersion(), secrets).orElse(null);
         }
         // The questions read the terminal on this thread, so the console's own read loop starts
         // only afterwards.

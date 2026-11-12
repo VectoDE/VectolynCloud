@@ -1,0 +1,108 @@
+name: PostgreSQL real server
+
+# Runs the PostgreSQL adapter (cloud-database, mode postgresql, see docs/cloud/database.md) against
+# a real PostgreSQL server instead of the fake of the unit tests. The server is a service
+# container with a throwaway password; PostgresServerIT creates its own role and database in it,
+# checks login, rights, the grants named in the error message, version and max_connections, works
+# as the created user and drops everything again.
+#
+# Weekly, on demand, and on pull requests that change the database module or this workflow. It is
+# not a required check. The normal CI excludes these tests (tag "postgres").
+
+on:
+  schedule:
+    - cron: '41 4 * * 1'
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'cloud/database/**'
+      - 'gradle/libs.versions.toml'
+      - '.github/workflows/postgres-real-server.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: postgres-real-server-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  postgres:
+    name: PostgreSQL ${{ matrix.version }} (real server)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Pinned by digest (multi-arch index); bump tag and digest together.
+          - version: '17'
+            image: postgres:17-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0
+    services:
+      postgres:
+        image: ${{ matrix.image }}
+        env:
+          POSTGRES_USER: postgres
+          # Throwaway: the container lives for this job only and listens on the runner's loopback.
+          POSTGRES_PASSWORD: ci-only-throwaway
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            api.adoptium.net:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            services.gradle.org:443
+            downloads.gradle.org:443
+            plugins.gradle.org:443
+            plugins-artifacts.gradle.org:443
+            repo.maven.apache.org:443
+            repo.papermc.io:443
+            repo.hpfxd.com:443
+            api.foojay.io:443
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Both JDKs are installed; the last one becomes JAVA_HOME and runs Gradle.
+      - name: Set up JDK 21 and 25
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: |
+            21
+            25
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      - name: Run the PostgreSQL adapter against the real server
+        env:
+          VECTOLYN_TEST_POSTGRES_URL: postgresql://postgres:ci-only-throwaway@localhost:5432/postgres
+        run: >-
+          bash ./gradlew :cloud:database:postgresTest --no-daemon --stacktrace
+          -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64,JAVA_HOME_25_X64
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: postgres-real-server-${{ matrix.version }}
+          path: cloud/database/build/reports/tests/
+          retention-days: 7

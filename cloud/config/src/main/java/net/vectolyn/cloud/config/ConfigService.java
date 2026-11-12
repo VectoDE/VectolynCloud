@@ -296,11 +296,18 @@ public final class ConfigService implements AutoCloseable {
      * {@code cloud.yml} with these nodes, groups and tasks, is validated as a whole and then written
      * (each file atomically; group and task files that are not in the set are deleted).
      *
+     * <p>A JVM flag the set adds to a group and {@link JvmFlagPolicy} does not allow is refused
+     * here, on every member, with the same rule as a change through the REST API
+     * ({@link JvmFlagPolicy#refusedChanges}): the head can be changed by its console, its files or
+     * its API, and a member cannot tell which, so it treats every new flag like one from the API.
+     * Flags this node's groups already had stay accepted.
+     *
      * @param nodes  the head's {@code nodes.yml}
      * @param groups the head's groups by name
      * @param tasks  the head's tasks by name
      * @return the change; empty if the files were the same already
-     * @throws ConfigException if the result is invalid; nothing is written then
+     * @throws ConfigException if the result is invalid or adds a JVM flag outside the allowlist;
+     *                         nothing is written then
      * @throws IOException     if a file cannot be written
      * @throws IllegalStateException if the mirror mode is off
      */
@@ -316,6 +323,10 @@ public final class ConfigService implements AutoCloseable {
             ConfigSnapshot before = current;
             ConfigSnapshot after = ConfigSnapshot.of(before.cloud(), nodes, groups, tasks);
             requireValid(after);
+            List<ConfigError> refused = JvmFlagPolicy.refusedChanges(before, after);
+            if (!refused.isEmpty()) {
+                throw new ConfigException(refused);
+            }
             Set<String> files = new LinkedHashSet<>(store.writeMirrored(after));
             files.addAll(changedFiles(before, after));
             current = after;

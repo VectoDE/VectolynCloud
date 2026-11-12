@@ -31,6 +31,8 @@ interface I18n {
   locale: Locale;
   setLocale: (locale: Locale) => void;
   t: (key: MessageKey, vars?: Record<string, string | number>) => string;
+  /** Whether a key exists, for keys built at run time (error codes of the server). */
+  has: (key: string) => boolean;
   formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string;
   formatDate: (value: string | number | Date) => string;
 }
@@ -69,6 +71,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
         const text = messages[key] ?? catalogues.en[key] ?? key;
         return vars ? text.replace(/\{(\w+)\}/g, (_, name: string) => String(vars[name] ?? `{${name}}`)) : text;
       },
+      has: (key) => Object.prototype.hasOwnProperty.call(catalogues.en, key),
       formatNumber: (n, options) => (options ? new Intl.NumberFormat(locale, options).format(n) : numbers.format(n)),
       formatDate: (d) => dates.format(new Date(d)),
     };

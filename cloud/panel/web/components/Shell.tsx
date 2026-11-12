@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { useAuth } from "@/lib/auth";
 import { useI18n, type Locale } from "@/lib/i18n";
 
 /** The mark in the colours of the current scheme; decorative next to the visible product name. */
@@ -33,8 +34,21 @@ function LanguageSwitch() {
   );
 }
 
+function NavLink({ href, path, children }: { href: string; path: string; children: ReactNode }) {
+  const current = path === href;
+  return (
+    <a href={href} aria-current={current ? "page" : undefined}
+      className={`flex min-h-11 items-center text-ink underline-offset-4 ${current ? "font-bold underline" : "hover:underline"}`}>
+      {children}
+    </a>
+  );
+}
+
 export function Shell({ children }: { children: ReactNode }) {
   const { t } = useI18n();
+  const { session, can, signOut } = useAuth();
+  const [path, setPath] = useState("/");
+  useEffect(() => setPath(window.location.pathname), []);
   return (
     <div className="flex min-h-screen flex-col">
       <a
@@ -52,9 +66,17 @@ export function Shell({ children }: { children: ReactNode }) {
             </span>
           </a>
           <nav aria-label={t("nav.label")} className="flex flex-wrap items-center gap-4">
-            <a href="/" aria-current="page" className="flex min-h-11 items-center text-ink underline underline-offset-4">
-              {t("nav.overview")}
-            </a>
+            {session && (
+              <>
+                <NavLink href="/" path={path}>{t("nav.overview")}</NavLink>
+                {can("users:manage") && <NavLink href="/users/" path={path}>{t("nav.users")}</NavLink>}
+                <NavLink href="/account/" path={path}>{t("nav.account")}</NavLink>
+                <button type="button" onClick={() => void signOut()}
+                  className="min-h-11 border-2 border-line bg-raised px-3 font-bold text-ink">
+                  {t("nav.sign-out")}
+                </button>
+              </>
+            )}
             <LanguageSwitch />
           </nav>
         </div>

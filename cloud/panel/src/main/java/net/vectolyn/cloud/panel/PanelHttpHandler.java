@@ -66,7 +66,32 @@ final class PanelHttpHandler extends SimpleChannelInboundHandler<FullHttpRequest
             send(ctx, Responses.text(400, "The request target breaks a rule of the panel.", server.secure()), false);
             return;
         }
-        if (target.get().path().startsWith("/api/")) {
+        if (target.get().path().startsWith("/api/") && server.api() != null) {
+            // Password hashing, file writes and calls to a sign-on provider block: they run on a
+            // virtual thread, and the connection reads nothing else until the answer is out.
+            int q = request.uri().indexOf('?');
+            byte[] body = new byte[request.content().readableBytes()];
+            request.content().getBytes(request.content().readerIndex(), body);
+            PanelApi.Call call = new PanelApi.Call(request.method().name(), target.get().path(), target.get().query(),
+                    q < 0 ? "" : request.uri().substring(q + 1), body, request.headers().copy(),
+                    PanelServer.clientKey(ctx.channel().remoteAddress()));
+            ctx.channel().config().setAutoRead(false);
+            try {
+                server.executor().execute(() -> {
+                    FullHttpResponse response;
+                    try {
+                        response = server.api().handle(call);
+                    } catch (RuntimeException e) {
+                        LOG.log(System.Logger.Level.ERROR, "Panel endpoint failed: {0}", e.getClass().getName());
+                        response = Responses.error(500, "internal", "The panel failed.", server.secure());
+                    }
+                    send(ctx, response, keepAlive);
+                    ctx.channel().config().setAutoRead(true);
+                });
+            } catch (java.util.concurrent.RejectedExecutionException e) {
+                send(ctx, Responses.error(503, "shutting-down", "The panel is stopping.", server.secure()), false);
+            }
+        } else if (target.get().path().startsWith("/api/")) {
             send(ctx, api(request, target.get()), keepAlive);
         } else {
             send(ctx, file(request, target.get()), keepAlive);
