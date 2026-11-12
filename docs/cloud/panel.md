@@ -200,6 +200,20 @@ The name comes from the node's list of players, never from the request, and must
 
 An archive may be 8 MiB here (bigger ones through the console). An invalid one answers `422 invalid-import` with what is wrong; nothing is written. Export and import go into the audit log.
 
+## Activity
+
+**Activity** gathers three views. Each one appears only with its right:
+
+| View | Endpoint | Right | Shows |
+|---|---|---|---|
+| Statistics per game mode | `GET /api/panel/statistics` | node:read | logins, playtime and peak players per game mode, from the node's own statistics (`privacy.yml` decides whether they are counted) |
+| Audit log | `GET /api/panel/audit?limit=` | audit:read | the newest entries (at most 500) with time, event, user, target and address; filtered in the browser |
+| Log search | `GET /api/panel/logs?q=&limit=` | admin | lines of `logs/cloud.log` and its rotated files that contain the text, newest first |
+
+The search text must be 2 to 200 characters without control characters, `limit` 1 to 500. The search reads at most 64 MiB, cuts lines at 2000 characters, follows no symbolic links and says when there are more hits than shown (`truncated`). Every search goes into the audit log as `log.searched`.
+
+Modules and the store are not part of the panel yet. They follow once the module system (E7) and the store (E12) exist.
+
 ## Building the frontend
 
 The frontend is built by Gradle when `-Pvectolyn.panel.web=true` is set; this needs Node.js 20.9 or newer with npm on the `PATH`:

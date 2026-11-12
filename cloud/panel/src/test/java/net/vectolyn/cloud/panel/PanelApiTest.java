@@ -545,6 +545,46 @@ class PanelApiTest {
             imported = archive;
             return java.util.Set.of("cloud.yml");
         }
+
+        String searched;
+
+        @Override
+        public List<PanelNode.ModeStatistics> statistics() {
+            return List.of(new PanelNode.ModeStatistics("lobby", 12, 3600, 5));
+        }
+
+        @Override
+        public PanelNode.LogSearch searchLog(String text, int limit) {
+            searched = text + "/" + limit;
+            return new PanelNode.LogSearch(List.of(new PanelNode.LogHit("cloud.log", 7, "WARN disk")), false);
+        }
+    }
+
+    @Test
+    void statisticsNeedNodeReadAndTheLogSearchNeedsAdmin() throws Exception {
+        start(null);
+        FakePanelNode fake = new FakePanelNode();
+        api.node(fake);
+        Browser owner = owner();
+        assertEquals(200, owner.post("/api/panel/users", Map.of("name", "vic", "password", PASSWORD,
+                "roles", List.of("viewer"))).status());
+        Browser viewer = new Browser();
+        assertEquals(200, viewer.post("/api/panel/login", Map.of("name", "vic", "password", PASSWORD)).status());
+        Reply stats = viewer.get("/api/panel/statistics");
+        assertEquals(200, stats.status());
+        assertTrue(stats.body().contains("\"playtime-seconds\":3600"), stats.body());
+        assertEquals(403, viewer.get("/api/panel/logs?q=disk").status(), "the log is for admins");
+        assertEquals(403, viewer.get("/api/panel/audit").status(), "the audit log needs audit:read");
+
+        Reply hits = owner.get("/api/panel/logs?q=disk%20full&limit=20");
+        assertEquals(200, hits.status(), hits.body());
+        assertEquals("disk full/20", fake.searched);
+        assertTrue(hits.body().contains("\"line\":7"));
+        for (String bad : List.of("q=a", "q=" + "x".repeat(201), "q=a%0Ab", "q=disk&limit=0", "q=disk&limit=501",
+                "q=disk&limit=x")) {
+            assertEquals(400, owner.get("/api/panel/logs?" + bad).status(), bad);
+        }
+        assertTrue(Files.readString(home.resolve("logs").resolve(AuditLog.FILE_NAME)).contains("\"event\":\"log.searched\""));
     }
 
     @Test

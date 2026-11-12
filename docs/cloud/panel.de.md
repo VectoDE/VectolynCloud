@@ -68,6 +68,10 @@ Jede Anfrage muss das Panel im `Host`-Header nennen (`localhost`, `127.0.0.1`, `
 
 **Konfiguration** bearbeitet Gruppen und Aufgaben als JSON und Textdateien von Vorlagen über die REST-Routen der API, mit derselben Validierung (`422` mit Feld) und `If-Match`, damit keine fremde Änderung überschrieben wird. **Export** liefert die Konfiguration als Zip, ohne Secrets. Ein **Import** zeigt zuerst Dateien und Diff und wird nur mit der Prüfsumme genau dieser Vorschau angewendet. Details in [panel.md](panel.md#players-and-configuration).
 
+## Aktivität
+
+**Aktivität** zeigt, je nach Recht, die Statistik je Spielmodus (`node:read`), das Audit-Log mit Filter (`audit:read`, die letzten 500 Einträge) und eine Suche in den Log-Dateien des Knotens (`admin`, 2 bis 200 Zeichen, neueste zuerst, höchstens 64 MiB gelesen). Jede Log-Suche steht im Audit-Log. Module und Store kommen hinzu, sobald das Modulsystem (E7) und der Store (E12) fertig sind. Details in [panel.md](panel.md#activity).
+
 ## Oberfläche bauen
 
 ```sh

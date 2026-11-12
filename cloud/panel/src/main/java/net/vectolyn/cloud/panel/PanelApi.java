@@ -258,6 +258,14 @@ public final class PanelApi {
                     require(session, PanelRight.SERVICES_READ);
                     yield listPlayers();
                 }
+                case "/api/panel/statistics" -> {
+                    require(session, PanelRight.NODE_READ);
+                    yield statistics();
+                }
+                case "/api/panel/logs" -> {
+                    require(session, PanelRight.ADMIN);
+                    yield searchLog(call, session);
+                }
                 case "/api/panel/config/export" -> {
                     require(session, PanelRight.CONFIG_READ);
                     yield exportConfig(call, session);
@@ -1295,6 +1303,48 @@ public final class PanelApi {
         details.put("name", player.name());
         audit.record("player." + action, session.user(), player.uuid(), call.client(), details);
         return Responses.json(200, Map.of("sent", true, "service", player.service()), secure());
+    }
+
+    // ---- statistics and log search --------------------------------------------------------
+
+    /** Most hits of one log search. */
+    static final int MAX_LOG_HITS = 500;
+
+    private FullHttpResponse statistics() throws Refusal {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (PanelNode.ModeStatistics m : requireNode().statistics()) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("mode", m.mode());
+            item.put("logins", m.logins());
+            item.put("playtime-seconds", m.playtimeSeconds());
+            item.put("peak-players", m.peakPlayers());
+            out.add(item);
+        }
+        return Responses.json(200, Map.of("modes", out), secure());
+    }
+
+    private FullHttpResponse searchLog(Call call, Sessions.Session session) throws Refusal, IOException {
+        String text = queryText(call, "q").strip();
+        if (text.length() < 2 || text.length() > 200 || text.chars().anyMatch(Character::isISOControl)) {
+            throw new Refusal(400, "invalid-query", "Search for 2 to 200 characters without control characters.");
+        }
+        int limit = MAX_LOG_HITS;
+        String raw = call.query().get("limit");
+        if (raw != null) {
+            try {
+                limit = Integer.parseInt(raw);
+            } catch (NumberFormatException e) {
+                limit = -1;
+            }
+            if (limit < 1 || limit > MAX_LOG_HITS) {
+                throw new Refusal(400, "invalid-query", "\"limit\" must be 1 to " + MAX_LOG_HITS + ".");
+            }
+        }
+        PanelNode.LogSearch result = requireNode().searchLog(text, limit);
+        List<Map<String, Object>> hits = new ArrayList<>();
+        result.hits().forEach(h -> hits.add(Map.of("file", h.file(), "line", h.line(), "text", h.text())));
+        audit.record("log.searched", session.user(), "logs", call.client(), Map.of("hits", hits.size()));
+        return Responses.json(200, Map.of("hits", hits, "truncated", result.truncated()), secure());
     }
 
     // ---- configuration archive ------------------------------------------------------------

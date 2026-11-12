@@ -57,6 +57,54 @@ public interface PanelNode {
         }
     }
 
+    /**
+     * The figures of one game mode (a group), without anything that names a player.
+     *
+     * @param mode            the group
+     * @param logins          joins counted
+     * @param playtimeSeconds play time in seconds
+     * @param peakPlayers     most players at the same time
+     */
+    record ModeStatistics(String mode, long logins, long playtimeSeconds, int peakPlayers) {
+    }
+
+    /**
+     * A line of the node's log that matches a search.
+     *
+     * @param file the log file, for example {@code cloud.1.log}
+     * @param line its line number, from 1
+     * @param text the line, at most 2000 characters
+     */
+    record LogHit(String file, int line, String text) {
+    }
+
+    /**
+     * The result of a search.
+     *
+     * @param hits      the lines, newest file first
+     * @param truncated whether the search stopped at its limit of hits or bytes
+     */
+    record LogSearch(List<LogHit> hits, boolean truncated) {
+    }
+
+    /** @return the statistics per game mode, by mode */
+    default List<ModeStatistics> statistics() {
+        return List.of();
+    }
+
+    /**
+     * Searches the node's own log ({@code logs/cloud.log} and its rotated files), which is written
+     * with secrets already replaced.
+     *
+     * @param text  the text to find, case-insensitive
+     * @param limit most hits
+     * @return the hits
+     * @throws IOException if a file cannot be read
+     */
+    default LogSearch searchLog(String text, int limit) throws IOException {
+        return new LogSearch(List.of(), false);
+    }
+
     /** @return every player online, by name */
     List<Player> players();
 

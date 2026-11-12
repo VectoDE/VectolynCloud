@@ -72,6 +72,7 @@ export function Shell({ children }: { children: ReactNode }) {
                 {can("services:read") && <NavLink href="/services/" path={path}>{t("nav.services")}</NavLink>}
                 {can("services:read") && <NavLink href="/players/" path={path}>{t("nav.players")}</NavLink>}
                 {(can("config:read") || can("templates:read")) && <NavLink href="/config/" path={path}>{t("nav.config")}</NavLink>}
+                {(can("node:read") || can("audit:read") || can("admin")) && <NavLink href="/activity/" path={path}>{t("nav.activity")}</NavLink>}
                 {can("users:manage") && <NavLink href="/users/" path={path}>{t("nav.users")}</NavLink>}
                 <NavLink href="/account/" path={path}>{t("nav.account")}</NavLink>
                 <button type="button" onClick={() => void signOut()}
