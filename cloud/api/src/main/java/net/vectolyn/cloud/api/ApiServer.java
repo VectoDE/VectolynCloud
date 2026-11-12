@@ -347,7 +347,7 @@ public final class ApiServer implements AutoCloseable {
                 .decoderEnforceMaxConsecutiveEmptyDataFrames(2)
                 .build());
         p.addLast("vectolyn-grpc-connection", new GrpcConnection(settings.limits().idleTimeoutSeconds(),
-                settings.limits().maxBodyBytes(), nanoTime));
+                settings.limits().maxBodyBytes() + 5L, nanoTime));
         p.addLast("vectolyn-grpc-mux", new Http2MultiplexHandler(new ChannelInitializer<Http2StreamChannel>() {
             @Override
             protected void initChannel(Http2StreamChannel stream) {

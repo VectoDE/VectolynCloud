@@ -67,6 +67,7 @@ final class GrpcStreamHandler extends SimpleChannelInboundHandler<Http2StreamFra
     private final AtomicLong dropped = new AtomicLong();
     private GrpcConnection connection;
     private long reserved;
+    private java.util.concurrent.ScheduledFuture<?> deadline;
 
     GrpcStreamHandler(ApiServer server, GrpcService service) {
         this.server = server;
@@ -183,7 +184,7 @@ final class GrpcStreamHandler extends SimpleChannelInboundHandler<Http2StreamFra
                 owner.end();
             });
         }
-        ctx.executor().schedule(() -> {
+        deadline = ctx.executor().schedule(() -> {
             if (body != null && !finished) {
                 fail(ctx, new ApiException(408, "request-timeout", "The request message did not arrive in time."));
             }
@@ -201,11 +202,16 @@ final class GrpcStreamHandler extends SimpleChannelInboundHandler<Http2StreamFra
         return base.equals("application/grpc") || base.equals("application/grpc+proto");
     }
 
+    /** Gives the body bytes back to the connection and stops the deadline; safe to call twice. */
     private void releaseBody() {
         if (connection != null && reserved > 0) {
             connection.release(reserved);
         }
         reserved = 0;
+        if (deadline != null) {
+            deadline.cancel(false);
+            deadline = null;
+        }
     }
 
     private void complete(ChannelHandlerContext ctx) {

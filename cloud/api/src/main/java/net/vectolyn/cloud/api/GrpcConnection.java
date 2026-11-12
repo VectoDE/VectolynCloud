@@ -17,8 +17,10 @@ import java.util.function.LongSupplier;
  * closed, whatever frames (PING, SETTINGS, unfinished or refused streams) the client sends, so an
  * unauthenticated client cannot hold one of the connections that REST shares. While a call is open
  * (an {@code Events} stream that has nothing to send) the server pings instead, so a dead client is
- * noticed by the transport. Request bodies that are still arriving share one budget of
- * {@code maxBodyBytes} per connection, the same memory a REST connection may hold.
+ * noticed by the transport. Request bodies that are still arriving share one budget of one
+ * framed message ({@code maxBodyBytes} plus the 5-byte prefix) per connection, the same memory a
+ * REST connection may hold; a second large upload in parallel on the same connection is refused
+ * with {@code UNAVAILABLE} and can be retried.
  */
 final class GrpcConnection extends ChannelInboundHandlerAdapter {
 
