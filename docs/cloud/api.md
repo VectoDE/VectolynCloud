@@ -72,7 +72,7 @@ curl -X POST -H "Authorization: Bearer vcs_..." https://cloud.example.org:8443/a
 | `backups:write` | create a backup |
 | `node:read` | node status; metrics events |
 | `templates:read` | list templates and their files, read a file (never secrets) |
-| `templates:write` | create and replace template files |
+| `templates:write` | create and replace text configuration files of templates (no code, no new secret placeholders) |
 | `admin` | everything above, and the token management under `/admin/tokens` |
 
 A write scope does not include the read scope. A missing scope gives `403 missing-scope`. Changing the `api` or `database` section of `cloud.yml` needs `admin`: they decide who can reach the node and which image `docker compose` runs with the database root password.
@@ -115,7 +115,7 @@ All paths start with `/api/v1`. Bodies are `application/json` in UTF-8, with the
 | `GET /templates` | templates:read | `[{"name": "Lobby-Server"}, ...]` |
 | `GET /templates/{template}/files` | templates:read | `{"template": ..., "files": [{"path": "default/server.properties", "size": 1210}], "truncated": false}` |
 | `GET /templates/{template}/files/{path}` | templates:read | the file as `{"encoding": "utf-8"\|"base64", "content": ...}`, with `ETag` |
-| `PUT /templates/{template}/files/{path}` `{"content": "...", "encoding": "utf-8"}` | templates:write | `201` created or `200` replaced, with `ETag` |
+| `PUT /templates/{template}/files/{path}` `{"content": "...", "encoding": "utf-8"}` | templates:write | `201` created or `200` replaced, with `ETag`; text configuration only (see below) |
 | `GET /tokens/self` | any | the calling token |
 | `GET /admin/tokens` | admin | every token (never the token or its hash), paged |
 | `POST /admin/tokens` `{"name": "ci", "scopes": ["services:read"], "expires-in": "90d"}` | admin | `201` the token, shown in this answer only |
@@ -147,6 +147,10 @@ Every write goes through `ConfigService.apply`: the whole configuration is valid
 
 - **Reading** returns UTF-8 text as it is and anything else (or text with a NUL byte) as Base64, up to 1 MiB (`413 file-too-large` above). The `ETag` is that of the file's bytes.
 - **Writing** is checked against the `ETag`: without `If-Match` only a new file is created, an existing one answers `428 precondition-required`; with the `ETag` of the `GET` (or `*`) the file is replaced, and if it changed in between the answer is `412 precondition-failed`. Check and write run under one lock, so of two editors with the same `ETag` exactly one gets through. A file may be at most 48 KiB (the API reads strings up to 64 KiB, which is 48 KiB in Base64); folders on the way are created; the file is replaced atomically.
+- **What may be written.** `templates:write` covers text configuration only, so a token cannot place code a server loads or pull a secret into a file. These rules sit in `TemplatePaths.isEditablePath` and `TemplateFiles.write` in `cloud/config`, so every caller gets them, and each refusal answers `422` without writing anything:
+  - `422 file-not-editable`: the file name must end in `.yml`, `.yaml`, `.toml`, `.json`, `.properties`, `.txt` or `.conf` (case ignored), and no folder on the way may be `plugins`, `mods`, `libraries`, `versions`, `bundler` or `cache` (case ignored, also `Plugins/`, and no Windows short name such as `LIBRAR~1`). Jars, classes, archives, scripts (`.sh`, `.bat`, `.cmd`, `.ps1`), native libraries, `.ini` and `.sql` are refused by the list. Plugin configurations under `plugins/` can still be read but are changed on disk, not through the API.
+  - `422 binary-content`: the content must be UTF-8 text without NUL. `"encoding": "base64"` is refused outright; reading still answers with Base64 for binary files.
+  - `422 secret-placeholder`: the content may not contain a secret placeholder more often than the file has it now. Secret placeholders are `{{VECTOLYN_...}}` with a key of `secrets/vectolyn.env` the renderer fills in (`VECTOLYN_FORWARDING_SECRET`, `VECTOLYN_LEGACY_FORWARDING_SECRET`, `VECTOLYN_MANAGEMENT_SECRET`, `VECTOLYN_DB_PASSWORD`, `VECTOLYN_DB_ROOT_PASSWORD`, `VECTOLYN_FLOODGATE_KEY_B64`) or any name containing `SECRET`, `PASSWORD`, `PASS`, `KEY` or `TOKEN`; escaped ones (`{{{{VECTOLYN_...}}`) count too. So a new file carries none, and an edit may keep or remove the placeholders a shipped file has but never add one. Moving an existing placeholder inside the same file is not detected; review such files before you give out `templates:write`.
 - **Cluster.** On a member the templates come from the head (see [cluster.md](cluster.md)), so `PUT` answers `409 managed-by-head` there; reading works.
 - Services pick a changed template up when they are next prepared from it ([template.md](template.md)); a running service is not touched.
 
@@ -192,7 +196,7 @@ File names in `file` and in the `files` of a reload are relative to `config/` (`
 | 413 | `body-too-large`, `file-too-large` |
 | 428 | `precondition-required` (a template file is replaced without `If-Match`) |
 | 415 | `unsupported-media-type` |
-| 422 | `invalid-config`, `invalid` |
+| 422 | `invalid-config`, `invalid`, `file-not-editable`, `binary-content`, `secret-placeholder` (template writes) |
 | 426 | `upgrade-required` (plain `GET /events`) |
 | 429 | `rate-limited` (with `Retry-After`) |
 | 500 | `io-error`, `internal-error` |

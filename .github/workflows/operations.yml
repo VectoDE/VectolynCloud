@@ -105,12 +105,17 @@ jobs:
             .github/scripts/release-gate.sh .github/scripts/release-changelog.sh \
             gradle/update-verification-metadata.sh tools/release-banner/banner-from-tag.sh tools/release-banner/check-tag.sh
           # The installer script inside the egg (runs with ash in ghcr.io/pterodactyl/installers:alpine).
-          jq -r '.scripts.installation.script' cloud/dist/pterodactyl/egg-vectolyn-cloud.json \
-            | shellcheck --shell=sh -
+          for egg in cloud/dist/pterodactyl/egg-vectolyn-cloud.json cloud/dist/pelican/egg-vectolyn-cloud.json; do
+            jq -r '.scripts.installation.script' "$egg" | shellcheck --shell=sh -
+          done
           echo "ShellCheck OK."
 
-      - name: Pterodactyl egg
-        run: python3 -I .github/scripts/check-egg.py cloud/dist/pterodactyl/egg-vectolyn-cloud.json
+      # Both eggs on their own (structure, variables against their rules, the setup file the
+      # daemon would write) and against each other: same startup, variables, setup file, installer.
+      - name: Pterodactyl and Pelican egg
+        run: |
+          python3 -I .github/scripts/check-egg.py \
+            cloud/dist/pterodactyl/egg-vectolyn-cloud.json cloud/dist/pelican/egg-vectolyn-cloud.json
 
       # The official image pinned by digest (it brings ShellCheck for the run: blocks), instead of
       # an unpinned "go install" or a downloaded binary.
@@ -350,6 +355,116 @@ jobs:
       - name: java -jar VectolynCloud.jar
         shell: bash
         run: bash .github/scripts/smoke-jar-runtime.sh ops-dist/VectolynCloud.jar
+
+  # The eggs as a panel runs them, against the newest published release: the installer script in
+  # the panel's own installer image (entrypoint ash, files in /mnt/server), then the startup command
+  # in the panel's Java image with the setup file the daemon writes. No panel is needed for this;
+  # what only a panel shows is listed in docs/cloud/operations.md.
+  eggs:
+    name: Egg installation (${{ matrix.panel }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - panel: Pterodactyl
+            egg: cloud/dist/pterodactyl/egg-vectolyn-cloud.json
+            java-image: ghcr.io/pterodactyl/yolks:java_25
+          - panel: Pelican
+            egg: cloud/dist/pelican/egg-vectolyn-cloud.json
+            java-image: ghcr.io/pelican-eggs/yolks:java_25
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            ghcr.io:443
+            pkg-containers.githubusercontent.com:443
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Installer (latest release)
+        env:
+          EGG: ${{ matrix.egg }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/install" "$RUNNER_TEMP/server"
+          jq -r '.scripts.installation.script' "$EGG" > "$RUNNER_TEMP/install/install.sh"
+          image=$(jq -r '.scripts.installation.container' "$EGG")
+          entry=$(jq -r '.scripts.installation.entrypoint' "$EGG")
+          docker run --rm \
+            --volume "$RUNNER_TEMP/server:/mnt/server" \
+            --volume "$RUNNER_TEMP/install:/mnt/install:ro" \
+            "$image" "$entry" /mnt/install/install.sh
+          ls -l "$RUNNER_TEMP/server"
+          test -f "$RUNNER_TEMP/server/VectolynCloud.jar"
+          test -f "$RUNNER_TEMP/server/SHA256SUMS"
+          test -f "$RUNNER_TEMP/server/setup.yml"
+          cat "$RUNNER_TEMP/server/.vectolyn-version"
+          (cd "$RUNNER_TEMP/server" && grep -E '^[0-9a-f]{64}  VectolynCloud\.jar$' SHA256SUMS | sha256sum --check --strict -)
+
+      # A version that does not exist must stop the installer and leave no jar behind.
+      - name: Installer (unknown version stops)
+        env:
+          EGG: ${{ matrix.egg }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/empty"
+          image=$(jq -r '.scripts.installation.container' "$EGG")
+          if docker run --rm -e VECTOLYN_VERSION=0.0.1-nonexistent \
+              --volume "$RUNNER_TEMP/empty:/mnt/server" \
+              --volume "$RUNNER_TEMP/install:/mnt/install:ro" \
+              "$image" ash /mnt/install/install.sh; then
+            echo "::error::the installer accepted a version that does not exist"; exit 1
+          fi
+          test ! -e "$RUNNER_TEMP/empty/VectolynCloud.jar"
+          echo "Unknown version stopped, no jar left."
+
+      # The startup command of the egg with its default variables, in the panel's Java image as
+      # the unprivileged panel user (the root check passes), with the setup file the daemon writes
+      # (eula true here, the database embedded: the test needs no MariaDB download).
+      - name: Startup in the panel image
+        env:
+          EGG: ${{ matrix.egg }}
+          JAVA_IMAGE: ${{ matrix.java-image }}
+        run: |
+          set -euo pipefail
+          server="$RUNNER_TEMP/server"
+          # The installer ran as root in its container; the panel user must be able to write.
+          sudo chmod -R a+rwX "$server"
+          printf 'schema-version: 1\neula: true\nlanguage: en\nnetwork-name: Vectolyn\nnetwork:\n  bind: 0.0.0.0\n  java-port: 25565\n  bedrock-port: 19132\ndatabase:\n  mode: h2\n' > "$server/setup.yml"
+          startup=$(jq -r '.startup // .startup_commands.Default' "$EGG")
+          while read -r name value; do
+            startup=${startup//"{{${name}}}"/${value}}
+          done < <(jq -r '.variables[] | "\(.env_variable) \(.default_value)"' "$EGG")
+          case "$startup" in *"{{"*) echo "::error::unresolved variable in: $startup"; exit 1 ;; esac
+          echo "Startup: $startup"
+          done_text=$(jq -r '.config.startup | if type == "string" then fromjson else . end | .done' "$EGG")
+          docker run -d --name egg-ci --volume "$server:/home/container" --workdir /home/container \
+            "$JAVA_IMAGE" bash -c "$startup"
+          up=false
+          for _ in $(seq 1 60); do
+            if docker logs egg-ci 2>&1 | grep -qF "$done_text"; then
+              up=true; break
+            fi
+            [ "$(docker inspect -f '{{.State.Running}}' egg-ci)" = true ] || break
+            sleep 2
+          done
+          docker logs egg-ci
+          test "$up" = true
+          docker stop -t 120 egg-ci
+          code=$(docker inspect -f '{{.State.ExitCode}}' egg-ci)
+          echo "Exit code after stop: $code"
+          # 130: the Pelican image stops with SIGINT (the egg's stop command is ^C), a clean shutdown.
+          case "$code" in 0|130|143) ;; *) echo "::error::unexpected exit code $code"; exit 1 ;; esac
 
   # The release process around the files: the milestone gate for every channel and the changelog of
   # a release, both on fixtures (a throwaway repository), so the checks do not depend on the state
