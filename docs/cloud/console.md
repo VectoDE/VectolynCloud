@@ -153,6 +153,26 @@ Comes from `cloud/api` ([api.md](api.md)). The whole command is sensitive: no li
 | `api token setup [name]` | Makes a new one-time setup token for the first administrator (default `admin`), valid 24 hours, and prints it once; it replaces an earlier one. See [setup](setup.md#first-administrator). |
 | `api scopes` | Lists the scopes. |
 
+### `template`
+
+Registered by the node. Same rules as `/api/v1/templates`: only folders under `local/templates` with a valid name, no secrets, no links or special files.
+
+| Subcommand | Effect |
+|---|---|
+| `template list` | The template folders. |
+| `template files <template>` | Every file of a template with its size; secret files and links are left out. |
+| `template show <template> <path>` | Prints a text file (at most 1 MiB); for another file only its size. |
+| `template put <template> <path> <source>` | Writes a text file into the template from a file on this machine (relative paths start at the cloud home), at most 48 KiB. Refused like the API: paths that are not editable, content that is no UTF-8 text, a new secret placeholder. |
+
+### `privacy`
+
+Registered by the node; the same as `GET` and `DELETE /api/v1/admin/privacy/players/{uuid}` ([privacy](privacy.md)).
+
+| Subcommand | Effect |
+|---|---|
+| `privacy show <uuid>` | Prints as JSON what the tracking stored about a player who agreed to it. |
+| `privacy delete <uuid> [--yes]` | Deletes all of it, the consent included, after asking. |
+
 ### `cluster`
 
 Comes from `cloud/cluster`; the subcommands are in [cluster.md](cluster.md). Tab completes the ids of open join tokens after `cluster token revoke` and the members after `cluster remove`, both only on the head.
@@ -188,11 +208,18 @@ Every read and write of the [REST API](api.md) has a console command. `ConsolePa
 | `GET /backups`, `POST /backups` | `backup list`, `backup create` |
 | `GET /tokens/self` | `api token list` (the console sees every token) |
 | `GET /admin/tokens`, `POST /admin/tokens`, `DELETE /admin/tokens/{id}` | `api token list`, `api token create`, `api token revoke` |
+| `GET /admin/privacy/players/{uuid}`, `DELETE /admin/privacy/players/{uuid}` | `privacy show <uuid>`, `privacy delete <uuid>` |
+| `GET /templates` | `template list` |
+| `GET /templates/{template}/files` | `template files <template>` |
+| `GET /templates/{template}/files/{path}` | `template show <template> <path>` |
+| `PUT /templates/{template}/files/{path}` | `template put <template> <path> <source>` |
+| `POST /setup/claim` | `setup` (the panel claims the one-time setup token; the console runs the assistant directly) |
+| `GET /graphql`, `POST /graphql` | no command of its own: GraphQL runs the routes above with the caller's token, so their commands apply (the test maps it to `help`) |
 | `GET /events` (WebSocket) | the log lines above the prompt and `service screen <id>` |
 
-The console also has commands the API does not offer: `node delete`, `backup restore` and `backup delete`, `cluster ...`, `monitor`, `alerts`, `setup`, `shutdown`.
+The console also has commands the API does not offer: `node delete`, `config export` and `config import`, `backup restore` and `backup delete`, `cluster ...`, `monitor`, `alerts`, `setup`, `shutdown`.
 
-Still edited in the files, because no write operation exists for them yet in the cloud at all: the plugin and mod catalog of a group, templates, `monitor.yml` and `backup.yml`. Functions the cloud does not have yet (updates, maintenance mode, placement rules, template editing) get their console commands together with the function, in their own issues.
+Still edited in the files, because no write operation exists for them yet in the cloud at all: the plugin and mod catalog of a group, `monitor.yml` and `backup.yml` (they travel with `config export|import`). Templates take single text files through `template put`; binary files and folders stay in the file system. Functions the cloud does not have yet (updates, maintenance mode, placement rules) get their console commands together with the function, in their own issues.
 
 ## Adding commands
 

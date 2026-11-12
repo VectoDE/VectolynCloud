@@ -72,6 +72,17 @@ class ConsoleParityTest {
             Map.entry("GET /api/v1/setup", List.of("config get", "setup")),
             Map.entry("GET /api/v1/backups", List.of("backup list")),
             Map.entry("POST /api/v1/backups", List.of("backup create")),
+            Map.entry("GET /api/v1/admin/privacy/players/{uuid}", List.of("privacy show")),
+            Map.entry("DELETE /api/v1/admin/privacy/players/{uuid}", List.of("privacy delete")),
+            Map.entry("GET /api/v1/templates", List.of("template list")),
+            Map.entry("GET /api/v1/templates/{template}/files", List.of("template files")),
+            Map.entry("GET /api/v1/templates/{template}/files/{path}", List.of("template show")),
+            Map.entry("PUT /api/v1/templates/{template}/files/{path}", List.of("template put")),
+            // GraphQL runs the routes above with the caller's token; their commands are listed there.
+            Map.entry("POST /api/v1/graphql", List.of("help")),
+            Map.entry("GET /api/v1/graphql", List.of("help")),
+            // The panel claims the one-time setup token; on the console the assistant runs directly.
+            Map.entry("POST /api/v1/setup/claim", List.of("setup")),
             // The token asks about itself; on the console the operator sees every token.
             Map.entry("GET /api/v1/tokens/self", List.of("api token list")),
             Map.entry("GET /api/v1/admin/tokens", List.of("api token list")),
@@ -104,6 +115,7 @@ class ConsoleParityTest {
             // The new read commands work on a running node.
             assertEquals(Outcome.DONE, console.dispatcher().execute("node status"));
             assertEquals(Outcome.DONE, console.dispatcher().execute("config warnings"));
+            assertEquals(Outcome.DONE, console.dispatcher().execute("template list"));
             String text = screen.toString(StandardCharsets.UTF_8);
             assertTrue(text.contains("Java:") && text.contains("Uptime:") && text.contains("Heap:"), text);
             assertTrue(text.contains("groups/lobby.yml: process.jvm-flags[0]"), "the fixture's -Dfake.cloud flag: " + text);
@@ -148,7 +160,7 @@ class ConsoleParityTest {
 
     /** The command a line like {@code group set} names, following subcommands. */
     static Optional<Command> resolve(CommandRegistry registry, String line) {
-        String[] words = line.split(" ");
+        String[] words = line.split(" ", -1);
         Optional<Command> current = registry.find(words[0]);
         for (int i = 1; i < words.length && current.isPresent(); i++) {
             current = current.get().subcommand(words[i]);

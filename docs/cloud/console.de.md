@@ -126,15 +126,73 @@ Kommt aus `cloud/api` ([api.de.md](api.de.md)). Der ganze Befehl gilt als sensib
 | `api token setup [Name]` | Erstellt einen neuen einmaligen Einrichtungs-Token für den ersten Administrator (Standard `admin`), 24 Stunden gültig, und zeigt ihn einmal an; er ersetzt einen früheren. Siehe [Einrichtung](setup.de.md#erster-administrator). |
 | `api scopes` | Listet die Scopes auf. |
 
+### `template`
+
+Kommt von cloud-node. Es gelten dieselben Regeln wie bei `/api/v1/templates`: nur Ordner unter `local/templates` mit gültigem Namen, keine Secrets, keine Links oder Sonderdateien.
+
+| Unterbefehl | Wirkung |
+|---|---|
+| `template list` | Die Template-Ordner. |
+| `template files <Template>` | Alle Dateien eines Templates mit Größe; Secret-Dateien und Links fehlen. |
+| `template show <Template> <Pfad>` | Gibt eine Textdatei aus (höchstens 1 MiB), bei anderen Dateien nur die Größe. |
+| `template put <Template> <Pfad> <Quelle>` | Schreibt eine Textdatei aus einer Datei auf diesem Rechner ins Template (relative Pfade beginnen im Cloud-Home), höchstens 48 KiB. Abgelehnt wird wie bei der API: nicht bearbeitbare Pfade, Inhalt, der kein UTF-8-Text ist, ein neuer Secret-Platzhalter. |
+
+### `privacy`
+
+Kommt von cloud-node und entspricht `GET` und `DELETE /api/v1/admin/privacy/players/{uuid}` ([Datenschutz](privacy.md)).
+
+| Unterbefehl | Wirkung |
+|---|---|
+| `privacy show <UUID>` | Gibt als JSON aus, was das Tracking über einen Spieler gespeichert hat, der zugestimmt hat. |
+| `privacy delete <UUID> [--yes]` | Löscht nach Rückfrage alles davon, die Zustimmung eingeschlossen. |
+
 ### `cluster`
 
 Kommt aus `cloud/cluster`, die Unterbefehle stehen in [cluster.md](cluster.md). Tab ergänzt nach `cluster token revoke` die IDs offener Beitritts-Tokens und nach `cluster remove` die Mitglieder, beides nur auf dem Head.
 
 ## Konsole und REST-API
 
-Jede lesende und schreibende Funktion der [REST-API](api.de.md) gibt es auch als Konsolenbefehl. Die Zuordnung steht in [console.md](console.md#console-and-rest-api); `ConsoleParityTest` in cloud-node schlägt fehl, sobald ein Endpunkt dort fehlt oder sein Befehl nicht existiert. Kurz: `service ...` für Dienste, `group`/`task`/`node` für die Dateien, `config ...` für `cloud.yml`, Server-Schalter, Neuladen und Warnungen, `node status` für `GET /node`, `backup list|create` für die Backups, `api token list|create|revoke` für die Tokens.
+Jede lesende und schreibende Funktion der [REST-API](api.de.md) gibt es auch als Konsolenbefehl. `ConsoleParityTest` in cloud-node liest die Endpunkte aus `ApiRoutes` und schlägt fehl, sobald ein Endpunkt in dieser Tabelle fehlt oder sein Befehl nicht existiert.
 
-Noch in den Dateien geändert werden der Plugin- und Mod-Katalog einer Gruppe, Templates, `monitor.yml` und `backup.yml`, weil es dafür in der Cloud noch gar keine Schreib-Operation gibt. Funktionen, die die Cloud noch nicht hat (Updates, Wartungsmodus, Platzierungsregeln, Templates bearbeiten), bekommen ihre Konsolenbefehle zusammen mit der Funktion in eigenen Issues.
+| Endpunkt | Konsole |
+|---|---|
+| `GET /services` | `service list` |
+| `POST /services` | `service start <Task>` |
+| `GET /services/{id}` | `service info <ID>` |
+| `POST /services/{id}/stop` | `service stop <ID>` |
+| `POST /services/{id}/restart` | `service restart <ID>` |
+| `POST /services/{id}/command` | `service command <ID> <Zeile>` |
+| `GET /groups`, `GET /groups/{name}` | `group list`, `group info <Name>` |
+| `PUT /groups/{name}` | `group create`, dann `group set` je Feld |
+| `DELETE /groups/{name}` | `group delete <Name>` |
+| `PUT /groups/{name}/wanted` | `group set <Name> wanted on\|off` |
+| `GET /tasks`, `GET /tasks/{name}` | `task list`, `task info <Name>` |
+| `PUT /tasks/{name}` | `task create`, dann `task set` je Feld |
+| `DELETE /tasks/{name}` | `task delete <Name>` |
+| `PUT /tasks/{name}/wanted` | `group set <Gruppe des Tasks> wanted on\|off` |
+| `GET /nodes`, `GET /nodes/{name}` | `node list`, `node info <ID>` |
+| `PUT /nodes/{name}` | `node create`, dann `node set` je Feld |
+| `GET /servers`, `PUT /servers/{kind}` | `config get servers.<Art>`, `config set servers.<Art> true\|false` |
+| `GET /config`, `PUT /config` | `config list`, `config get`, `config set` |
+| `POST /config/reload` | `config reload` |
+| `GET /config/warnings` | `config warnings` |
+| `GET /node` | `node status` |
+| `GET /setup` | `config get setup-complete`, `config get eula-accepted`; `setup` startet den Assistenten |
+| `GET /backups`, `POST /backups` | `backup list`, `backup create` |
+| `GET /tokens/self` | `api token list` (die Konsole sieht alle Tokens) |
+| `GET /admin/tokens`, `POST /admin/tokens`, `DELETE /admin/tokens/{id}` | `api token list`, `api token create`, `api token revoke` |
+| `GET /admin/privacy/players/{uuid}`, `DELETE /admin/privacy/players/{uuid}` | `privacy show <UUID>`, `privacy delete <UUID>` |
+| `GET /templates` | `template list` |
+| `GET /templates/{template}/files` | `template files <Template>` |
+| `GET /templates/{template}/files/{path}` | `template show <Template> <Pfad>` |
+| `PUT /templates/{template}/files/{path}` | `template put <Template> <Pfad> <Quelle>` |
+| `POST /setup/claim` | `setup` (das Panel löst das einmalige Setup-Token ein, die Konsole startet den Assistenten direkt) |
+| `GET /graphql`, `POST /graphql` | kein eigener Befehl: GraphQL führt die Routen oben mit dem Token des Aufrufers aus, es gelten deren Befehle (der Test ordnet es `help` zu) |
+| `GET /events` (WebSocket) | die Log-Zeilen über dem Prompt und `service screen <ID>` |
+
+Die Konsole hat außerdem Befehle, die die API nicht anbietet: `node delete`, `config export` und `config import`, `backup restore` und `backup delete`, `cluster ...`, `monitor`, `alerts`, `setup`, `shutdown`.
+
+Noch in den Dateien geändert werden der Plugin- und Mod-Katalog einer Gruppe, `monitor.yml` und `backup.yml` (sie reisen mit `config export|import`), weil es dafür in der Cloud noch gar keine Schreib-Operation gibt. Templates nehmen einzelne Textdateien über `template put` an; Binärdateien und Ordner bleiben im Dateisystem. Funktionen, die die Cloud noch nicht hat (Updates, Wartungsmodus, Platzierungsregeln), bekommen ihre Konsolenbefehle zusammen mit der Funktion in eigenen Issues.
 
 ## Fragen von Assistenten
 

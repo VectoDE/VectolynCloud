@@ -137,7 +137,7 @@ public final class ClusterCommands {
             return List.of();
         }
         try {
-            return cluster.tokens().stream().map(JoinTokens.Info::id).toList();
+            return cluster.tokens().stream().map(JoinTokens.TokenInfo::id).toList();
         } catch (ClusterException | IOException | RuntimeException e) {
             return List.of();
         }

@@ -521,7 +521,8 @@ class BuiltinCommandsTest {
         assertEquals(List.of("node-1", "node-2"), CommandDispatcher.complete(registry, "node info "));
         assertEquals(List.of("node-2"), CommandDispatcher.complete(registry, "node delete node-2"));
         assertEquals(List.of("host"), CommandDispatcher.complete(registry, "node set node-1 h"));
-        assertEquals(List.of("get", "list", "reload", "set", "warnings"), CommandDispatcher.complete(registry, "config "));
+        assertEquals(List.of("export", "get", "import", "list", "reload", "set", "warnings"),
+                CommandDispatcher.complete(registry, "config "));
         assertEquals(List.of(), CommandDispatcher.complete(registry, "nope "), "unknown command: nothing");
         assertEquals(List.of(), CommandDispatcher.complete(registry, "group info lobby "), "no argument left");
     }
@@ -532,7 +533,7 @@ class BuiltinCommandsTest {
         for (Command command : console.commands().commands()) {
             checked += checkHelp(List.of(command.name()), command);
         }
-        assertEquals(29, checked, "every command and subcommand of the basic set");
+        assertEquals(31, checked, "every command and subcommand of the basic set");
     }
 
     /** Asserts the help texts of a command and its subtree, and that {@code help <path>} explains it. */
