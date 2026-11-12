@@ -62,13 +62,13 @@ curl -X POST -H "Authorization: Bearer vcs_..." https://cloud.example.org:8443/a
 
 | Scope | Erlaubt |
 |---|---|
-| `services:read` | Dienste auflisten und lesen, Event-Stream |
+| `services:read` | Dienste auflisten und lesen; Dienst- und Spieler-Events |
 | `services:write` | starten, stoppen, neu starten, Konsolenbefehl senden |
 | `config:read` | `cloud.yml`, Gruppen, Tasks, Server-Schalter, Warnungen und Setup-Status lesen |
 | `config:write` | Gruppen und Tasks schreiben und löschen, `wanted` setzen, `cloud.yml` außer `api` und `database` schreiben, neu laden |
 | `backups:read` | Backups auflisten |
 | `backups:write` | Backup erstellen |
-| `node:read` | Node-Status |
+| `node:read` | Node-Status; Metrik-Events |
 | `admin` | alles oben und die Token-Verwaltung unter `/admin/tokens` |
 
 Ein Schreib-Scope schließt den Lese-Scope nicht ein. Fehlt der Scope, kommt `403 missing-scope`. Für Änderungen an `api` oder `database` in `cloud.yml` braucht es `admin`. Diese Abschnitte bestimmen, wer den Node erreicht und welches Image `docker compose` mit dem Root-Passwort der Datenbank startet.
@@ -135,17 +135,29 @@ Jeder Fehler hat denselben Body: `code`, `message` und bei Konfigurationsfehlern
 
 ## Live-Events: `GET /api/v1/events`
 
-Ein WebSocket mit Textframes. Filter sind optional: `?types=service-state,service-output,player` und `?services=lobby-1,survival-1`. Ein unbekannter Typ ergibt `400`.
+Ein WebSocket mit Textframes. Filter sind optional: `?types=service-state,metrics` und `?services=lobby-1,survival-1`. Ein unbekannter Typ ergibt `400`.
+
+| Typ | Scope | Inhalt |
+|---|---|---|
+| `service-state` | `services:read` | ein Dienst hat seinen Zustand gewechselt |
+| `service-output` | `services:read` | eine Zeile, die ein Dienst ausgegeben hat (sein Log) |
+| `player` | `services:read` | ein Spieler kam, wechselte oder ging |
+| `metrics` | `node:read` | der Node-Status (wie `GET /node`) alle 10 s |
+| `node-log` | `admin` | eine Zeile aus dem Log des Nodes, ab INFO |
+
+Der Scope wird beim Handshake je Typ geprüft. Fragt `types` einen Typ an, den das Token nicht sehen darf, kommt `403 missing-scope`. Ohne `types` bekommt der Stream alle Typen, die das Token sehen darf; darf es keinen, kommt `403`. Unbekannte Typen sollte ein Client überspringen, innerhalb von `vectolyn.v1` können neue hinzukommen. Der Filter `services` gilt für Dienst- und Spieler-Events; `metrics` und `node-log` gehören zum Node und kommen immer durch.
 
 ```json
 {"type": "service-output", "time": "2026-10-29T10:00:00Z", "data": {"service": "lobby-1", "line": "Done (3.2s)!"}}
 ```
 
-- Ausgabezeilen werden geschwärzt, bevor sie den Node verlassen. Jedes Secret aus `vectolyn.env` wird zu `***`, genau wie in der Konsole.
+- Ausgabezeilen und Zeilen aus dem Node-Log werden geschwärzt, bevor sie den Node verlassen. Jedes Secret aus `vectolyn.env` wird zu `***`, genau wie in der Konsole. Eine Node-Log-Zeile enthält nie einen Stacktrace, nur den Namen der Ausnahme; Steuerzeichen werden zu Leerzeichen, nach 2000 Zeichen wird gekürzt. Einträge von Netty und der API selbst werden nicht gestreamt, damit sich der Stream nicht selbst füttert.
+- Metriken werden nur gesammelt, solange ein Stream sie haben will.
 - Ein langsamer Client bremst den Node nicht. Solange sein Socket nicht beschreibbar ist, werden Events für ihn verworfen und gezählt. Danach kommt ein einzelnes Event `dropped` mit der Anzahl.
 - Der Server pingt alle 30 s und schließt einen Stream, von dem 90 s lang nichts kam. Ein Widerruf schließt mit `1008`, das Herunterfahren mit `1001`.
 - Ein Handshake aus dem Browser mit einem `Origin`, der nicht in `api.cors-origins` steht, wird mit `403` abgelehnt.
 - Höchstens 32 Streams gleichzeitig.
+- **Lasttest:** `EventStreamLoadTest` öffnet 260 Streams in Wellen zu je 40 gegen ein Limit von 200 und schickt dann von 4 Threads gleichzeitig 10.000 Events an alle. Geprüft wird, dass genau 200 aufgehen, die übrigen 60 `503` bekommen, die REST-API weiter antwortet, jeder Stream jedes Event verbucht (empfangen oder in `dropped` gezählt) und sich jeder Stream sauber schließt. Die Messwerte stehen im JUnit-XML jedes CI-Laufs und in `cloud/api/build/reports/api-load/event-streams.md`.
 
 ## Transportsicherheit
 

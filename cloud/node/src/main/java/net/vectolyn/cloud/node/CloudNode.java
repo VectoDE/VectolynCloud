@@ -508,6 +508,8 @@ public final class CloudNode implements AutoCloseable {
                     : Optional.empty();
             ApiServer server = ApiServer.builder(config, api, tokens.get()).settings(ApiSettings.of(settings, tls)).build();
             api.attach(server);
+            // The node's own log as node-log events for streams with the scope admin.
+            Logger.getLogger("").addHandler(server.logHandler());
             return server;
         } catch (IOException | EnvFormatException | RuntimeException e) {
             LOG.log(System.Logger.Level.ERROR, "The API is switched on in cloud.yml but cannot be prepared ({0});"
@@ -1117,6 +1119,7 @@ public final class CloudNode implements AutoCloseable {
         // Last: event streams get 1001, then the sockets close.
         step(errors, "closing the API", () -> {
             if (ops.apiServer() != null) {
+                Logger.getLogger("").removeHandler(ops.apiServer().logHandler());
                 ops.apiServer().close();
             }
         });

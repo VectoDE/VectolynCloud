@@ -244,8 +244,9 @@ public final class ApiRoutes {
             throw new ApiException(403, "setup-token-required",
                     "This endpoint takes the one-time setup token (vcs_...), not an API token.");
         });
-        // The WebSocket is answered by ApiHttpHandler before routing; the route carries its scope.
-        r.add("GET", EVENTS, Scope.SERVICES_READ, q -> {
+        // The WebSocket is answered by ApiHttpHandler before routing. It checks the scope per event
+        // type (ApiEvent.TYPES) on the handshake, so the route itself needs none.
+        r.add("GET", EVENTS, null, q -> {
             throw new ApiException(426, "upgrade-required", "This endpoint is a WebSocket.");
         });
         return r;

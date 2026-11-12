@@ -31,6 +31,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.function.LongSupplier;
@@ -65,6 +66,9 @@ import net.vectolyn.cloud.config.ConfigService;
  */
 public final class ApiServer implements AutoCloseable {
 
+    /** How often a {@code metrics} event is sent while a stream wants one. */
+    static final int METRICS_SECONDS = 10;
+
     /** How often open event streams are checked for an expired token. */
     static final int EXPIRY_CHECK_SECONDS = 15;
 
@@ -90,6 +94,8 @@ public final class ApiServer implements AutoCloseable {
             Thread.ofVirtual().name("vectolyn-api-", 0).factory());
 
     private final long expiryCheckMillis;
+    private final long metricsMillis;
+    private final ApiLogHandler logHandler;
     private volatile boolean shuttingDown;
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
@@ -111,6 +117,8 @@ public final class ApiServer implements AutoCloseable {
         this.requestSlots = new Semaphore(limits.maxConcurrentRequests());
         this.events = new EventHub(this::redact, limits.maxWebSockets());
         this.expiryCheckMillis = builder.expiryCheckMillis;
+        this.metricsMillis = builder.metricsMillis;
+        this.logHandler = new ApiLogHandler(this::publish, events::anyWants);
         tokens.onRevoke(token -> events.closeToken(token.id()));
     }
 
@@ -190,6 +198,9 @@ public final class ApiServer implements AutoCloseable {
         // EXPIRY_CHECK_SECONDS, as if the token had been revoked.
         workerGroup.scheduleAtFixedRate(() -> events.closeTokensIf(id -> !tokens.isValid(id)),
                 expiryCheckMillis, expiryCheckMillis, TimeUnit.MILLISECONDS);
+        // Metrics only while a stream wants them; the status is read on a virtual thread, never on
+        // the event loop.
+        workerGroup.scheduleAtFixedRate(this::publishMetrics, metricsMillis, metricsMillis, TimeUnit.MILLISECONDS);
         InetSocketAddress bound = (InetSocketAddress) serverChannel.localAddress();
         LOG.log(System.Logger.Level.INFO, "API listening on {0}://{1}:{2,number,#}",
                 sslContext == null ? "http" : "https", bound.getAddress().getHostAddress(), bound.getPort());
@@ -285,6 +296,34 @@ public final class ApiServer implements AutoCloseable {
         events.publish(Objects.requireNonNull(event, "event"));
     }
 
+    private void publishMetrics() {
+        if (!events.anyWants("metrics")) {
+            return;
+        }
+        try {
+            executor.execute(() -> {
+                try {
+                    events.publish(new ApiEvent.Metrics(backend.node().status()));
+                } catch (RuntimeException e) {
+                    LOG.log(System.Logger.Level.DEBUG, "No metrics event: {0}", e.getClass().getSimpleName());
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            // closing
+        }
+    }
+
+    /**
+     * The handler that turns the node's log records into {@code node-log} events. cloud-node adds
+     * it to the root logger ({@code java.util.logging.Logger.getLogger("")}) and removes it at
+     * shutdown; after {@link #close()} it drops every record.
+     *
+     * @return the handler
+     */
+    public java.util.logging.Handler logHandler() {
+        return logHandler;
+    }
+
     /**
      * Marks the node as shutting down: starts, restarts, reloads and backups get 503 from now on;
      * reads, stops and commands still work.
@@ -319,6 +358,7 @@ public final class ApiServer implements AutoCloseable {
         }
         closed = true;
         shuttingDown = true;
+        logHandler.close();
         events.closeAll();
         if (serverChannel != null) {
             serverChannel.close().syncUninterruptibly();
@@ -394,6 +434,7 @@ public final class ApiServer implements AutoCloseable {
         private ApiSettings settings;
         private LongSupplier nanoTime = System::nanoTime;
         private long expiryCheckMillis = EXPIRY_CHECK_SECONDS * 1000L;
+        private long metricsMillis = METRICS_SECONDS * 1000L;
 
         private Builder(ConfigService config, ApiBackend backend, ApiTokens tokens) {
             this.config = Objects.requireNonNull(config, "config");
@@ -434,6 +475,20 @@ public final class ApiServer implements AutoCloseable {
                 throw new IllegalArgumentException("millis must be at least 1");
             }
             this.expiryCheckMillis = millis;
+            return this;
+        }
+
+        /**
+         * How often a {@code metrics} event is sent (tests).
+         *
+         * @param millis the interval in milliseconds, at least 1
+         * @return this builder
+         */
+        Builder metricsMillis(long millis) {
+            if (millis < 1) {
+                throw new IllegalArgumentException("millis must be at least 1");
+            }
+            this.metricsMillis = millis;
             return this;
         }
 

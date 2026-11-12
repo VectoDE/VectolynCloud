@@ -64,13 +64,13 @@ curl -X POST -H "Authorization: Bearer vcs_..." https://cloud.example.org:8443/a
 
 | Scope | Allows |
 |---|---|
-| `services:read` | list and read services, event stream |
+| `services:read` | list and read services; service and player events |
 | `services:write` | start, stop, restart, send a console command |
 | `config:read` | read `cloud.yml`, groups, tasks, server switches, warnings, setup status |
 | `config:write` | write and delete groups and tasks, set `wanted`, write `cloud.yml` except `api` and `database`, reload |
 | `backups:read` | list backups |
 | `backups:write` | create a backup |
-| `node:read` | node status |
+| `node:read` | node status; metrics events |
 | `admin` | everything above, and the token management under `/admin/tokens` |
 
 A write scope does not include the read scope. A missing scope gives `403 missing-scope`. Changing the `api` or `database` section of `cloud.yml` needs `admin`: they decide who can reach the node and which image `docker compose` runs with the database root password.
@@ -115,7 +115,7 @@ All paths start with `/api/v1`. Bodies are `application/json` in UTF-8, with the
 | `POST /admin/tokens` `{"name": "ci", "scopes": ["services:read"], "expires-in": "90d"}` | admin | `201` the token, shown in this answer only |
 | `DELETE /admin/tokens/{id}` | admin | `204`; id or name |
 | `POST /setup/claim` | the setup token only | `201` a new `admin` token with its value, see [first administrator](#first-administrator) |
-| `GET /events` (WebSocket) | services:read | live events |
+| `GET /events` (WebSocket) | per event type, see below | live events |
 
 Every write goes through `ConfigService.apply`: the whole configuration is validated (ports, EULA before `setup-complete`, TLS for a public API, the JVM flag allowlist), written atomically, and the listeners of the node see the change as if it was typed at the console. On an error nothing is written and the answer is `422 invalid-config` with the list of errors.
 
@@ -196,21 +196,35 @@ File names in `file` and in the `files` of a reload are relative to `config/` (`
 
 ## Live events: `GET /api/v1/events`
 
-A WebSocket (text frames). Optional filters as query: `?types=service-state,service-output,player` and `?services=lobby-1,survival-1`; an unknown type is `400`.
+A WebSocket (text frames). Optional filters as query: `?types=service-state,metrics` and `?services=lobby-1,survival-1`; an unknown type is `400`.
+
+| Type | Scope | What |
+|---|---|---|
+| `service-state` | `services:read` | a service changed its state |
+| `service-output` | `services:read` | a line a service printed (its log) |
+| `player` | `services:read` | a player joined, switched or left |
+| `metrics` | `node:read` | the node status (as `GET /node`) every 10 s |
+| `node-log` | `admin` | a line of the node's own log, INFO and above |
+
+The scope is checked per type on the handshake. Asking with `types` for a type the token may not see answers `403 missing-scope`; without `types` the stream gets every type its token may see, and a token that may see none gets `403`. A client should ignore types it does not know: new ones may be added within `vectolyn.v1`. The `services` filter applies to service and player events; `metrics` and `node-log` belong to the node and always pass it.
 
 ```json
 {"type": "service-state", "time": "2026-10-29T10:00:00Z",
  "data": {"service": {"id": "lobby-1", "state": "running", ...}, "previous": "starting"}}
 {"type": "service-output", "time": "...", "data": {"service": "lobby-1", "line": "Done (3.2s)!"}}
 {"type": "player", "time": "...", "data": {"kind": "join", "player-id": "...", "player-name": "Steve", "service": "lobby-1"}}
+{"type": "metrics", "time": "...", "data": {"node": {"node-id": "node-1", "services-running": 3, "heap-used-bytes": 123456789, ...}}}
+{"type": "node-log", "time": "...", "data": {"level": "warning", "logger": "net.vectolyn.cloud.node.CloudNode", "message": "..."}}
 {"type": "dropped", "time": "...", "data": {"count": 12}}
 ```
 
-- Output lines are redacted before they leave the node: every secret of `vectolyn.env` becomes `***`, as in the console.
+- Output lines and node log lines are redacted before they leave the node: every secret of `vectolyn.env` becomes `***`, as in the console. A node log line never carries a stack trace, only the name of the exception; control characters become spaces and it is cut to 2000 characters. Records of Netty and of the API itself are not streamed, so the stream cannot feed itself.
+- Metrics are only gathered while a stream wants them.
 - A slow client does not slow the node down: while its socket is not writable, events for it are dropped and counted, then reported in one `dropped` event.
 - The server pings every 30 s and closes a stream that has been silent for 90 s. Revoking the token closes the stream with `1008`, shutting down with `1001`.
 - A browser handshake with an `Origin` that is not in `api.cors-origins` is refused with `403`.
 - At most 32 streams at once.
+- **Load test.** `EventStreamLoadTest` opens 260 streams in waves of 40 against a limit of 200, then publishes 10,000 events from 4 threads at once to all of them. It checks that exactly 200 open, the other 60 get `503`, the REST API keeps answering, every stream accounts for every event (received or counted in `dropped`), and that every stream closes. Its figures are printed into the JUnit XML of each CI run and written to `cloud/api/build/reports/api-load/event-streams.md`; on a Windows desktop: 200 streams in 0.8 s, about 95,000 deliveries a second, 72 % delivered and the rest reported as dropped while the test clients were busy.
 
 ## Transport security
 

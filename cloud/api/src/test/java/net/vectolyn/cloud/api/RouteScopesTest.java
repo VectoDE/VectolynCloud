@@ -21,8 +21,8 @@ import org.junit.jupiter.api.io.TempDir;
 /**
  * Rights audit of the API (docs/cloud/rights-audit.md): every action that changes something needs a
  * write scope, checked by the server for each request; reading needs a read scope. Everything under
- * {@code /admin/} (token management) needs {@code admin}. The only route without a scope is a token
- * describing itself.
+ * {@code /admin/} (token management) needs {@code admin}. Without a route scope are only a token
+ * describing itself and the event stream, which checks a scope per event type.
  */
 class RouteScopesTest {
 
@@ -52,8 +52,9 @@ class RouteScopesTest {
                 }
             }
         }
-        // A token describing itself, and the setup claim: an API token gets 403 there, only the setup token passes.
-        assertEquals(List.of("GET /api/v1/tokens/self", "POST /api/v1/setup/claim"), unscoped,
-                "only these two need no scope");
+        // A token describing itself; the setup claim (an API token gets 403 there, only the setup token
+        // passes); the event stream, which checks a scope per event type on the handshake (EventStreamTest).
+        assertEquals(List.of("GET /api/v1/tokens/self", "POST /api/v1/setup/claim", "GET /api/v1/events"),
+                unscoped, "only these three need no route scope");
     }
 }
