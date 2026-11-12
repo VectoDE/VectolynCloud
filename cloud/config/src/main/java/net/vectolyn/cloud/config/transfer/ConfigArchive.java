@@ -257,9 +257,11 @@ public final class ConfigArchive {
                     tasks.put(baseName(name), task);
                 }
             } else if (extras.containsKey(name)) {
+                // The registered file, not the entry name, names the file from here on.
+                ExtraFile extra = extras.get(name);
                 try {
-                    extras.get(name).checker().check(entry.getValue());
-                    extraContent.put(name, entry.getValue());
+                    extra.checker().check(entry.getValue());
+                    extraContent.put(extra.name(), entry.getValue());
                 } catch (ConfigException e) {
                     errors.addAll(e.errors());
                 }
@@ -299,11 +301,16 @@ public final class ConfigArchive {
     public Set<String> apply(Plan plan) throws ConfigException, IOException {
         ConfigChanged change = config.apply(new ReplaceConfig(plan.snapshot()));
         Set<String> written = new LinkedHashSet<>(change.files());
-        for (Map.Entry<String, byte[]> entry : plan.extras().entrySet()) {
-            byte[] current = readExtra(entry.getKey());
-            if (current == null || !Arrays.equals(current, entry.getValue())) {
-                writer.write(config.home().configDir().resolve(entry.getKey()), entry.getValue());
-                written.add(entry.getKey());
+        // Only the registered names are resolved; a name from the archive never reaches a path.
+        for (ExtraFile extra : extras.values()) {
+            byte[] content = plan.extras().get(extra.name());
+            if (content == null) {
+                continue;
+            }
+            byte[] current = readExtra(extra.name());
+            if (current == null || !Arrays.equals(current, content)) {
+                writer.write(config.home().configDir().resolve(extra.name()), content);
+                written.add(extra.name());
             }
         }
         return written;
