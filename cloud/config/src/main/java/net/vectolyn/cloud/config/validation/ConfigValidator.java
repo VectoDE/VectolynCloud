@@ -119,6 +119,9 @@ public final class ConfigValidator {
         }
         c.pattern(f, "api.bind", api.bind(), ConfigNames.HOST);
         c.port(f, "api.port", api.port());
+        if (api.grpcPort() != 0) {
+            c.port(f, "api.grpc-port", api.grpcPort());
+        }
         List<String> origins = api.corsOrigins();
         c.range(f, "api.cors-origins", origins.size(), 0, ApiConfig.MAX_CORS_ORIGINS);
         Set<String> seen = new HashSet<>();
@@ -348,6 +351,9 @@ public final class ConfigValidator {
         }
         if (cloud.api() != null && cloud.api().enabled()) {
             fixed.put("cloud.yml api.port", cloud.api().port());
+            if (cloud.api().grpcPort() != 0) {
+                fixed.put("cloud.yml api.grpc-port", cloud.api().grpcPort());
+            }
         }
         DatabaseConfig db = cloud.database();
         if (db != null && (db.mode() == DatabaseMode.MANAGED || db.mode() == DatabaseMode.DOCKER)) {

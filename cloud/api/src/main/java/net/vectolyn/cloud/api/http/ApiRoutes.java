@@ -75,6 +75,8 @@ public final class ApiRoutes {
     public static final String SETUP_CLAIM = PREFIX + "/setup/claim";
     /** Path of the WebSocket. */
     public static final String EVENTS = PREFIX + "/events";
+    /** Path of the GraphQL endpoint (POST, and the WebSocket for subscriptions). */
+    public static final String GRAPHQL = PREFIX + "/graphql";
     /** Longest console command sent to a service. */
     public static final int MAX_COMMAND_LENGTH = 1024;
 
@@ -97,6 +99,7 @@ public final class ApiRoutes {
     private final BooleanSupplier shuttingDown;
     private final ApiTokens tokens;
     private final TemplateFiles templateFiles;
+    private Handler graphql;
 
     /**
      * Creates the endpoints.
@@ -123,6 +126,17 @@ public final class ApiRoutes {
         this.shuttingDown = shuttingDown;
         this.tokens = tokens;
         this.templateFiles = new TemplateFiles(config.home());
+    }
+
+    /**
+     * Sets the handler of {@code POST /graphql}; without one the endpoint answers 501.
+     *
+     * @param handler the GraphQL handler
+     * @return this
+     */
+    public ApiRoutes graphql(Handler handler) {
+        this.graphql = handler;
+        return this;
     }
 
     /**
@@ -259,6 +273,18 @@ public final class ApiRoutes {
                 throw ApiException.notFound("Token \"" + q.param("id") + "\"");
             }
             return ApiResponse.noContent();
+        });
+        // GraphQL runs the routes above with the caller's token, so every field checks its own
+        // scope; the endpoint itself needs none.
+        r.add("POST", GRAPHQL, null, q -> {
+            if (graphql == null) {
+                throw new ApiException(501, "not-available", "GraphQL is not available on this server.");
+            }
+            return graphql.handle(q);
+        });
+        r.add("GET", GRAPHQL, null, q -> {
+            throw new ApiException(426, "upgrade-required",
+                    "GET is the WebSocket for subscriptions (graphql-transport-ws); queries use POST.");
         });
         // Reached with an API token only; the setup token is answered by ApiHttpHandler before routing.
         r.add("POST", SETUP_CLAIM, null, q -> {

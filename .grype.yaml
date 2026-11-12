@@ -1,0 +1,17 @@
+# SPDX-FileCopyrightText: 2026 VectoDE
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Grype exceptions for the image scan (.github/workflows/secrets-and-containers.yml). Each entry is
+# limited to one advisory and one package version and says why it does not apply.
+# Nothing is ignored repository-wide.
+ignore:
+  - vulnerability: GHSA-xxph-c9ww-hj94
+    reason: >-
+      Guava 32.1.2-jre shaded into graphql-java 26.1 (the newest release) under graphql.com.google.common,
+      so only graphql-java itself can use it. The flaw needs Java deserialization (ObjectInputStream) of
+      attacker data; neither VectolynCloud nor the GraphQL endpoint deserializes Java objects. The
+      project's own Guava is 33.7.2-jre (fixed), so 32.1.2-jre in the image is only the graphql-java copy.
+      Remove this entry once graphql-java ships a newer Guava.
+    package:
+      name: guava
+      version: 32.1.2-jre

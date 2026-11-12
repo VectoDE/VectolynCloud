@@ -1,0 +1,211 @@
+# SPDX-FileCopyrightText: 2026 VectoDE
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# GraphQL schema of the VectolynCloud API (POST /api/v1/graphql, subscriptions over the WebSocket
+# /api/v1/graphql with the subprotocol graphql-transport-ws). Every field runs the REST endpoint
+# named in its description with the same token, so scopes, validation and errors are the same as
+# in REST. Documents (groups, tasks, nodes, cloud.yml) keep their REST shape as JSON.
+# Details: docs/cloud/api.md, section GraphQL.
+
+"Any JSON value: a configuration document in its REST shape (kebab-case keys)."
+scalar JSON
+
+"A 64-bit integer (bytes, seconds)."
+scalar Long
+
+schema {
+    query: Query
+    mutation: Mutation
+    subscription: Subscription
+}
+
+# Root fields are nullable on purpose: a field the token may not read (or that fails) is null with
+# its error, and the other fields of the same document are still answered.
+type Query {
+    "GET /services, scope services:read."
+    services(limit: Int, after: String): ServicePage
+    "GET /services/{id}, scope services:read."
+    service(id: ID!): Service
+    "GET /groups, scope config:read."
+    groups(limit: Int, after: String): DocumentPage
+    "GET /groups/{name}, scope config:read."
+    group(name: ID!): VersionedDocument
+    "GET /tasks, scope config:read."
+    tasks(limit: Int, after: String): DocumentPage
+    "GET /tasks/{name}, scope config:read."
+    task(name: ID!): VersionedDocument
+    "GET /nodes, scope config:read."
+    nodes(limit: Int, after: String): DocumentPage
+    "GET /nodes/{name}, scope config:read."
+    node(name: ID!): VersionedDocument
+    "GET /servers, scope config:read."
+    servers: JSON
+    "GET /config, scope config:read."
+    config: VersionedDocument
+    "GET /config/warnings, scope config:read."
+    configWarnings: JSON
+    "GET /node, scope node:read."
+    nodeStatus: NodeStatus
+    "GET /setup, scope config:read."
+    setup: SetupStatus
+    "GET /backups, scope backups:read."
+    backups(limit: Int, after: String): BackupPage
+    "GET /tokens/self, any valid token."
+    self: Token
+    "GET /admin/tokens, scope admin."
+    tokens(limit: Int, after: String): TokenPage
+}
+
+type Mutation {
+    "POST /services, scope services:write."
+    startService(task: ID!): Service
+    "POST /services/{id}/stop, scope services:write."
+    stopService(id: ID!): Service
+    "POST /services/{id}/restart, scope services:write."
+    restartService(id: ID!): Service
+    "POST /services/{id}/command, scope services:write."
+    sendCommand(id: ID!, command: String!): JSON
+    "PUT /groups/{name}, scope config:write."
+    putGroup(name: ID!, document: JSON!, ifMatch: String): VersionedDocument
+    "DELETE /groups/{name}?confirm={name}, scope config:write."
+    deleteGroup(name: ID!, confirm: ID!, ifMatch: String): Boolean
+    "PUT /groups/{name}/wanted, scope config:write."
+    setGroupWanted(name: ID!, wanted: Boolean!): JSON
+    "PUT /tasks/{name}, scope config:write."
+    putTask(name: ID!, document: JSON!, ifMatch: String): VersionedDocument
+    "DELETE /tasks/{name}?confirm={name}, scope config:write."
+    deleteTask(name: ID!, confirm: ID!, ifMatch: String): Boolean
+    "PUT /tasks/{name}/wanted, scope config:write."
+    setTaskWanted(name: ID!, wanted: Boolean!): JSON
+    "PUT /nodes/{name}, scope config:write."
+    putNode(name: ID!, document: JSON!, ifMatch: String): VersionedDocument
+    "PUT /servers/{kind}, scope config:write."
+    setServerWanted(kind: ID!, wanted: Boolean!): JSON
+    "PUT /config, scope config:write (sensitive sections: admin)."
+    putConfig(document: JSON!, ifMatch: String): VersionedDocument
+    "POST /config/reload, scope config:write."
+    reloadConfig: JSON
+    "POST /backups, scope backups:write."
+    createBackup(services: [ID!], database: Boolean, note: String): Backup
+    "POST /admin/tokens, scope admin. The secret is in the answer once."
+    createToken(name: ID!, scopes: [String!]!, expiresIn: String): CreatedToken
+    "DELETE /admin/tokens/{id}, scope admin."
+    revokeToken(id: ID!): Boolean
+}
+
+type Subscription {
+    "The event stream of /api/v1/events: every type needs its scope (service-state, service-output, player: services:read; metrics: node:read; node-log: admin). Without types: every type the token may see."
+    events(types: [String!], services: [ID!]): Event!
+}
+
+type Event {
+    "service-state, service-output, player, metrics, node-log, or dropped (data.count events were skipped for a slow client)."
+    type: String!
+    time: String!
+    data: JSON!
+}
+
+type Service {
+    id: ID!
+    group: String!
+    task: String!
+    index: Int!
+    mode: String!
+    state: String!
+    port: Int!
+    pid: Long
+    startedAt: String
+    exitCode: Int
+    restartAttempts: Int!
+    playersOnline: Int
+    maxPlayers: Int
+}
+
+type ServicePage {
+    totalCount: Int!
+    "Cursor for the next page (after), null on the last page."
+    next: String
+    items: [Service!]!
+}
+
+type Backup {
+    id: ID!
+    createdAt: String
+    reason: String
+    services: [String!]!
+    database: Boolean!
+    sizeBytes: Long!
+    readable: Boolean!
+    problem: String
+    warnings: [String!]
+}
+
+type BackupPage {
+    totalCount: Int!
+    next: String
+    items: [Backup!]!
+}
+
+type NodeStatus {
+    nodeId: String!
+    version: String!
+    javaVersion: String!
+    os: String!
+    uptimeSeconds: Long!
+    shuttingDown: Boolean!
+    servicesTotal: Int!
+    servicesRunning: Int!
+    heapUsedBytes: Long!
+    heapMaxBytes: Long!
+}
+
+type SetupStatus {
+    eulaAccepted: Boolean!
+    setupComplete: Boolean!
+    ready: Boolean!
+    missing: [String!]!
+}
+
+type Token {
+    id: ID!
+    name: String!
+    scopes: [String!]!
+    createdAt: String!
+    expiresAt: String
+    expired: Boolean!
+}
+
+type CreatedToken {
+    id: ID!
+    name: String!
+    scopes: [String!]!
+    createdAt: String!
+    expiresAt: String
+    expired: Boolean!
+    "The secret (vct_...). Shown once."
+    token: String!
+}
+
+type TokenPage {
+    totalCount: Int!
+    next: String
+    items: [Token!]!
+}
+
+"A configuration document and its ETag (for ifMatch)."
+type VersionedDocument {
+    etag: String
+    document: JSON!
+}
+
+"An entry of a configuration list: its key (name or id) and the document."
+type DocumentEntry {
+    key: ID!
+    document: JSON!
+}
+
+type DocumentPage {
+    totalCount: Int!
+    next: String
+    items: [DocumentEntry!]!
+}
