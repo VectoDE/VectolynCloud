@@ -437,7 +437,6 @@ jobs:
           case "$startup" in *"{{"*) echo "::error::unresolved variable in: $startup"; exit 1 ;; esac
           echo "Startup: $startup"
           done_text=$(jq -r '.config.startup | if type == "string" then fromjson else . end | .done' "$EGG")
-          chmod -R a+rwX "$server"
           docker run -d --name egg-ci --volume "$server:/home/container" --workdir /home/container \
             "$JAVA_IMAGE" bash -c "$startup"
           up=false
