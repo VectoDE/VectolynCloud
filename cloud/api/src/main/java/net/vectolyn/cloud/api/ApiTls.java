@@ -177,6 +177,7 @@ public final class ApiTls {
                 "-dname", "CN=VectolynCloud API", "-ext", "SAN=" + String.join(",", san),
                 "-keystore", keystore.toString(), "-storetype", "PKCS12",
                 "-storepass:env", PASSWORD_ENV, "-keypass:env", PASSWORD_ENV, "-noprompt");
+        // nosemgrep: java.lang.security.audit.command-injection-process-builder.command-injection-process-builder -- keytool by its full path from the running JDK, arguments are separate list elements, no shell
         ProcessBuilder builder = new ProcessBuilder(command).redirectErrorStream(true);
         builder.environment().put(PASSWORD_ENV, password.reveal());
         Process process = builder.start();

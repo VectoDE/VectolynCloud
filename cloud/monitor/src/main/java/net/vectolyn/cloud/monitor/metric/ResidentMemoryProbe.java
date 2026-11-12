@@ -395,6 +395,7 @@ public interface ResidentMemoryProbe {
      * @throws IOException as {@link #runCommand(List)}
      */
     static String runCommand(List<String> command, Duration timeout) throws IOException {
+        // nosemgrep: java.lang.security.audit.command-injection-process-builder.command-injection-process-builder -- fixed system tools (ps, tasklist) with argument lists and a timeout, no shell
         ProcessBuilder builder = new ProcessBuilder(command)
                 .redirectInput(ProcessBuilder.Redirect.from(nullDevice()))
                 .redirectError(ProcessBuilder.Redirect.DISCARD);

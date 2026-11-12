@@ -39,6 +39,7 @@ public final class PortAllocator {
          */
         static PortProbe binding(String host) {
             return port -> {
+                // nosemgrep: java.lang.security.audit.crypto.unencrypted-socket.unencrypted-socket -- only tests whether the port can be bound, no data is sent
                 try (ServerSocket socket = new ServerSocket()) {
                     socket.setReuseAddress(false);
                     socket.bind(new InetSocketAddress(InetAddress.getByName(host), port));

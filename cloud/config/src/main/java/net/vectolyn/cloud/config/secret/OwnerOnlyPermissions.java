@@ -107,6 +107,7 @@ public final class OwnerOnlyPermissions {
     private static void protectAcl(Path path) throws IOException {
         String systemRoot = System.getenv("SystemRoot");
         Path icacls = Path.of(systemRoot == null || systemRoot.isBlank() ? "C:\\Windows" : systemRoot, "System32", "icacls.exe");
+        // nosemgrep: java.lang.security.audit.command-injection-process-builder.command-injection-process-builder -- icacls by its full path in System32, the file path is a single argument, no shell
         Process process = new ProcessBuilder(icacls.toString(), path.toAbsolutePath().toString(), "/inheritance:d", "/q")
                 .redirectErrorStream(true)
                 .redirectOutput(ProcessBuilder.Redirect.DISCARD)

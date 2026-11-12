@@ -82,6 +82,7 @@ public final class DefaultSystemAccess implements SystemAccess {
     private static Optional<String> runInto(List<String> command, Path output) {
         Process process;
         try {
+            // nosemgrep: java.lang.security.audit.command-injection-process-builder.command-injection-process-builder -- fixed system tools with argument lists, output goes to a file, no shell
             process = new ProcessBuilder(command)
                     .redirectOutput(output.toFile())
                     .redirectError(ProcessBuilder.Redirect.DISCARD)

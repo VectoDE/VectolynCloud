@@ -51,6 +51,7 @@ def load(path):
         if token in body:
             raise Rejected(f"{path}: contains {token!r} (DOCTYPE, entity, comment, CDATA or processing instruction)")
     try:
+        # nosemgrep: python.lang.security.use-defused-xml.use-defused-xml -- the body has no DOCTYPE, entity or comment (rejected above) and is limited to MAX_BYTES
         root = ET.fromstring(body)
     except ET.ParseError as exc:
         raise Rejected(f"{path}: not well-formed XML ({exc})") from None

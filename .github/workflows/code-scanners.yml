@@ -62,7 +62,8 @@ jobs:
         with:
           persist-credentials: false
 
-      # --error: any finding fails the job. Metrics are off, no account is used.
+      # --error: any finding fails the job. Metrics are off, no account is used. The two excluded
+      # rules only warn that Popen(text=..., encoding=...) needs Python 3.6; CI runs 3.12.
       - name: Semgrep
         run: |
           set -euo pipefail
