@@ -452,7 +452,8 @@ jobs:
           docker stop -t 120 egg-ci
           code=$(docker inspect -f '{{.State.ExitCode}}' egg-ci)
           echo "Exit code after stop: $code"
-          case "$code" in 0|143) ;; *) echo "::error::unexpected exit code $code"; exit 1 ;; esac
+          # 130: the Pelican image stops with SIGINT (the egg's stop command is ^C), a clean shutdown.
+          case "$code" in 0|130|143) ;; *) echo "::error::unexpected exit code $code"; exit 1 ;; esac
 
   start-scripts:
     name: Start scripts (${{ matrix.os }})
