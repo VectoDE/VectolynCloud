@@ -185,8 +185,9 @@ jobs:
           test "$(find ops-dist -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\n' | LC_ALL=C sort | tr '\n' ' ')" = \
             "VectolynCloud-0.0.0-ci-linux-macos.tar.gz VectolynCloud-0.0.0-ci-templates.tar.gz VectolynCloud-0.0.0-ci-windows.zip VectolynCloud.jar setup.example.yml "
           # Every server template of the repository is in the templates archive.
+          tar -tzf ops-dist/VectolynCloud-0.0.0-ci-templates.tar.gz > "$RUNNER_TEMP/templates.lst"
           for dir in templates/*/; do
-            tar -tzf ops-dist/VectolynCloud-0.0.0-ci-templates.tar.gz | grep -q "/templates/$(basename "$dir")/" \
+            grep -q "/templates/$(basename "$dir")/" "$RUNNER_TEMP/templates.lst" \
               || { echo "::error::template $dir is missing in the templates archive"; exit 1; }
           done
 
