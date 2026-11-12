@@ -8,6 +8,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import net.vectolyn.cloud.backup.BackupReason;
+import org.jspecify.annotations.Nullable;
 
 /**
  * {@code manifest.json}, the last entry of every backup archive: what was backed up, when, with
@@ -34,9 +35,9 @@ public record BackupManifest(@JsonProperty(required = true) int schemaVersion,
                              @JsonProperty(required = true) String createdAt,
                              @JsonProperty(required = true) String reason,
                              @JsonProperty(required = true) String cloudVersion,
-                             String note,
+                             @Nullable String note,
                              @JsonProperty(required = true) List<ServiceEntry> services,
-                             DatabaseEntry database,
+                             @Nullable DatabaseEntry database,
                              @JsonProperty(required = true) List<FileEntry> files,
                              List<SkippedEntry> skipped) {
 
@@ -109,7 +110,7 @@ public record BackupManifest(@JsonProperty(required = true) int schemaVersion,
     @JsonPropertyOrder({"mode", "status", "file", "detail"})
     public record DatabaseEntry(@JsonProperty(required = true) String mode,
                                 @JsonProperty(required = true) String status,
-                                String file, String detail) {
+                                @Nullable String file, @Nullable String detail) {
     }
 
     /**

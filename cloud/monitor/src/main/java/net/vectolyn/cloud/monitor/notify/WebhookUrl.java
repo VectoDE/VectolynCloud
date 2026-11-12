@@ -51,7 +51,7 @@ public final class WebhookUrl {
         try {
             uri = new URI(value);
         } catch (URISyntaxException e) {
-            throw new IllegalArgumentException("webhook URL is not a valid URL");
+            throw new IllegalArgumentException("webhook URL is not a valid URL"); // NOPMD - the URISyntaxException message quotes the webhook URL, which is a secret
         }
         if (!uri.isAbsolute() || uri.getScheme() == null || !uri.getScheme().toLowerCase(Locale.ROOT).equals("https")) {
             throw new IllegalArgumentException("webhook URL must start with https://");

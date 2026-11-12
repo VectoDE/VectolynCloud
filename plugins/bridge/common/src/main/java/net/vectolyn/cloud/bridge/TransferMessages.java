@@ -5,6 +5,7 @@ package net.vectolyn.cloud.bridge;
 import java.util.Locale;
 import java.util.Objects;
 import net.vectolyn.protocol.message.TransferPlayer;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The lines a player reads when the cloud or the proxy moves them to another server or cannot:
@@ -23,7 +24,7 @@ public final class TransferMessages {
      * @param locale the client's language, or {@code null} if unknown
      * @return plain text without formatting codes
      */
-    public static String text(TransferPlayer.Reason reason, Locale locale) {
+    public static String text(TransferPlayer.Reason reason, @Nullable Locale locale) {
         Objects.requireNonNull(reason, "reason");
         return switch (reason) {
             case SCALE_DOWN -> german(locale)
@@ -38,7 +39,7 @@ public final class TransferMessages {
      * @param locale the client's language, or {@code null} if unknown
      * @return plain text without formatting codes
      */
-    public static String rescued(Locale locale) {
+    public static String rescued(@Nullable Locale locale) {
         return german(locale)
                 ? "Dein Server ist nicht mehr erreichbar. Du wirst auf einen anderen Server gebracht."
                 : "Your server is no longer available. You are being sent to another server.";
@@ -51,7 +52,7 @@ public final class TransferMessages {
      * @param locale the client's language, or {@code null} if unknown
      * @return plain text without formatting codes
      */
-    public static String lost(Locale locale) {
+    public static String lost(@Nullable Locale locale) {
         return german(locale)
                 ? "Die Verbindung zum Server ist abgebrochen, und gerade ist kein anderer Server frei."
                 : "The connection to the server was lost, and no other server is free right now.";
@@ -64,7 +65,7 @@ public final class TransferMessages {
      * @param locale the client's language, or {@code null} if unknown
      * @return plain text without formatting codes
      */
-    public static String kicked(Locale locale) {
+    public static String kicked(@Nullable Locale locale) {
         return german(locale)
                 ? "Du wurdest vom Netzwerk geworfen."
                 : "You were kicked from the network.";
@@ -76,13 +77,13 @@ public final class TransferMessages {
      * @param locale the client's language, or {@code null} if unknown
      * @return plain text without formatting codes
      */
-    public static String closed(Locale locale) {
+    public static String closed(@Nullable Locale locale) {
         return german(locale)
                 ? "Dieser Server nimmt gerade keine Spieler auf, weil er bald heruntergefahren wird."
                 : "This server is not taking players right now because it is about to shut down.";
     }
 
-    private static boolean german(Locale locale) {
+    private static boolean german(@Nullable Locale locale) {
         return locale != null && "de".equals(locale.getLanguage());
     }
 }

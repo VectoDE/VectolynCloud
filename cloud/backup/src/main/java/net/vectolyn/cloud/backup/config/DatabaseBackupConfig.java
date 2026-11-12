@@ -4,6 +4,7 @@ package net.vectolyn.cloud.backup.config;
 
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import net.vectolyn.cloud.config.model.TimeSpan;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Database part of a backup.
@@ -14,16 +15,18 @@ import net.vectolyn.cloud.config.model.TimeSpan;
  * @param timeout longest dump, 10 s to 6 h
  */
 @JsonPropertyOrder({"enabled", "dump-executable", "timeout"})
-public record DatabaseBackupConfig(Boolean enabled, String dumpExecutable, TimeSpan timeout) {
+public record DatabaseBackupConfig(Boolean enabled, @Nullable String dumpExecutable, TimeSpan timeout) {
+
+    private static final TimeSpan DEFAULT_TIMEOUT = TimeSpan.parse("10m");
 
     /** Missing values: enabled, no fixed tool, 10 minutes. */
     public DatabaseBackupConfig {
         enabled = enabled == null ? Boolean.TRUE : enabled;
-        timeout = timeout == null ? TimeSpan.parse("10m") : timeout;
+        timeout = timeout == null ? DEFAULT_TIMEOUT : timeout;
     }
 
     /** Enabled, tool found automatically, 10 minutes. */
     public static DatabaseBackupConfig defaults() {
-        return new DatabaseBackupConfig(true, null, null);
+        return new DatabaseBackupConfig(true, null, DEFAULT_TIMEOUT);
     }
 }

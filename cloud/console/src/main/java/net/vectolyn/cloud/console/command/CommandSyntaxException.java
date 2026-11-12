@@ -17,27 +17,29 @@ public final class CommandSyntaxException extends Exception {
     /** Which rule was broken. */
     public enum Reason {
         /** A quote is not closed. The detail is the position of the opening quote (0-based). */
-        UNCLOSED_QUOTE(Text.of("Unclosed quote at position %1$d.", "Nicht geschlossenes Anführungszeichen an Position %1$d.")),
+        UNCLOSED_QUOTE("Unclosed quote at position %1$d.", "Nicht geschlossenes Anführungszeichen an Position %1$d."),
         /** A backslash at the very end. The detail is its position. */
-        DANGLING_ESCAPE(Text.of("Backslash at the end of the line (position %1$d).",
-                "Backslash am Zeilenende (Position %1$d).")),
+        DANGLING_ESCAPE("Backslash at the end of the line (position %1$d).",
+                "Backslash am Zeilenende (Position %1$d)."),
         /** A control character or line break. The detail is its position. */
-        CONTROL_CHARACTER(Text.of("Control character at position %1$d is not allowed.",
-                "Steuerzeichen an Position %1$d ist nicht erlaubt.")),
+        CONTROL_CHARACTER("Control character at position %1$d is not allowed.",
+                "Steuerzeichen an Position %1$d ist nicht erlaubt."),
         /** The line is too long. The detail is the limit. */
-        TOO_LONG(Text.of("The line is longer than %1$d characters.", "Die Zeile ist länger als %1$d Zeichen.")),
+        TOO_LONG("The line is longer than %1$d characters.", "Die Zeile ist länger als %1$d Zeichen."),
         /** Too many words. The detail is the limit. */
-        TOO_MANY_WORDS(Text.of("More than %1$d words.", "Mehr als %1$d Wörter."));
+        TOO_MANY_WORDS("More than %1$d words.", "Mehr als %1$d Wörter.");
 
-        private final Text text;
+        private final String english;
+        private final String german;
 
-        Reason(Text text) {
-            this.text = text;
+        Reason(String english, String german) {
+            this.english = english;
+            this.german = german;
         }
 
         /** The message template; its argument is {@link CommandSyntaxException#detail()}. */
         public Text text() {
-            return text;
+            return Text.of(english, german);
         }
     }
 

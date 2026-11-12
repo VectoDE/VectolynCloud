@@ -82,6 +82,8 @@ class LoginGateTest {
         assertEquals(PlayerLoginEvent.Result.KICK_OTHER, login.getResult());
     }
 
+    // Identity is the contract of Object.equals for the proxy; calling proxy.equals here would recurse.
+    @SuppressWarnings("ReferenceEquality")
     private static PlayerLoginEvent login(UUID uuid) throws Exception {
         Player player = (Player) Proxy.newProxyInstance(Player.class.getClassLoader(), new Class<?>[] {Player.class},
                 (proxy, method, args) -> switch (method.getName()) {

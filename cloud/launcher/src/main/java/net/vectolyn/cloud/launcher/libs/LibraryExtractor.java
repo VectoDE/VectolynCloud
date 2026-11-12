@@ -18,6 +18,7 @@ import java.util.HexFormat;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -81,7 +82,7 @@ public final class LibraryExtractor {
         Set<String> wanted = new HashSet<>();
         for (LibraryEntry entry : index.entries()) {
             Path target = resolveInside(entry.fileName());
-            wanted.add(target.getFileName().toString().toLowerCase(Locale.ROOT));
+            wanted.add(Objects.requireNonNull(target.getFileName(), "file name").toString().toLowerCase(Locale.ROOT));
             if (!isCachedAndValid(target, entry)) {
                 unpack(entry, target);
             }
@@ -178,7 +179,7 @@ public final class LibraryExtractor {
     private void deleteStale(Set<String> wanted) {
         try (DirectoryStream<Path> files = Files.newDirectoryStream(directory)) {
             for (Path file : files) {
-                String name = file.getFileName().toString();
+                String name = Objects.requireNonNull(file.getFileName(), "file name").toString();
                 String lower = name.toLowerCase(Locale.ROOT);
                 boolean staleJar = lower.endsWith(".jar") && !wanted.contains(lower);
                 boolean leftover = name.startsWith(".unpack-") && lower.endsWith(".tmp");

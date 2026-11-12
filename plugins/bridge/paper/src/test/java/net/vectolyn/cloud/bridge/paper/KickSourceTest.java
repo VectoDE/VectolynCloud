@@ -27,6 +27,8 @@ import org.junit.jupiter.api.Test;
 class KickSourceTest {
 
     /** A sender of the given type whose permission check answers {@code permitted}. */
+    // Identity is the contract of Object.equals for the proxy; calling proxy.equals here would recurse.
+    @SuppressWarnings("ReferenceEquality")
     private static Object sender(Class<?> type, boolean permitted) {
         return Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[] {type}, (proxy, method, args) ->
                 switch (method.getName()) {
@@ -63,6 +65,8 @@ class KickSourceTest {
     }
 
     /** A proxied sender (a plugin's {@code execute as}) whose caller is a sender of the given type. */
+    // Identity is the contract of Object.equals for the proxy; calling proxy.equals here would recurse.
+    @SuppressWarnings("ReferenceEquality")
     private static boolean entitledThroughProxy(Class<?> callerType, boolean permitted) {
         Object caller = sender(callerType, permitted);
         Object proxied = Proxy.newProxyInstance(ProxiedCommandSender.class.getClassLoader(),

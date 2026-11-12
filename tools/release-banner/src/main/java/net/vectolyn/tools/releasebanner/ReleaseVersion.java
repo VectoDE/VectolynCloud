@@ -7,6 +7,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.jspecify.annotations.Nullable;
 
 /**
  * A release tag such as {@code v1.2.3}, {@code v0.3.0-dev.2} or {@code v1.4.0-lts}, checked against
@@ -54,7 +55,7 @@ public record ReleaseVersion(String tag, ReleaseChannel channel, int coreLength)
      * @throws IllegalArgumentException if the tag breaks one of the version rules; the message
      *     says which one and what is allowed
      */
-    public static ReleaseVersion parse(String tag) {
+    public static ReleaseVersion parse(@Nullable String tag) {
         if (tag == null || tag.isEmpty()) {
             throw new IllegalArgumentException("release version is missing (expected a tag such as v1.2.3)");
         }

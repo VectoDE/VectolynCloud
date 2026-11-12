@@ -127,7 +127,7 @@ final class TemplateSink {
             return;
         }
         for (Path left : list(old)) {
-            Path current = templatesDir.resolve(left.getFileName().toString());
+            Path current = templatesDir.resolve(Objects.requireNonNull(left.getFileName(), "file name").toString());
             if (RegularPaths.kind(current) == RegularPaths.Kind.MISSING) {
                 Files.createDirectories(templatesDir);
                 Files.move(left, current, StandardCopyOption.ATOMIC_MOVE);
@@ -164,7 +164,7 @@ final class TemplateSink {
             list = TemplateList.read(new PacketReader(session.call(MirrorMessages.TEMPLATE_LIST,
                     new ManifestRequest("", new byte[0], 0).write(), MirrorClient.TIMEOUT)));
         } catch (ProtocolException e) {
-            throw new MirrorException("invalid template list");
+            throw new MirrorException("invalid template list", e);
         }
         requireRealWorkDir();
         Set<String> folded = new HashSet<>();
@@ -224,7 +224,7 @@ final class TemplateSink {
         list.templates().forEach(t -> wanted.add(t.name()));
         List<Path> gone = new ArrayList<>();
         for (Path folder : list(templatesDir)) {
-            String name = folder.getFileName().toString();
+            String name = Objects.requireNonNull(folder.getFileName(), "file name").toString();
             if (wanted.contains(name) || !MirrorPaths.isTemplateName(name)
                     || RegularPaths.kind(folder) != RegularPaths.Kind.DIRECTORY) {
                 continue;
@@ -239,7 +239,7 @@ final class TemplateSink {
         }
         if (!removalAllowed(gone.size(), synced.size(), list.templates().isEmpty())) {
             for (Path folder : gone) {
-                String name = folder.getFileName().toString();
+                String name = Objects.requireNonNull(folder.getFileName(), "file name").toString();
                 now.put(name, synced.get(name));
             }
             LOG.log(System.Logger.Level.WARNING, "Cluster: the head no longer lists {0} of the {1} templates synced "
@@ -251,7 +251,7 @@ final class TemplateSink {
         }
         int removed = 0;
         for (Path folder : gone) {
-            String name = folder.getFileName().toString();
+            String name = Objects.requireNonNull(folder.getFileName(), "file name").toString();
             deleteTree(folder);
             LOG.log(System.Logger.Level.INFO, "Cluster: template {0} removed, the head no longer has it", name);
             removed++;
@@ -323,7 +323,7 @@ final class TemplateSink {
     private static void write(ClusterSession session, TemplateEntry template, FileEntry entry, Path target, Path current)
             throws IOException {
         Path file = resolve(target, entry.path());
-        Files.createDirectories(file.getParent());
+        Files.createDirectories(Objects.requireNonNull(file.getParent(), "parent folder"));
         if (copyIfSame(current, entry, file)) {
             return;
         }
@@ -337,7 +337,7 @@ final class TemplateSink {
     /** Copies the file of the current template if it is a real file with the same content. */
     private static boolean copyIfSame(Path current, FileEntry entry, Path file) throws IOException {
         Path source = current;
-        String[] segments = entry.path().split("/");
+        String[] segments = entry.path().split("/", -1);
         for (int i = 0; i < segments.length; i++) {
             source = source.resolve(segments[i]);
             RegularPaths.Kind kind = RegularPaths.kind(source);
@@ -385,7 +385,7 @@ final class TemplateSink {
             throw new MirrorException("unsafe path");
         }
         Path file = root;
-        for (String segment : path.split("/")) {
+        for (String segment : path.split("/", -1)) {
             file = file.resolve(segment);
         }
         if (!file.normalize().startsWith(root.normalize())) {
@@ -402,7 +402,7 @@ final class TemplateSink {
     private void swap(Path ready, Path current, String name, boolean managed) throws IOException {
         Path aside = managed ? old.resolve(name) : replaced.resolve(name + "-" + System.currentTimeMillis());
         deleteTree(aside);
-        Files.createDirectories(aside.getParent());
+        Files.createDirectories(Objects.requireNonNull(aside.getParent(), "parent folder"));
         Files.createDirectories(templatesDir);
         boolean moved = false;
         if (RegularPaths.kind(current) != RegularPaths.Kind.MISSING) {

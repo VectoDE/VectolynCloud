@@ -9,10 +9,12 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 import net.vectolyn.protocol.NodeId;
+import org.jspecify.annotations.Nullable;
 
 /**
  * {@code config/cluster.yml}: which node is the head and where it listens, the members with the
@@ -71,7 +73,7 @@ public record ClusterConfig(@JsonProperty(required = true) int schemaVersion, He
      * @param bind the address it listens on; null means {@code host}
      */
     @JsonPropertyOrder({"id", "host", "port", "bind"})
-    public record Head(String id, String host, int port, String bind) {
+    public record Head(String id, String host, int port, @Nullable String bind) {
 
         /** The address the head listens on. */
         public String bindAddress() {
@@ -199,20 +201,26 @@ public record ClusterConfig(@JsonProperty(required = true) int schemaVersion, He
         return problems;
     }
 
-    private static boolean validNodeId(String value) {
+    private static boolean validNodeId(@Nullable String value) {
+        if (value == null) {
+            return false;
+        }
         try {
             new NodeId(value);
             return true;
-        } catch (IllegalArgumentException | NullPointerException e) {
+        } catch (IllegalArgumentException e) {
             return false;
         }
     }
 
-    private static boolean validInstant(String value) {
+    private static boolean validInstant(@Nullable String value) {
+        if (value == null) {
+            return false;
+        }
         try {
-            Instant.parse(value);
+            Objects.requireNonNull(Instant.parse(value));
             return true;
-        } catch (DateTimeParseException | NullPointerException e) {
+        } catch (DateTimeParseException e) {
             return false;
         }
     }

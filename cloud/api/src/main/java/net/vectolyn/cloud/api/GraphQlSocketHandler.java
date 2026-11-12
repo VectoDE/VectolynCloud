@@ -28,6 +28,7 @@ import java.util.regex.Pattern;
 import net.vectolyn.cloud.api.auth.ApiToken;
 import net.vectolyn.cloud.api.http.ApiException;
 import net.vectolyn.cloud.api.http.ApiJson;
+import org.jspecify.annotations.Nullable;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
@@ -67,10 +68,10 @@ final class GraphQlSocketHandler extends SimpleChannelInboundHandler<Object>
     private final WebSocketServerHandshaker handshaker;
     private final ApiToken token;
     private final Map<String, Operation> operations = new ConcurrentHashMap<>();
-    private volatile Channel channel;
+    private volatile @Nullable Channel channel;
     private boolean initialised;
     private volatile boolean acknowledged;
-    private ScheduledFuture<?> initTimeout;
+    private @Nullable ScheduledFuture<?> initTimeout;
 
     GraphQlSocketHandler(ApiServer server, WebSocketServerHandshaker handshaker, ApiToken token) {
         this.server = server;
@@ -81,19 +82,22 @@ final class GraphQlSocketHandler extends SimpleChannelInboundHandler<Object>
     @Override
     public void handlerAdded(ChannelHandlerContext ctx) {
         channel = ctx.channel();
-        initTimeout = ctx.executor().schedule(() -> {
+        ScheduledFuture<?> timeout = ctx.executor().schedule(() -> {
             if (!initialised) {
                 close(4408, "Connection initialisation timeout");
             }
         }, INIT_SECONDS, TimeUnit.SECONDS);
+        initTimeout = timeout;
         ctx.channel().closeFuture().addListener(f -> {
-            initTimeout.cancel(false);
+            timeout.cancel(false);
             operations.values().forEach(Operation::cancel);
             operations.clear();
         });
     }
 
+    // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
     @Override
+    @SuppressWarnings("FutureReturnValueIgnored")
     protected void channelRead0(ChannelHandlerContext ctx, Object msg) {
         if (msg instanceof CloseWebSocketFrame close) {
             handshaker.close(ctx.channel(), close.retain());
@@ -101,12 +105,10 @@ final class GraphQlSocketHandler extends SimpleChannelInboundHandler<Object>
             ctx.writeAndFlush(new PongWebSocketFrame(ping.content().retain()));
         } else if (msg instanceof TextWebSocketFrame text) {
             message(text.text());
-        } else if (msg instanceof PongWebSocketFrame) {
-            return;
-        } else if (msg instanceof WebSocketFrame) {
+        } else if (msg instanceof WebSocketFrame && !(msg instanceof PongWebSocketFrame)) {
             close(4400, "Binary and fragmented messages are not supported");
         }
-        // anything else (the end of the upgrade request) is dropped
+        // a pong (the answer to our ping) and anything else (the end of the upgrade request) are dropped
     }
 
     private void message(String text) {
@@ -129,7 +131,10 @@ final class GraphQlSocketHandler extends SimpleChannelInboundHandler<Object>
                     return;
                 }
                 initialised = true;
-                initTimeout.cancel(false);
+                ScheduledFuture<?> timeout = initTimeout;
+                if (timeout != null) {
+                    timeout.cancel(false);
+                }
                 acknowledged = true;
                 send(Map.of("type", "connection_ack"));
             }
@@ -234,7 +239,7 @@ final class GraphQlSocketHandler extends SimpleChannelInboundHandler<Object>
         }
     }
 
-    private static Map<String, Object> errorMessage(String id, Object errors) {
+    private static Map<String, Object> errorMessage(String id, @Nullable Object errors) {
         Map<String, Object> message = new LinkedHashMap<>();
         message.put("id", id);
         message.put("type", "error");
@@ -250,6 +255,8 @@ final class GraphQlSocketHandler extends SimpleChannelInboundHandler<Object>
         return message;
     }
 
+    // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
+    @SuppressWarnings("FutureReturnValueIgnored")
     private void send(Map<String, ?> message) {
         Channel ch = channel;
         if (ch != null && ch.isActive()) {
@@ -257,6 +264,8 @@ final class GraphQlSocketHandler extends SimpleChannelInboundHandler<Object>
         }
     }
 
+    // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
+    @SuppressWarnings("FutureReturnValueIgnored")
     private void close(int code, String reason) {
         Channel ch = channel;
         if (ch != null) {
@@ -316,7 +325,7 @@ final class GraphQlSocketHandler extends SimpleChannelInboundHandler<Object>
 
         private final Set<String> types;
         private final Set<String> services;
-        private Subscriber<? super Map<String, Object>> subscriber;
+        private @Nullable Subscriber<? super Map<String, Object>> subscriber;
         private long demand;
         private long dropped;
         private boolean cancelled;
@@ -384,8 +393,8 @@ final class GraphQlSocketHandler extends SimpleChannelInboundHandler<Object>
     private final class Operation implements Subscriber<ExecutionResult> {
 
         private final String id;
-        private volatile Subscription subscription;
-        private volatile Events events;
+        private volatile @Nullable Subscription subscription;
+        private volatile @Nullable Events events;
         private volatile boolean cancelled;
 
         Operation(String id) {
@@ -436,7 +445,9 @@ final class GraphQlSocketHandler extends SimpleChannelInboundHandler<Object>
         }
     }
 
+    // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
     @Override
+    @SuppressWarnings("FutureReturnValueIgnored")
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
         if (evt instanceof IdleStateEvent idle) {
             if (idle.state() == IdleState.WRITER_IDLE) {
@@ -449,7 +460,9 @@ final class GraphQlSocketHandler extends SimpleChannelInboundHandler<Object>
         super.userEventTriggered(ctx, evt);
     }
 
+    // Netty writes and closes are fire-and-forget; a failed write closes the channel through the pipeline.
     @Override
+    @SuppressWarnings("FutureReturnValueIgnored")
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         ctx.close();
     }

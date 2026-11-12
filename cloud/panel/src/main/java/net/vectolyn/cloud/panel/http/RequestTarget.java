@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 
 /**
  * A request target ({@code /path?query}) checked before anything uses it.
@@ -35,7 +36,7 @@ public record RequestTarget(String path, Map<String, String> query) {
      * @param uri the target from the request line
      * @return the target, or empty if it breaks a rule
      */
-    public static Optional<RequestTarget> parse(String uri) {
+    public static Optional<RequestTarget> parse(@Nullable String uri) {
         if (uri == null || uri.isEmpty() || uri.length() > MAX_LENGTH || uri.charAt(0) != '/') {
             return Optional.empty();
         }

@@ -3,6 +3,7 @@
 package net.vectolyn.cloud.launcher.platform;
 
 import java.util.Locale;
+import org.jspecify.annotations.Nullable;
 
 /** Operating system family, as far as the cloud cares. */
 public enum OperatingSystem {
@@ -21,7 +22,7 @@ public enum OperatingSystem {
      * @param osName value of {@code os.name}, may be {@code null}
      * @return the family
      */
-    public static OperatingSystem fromOsName(String osName) {
+    public static OperatingSystem fromOsName(@Nullable String osName) {
         String name = osName == null ? "" : osName.toLowerCase(Locale.ROOT);
         if (name.startsWith("windows")) {
             return WINDOWS;

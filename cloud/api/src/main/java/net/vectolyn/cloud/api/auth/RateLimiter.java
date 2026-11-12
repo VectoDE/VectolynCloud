@@ -63,7 +63,7 @@ public final class RateLimiter<K> {
 
             @Override
             protected boolean removeEldestEntry(Map.Entry<K, Bucket> eldest) {
-                return size() > maxKeys;
+                return super.size() > maxKeys;
             }
         };
     }

@@ -4,6 +4,7 @@ package net.vectolyn.cloud.download.provider;
 
 import java.util.Objects;
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Identifies one concrete artifact: which source, which project, which version and build.
@@ -13,7 +14,8 @@ import java.util.Optional;
  * @param version the resolved version, for example {@code 26.3}
  * @param build the resolved build, or {@code null} if the source has no builds
  */
-public record ArtifactCoordinate(String provider, String project, String version, String build) {
+public record ArtifactCoordinate(String provider, String project, String version,
+        @Nullable String build) {
 
     /**
      * Checks the values.

@@ -22,6 +22,7 @@ import net.vectolyn.cloud.config.model.GroupConfig;
 import net.vectolyn.cloud.config.model.Language;
 import net.vectolyn.cloud.config.model.NodesConfig;
 import net.vectolyn.cloud.config.model.TaskConfig;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The member's side of the config mirror. A sync reads the head's manifest, refuses anything
@@ -113,7 +114,7 @@ final class ConfigMirrorSink {
             known = Optional.empty();
             // Taking over anything now would switch the stale check off; the operator decides.
             throw new MirrorException("state/cluster/config-applied cannot be read (" + e.getMessage()
-                    + "); delete it to take over the head's config again");
+                    + "); delete it to take over the head's config again", e);
         }
         if (applied.isPresent()) {
             long last = applied.get().revision();
@@ -137,7 +138,11 @@ final class ConfigMirrorSink {
             }
             files.put(entry.path(), content);
         }
-        NodesConfig nodesConfig = parse(CloudHome.NODES_FILE, files.get(CloudHome.NODES_FILE), ConfigFormat.NODES);
+        byte[] nodesFile = files.get(CloudHome.NODES_FILE);
+        if (nodesFile == null) {
+            throw new MirrorException("the head's config has no " + CloudHome.NODES_FILE);
+        }
+        NodesConfig nodesConfig = parse(CloudHome.NODES_FILE, nodesFile, ConfigFormat.NODES);
         Map<String, GroupConfig> groups = new TreeMap<>();
         Map<String, TaskConfig> tasks = new TreeMap<>();
         for (Map.Entry<String, byte[]> file : files.entrySet()) {
@@ -153,7 +158,7 @@ final class ConfigMirrorSink {
             changed |= !config.applyMirror(nodesConfig, groups, tasks).isEmpty();
         } catch (ConfigException e) {
             throw new MirrorException("the head's config does not validate on this node: "
-                    + e.describe(Language.EN).strip().replace(System.lineSeparator(), "; "));
+                    + e.describe(Language.EN).strip().replace(System.lineSeparator(), "; "), e);
         }
         // A sync that finds the revision it took over already does not write the record again: a
         // late push would otherwise rewrite it for nothing, racing anyone who reads or edits it.
@@ -167,7 +172,7 @@ final class ConfigMirrorSink {
     }
 
     /** The file on disk if it has exactly the entry's content, else null. */
-    private static byte[] localCopy(Path local, FileEntry entry) throws IOException {
+    private static byte @Nullable [] localCopy(Path local, FileEntry entry) throws IOException {
         if (RegularPaths.kind(local) != RegularPaths.Kind.FILE || Files.size(local) != entry.size()) {
             return null;
         }
@@ -184,7 +189,7 @@ final class ConfigMirrorSink {
             return decoded.value();
         } catch (ConfigException e) {
             throw new MirrorException("the head's " + path + " cannot be read: "
-                    + e.describe(Language.EN).strip().replace(System.lineSeparator(), "; "));
+                    + e.describe(Language.EN).strip().replace(System.lineSeparator(), "; "), e);
         }
     }
 }

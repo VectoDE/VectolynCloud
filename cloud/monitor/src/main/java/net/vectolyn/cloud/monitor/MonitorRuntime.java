@@ -29,6 +29,7 @@ import net.vectolyn.cloud.monitor.notify.WebhookNotifier;
 import net.vectolyn.cloud.monitor.notify.WebhookUrl;
 import net.vectolyn.cloud.monitor.prometheus.PrometheusEndpoint;
 import net.vectolyn.cloud.monitor.prometheus.PrometheusFormat;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Everything the monitor needs, put together from {@code monitor.yml}: the {@link Monitor} on
@@ -57,11 +58,11 @@ public final class MonitorRuntime implements AutoCloseable {
     private final MonitorConfigLoader.Settings settings;
     private final Monitor monitor;
     private final MonitorCommands commands;
-    private final NotificationDispatcher dispatcher;
-    private PrometheusEndpoint prometheus;
+    private final @Nullable NotificationDispatcher dispatcher;
+    private @Nullable PrometheusEndpoint prometheus;
     private boolean closed;
 
-    private MonitorRuntime(MonitorConfigLoader.Settings settings, Monitor monitor, NotificationDispatcher dispatcher) {
+    private MonitorRuntime(MonitorConfigLoader.Settings settings, Monitor monitor, @Nullable NotificationDispatcher dispatcher) {
         this.settings = settings;
         this.monitor = monitor;
         this.dispatcher = dispatcher;

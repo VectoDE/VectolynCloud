@@ -148,10 +148,15 @@ public final class PlacementPlanner {
             return new Unplaced(task, refused);
         }
         NodeId chosen = fitting.stream().min(Comparator
-                .comparingInt((NodeId node) -> reachable.get(node).servicesOf(task))
-                .thenComparing(node -> -(reachable.get(node).budget() - reachable.get(node).declared() - heap))
+                .comparingInt((NodeId node) -> status(reachable, node).servicesOf(task))
+                .thenComparingLong(node -> -(status(reachable, node).budget() - status(reachable, node).declared() - heap))
                 .thenComparing(NodeId::value)).orElseThrow();
         return new Placed(task, chosen, refused);
+    }
+
+    /** The status of a node that is known to be in the map (the candidates are its keys). */
+    static NodeStatus status(Map<NodeId, NodeStatus> statuses, NodeId node) {
+        return Objects.requireNonNull(statuses.get(node), "no status for the node");
     }
 
     /**
@@ -173,7 +178,7 @@ public final class PlacementPlanner {
         for (ServiceRequest request : services) {
             Result result = place(snapshot, request.task(), planned, excluded);
             if (result instanceof Placed placed) {
-                planned.put(placed.node(), planned.get(placed.node()).with(
+                planned.put(placed.node(), status(planned, placed.node()).with(
                         new RunningService(request.id(), request.task(), true, heapBytes(snapshot, request.task()))));
             }
             results.add(result);

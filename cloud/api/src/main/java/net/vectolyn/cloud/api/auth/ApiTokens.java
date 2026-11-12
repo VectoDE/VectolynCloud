@@ -34,6 +34,7 @@ import net.vectolyn.cloud.config.io.RegularPaths;
 import net.vectolyn.cloud.config.secret.OwnerOnlyPermissions;
 import net.vectolyn.cloud.config.secret.Secret;
 import net.vectolyn.cloud.config.validation.ConfigNames;
+import org.jspecify.annotations.Nullable;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.StreamReadConstraints;
 import tools.jackson.core.json.JsonFactory;
@@ -113,9 +114,10 @@ public final class ApiTokens {
     private final AtomicFileWriter writer = new AtomicFileWriter();
     private final List<Consumer<ApiToken>> revokeListeners = new CopyOnWriteArrayList<>();
     private volatile List<Entry> entries;
-    private volatile SetupEntry setup;
+    private volatile @Nullable SetupEntry setup;
 
-    private ApiTokens(Path file, Clock clock, SecureRandom random, List<Entry> entries, SetupEntry setup) {
+    private ApiTokens(Path file, Clock clock, SecureRandom random, List<Entry> entries,
+                      @Nullable SetupEntry setup) {
         this.file = file;
         this.clock = clock;
         this.random = random;
@@ -145,7 +147,7 @@ public final class ApiTokens {
      */
     public static ApiTokens open(Path file, Clock clock, SecureRandom random) throws IOException {
         Objects.requireNonNull(file, "file");
-        RegularPaths.requireDirectoryOrMissing(file.getParent());
+        RegularPaths.requireDirectoryOrMissing(Objects.requireNonNull(file.getParent(), "parent folder of file"));
         RegularPaths.requireFileOrMissing(file);
         List<Entry> entries = new ArrayList<>();
         if (Files.exists(file)) {
@@ -156,7 +158,7 @@ public final class ApiTokens {
         }
         Path setupFile = file.resolveSibling(SETUP_FILE_NAME);
         RegularPaths.requireFileOrMissing(setupFile);
-        SetupEntry setup = null;
+        @Nullable SetupEntry setup = null;
         if (Files.exists(setupFile)) {
             if (Files.size(setupFile) > MAX_FILE_BYTES) {
                 throw new IOException(SETUP_FILE_NAME + " is larger than " + MAX_FILE_BYTES + " bytes");
@@ -178,7 +180,7 @@ public final class ApiTokens {
         try {
             parsed = JSON.readValue(content, SetupFile.class);
         } catch (JacksonException e) {
-            throw new IOException(SETUP_FILE_NAME + " is not a valid setup token file (unknown field, wrong type or broken JSON)");
+            throw new IOException(SETUP_FILE_NAME + " is not a valid setup token file (unknown field, wrong type or broken JSON)"); // NOPMD - the Jackson message can quote token material
         }
         if (parsed == null || parsed.schemaVersion() != SCHEMA_VERSION || parsed.token() == null) {
             throw new IOException(SETUP_FILE_NAME + ": schema-version must be " + SCHEMA_VERSION + " and token must be set");
@@ -208,7 +210,7 @@ public final class ApiTokens {
         try {
             parsed = JSON.readValue(content, TokenFile.class);
         } catch (JacksonException e) {
-            throw new IOException(FILE_NAME + " is not a valid token file (unknown field, wrong type or broken JSON)");
+            throw new IOException(FILE_NAME + " is not a valid token file (unknown field, wrong type or broken JSON)"); // NOPMD - the Jackson message can quote token material
         }
         if (parsed == null || parsed.schemaVersion() != SCHEMA_VERSION) {
             throw new IOException(FILE_NAME + ": schema-version must be " + SCHEMA_VERSION);
@@ -277,7 +279,8 @@ public final class ApiTokens {
      *                                  lifetime is out of range, or the limit is reached
      * @throws IOException              if the file cannot be written; then no token exists
      */
-    public synchronized Created create(String name, Set<Scope> scopes, Duration lifetime) throws IOException {
+    public synchronized Created create(String name, Set<Scope> scopes, @Nullable Duration lifetime)
+            throws IOException {
         if (lifetime != null && (lifetime.compareTo(MIN_LIFETIME) < 0 || lifetime.compareTo(MAX_LIFETIME) > 0)) {
             throw new IllegalArgumentException("the lifetime must be from 1h to 3650d");
         }
@@ -305,7 +308,7 @@ public final class ApiTokens {
         } while (find(current, id).isPresent());
         Instant now = clock.instant();
         List<String> scopeIds = EnumSet.copyOf(scopes).stream().map(Scope::id).toList();
-        String expiresAt = lifetime == null ? null : now.plus(lifetime).toString();
+        @Nullable String expiresAt = lifetime == null ? null : now.plus(lifetime).toString();
         Entry entry = new Entry(id, name, scopeIds, now.toString(), expiresAt, HexFormat.of().formatHex(sha256(token)));
         List<Entry> next = new ArrayList<>(current);
         next.add(entry);
@@ -481,7 +484,7 @@ public final class ApiTokens {
     }
 
     private void prepareDirectory() throws IOException {
-        Path dir = file.getParent();
+        Path dir = Objects.requireNonNull(file.getParent(), "parent folder of file");
         RegularPaths.requireDirectoryOrMissing(dir);
         Files.createDirectories(dir);
         OwnerOnlyPermissions.restrictDirectory(dir);
@@ -619,7 +622,7 @@ public final class ApiTokens {
             return false;
         }
         try {
-            Instant.parse(text);
+            Objects.requireNonNull(Instant.parse(text));
             return true;
         } catch (DateTimeParseException e) {
             return false;
@@ -674,7 +677,8 @@ public final class ApiTokens {
 
     /** One stored token. */
     @JsonPropertyOrder({"id", "name", "scopes", "created-at", "expires-at", "sha256"})
-    record Entry(String id, String name, List<String> scopes, String createdAt, String expiresAt, String sha256) {
+    record Entry(String id, String name, List<String> scopes, String createdAt, @Nullable String expiresAt,
+                 String sha256) {
 
         byte[] hashBytes() {
             return HexFormat.of().parseHex(sha256);

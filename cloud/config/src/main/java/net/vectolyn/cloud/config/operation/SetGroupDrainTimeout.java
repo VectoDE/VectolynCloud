@@ -6,6 +6,7 @@ import java.util.Objects;
 import net.vectolyn.cloud.config.error.ConfigException;
 import net.vectolyn.cloud.config.model.ConfigSnapshot;
 import net.vectolyn.cloud.config.model.TimeSpan;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Sets the {@code drain-timeout} of a group.
@@ -14,7 +15,7 @@ import net.vectolyn.cloud.config.model.TimeSpan;
  * @param value the new value; null removes the field, so the default applies. The validator checks
  *              the range.
  */
-public record SetGroupDrainTimeout(String group, TimeSpan value) implements ConfigOperation {
+public record SetGroupDrainTimeout(String group, @Nullable TimeSpan value) implements ConfigOperation {
 
     /** Checks the group name. */
     public SetGroupDrainTimeout {

@@ -26,6 +26,8 @@ import org.yaml.snakeyaml.Yaml;
 class BuildProtectionTest {
 
     /** A player whose permission check answers {@code permitted}. */
+    // Identity is the contract of Object.equals for the proxy; calling proxy.equals here would recurse.
+    @SuppressWarnings("ReferenceEquality")
     private static Object player(boolean permitted) {
         return Proxy.newProxyInstance(Player.class.getClassLoader(), new Class<?>[] {Player.class}, (proxy, method, args) ->
                 switch (method.getName()) {

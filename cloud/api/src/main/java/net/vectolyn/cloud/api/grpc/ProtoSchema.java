@@ -9,11 +9,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Reads the subset of the proto3 language that {@code cloud.proto} uses, so the server encodes
  * exactly the messages the published file describes and no second copy of them can drift:
- * {@code syntax}, {@code package}, {@code option}, {@code message} with scalar, enum and message
+ * {@code syntax}, {@code package}, {@code option}, message definitions with scalar, enum and message
  * fields ({@code repeated}, {@code optional}), top-level {@code enum} and one {@code service} with
  * unary and server-streaming {@code rpc}s. Line comments are ignored.
  *
@@ -92,7 +93,7 @@ public record ProtoSchema(String pkg, String service, Map<String, Proto.Message>
         private final List<String> tokens;
         private int at;
         private String pkg = "";
-        private String service;
+        private @Nullable String service;
         private final Map<String, Proto.Message> messages = new LinkedHashMap<>();
         private final Map<String, List<String>> enums = new LinkedHashMap<>();
         /** Fields whose type is resolved after the whole file is read: message, field tokens. */

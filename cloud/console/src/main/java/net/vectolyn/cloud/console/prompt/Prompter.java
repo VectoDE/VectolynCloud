@@ -8,6 +8,7 @@ import net.vectolyn.cloud.config.model.Language;
 import net.vectolyn.cloud.console.ConsoleOutput;
 import net.vectolyn.cloud.console.Messages;
 import net.vectolyn.cloud.console.Style;
+import net.vectolyn.cloud.console.Text;
 import net.vectolyn.cloud.console.terminal.ConsoleTerminal;
 import net.vectolyn.cloud.console.terminal.ReadResult;
 
@@ -53,8 +54,9 @@ public final class Prompter {
     public <T> T ask(Question<T> question) throws PromptCancelledException {
         Objects.requireNonNull(question, "question");
         Language language = out.language();
-        if (question.helpText() != null) {
-            out.println(Style.MUTED.apply(question.helpText().get(language), terminal.ansi()));
+        Text helpText = question.helpText();
+        if (helpText != null) {
+            out.println(Style.MUTED.apply(helpText.get(language), terminal.ansi()));
         }
         List<Question.Option<T>> options = question.options();
         for (int i = 0; i < options.size(); i++) {

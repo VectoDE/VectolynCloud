@@ -46,6 +46,7 @@ import net.vectolyn.cloud.config.model.NodesConfig;
 import net.vectolyn.cloud.config.model.TaskConfig;
 import net.vectolyn.cloud.config.operation.ReplaceConfig;
 import net.vectolyn.cloud.config.validation.ConfigNames;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Export and import of the whole configuration as one zip archive, to move a network to another
@@ -270,7 +271,9 @@ public final class ConfigArchive {
         if (!errors.isEmpty()) {
             throw new ConfigException(errors);
         }
-        ConfigSnapshot snapshot = ConfigSnapshot.of(cloud, nodes, groups, tasks);
+        // Without errors, both files were read.
+        ConfigSnapshot snapshot = ConfigSnapshot.of(Objects.requireNonNull(cloud, CloudHome.CLOUD_FILE),
+                Objects.requireNonNull(nodes, CloudHome.NODES_FILE), groups, tasks);
         ConfigPreview preview = config.preview(new ReplaceConfig(snapshot));
         List<ConfigPreview.FileChange> changes = new ArrayList<>(preview.files());
         for (Map.Entry<String, byte[]> entry : extraContent.entrySet()) {
@@ -317,7 +320,7 @@ public final class ConfigArchive {
     }
 
     /** The bytes of an extra file in {@code config/}, or null if it does not exist. */
-    private byte[] readExtra(String name) throws IOException {
+    private byte @Nullable [] readExtra(String name) throws IOException {
         Path path = config.home().configDir().resolve(name);
         RegularPaths.Kind kind = RegularPaths.kind(path);
         if (kind == RegularPaths.Kind.MISSING) {
@@ -372,12 +375,12 @@ public final class ConfigArchive {
                 }
             }
         } catch (ZipException e) {
-            throw new ConfigException(ConfigError.of(ARCHIVE, "", ErrorCode.SYNTAX));
+            throw new ConfigException(ConfigError.of(ARCHIVE, "", ErrorCode.SYNTAX), e);
         } catch (IOException e) {
-            throw new ConfigException(ConfigError.of(ARCHIVE, "", ErrorCode.FILE_ACCESS));
+            throw new ConfigException(ConfigError.of(ARCHIVE, "", ErrorCode.FILE_ACCESS), e);
         } catch (IllegalArgumentException e) {
             // A name that is not valid in the archive's encoding.
-            throw new ConfigException(ConfigError.of(ARCHIVE, "", ErrorCode.SYNTAX));
+            throw new ConfigException(ConfigError.of(ARCHIVE, "", ErrorCode.SYNTAX), e);
         }
         if (count == 0) {
             errors.add(ConfigError.of(ARCHIVE, "", ErrorCode.EMPTY));
@@ -414,7 +417,8 @@ public final class ConfigArchive {
         return name.substring(name.indexOf('/') + 1, name.length() - CloudHome.EXTENSION.length());
     }
 
-    private static <T> T parse(Map<String, byte[]> files, String name, ConfigFormat<T> format, List<ConfigError> errors) {
+    private static <T> @Nullable T parse(Map<String, byte[]> files, String name, ConfigFormat<T> format,
+            List<ConfigError> errors) {
         byte[] content = files.get(name);
         if (content == null) {
             errors.add(ConfigError.of(name, "", ErrorCode.FILE_MISSING));

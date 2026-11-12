@@ -8,6 +8,7 @@ import java.util.Locale;
 import net.vectolyn.cloud.config.error.ConfigError;
 import net.vectolyn.cloud.config.error.ConfigException;
 import net.vectolyn.cloud.config.error.ErrorCode;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Turns typed text into values with the same strictness as the YAML files: {@code true} or
@@ -35,7 +36,7 @@ final class Values {
         try {
             return Integer.parseInt(text); // nine digits always fit; the catch only satisfies the type
         } catch (NumberFormatException e) {
-            throw invalid(file, path, "a whole number");
+            throw invalid(file, path, "a whole number", e);
         }
     }
 
@@ -57,13 +58,28 @@ final class Values {
         return Arrays.stream(type.getEnumConstants()).map(Values::name).toList();
     }
 
+    /**
+     * Hands an unset value ({@code null}) to a config model parameter that takes it as "not set".
+     * Those parameters are not annotated {@code @Nullable} in the config module yet; this is the one
+     * place that bridges the gap.
+     */
+    @SuppressWarnings("NullAway") // see above: the config model does not declare the null yet
+    static <T> T unset(@Nullable T value) {
+        return value;
+    }
+
     /** {@code ""} clears an optional text; anything else is kept. */
-    static String optionalText(String text) {
+
+    static @Nullable String optionalText(String text) {
         return text.isEmpty() ? null : text;
     }
 
     static ConfigException invalid(String file, String path, String expected) {
         return new ConfigException(ConfigError.of(file, path, ErrorCode.INVALID_VALUE, expected));
+    }
+
+    static ConfigException invalid(String file, String path, String expected, Throwable cause) {
+        return new ConfigException(ConfigError.of(file, path, ErrorCode.INVALID_VALUE, expected), cause);
     }
 
     /** {@code on} or {@code off}, as in {@code group wanted lobby on}. */

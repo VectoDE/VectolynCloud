@@ -129,7 +129,9 @@ public final class ManagedJavaRuntimes implements JavaRuntimeResolver {
             return new JavaRuntime(runtime.executable(), runtime.feature());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new InterruptedIOException("interrupted while preparing Java for group " + group);
+            InterruptedIOException failure = new InterruptedIOException("interrupted while preparing Java for group " + group);
+            failure.initCause(e);
+            throw failure;
         }
     }
 }

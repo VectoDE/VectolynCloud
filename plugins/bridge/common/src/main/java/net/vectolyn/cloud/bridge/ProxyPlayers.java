@@ -5,6 +5,7 @@ package net.vectolyn.cloud.bridge;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The players of the proxy, as {@link ProxyBridge} needs them to carry out a transfer or a network
@@ -27,7 +28,7 @@ public interface ProxyPlayers {
      * @param player the player
      * @return the locale, or {@code null} if the client has not sent it
      */
-    Locale locale(UUID player);
+    @Nullable Locale locale(UUID player);
 
     /**
      * Shows the player a line and connects them to another backend. Must not block.

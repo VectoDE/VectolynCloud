@@ -24,6 +24,7 @@ import net.vectolyn.cloud.api.http.ApiJson;
 import net.vectolyn.cloud.config.io.AtomicFileWriter;
 import net.vectolyn.cloud.config.io.RegularPaths;
 import net.vectolyn.cloud.config.secret.OwnerOnlyPermissions;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The panel's accounts and roles, in {@code secrets/panel-users.json} (owner-only, written
@@ -115,7 +116,8 @@ public final class PanelUsers {
      * @param disabled     whether sign-in is blocked
      * @param createdAt    when it was created
      */
-    public record User(String name, String passwordHash, List<String> roles, String totpSecret, long totpLastStep,
+    public record User(String name, String passwordHash, List<String> roles, @Nullable String totpSecret,
+                       long totpLastStep,
                        List<Passkey> passkeys, List<OidcLink> oidc, boolean disabled, String createdAt) {
 
         /** Copies the lists. */
@@ -158,6 +160,10 @@ public final class PanelUsers {
         FormatException(String message) {
             super(message);
         }
+
+        FormatException(String message, Throwable cause) {
+            super(message, cause);
+        }
     }
 
     /** A change was refused; the message is meant for the user. */
@@ -169,6 +175,11 @@ public final class PanelUsers {
 
         RefusedException(String code, String message) {
             super(message);
+            this.code = code;
+        }
+
+        RefusedException(String code, String message, Throwable cause) {
+            super(message, cause);
             this.code = code;
         }
 
@@ -200,7 +211,7 @@ public final class PanelUsers {
     }
 
     static PanelUsers load(Path file, AtomicFileWriter writer) throws IOException {
-        RegularPaths.requireDirectoryOrMissing(file.getParent());
+        RegularPaths.requireDirectoryOrMissing(Objects.requireNonNull(file.getParent(), "parent"));
         RegularPaths.requireFileOrMissing(file);
         if (!Files.exists(file)) {
             return new PanelUsers(file, writer, new Data(SCHEMA_VERSION, List.of(), List.of()));
@@ -211,7 +222,7 @@ public final class PanelUsers {
         try {
             return new PanelUsers(file, writer, parse(Files.readAllBytes(file)));
         } catch (FormatException e) {
-            throw new IOException(FILE_NAME + " is not valid: " + e.getMessage());
+            throw new IOException(FILE_NAME + " is not valid: " + e.getMessage(), e);
         }
     }
 
@@ -230,7 +241,7 @@ public final class PanelUsers {
         try {
             parsed = ApiJson.mapper().readValue(content, Data.class);
         } catch (RuntimeException e) {
-            throw new FormatException("unknown field, wrong type or broken JSON");
+            throw new FormatException("unknown field, wrong type or broken JSON", e);
         }
         if (parsed == null) {
             throw new FormatException("empty");
@@ -365,7 +376,7 @@ public final class PanelUsers {
      * @param name the name
      * @return the user
      */
-    public Optional<User> find(String name) {
+    public Optional<User> find(@Nullable String name) {
         if (name == null) {
             return Optional.empty();
         }
@@ -513,12 +524,12 @@ public final class PanelUsers {
         try {
             check(next);
         } catch (FormatException e) {
-            throw new RefusedException("invalid", e.getMessage());
+            throw new RefusedException("invalid", Objects.requireNonNullElse(e.getMessage(), "invalid"), e);
         }
         if (!data.users().isEmpty() && owners(next.users()) == 0) {
             throw new RefusedException("last-owner", "At least one enabled user must keep the owner role.");
         }
-        Path dir = file.getParent();
+        Path dir = Objects.requireNonNull(file.getParent(), "parent");
         RegularPaths.requireDirectoryOrMissing(dir);
         Files.createDirectories(dir);
         OwnerOnlyPermissions.restrictDirectory(dir);

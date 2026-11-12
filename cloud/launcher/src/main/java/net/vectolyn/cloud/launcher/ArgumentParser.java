@@ -38,8 +38,9 @@ public final class ArgumentParser {
         Optional<Language> language = Optional.empty();
         Set<String> seen = new HashSet<>();
 
-        for (int i = 0; i < args.length; i++) {
-            String raw = args[i];
+        int next = 0;
+        while (next < args.length) {
+            String raw = args[next++];
             String name = raw;
             String inlineValue = null;
             int eq = raw.indexOf('=');
@@ -68,10 +69,10 @@ public final class ArgumentParser {
             }
             String value = inlineValue;
             if (value == null) {
-                if (i + 1 >= args.length || args[i + 1].startsWith("--")) {
+                if (next >= args.length || args[next].startsWith("--")) {
                     throw new ArgumentException(ArgumentException.Kind.MISSING_VALUE, name);
                 }
-                value = args[++i];
+                value = args[next++];
             }
             if (value.isBlank()) {
                 throw new ArgumentException(ArgumentException.Kind.MISSING_VALUE, name);
@@ -110,7 +111,7 @@ public final class ArgumentParser {
         try {
             return Path.of(value);
         } catch (InvalidPathException e) {
-            throw new ArgumentException(ArgumentException.Kind.INVALID_VALUE, name + " " + value);
+            throw new ArgumentException(ArgumentException.Kind.INVALID_VALUE, name + " " + value, e);
         }
     }
 }

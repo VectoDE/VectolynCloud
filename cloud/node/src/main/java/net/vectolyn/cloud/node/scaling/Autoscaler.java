@@ -6,6 +6,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -30,6 +31,7 @@ import net.vectolyn.cloud.config.model.CloudConfig;
 import net.vectolyn.cloud.config.model.ConfigSnapshot;
 import net.vectolyn.cloud.config.model.GroupConfig;
 import net.vectolyn.cloud.config.model.RestartConfig;
+import net.vectolyn.cloud.config.model.ScaleUpTriggers;
 import net.vectolyn.cloud.config.model.ScalingConfig;
 import net.vectolyn.cloud.config.model.ServerSoftware;
 import net.vectolyn.cloud.config.model.TaskConfig;
@@ -47,6 +49,7 @@ import net.vectolyn.cloud.node.service.ServiceListener;
 import net.vectolyn.cloud.node.service.ServicePlanner;
 import net.vectolyn.cloud.node.service.ServiceState;
 import net.vectolyn.protocol.ServiceId;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Scales the tasks of this node: every {@link #INTERVAL} it reads the configuration, the services
@@ -98,7 +101,7 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
     private final Clock clock;
     private final String node;
     private final Executor actions;
-    private final ExecutorService ownActions;
+    private final @Nullable ExecutorService ownActions;
 
     private final Object lock = new Object();
     private final Map<String, Instant> lastAction = new HashMap<>();
@@ -120,10 +123,10 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
     private final List<ScalingListener> listeners = new CopyOnWriteArrayList<>();
     private boolean suspended;
     private boolean closed;
-    private ScheduledExecutorService scheduler;
+    private @Nullable ScheduledExecutorService scheduler;
 
     private Autoscaler(ScalingTarget target, Supplier<ConfigSnapshot> config, ScalingSignals signals, Clock clock,
-                       Executor actions) {
+                       @Nullable Executor actions) {
         this.target = Objects.requireNonNull(target, "target");
         this.config = Objects.requireNonNull(config, "config");
         this.signals = Objects.requireNonNull(signals, "signals");
@@ -148,7 +151,7 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
      * @return the autoscaler
      */
     public static Autoscaler create(ScalingTarget target, Supplier<ConfigSnapshot> config, ScalingSignals signals) {
-        return new Autoscaler(target, config, signals, Clock.systemDefaultZone(), null);
+        return new Autoscaler(target, config, signals, Clock.system(ZoneId.systemDefault()), null);
     }
 
     /**
@@ -158,6 +161,11 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
     static Autoscaler create(ScalingTarget target, Supplier<ConfigSnapshot> config, ScalingSignals signals,
                              Clock clock, Executor actions) {
         return new Autoscaler(target, config, signals, clock, Objects.requireNonNull(actions, "actions"));
+    }
+
+    @SuppressWarnings("FutureReturnValueIgnored") // safeTick catches its own failures; close() shuts the scheduler down
+    private void scheduleRounds(ScheduledExecutorService executor) {
+        executor.scheduleWithFixedDelay(this::safeTick, INTERVAL.toMillis(), INTERVAL.toMillis(), TimeUnit.MILLISECONDS);
     }
 
     /**
@@ -191,9 +199,9 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
             if (closed || scheduler != null) {
                 return;
             }
-            scheduler = Executors.newSingleThreadScheduledExecutor(daemon("vectolyn-scaling"));
-            scheduler.scheduleWithFixedDelay(this::safeTick, INTERVAL.toMillis(), INTERVAL.toMillis(),
-                    TimeUnit.MILLISECONDS);
+            ScheduledExecutorService created = Executors.newSingleThreadScheduledExecutor(daemon("vectolyn-scaling"));
+            scheduler = created;
+            scheduleRounds(created);
         }
     }
 
@@ -487,19 +495,17 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
         return group == null ? GroupConfig.DEFAULT_DRAIN_TIMEOUT.duration() : group.drainTimeoutOrDefault().duration();
     }
 
-    private static String describe(ScalingPlanner.Reason reason, TaskConfig task) {
+    private static String describe(ScalingPlanner.Reason reason, @Nullable TaskConfig task) {
         ScalingConfig s = task == null ? null : task.scaling();
+        ScaleUpTriggers on = s == null ? null : s.scaleUpOn();
         return switch (reason) {
             case MIN_SERVICES -> "min-services is " + (s == null ? "?" : s.minServices());
             case SCHEDULE -> "an active schedule raises the minimum above min-services "
                     + (s == null ? "?" : s.minServices());
             case LOAD -> s == null ? "load" : "the load of the group has reached " + s.scaleUpAt() + " %";
-            case CPU -> s == null || s.scaleUpOn() == null ? "cpu"
-                    : "the average CPU of its services is above " + s.scaleUpOn().cpuAbove() + " %";
-            case TPS -> s == null || s.scaleUpOn() == null ? "tps"
-                    : "the average TPS of its services is below " + s.scaleUpOn().tpsBelow();
-            case RAM -> s == null || s.scaleUpOn() == null ? "ram"
-                    : "the average heap use of its services is above " + s.scaleUpOn().ramAbove() + " %";
+            case CPU -> on == null ? "cpu" : "the average CPU of its services is above " + on.cpuAbove() + " %";
+            case TPS -> on == null ? "tps" : "the average TPS of its services is below " + on.tpsBelow();
+            case RAM -> on == null ? "ram" : "the average heap use of its services is above " + on.ramAbove() + " %";
             case LOW_LOAD -> s == null ? "low load"
                     : "with one service fewer the load stays below " + s.scaleDownBelow() + " %, for "
                     + s.scaleDownAfter();
@@ -546,7 +552,7 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
     }
 
     @Override
-    public void stateChanged(ServiceInfo service, ServiceState previous) {
+    public void stateChanged(ServiceInfo service, @Nullable ServiceState previous) {
         stateChanged(service, previous, config.get());
     }
 
@@ -556,7 +562,7 @@ public final class Autoscaler implements ServiceListener, AutoCloseable {
      * ({@code at}), not at delivery: a switch flipped back on in between does not hide it.
      */
     @Override
-    public void stateChanged(ServiceInfo service, ServiceState previous, ConfigSnapshot at) {
+    public void stateChanged(ServiceInfo service, @Nullable ServiceState previous, ConfigSnapshot at) {
         switch (service.state()) {
             case CRASHED -> {
                 // PREPARED -> CRASHED is a start that failed before its process ran; the start

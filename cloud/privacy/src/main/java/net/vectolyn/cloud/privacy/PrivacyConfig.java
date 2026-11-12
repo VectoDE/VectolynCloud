@@ -4,6 +4,7 @@ package net.vectolyn.cloud.privacy;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
+import org.jspecify.annotations.Nullable;
 
 /**
  * {@code privacy.yml} in the cloud home. Every field except {@code schema-version} is optional;
@@ -36,7 +37,8 @@ public record PrivacyConfig(@JsonProperty(required = true) int schemaVersion, Ip
      * @return the defaults
      */
     public static PrivacyConfig defaults() {
-        return new PrivacyConfig(SCHEMA_VERSION, null, null, null, null);
+        return new PrivacyConfig(SCHEMA_VERSION, IpBans.defaults(), Statistics.defaults(), Telemetry.defaults(),
+                Tracking.defaults());
     }
 
     /**
@@ -66,7 +68,7 @@ public record PrivacyConfig(@JsonProperty(required = true) int schemaVersion, Ip
          * @return default settings
          */
         public static IpBans defaults() {
-            return new IpBans(null);
+            return new IpBans(DEFAULT_RETENTION_DAYS);
         }
     }
 
@@ -90,7 +92,7 @@ public record PrivacyConfig(@JsonProperty(required = true) int schemaVersion, Ip
          * @return default settings
          */
         public static Statistics defaults() {
-            return new Statistics(null);
+            return new Statistics(Boolean.TRUE);
         }
     }
 
@@ -103,7 +105,7 @@ public record PrivacyConfig(@JsonProperty(required = true) int schemaVersion, Ip
      * @param consent  the explicit consent of the operator
      */
     @JsonPropertyOrder({"enabled", "endpoint", "consent"})
-    public record Telemetry(Boolean enabled, String endpoint, Consent consent) {
+    public record Telemetry(Boolean enabled, @Nullable String endpoint, @Nullable Consent consent) {
 
         /** Fills in the defaults. */
         public Telemetry {
@@ -116,7 +118,7 @@ public record PrivacyConfig(@JsonProperty(required = true) int schemaVersion, Ip
          * @return default settings
          */
         public static Telemetry defaults() {
-            return new Telemetry(null, null, null);
+            return new Telemetry(Boolean.FALSE, null, null);
         }
     }
 
@@ -165,7 +167,7 @@ public record PrivacyConfig(@JsonProperty(required = true) int schemaVersion, Ip
          * @return default settings
          */
         public static Tracking defaults() {
-            return new Tracking(null, null, null);
+            return new Tracking(Boolean.FALSE, DEFAULT_RETENTION_DAYS, "");
         }
     }
 }

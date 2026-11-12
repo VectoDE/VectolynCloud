@@ -51,6 +51,7 @@ import net.vectolyn.protocol.ChannelName;
 import net.vectolyn.protocol.NodeId;
 import net.vectolyn.protocol.PacketReader;
 import net.vectolyn.protocol.message.Disconnect;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The cluster of one node: setting it up on the head ({@link #init}), join tokens, joining from a
@@ -222,7 +223,7 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
     private volatile Duration lossGrace = LOSS_GRACE;
     private volatile Duration lossCheck = LOSS_CHECK;
     /** Head: which members are lost; only touched on {@link #mirrorTimer}. */
-    private volatile MemberWatch watch;
+    private volatile @Nullable MemberWatch watch;
     /** Head: the plan for every member that is lost now. */
     private final Map<NodeId, FailoverPlanner.Plan> plans = new ConcurrentHashMap<>();
     private final String version;
@@ -248,22 +249,22 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
     private final Object syncLock = new Object();
     private final ConfigListener configListener = change -> runMirror(this::refreshConfig);
     /** The member's next sync, while one is queued; guarded by {@link #syncLock}. */
-    private CompletableFuture<Void> queuedSync;
-    private volatile Instant lastSync;
-    private volatile String mirrorProblem;
+    private @Nullable CompletableFuture<Void> queuedSync;
+    private volatile @Nullable Instant lastSync;
+    private volatile @Nullable String mirrorProblem;
     private final Object joinLock = new Object();
     private final java.util.concurrent.atomic.AtomicLong refusedJoins = new java.util.concurrent.atomic.AtomicLong();
     private final java.util.concurrent.atomic.AtomicLong refusedHellos = new java.util.concurrent.atomic.AtomicLong();
     private volatile Events events = Events.DEBUG_LOG;
-    private volatile ClusterConfig cluster;
-    private volatile ClusterServer server;
-    private volatile ClusterLink link;
+    private volatile @Nullable ClusterConfig cluster;
+    private volatile @Nullable ClusterServer server;
+    private volatile @Nullable ClusterLink link;
     private volatile boolean closed;
     /** Why {@code cluster.yml} could not be read at the start, or null. */
-    private volatile String broken;
+    private volatile @Nullable String broken;
 
     private ClusterService(ClusterPaths paths, NodeId self, String version, ConfigService config,
-                           VersionPolicy versions, Clock clock, ClusterConfig cluster) {
+                           VersionPolicy versions, Clock clock, @Nullable ClusterConfig cluster) {
         this.paths = paths;
         this.self = self;
         this.version = ClusterMessages.checkVersion(version);
@@ -384,7 +385,7 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
      * @throws ClusterException if the node is in a cluster already or the address is invalid
      * @throws IOException      if keytool or the files fail; what was created is removed again
      */
-    public synchronized CaPin init(String host, int port, String bind) throws ClusterException, IOException {
+    public synchronized CaPin init(String host, int port, @Nullable String bind) throws ClusterException, IOException {
         requireOpen();
         if (cluster != null) {
             throw new ClusterException("This node is in a cluster already.", "Dieser Node ist schon in einem Cluster.");
@@ -439,8 +440,8 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
      * @throws IOException      if the token file cannot be written
      */
     public JoinTokens.Created createToken(NodeId node, Duration ttl) throws ClusterException, IOException {
-        requireHead();
-        if (cluster.member(node).isPresent()) {
+        ClusterConfig current = requireHead();
+        if (current.member(node).isPresent()) {
             throw new ClusterException("Node " + node + " is a member already.", "Node " + node + " ist schon Mitglied.");
         }
         DatabaseConfig database = config.snapshot().cloud().database();
@@ -453,15 +454,15 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
         try {
             return tokens.create(node, ttl, clock.instant());
         } catch (IllegalArgumentException e) {
-            throw new ClusterException("The lifetime must be 1m to 24h.", "Die Laufzeit muss 1m bis 24h sein.");
+            throw new ClusterException("The lifetime must be 1m to 24h.", "Die Laufzeit muss 1m bis 24h sein.", e);
         } catch (IllegalStateException e) {
             throw new ClusterException("At most " + JoinTokens.MAX_TOKENS + " join tokens can be open.",
-                    "Höchstens " + JoinTokens.MAX_TOKENS + " Beitritts-Tokens können offen sein.");
+                    "Höchstens " + JoinTokens.MAX_TOKENS + " Beitritts-Tokens können offen sein.", e);
         }
     }
 
     /** The open join tokens (head only). */
-    public List<JoinTokens.Info> tokens() throws ClusterException, IOException {
+    public List<JoinTokens.TokenInfo> tokens() throws ClusterException, IOException {
         requireHead();
         return tokens.list(clock.instant());
     }
@@ -483,13 +484,13 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
     public void remove(NodeId node) throws ClusterException, IOException {
         ClusterServer running;
         synchronized (this) {
-            requireHead();
+            ClusterConfig current = requireHead();
             if (node.equals(self)) {
                 throw new ClusterException("The head cannot remove itself.", "Der Head kann sich nicht selbst entfernen.");
             }
-            ClusterConfig.Member member = cluster.member(node).orElseThrow(() -> new ClusterException(
+            ClusterConfig.Member member = current.member(node).orElseThrow(() -> new ClusterException(
                     "Node " + node + " is no member.", "Node " + node + " ist kein Mitglied."));
-            ClusterConfig next = cluster.withRevoked(member, clock.instant());
+            ClusterConfig next = current.withRevoked(member, clock.instant());
             ClusterFile.write(paths.clusterFile(), next);
             cluster = next;
             running = server;
@@ -663,7 +664,7 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
         // answer; the TLS layer checks the chain to the CA and that it is a node certificate.
         SSLContext context = ClusterTls.context(identity.keyManagers().getKeyManagers(),
                 ClusterTrust.peers(ca, (node, fingerprint) -> { }));
-        ClusterConfig.Head head = cluster.head();
+        ClusterConfig.Head head = Objects.requireNonNull(cluster, "the node is in a cluster").head();
         ClusterServer created = new ClusterServer(ClusterServer.Settings.of(head.bindAddress(), head.port(), self, version),
                 context, this, headHandlers);
         InetSocketAddress bound = created.start();
@@ -680,11 +681,20 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
             rescanTemplates(true);
         });
         long rescan = TEMPLATE_RESCAN.toMillis();
-        mirrorTimer.scheduleWithFixedDelay(() -> runMirror(() -> rescanTemplates(false)), rescan, rescan,
-                TimeUnit.MILLISECONDS);
+        scheduleRescans(rescan);
         watch = new MemberWatch(lossGrace);
-        long check = lossCheck.toMillis();
-        mirrorTimer.scheduleWithFixedDelay(this::checkMembers, check, check, TimeUnit.MILLISECONDS);
+        scheduleMemberChecks(lossCheck.toMillis());
+    }
+
+    @SuppressWarnings("FutureReturnValueIgnored") // the timer lives as long as the service; runMirror catches the task's failures
+    private void scheduleRescans(long millis) {
+        mirrorTimer.scheduleWithFixedDelay(() -> runMirror(() -> rescanTemplates(false)), millis, millis,
+                TimeUnit.MILLISECONDS);
+    }
+
+    @SuppressWarnings("FutureReturnValueIgnored") // the timer lives as long as the service; the check runs every period
+    private void scheduleMemberChecks(long millis) {
+        mirrorTimer.scheduleWithFixedDelay(this::checkMembers, millis, millis, TimeUnit.MILLISECONDS);
     }
 
     private void startLink() throws IOException {
@@ -693,7 +703,7 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
         }
         NodeIdentity identity = identity();
         X509Certificate ca = identity.caCertificate().orElseThrow();
-        ClusterConfig current = cluster;
+        ClusterConfig current = Objects.requireNonNull(cluster, "the node is in a cluster");
         NodeId head = new NodeId(current.head().id());
         KeyManager[] keys = identity.keyManagers().getKeyManagers();
         SSLContext context = ClusterTls.context(keys, ClusterTrust.peers(ca, (node, fingerprint) -> {
@@ -716,7 +726,7 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
                     public void connected(NodeId node) {
                         LOG.log(System.Logger.Level.INFO, "Cluster: connected to the head {0}", node);
                         // on the mirror's worker: this thread reads the answers
-                        requestSync();
+                        requestSyncInBackground();
                         Thread.ofVirtual().name("vectolyn-cluster-status").start(ClusterService.this::reportStatus);
                     }
 
@@ -740,8 +750,12 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
                 }, memberHandlers);
         created.start();
         link = created;
-        long interval = STATUS_INTERVAL.toMillis();
-        mirrorTimer.scheduleWithFixedDelay(this::reportStatus, interval, interval, TimeUnit.MILLISECONDS);
+        scheduleStatusReports(STATUS_INTERVAL.toMillis());
+    }
+
+    @SuppressWarnings("FutureReturnValueIgnored") // the timer lives as long as the service; reportStatus catches its failures
+    private void scheduleStatusReports(long millis) {
+        mirrorTimer.scheduleWithFixedDelay(this::reportStatus, millis, millis, TimeUnit.MILLISECONDS);
     }
 
     // ---------------------------------------------------------------- placement
@@ -830,7 +844,7 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
             return PlacementPlanner.place(config.snapshot(), task, reachable(), Set.of());
         } catch (IllegalArgumentException e) {
             throw new ClusterException("The task cannot be placed: " + e.getMessage(),
-                    "Der Task lässt sich nicht platzieren: " + e.getMessage());
+                    "Der Task lässt sich nicht platzieren: " + e.getMessage(), e);
         }
     }
 
@@ -1061,6 +1075,12 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
     private void pushed(NodeId head, ChannelName channel, byte[] payload) throws ClusterRpcException {
         ConfigMirrorSource.read(() -> MirrorMessages.Changed.read(new PacketReader(payload)));
         LOG.log(System.Logger.Level.DEBUG, "Cluster: the head {0} pushed {1}; syncing", head, channel);
+        requestSyncInBackground();
+    }
+
+    /** Like {@link #requestSync}, for callers that do not wait: a failed sync is logged and shown in the status. */
+    @SuppressWarnings("FutureReturnValueIgnored") // memberSync records and logs every failure itself
+    private void requestSyncInBackground() {
         requestSync();
     }
 
@@ -1348,12 +1368,14 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
         }
     }
 
-    private void requireHead() throws ClusterException {
+    private ClusterConfig requireHead() throws ClusterException {
         requireOpen();
-        if (role() != Role.HEAD) {
+        ClusterConfig current = cluster;
+        if (current == null || role() != Role.HEAD) {
             throw new ClusterException("Only the head of a cluster can do that (\"cluster init\" makes one).",
                     "Das kann nur der Head eines Clusters („cluster init“ macht einen).");
         }
+        return current;
     }
 
     private void requireOpen() throws ClusterException {

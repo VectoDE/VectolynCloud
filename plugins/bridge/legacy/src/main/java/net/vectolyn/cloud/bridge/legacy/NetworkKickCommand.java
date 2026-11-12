@@ -13,6 +13,7 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.SimpleCommandMap;
 import org.bukkit.entity.Player;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The bridge's {@code kick} on 1.8.8, in the command map in place of {@code kick} and
@@ -131,7 +132,7 @@ final class NetworkKickCommand extends Command {
      * @return the vanilla command for selectors: {@code minecraft:kick} as it was, else {@code kick},
      *     {@code null} if there was none
      */
-    static Command install(Map<String, Command> known, NetworkKickCommand command) {
+    static @Nullable Command install(Map<String, Command> known, NetworkKickCommand command) {
         Command vanilla = known.get("minecraft:kick");
         if (vanilla == null || vanilla instanceof NetworkKickCommand) {
             vanilla = known.get("kick");

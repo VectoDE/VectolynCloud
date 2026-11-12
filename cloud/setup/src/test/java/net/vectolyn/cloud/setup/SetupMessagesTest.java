@@ -51,7 +51,7 @@ class SetupMessagesTest {
             for (Language language : Language.values()) {
                 String value = text.get(language);
                 assertFalse(value.isBlank(), text.toString());
-                for (String line : value.split("\\R")) {
+                for (String line : value.lines().toList()) {
                     String word = line.strip().split("[\\s,.:;!?]", 2)[0].toLowerCase(Locale.ROOT);
                     assertFalse(word.equals("no") || word.equals("not") || word.equals("none"),
                             "opens with a negation: " + line);

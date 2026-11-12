@@ -10,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.file.Path;
@@ -87,7 +88,7 @@ class ClusterPortTest {
         SSLParameters parameters = socket.getSSLParameters();
         parameters.setProtocols(protocols.length == 0 ? new String[] {ClusterTls.PROTOCOL} : protocols);
         socket.setSSLParameters(parameters);
-        socket.connect(new InetSocketAddress("127.0.0.1", port), 5000);
+        socket.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 5000);
         socket.setSoTimeout(15_000);
         return socket;
     }
@@ -317,7 +318,7 @@ class ClusterPortTest {
 
     @Test
     void aSilentConnectionIsClosedAfterTheHandshakeTimeout() throws Exception {
-        try (Socket socket = new Socket("127.0.0.1", port)) {
+        try (Socket socket = new Socket(InetAddress.getLoopbackAddress(), port)) {
             socket.setSoTimeout(20_000);
             long start = System.nanoTime();
             assertClosed(socket.getInputStream());
@@ -328,7 +329,7 @@ class ClusterPortTest {
 
     @Test
     void garbageEndsTheConnection() throws Exception {
-        try (Socket socket = new Socket("127.0.0.1", port)) {
+        try (Socket socket = new Socket(InetAddress.getLoopbackAddress(), port)) {
             socket.setSoTimeout(15_000);
             socket.getOutputStream().write("GET / HTTP/1.1\r\n\r\n".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
             assertClosed(socket.getInputStream());

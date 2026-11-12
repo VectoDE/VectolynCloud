@@ -5,6 +5,7 @@ package net.vectolyn.cloud.api;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.handler.codec.http2.Http2Headers;
 import java.nio.charset.StandardCharsets;
+import org.jspecify.annotations.Nullable;
 
 /**
  * gRPC status codes, the length-prefixed message framing and the trailers.
@@ -57,7 +58,7 @@ final class GrpcStatus {
      * @param code    the REST error code for {@code vectolyn-code}, or null
      * @return the headers
      */
-    static Http2Headers trailers(int status, String message, String code) {
+    static Http2Headers trailers(int status, @Nullable String message, @Nullable String code) {
         Http2Headers headers = new DefaultHttp2Headers().set("grpc-status", Integer.toString(status));
         if (message != null && !message.isEmpty()) {
             headers.set("grpc-message", percentEncode(message));

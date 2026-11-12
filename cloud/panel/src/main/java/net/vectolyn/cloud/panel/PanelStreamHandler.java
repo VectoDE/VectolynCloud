@@ -17,6 +17,7 @@ import io.netty.handler.timeout.IdleStateEvent;
  * pong and close are ignored. The server pings after 30 s without traffic and closes the stream if
  * nothing came back for 90 s.
  */
+@SuppressWarnings("FutureReturnValueIgnored")
 final class PanelStreamHandler extends SimpleChannelInboundHandler<Object> {
 
     private final WebSocketServerHandshaker handshaker;

@@ -34,6 +34,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /** The live-event stream over a real socket: the checks of the handshake, the delay of an event. */
+@SuppressWarnings("FutureReturnValueIgnored")
 class PanelStreamTest {
 
     @TempDir

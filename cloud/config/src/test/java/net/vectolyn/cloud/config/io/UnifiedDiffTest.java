@@ -95,14 +95,14 @@ class UnifiedDiffTest {
         List<String> old = before.isEmpty() ? List.of() : Arrays.asList(before.substring(0, before.length() - 1).split("\n", -1));
         List<String> out = new ArrayList<>();
         int position = 0;
-        for (String line : diff.split("\n")) {
+        for (String line : diff.lines().toList()) {
             if (line.startsWith("---") || line.startsWith("+++")) {
                 continue;
             }
             if (line.startsWith("@@")) {
-                String range = line.split(" ")[1].substring(1);
-                int start = Integer.parseInt(range.split(",")[0]);
-                int count = range.contains(",") ? Integer.parseInt(range.split(",")[1]) : 1;
+                String range = line.split(" ", -1)[1].substring(1);
+                int start = Integer.parseInt(range.split(",", -1)[0]);
+                int count = range.contains(",") ? Integer.parseInt(range.split(",", -1)[1]) : 1;
                 int target = count == 0 ? start : start - 1;
                 while (position < target) {
                     out.add(old.get(position++));

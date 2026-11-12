@@ -8,6 +8,7 @@ import net.vectolyn.cloud.config.model.MemorySize;
 import net.vectolyn.cloud.config.model.ServerKind;
 import net.vectolyn.cloud.config.model.ServerSoftware;
 import net.vectolyn.cloud.console.Text;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The servers the assistant offers, in the order it asks for them. Each has a "wanted" switch and a
@@ -17,6 +18,8 @@ import net.vectolyn.cloud.console.Text;
  * {@code servers:} in {@code cloud.yml}. The legacy proxy's switch is {@code legacy-proxy.enabled},
  * which also carries its port.
  */
+// MemorySize and Text are immutable value objects, but they are not annotated as such.
+@SuppressWarnings("ImmutableEnumChecker")
 public enum NetworkServer {
 
     /** Velocity, the entry point for Java and Bedrock players. */
@@ -61,7 +64,7 @@ public enum NetworkServer {
     /** Minecraft version of the 1.8.8 server. */
     public static final String LEGACY_MINECRAFT_VERSION = "1.8.8";
 
-    private final ServerKind kind;
+    private final @Nullable ServerKind kind;
     private final String key;
     private final String template;
     private final ServerSoftware software;
@@ -69,7 +72,7 @@ public enum NetworkServer {
     private final Text label;
     private final Text shortName;
 
-    NetworkServer(ServerKind kind, String key, String template, ServerSoftware software, String defaultHeap, Text label,
+    NetworkServer(@Nullable ServerKind kind, String key, String template, ServerSoftware software, String defaultHeap, Text label,
                   Text shortName) {
         this.kind = kind;
         this.key = key;

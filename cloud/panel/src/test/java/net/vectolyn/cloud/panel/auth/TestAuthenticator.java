@@ -48,10 +48,14 @@ public final class TestAuthenticator {
     }
 
     /** The answer of {@code navigator.credentials.create}. */
+    // Raw WebAuthn bytes, handed to the server as they are.
+    @SuppressWarnings("ArrayRecordComponent")
     public record Created(byte[] clientDataJson, byte[] attestationObject) {
     }
 
     /** The answer of {@code navigator.credentials.get}. */
+    // Raw WebAuthn bytes, handed to the server as they are.
+    @SuppressWarnings("ArrayRecordComponent")
     public record Assertion(byte[] clientDataJson, byte[] authenticatorData, byte[] signature) {
     }
 

@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package net.vectolyn.lobby;
 
+import java.util.logging.Level;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
-import org.bukkit.GameRule;
+import org.bukkit.GameRules;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -50,28 +51,30 @@ public final class VectolynLobby extends JavaPlugin implements Listener {
     }
 
     private void configureWorld(World world) {
-        world.setGameRule(GameRule.DO_DAYLIGHT_CYCLE, false);
-        world.setGameRule(GameRule.DO_WEATHER_CYCLE, false);
+        world.setGameRule(GameRules.ADVANCE_TIME, false);
+        world.setGameRule(GameRules.ADVANCE_WEATHER, false);
         world.setTime(1000);
         world.setStorm(false);
         // Nothing may hurt a player and no mob may appear; the event handlers below enforce the
         // same rules, the game rules additionally stop the work server-side.
-        world.setGameRule(GameRule.DO_MOB_SPAWNING, false);
-        world.setGameRule(GameRule.SPAWN_MONSTERS, false);
-        world.setGameRule(GameRule.DO_PATROL_SPAWNING, false);
-        world.setGameRule(GameRule.DO_TRADER_SPAWNING, false);
-        world.setGameRule(GameRule.DO_WARDEN_SPAWNING, false);
-        world.setGameRule(GameRule.DO_INSOMNIA, false);
-        world.setGameRule(GameRule.DISABLE_RAIDS, true);
-        world.setGameRule(GameRule.MOB_GRIEFING, false);
-        world.setGameRule(GameRule.DO_FIRE_TICK, false);
-        world.setGameRule(GameRule.FALL_DAMAGE, false);
-        world.setGameRule(GameRule.DROWNING_DAMAGE, false);
-        world.setGameRule(GameRule.FIRE_DAMAGE, false);
-        world.setGameRule(GameRule.FREEZE_DAMAGE, false);
-        world.setGameRule(GameRule.PVP, false);
+        world.setGameRule(GameRules.SPAWN_MOBS, false);
+        world.setGameRule(GameRules.SPAWN_MONSTERS, false);
+        world.setGameRule(GameRules.SPAWN_PATROLS, false);
+        world.setGameRule(GameRules.SPAWN_WANDERING_TRADERS, false);
+        world.setGameRule(GameRules.SPAWN_WARDENS, false);
+        world.setGameRule(GameRules.SPAWN_PHANTOMS, false);
+        world.setGameRule(GameRules.RAIDS, false);
+        world.setGameRule(GameRules.MOB_GRIEFING, false);
+        world.setGameRule(GameRules.FIRE_SPREAD_RADIUS_AROUND_PLAYER, 0);
+        world.setGameRule(GameRules.FALL_DAMAGE, false);
+        world.setGameRule(GameRules.DROWNING_DAMAGE, false);
+        world.setGameRule(GameRules.FIRE_DAMAGE, false);
+        world.setGameRule(GameRules.FREEZE_DAMAGE, false);
+        world.setGameRule(GameRules.PVP, false);
         for (Entity entity : world.getEntities()) {
-            if (isHostile(entity)) entity.remove();
+            if (isHostile(entity)) {
+                entity.remove();
+            }
         }
     }
 
@@ -83,7 +86,9 @@ public final class VectolynLobby extends JavaPlugin implements Listener {
         for (int x = -27; x <= 27; x++) {
             for (int z = -27; z <= 27; z++) {
                 double distance = Math.sqrt(x * x + z * z);
-                if (distance > 27) continue;
+                if (distance > 27) {
+                    continue;
+                }
                 int top = Y - Math.max(0, (int) ((distance - 15) / 3));
                 for (int y = 87; y <= top; y++) {
                     Material material = y == top ? Material.GRASS_BLOCK : (y < top - 4 ? Material.DEEPSLATE : Material.STONE);
@@ -96,7 +101,9 @@ public final class VectolynLobby extends JavaPlugin implements Listener {
         disk(world, 0, Y + 1, 0, 7, Material.POLISHED_DEEPSLATE);
         disk(world, 0, Y + 2, 0, 5, Material.CALCITE);
         disk(world, 0, Y + 3, 0, 3, Material.SMOOTH_QUARTZ);
-        for (int y = Y + 4; y <= Y + 9; y++) set(world, 0, y, 0, Material.AMETHYST_BLOCK);
+        for (int y = Y + 4; y <= Y + 9; y++) {
+            set(world, 0, y, 0, Material.AMETHYST_BLOCK);
+        }
         set(world, 0, Y + 10, 0, Material.SEA_LANTERN);
 
         // Four intentionally distinct paths, one for each existing backend mode.
@@ -122,7 +129,9 @@ public final class VectolynLobby extends JavaPlugin implements Listener {
             for (int offset = -1; offset <= 1; offset++) {
                 set(world, x + (dz == 0 ? 0 : offset), Y + 2, z + (dx == 0 ? 0 : offset), Material.POLISHED_DEEPSLATE);
             }
-            if (i % 5 == 0) set(world, x, Y + 3, z, Material.SEA_LANTERN);
+            if (i % 5 == 0) {
+                set(world, x, Y + 3, z, Material.SEA_LANTERN);
+            }
         }
         int px = toX - dx * 2;
         int pz = toZ - dz * 2;
@@ -140,9 +149,17 @@ public final class VectolynLobby extends JavaPlugin implements Listener {
     }
 
     private void tree(World world, int x, int y, int z, Material leaves) {
-        for (int trunk = 0; trunk < 6; trunk++) set(world, x, y + trunk, z, Material.DARK_OAK_LOG);
-        for (int lx = -3; lx <= 3; lx++) for (int lz = -3; lz <= 3; lz++) for (int ly = 3; ly <= 7; ly++) {
-            if (Math.abs(lx) + Math.abs(lz) + Math.abs(ly - 5) <= 5) set(world, x + lx, y + ly, z + lz, leaves);
+        for (int trunk = 0; trunk < 6; trunk++) {
+            set(world, x, y + trunk, z, Material.DARK_OAK_LOG);
+        }
+        for (int lx = -3; lx <= 3; lx++) {
+            for (int lz = -3; lz <= 3; lz++) {
+                for (int ly = 3; ly <= 7; ly++) {
+                    if (Math.abs(lx) + Math.abs(lz) + Math.abs(ly - 5) <= 5) {
+                        set(world, x + lx, y + ly, z + lz, leaves);
+                    }
+                }
+            }
         }
     }
 
@@ -155,8 +172,12 @@ public final class VectolynLobby extends JavaPlugin implements Listener {
     }
 
     private void disk(World world, int x, int y, int z, int radius, Material material) {
-        for (int dx = -radius; dx <= radius; dx++) for (int dz = -radius; dz <= radius; dz++) {
-            if (dx * dx + dz * dz <= radius * radius) set(world, x + dx, y, z + dz, material);
+        for (int dx = -radius; dx <= radius; dx++) {
+            for (int dz = -radius; dz <= radius; dz++) {
+                if (dx * dx + dz * dz <= radius * radius) {
+                    set(world, x + dx, y, z + dz, material);
+                }
+            }
         }
     }
 
@@ -164,19 +185,30 @@ public final class VectolynLobby extends JavaPlugin implements Listener {
         world.getBlockAt(x, y, z).setType(material, false);
     }
 
+    // The future is only watched for failures: a refused teleport is logged, never thrown.
+    @SuppressWarnings("FutureReturnValueIgnored")
+    private void teleportToSpawn(Player player) {
+        player.teleportAsync(player.getWorld().getSpawnLocation()).exceptionally(error -> {
+            getLogger().log(Level.WARNING, "Could not teleport " + player.getName() + " to the lobby spawn", error);
+            return false;
+        });
+    }
+
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        Bukkit.getScheduler().runTaskLater(this, () -> player.teleportAsync(player.getWorld().getSpawnLocation()), 1L);
+        Bukkit.getScheduler().runTaskLater(this, () -> teleportToSpawn(player), 1L);
     }
 
     @EventHandler(ignoreCancelled = true)
     public void onDamage(EntityDamageEvent event) {
-        if (!(event.getEntity() instanceof Player player)) return;
+        if (!(event.getEntity() instanceof Player player)) {
+            return;
+        }
         event.setCancelled(true);
         if (event.getCause() == DamageCause.VOID) {
             player.setFallDistance(0);
-            player.teleportAsync(player.getWorld().getSpawnLocation());
+            teleportToSpawn(player);
         }
     }
 
@@ -191,13 +223,17 @@ public final class VectolynLobby extends JavaPlugin implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onCreatureSpawn(CreatureSpawnEvent event) {
-        if (SpawnPolicy.blocks(event.getSpawnReason().name())) event.setCancelled(true);
+        if (SpawnPolicy.blocks(event.getSpawnReason().name())) {
+            event.setCancelled(true);
+        }
     }
 
     @EventHandler
     public void onEntitiesLoad(EntitiesLoadEvent event) {
         for (Entity entity : event.getEntities()) {
-            if (isHostile(entity)) entity.remove();
+            if (isHostile(entity)) {
+                entity.remove();
+            }
         }
     }
 }

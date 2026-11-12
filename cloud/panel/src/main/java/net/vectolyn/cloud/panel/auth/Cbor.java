@@ -43,6 +43,10 @@ public final class Cbor {
         CborException(String message) {
             super(message);
         }
+
+        CborException(String message, Throwable cause) {
+            super(message, cause);
+        }
     }
 
     /**
@@ -114,7 +118,7 @@ public final class Cbor {
                             .onUnmappableCharacter(CodingErrorAction.REPORT)
                             .decode(ByteBuffer.wrap(bytes(length(info)))).toString();
                 } catch (CharacterCodingException e) {
-                    throw new CborException("invalid UTF-8");
+                    throw new CborException("invalid UTF-8", e);
                 }
             }
             case 4 -> {
@@ -142,8 +146,8 @@ public final class Cbor {
             }
             case 7 -> {
                 return switch (info) {
-                    case 20 -> Boolean.FALSE;
-                    case 21 -> Boolean.TRUE;
+                    case 20 -> false;
+                    case 21 -> true;
                     case 22 -> NULL;
                     default -> throw new CborException("unsupported simple value or float");
                 };

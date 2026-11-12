@@ -18,6 +18,7 @@ import net.vectolyn.cloud.download.provider.AdoptiumProvider;
 import net.vectolyn.cloud.download.provider.ArtifactProvider;
 import net.vectolyn.cloud.download.provider.ResolvedArtifact;
 import net.vectolyn.cloud.download.provider.TargetPlatform;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Provides the Java runtime for a server group. This is the entry point for {@code cloud-node}:
@@ -181,7 +182,8 @@ public final class JreManager {
         }
     }
 
-    private JavaRuntime installAndPin(int feature, ResolvedArtifact resolved, LockedArtifact pinned)
+    private JavaRuntime installAndPin(int feature, ResolvedArtifact resolved, @Nullable LockedArtifact pinned)
+
             throws IOException, InterruptedException {
         LOG.log(System.Logger.Level.INFO, "Downloading Java {0} ({1}) for {2}", feature, resolved.coordinate(), platform);
         DownloadedArtifact file = downloader.download(resolved, pinned);

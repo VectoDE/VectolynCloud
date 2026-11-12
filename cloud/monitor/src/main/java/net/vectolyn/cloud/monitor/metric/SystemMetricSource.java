@@ -19,6 +19,7 @@ import java.util.OptionalLong;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import org.jspecify.annotations.Nullable;
 
 /**
  * {@link MetricSource} of the running node, built on the JDK and, for the resident memory of other
@@ -109,7 +110,7 @@ public final class SystemMetricSource implements MetricSource {
         if (total.isEmpty()) {
             return Double.NaN;
         }
-        Instant started = info.startInstant().orElse(null);
+        @Nullable Instant started = info.startInstant().orElse(null);
         CpuMark mark = new CpuMark(total.get().toNanos(), nowNanos, started);
         CpuMark before = previous.put(pid, mark);
         if (before == null || !Objects.equals(before.started, started)) {
@@ -185,8 +186,8 @@ public final class SystemMetricSource implements MetricSource {
     static OptionalLong parseMeminfo(String text, long mxTotal) {
         long total = -1;
         long available = -1;
-        for (String line : text.split("\n")) {
-            String[] parts = line.trim().split("\\s+");
+        for (String line : text.split("\n", -1)) {
+            String[] parts = line.trim().split("\\s+", -1);
             if (parts.length != 3 || !parts[2].equals("kB") || !parts[1].matches("[0-9]{1,15}")) {
                 continue;
             }
@@ -208,6 +209,6 @@ public final class SystemMetricSource implements MetricSource {
         return OptionalLong.of(Math.min(available, total));
     }
 
-    private record CpuMark(long cpuNanos, long wallNanos, Instant started) {
+    private record CpuMark(long cpuNanos, long wallNanos, @Nullable Instant started) {
     }
 }

@@ -12,6 +12,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import org.jspecify.annotations.Nullable;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.StreamReadFeature;
 import tools.jackson.databind.JsonNode;
@@ -95,7 +96,7 @@ public final class ArtifactCatalog {
         if (node == null || !node.isObject()) {
             throw new IOException("catalog: every artifact must be a mapping");
         }
-        String id = text(node, "id", "catalog entry", true);
+        String id = requiredText(node, "id", "catalog entry");
         String context = "catalog entry " + id;
         for (String key : node.propertyNames()) {
             if (!ENTRY_KEYS.contains(key)) {
@@ -117,29 +118,35 @@ public final class ArtifactCatalog {
         }
         try {
             return new CatalogEntry(id,
-                    enumValue(CatalogEntry.Kind.class, text(node, "kind", context, true), context),
-                    enumValue(CatalogEntry.Type.class, text(node, "type", context, true), context),
-                    text(node, "provider", context, true),
-                    text(node, "project", context, true),
-                    text(node, "platform", context, false),
-                    enumValue(CatalogEntry.GameVersionUse.class, text(node, "game-version", context, true), context),
+                    enumValue(CatalogEntry.Kind.class, requiredText(node, "kind", context), context),
+                    enumValue(CatalogEntry.Type.class, requiredText(node, "type", context), context),
+                    requiredText(node, "provider", context),
+                    requiredText(node, "project", context),
+                    optionalText(node, "platform", context),
+                    enumValue(CatalogEntry.GameVersionUse.class, requiredText(node, "game-version", context), context),
                     targets,
-                    text(node, "replaced-by", context, false),
-                    text(node, "alternative", context, false),
-                    text(node, "version", context, false));
+                    optionalText(node, "replaced-by", context),
+                    optionalText(node, "alternative", context),
+                    optionalText(node, "version", context));
         } catch (IllegalArgumentException e) {
             throw new IOException(context + ": " + e.getMessage(), e);
         }
     }
 
-    private static String text(JsonNode node, String field, String context, boolean required) throws IOException {
+    private static String requiredText(JsonNode node, String field, String context) throws IOException {
+        String value = optionalText(node, field, context);
+        if (value == null) {
+            throw new IOException(context + ": " + field + " is missing");
+        }
+        return value;
+    }
+
+    private static @Nullable String optionalText(JsonNode node, String field, String context) throws IOException {
         JsonNode value = node.get(field);
         if (value == null || value.isNull()) {
-            if (required) {
-                throw new IOException(context + ": " + field + " is missing");
-            }
             return null;
         }
+
         if (!value.isString() || value.stringValue().isBlank()) {
             throw new IOException(context + ": " + field + " must be a non-empty string");
         }

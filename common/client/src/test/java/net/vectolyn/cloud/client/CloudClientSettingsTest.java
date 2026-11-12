@@ -12,12 +12,15 @@ import java.util.Map;
 import java.util.function.UnaryOperator;
 import net.vectolyn.protocol.AuthToken;
 import net.vectolyn.protocol.ServiceId;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 
 class CloudClientSettingsTest {
 
     private static final String TOKEN = "service-token-not-a-real-secret-01";
-    private static final UnaryOperator<String> NONE = name -> null;
+    private static @Nullable String none(String name) {
+        return null;
+    }
 
     private static UnaryOperator<String> of(Map<String, String> values) {
         return values::get;
@@ -29,7 +32,7 @@ class CloudClientSettingsTest {
                 "VECTOLYN_CLOUD_HOST", "10.0.0.5",
                 "VECTOLYN_CLOUD_PORT", "7011",
                 "VECTOLYN_SERVICE_ID", "lobby-1",
-                "VECTOLYN_SERVICE_TOKEN", TOKEN)), NONE);
+                "VECTOLYN_SERVICE_TOKEN", TOKEN)), CloudClientSettingsTest::none);
         assertEquals("10.0.0.5", settings.host());
         assertEquals(7011, settings.port());
         assertEquals(new ServiceId("lobby-1"), settings.service());
@@ -39,7 +42,7 @@ class CloudClientSettingsTest {
     @Test
     void hostAndPortDefaultToTheLocalCloud() {
         CloudClientSettings settings = CloudClientSettings.from(of(Map.of(
-                "VECTOLYN_SERVICE_ID", "lobby-1", "VECTOLYN_SERVICE_TOKEN", TOKEN)), NONE);
+                "VECTOLYN_SERVICE_ID", "lobby-1", "VECTOLYN_SERVICE_TOKEN", TOKEN)), CloudClientSettingsTest::none);
         assertEquals("127.0.0.1", settings.host());
         assertEquals(7010, settings.port());
     }
@@ -64,27 +67,27 @@ class CloudClientSettingsTest {
     @Test
     void missingOrInvalidValuesNameTheVariable() {
         IllegalStateException noId = assertThrows(IllegalStateException.class,
-                () -> CloudClientSettings.from(of(Map.of("VECTOLYN_SERVICE_TOKEN", TOKEN)), NONE));
+                () -> CloudClientSettings.from(of(Map.of("VECTOLYN_SERVICE_TOKEN", TOKEN)), CloudClientSettingsTest::none));
         assertTrue(noId.getMessage().contains("VECTOLYN_SERVICE_ID"));
 
         IllegalStateException noToken = assertThrows(IllegalStateException.class,
-                () -> CloudClientSettings.from(of(Map.of("VECTOLYN_SERVICE_ID", "lobby-1")), NONE));
+                () -> CloudClientSettings.from(of(Map.of("VECTOLYN_SERVICE_ID", "lobby-1")), CloudClientSettingsTest::none));
         assertTrue(noToken.getMessage().contains("VECTOLYN_SERVICE_TOKEN"));
 
         IllegalStateException badPort = assertThrows(IllegalStateException.class, () -> CloudClientSettings.from(
                 of(Map.of("VECTOLYN_SERVICE_ID", "lobby-1", "VECTOLYN_SERVICE_TOKEN", TOKEN, "VECTOLYN_CLOUD_PORT", "70000")),
-                NONE));
+                CloudClientSettingsTest::none));
         assertTrue(badPort.getMessage().contains("port"));
 
         assertThrows(IllegalStateException.class, () -> CloudClientSettings.from(
-                of(Map.of("VECTOLYN_SERVICE_ID", "Lobby 1", "VECTOLYN_SERVICE_TOKEN", TOKEN)), NONE));
+                of(Map.of("VECTOLYN_SERVICE_ID", "Lobby 1", "VECTOLYN_SERVICE_TOKEN", TOKEN)), CloudClientSettingsTest::none));
     }
 
     @Test
     void anInvalidTokenIsNeverEchoed() {
         String shortSecret = "short-secret";
         IllegalStateException error = assertThrows(IllegalStateException.class, () -> CloudClientSettings.from(
-                of(Map.of("VECTOLYN_SERVICE_ID", "lobby-1", "VECTOLYN_SERVICE_TOKEN", shortSecret)), NONE));
+                of(Map.of("VECTOLYN_SERVICE_ID", "lobby-1", "VECTOLYN_SERVICE_TOKEN", shortSecret)), CloudClientSettingsTest::none));
         assertTrue(error.getMessage().contains("VECTOLYN_SERVICE_TOKEN"));
         assertFalse(error.getMessage().contains(shortSecret));
     }

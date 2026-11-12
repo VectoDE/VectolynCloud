@@ -39,14 +39,15 @@ final class PrivacyCommand implements SimpleCommand {
     }
 
     @Override
+    @SuppressWarnings("FutureReturnValueIgnored")
     public void execute(Invocation invocation) {
         CommandSource source = invocation.source();
         if (!(source instanceof Player player)) {
             source.sendMessage(Component.text("/privacy is for players."));
             return;
         }
-        boolean german = player.getEffectiveLocale() != null
-                && player.getEffectiveLocale().getLanguage().equals(Locale.GERMAN.getLanguage());
+        Locale locale = player.getEffectiveLocale();
+        boolean german = locale != null && locale.getLanguage().equals(Locale.GERMAN.getLanguage());
         String[] args = invocation.arguments();
         String first = args.length == 0 ? "" : args[0].toLowerCase(Locale.ROOT);
         boolean confirm = args.length == 2 && args[1].equalsIgnoreCase("confirm");

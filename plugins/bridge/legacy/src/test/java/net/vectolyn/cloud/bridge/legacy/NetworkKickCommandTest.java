@@ -45,6 +45,8 @@ class NetworkKickCommandTest {
             (issuer, label, args) -> selectorLines.add(label + " " + String.join(" ", args)));
 
     /** A sender of the given type; its permission check answers {@code permitted}, messages are kept. */
+    // Identity is the contract of Object.equals for the proxy; calling proxy.equals here would recurse.
+    @SuppressWarnings("ReferenceEquality")
     private <T extends CommandSender> T sender(Class<T> type, boolean permitted) {
         Object fake = Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[] {type}, (proxy, method, args) ->
                 switch (method.getName()) {
@@ -62,6 +64,8 @@ class NetworkKickCommandTest {
         return type.cast(fake);
     }
 
+    // Identity is the contract of Object.equals for the proxy; calling proxy.equals here would recurse.
+    @SuppressWarnings("ReferenceEquality")
     private static Player player(String name, boolean permitted) {
         UUID id = UUID.nameUUIDFromBytes(name.getBytes(java.nio.charset.StandardCharsets.UTF_8));
         Object fake = Proxy.newProxyInstance(Player.class.getClassLoader(), new Class<?>[] {Player.class},
@@ -79,6 +83,8 @@ class NetworkKickCommandTest {
     }
 
     /** {@code /execute} on 1.8.8 runs the command with a proxied sender whose caller started it. */
+    // Identity is the contract of Object.equals for the proxy; calling proxy.equals here would recurse.
+    @SuppressWarnings("ReferenceEquality")
     private ProxiedCommandSender proxied(CommandSender caller) {
         Object fake = Proxy.newProxyInstance(ProxiedCommandSender.class.getClassLoader(),
                 new Class<?>[] {ProxiedCommandSender.class}, (proxy, method, args) -> switch (method.getName()) {
@@ -190,7 +196,7 @@ class NetworkKickCommandTest {
 
         ConsoleCommandSender console = sender(ConsoleCommandSender.class, true);
         for (String line : List.of("kick Bob Spam", "minecraft:kick Bob", "vectolyncloud:kick Bob", "KICK Bob")) {
-            String[] parts = line.split(" ");
+            String[] parts = line.split(" ", -1);
             Command target = known.get(parts[0].toLowerCase(java.util.Locale.ROOT));
             assertTrue(target.execute(console, parts[0], java.util.Arrays.copyOfRange(parts, 1, parts.length)));
         }

@@ -233,11 +233,12 @@ public final class JreInstaller {
         if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) {
             return 0;
         }
-        lock.lock();
         int removed = 0;
-        try (DirectoryStream<Path> entries = Files.newDirectoryStream(directory)) {
+        lock.lock();
+        try (DirectoryStream<Path> entries
+ = Files.newDirectoryStream(directory)) {
             for (Path entry : entries) {
-                String fileName = entry.getFileName().toString();
+                String fileName = Objects.requireNonNull(entry.getFileName(), "file name").toString();
                 if ((fileName.startsWith(STAGING_PREFIX) || fileName.startsWith(OLD_PREFIX)) && deleteTree(entry)) {
                     removed++;
                 }

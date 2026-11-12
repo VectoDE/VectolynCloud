@@ -8,6 +8,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import org.jspecify.annotations.Nullable;
 
 /**
  * What a proxy can ask the cloud on behalf of a player who typed {@code /privacy}. The request is
@@ -57,48 +58,44 @@ public final class PrivacyRequests {
      * @param mode    the game mode the player is on, or null
      * @return the answer, UTF-8
      */
-    public byte[] handle(byte[] request, UUID player, String name, String mode) {
+    public byte[] handle(byte[] request, UUID player, String name, @Nullable String mode) {
         return answer(request, player, name, mode).getBytes(StandardCharsets.UTF_8);
     }
 
-    private String answer(byte[] request, UUID player, String name, String mode) {
+    private String answer(byte[] request, UUID player, String name, @Nullable String mode) {
         if (!config.enabled()) {
             return "error disabled";
         }
         if (request.length == 0 || request.length > MAX_REQUEST) {
             return "error bad-request";
         }
-        String[] words = new String(request, StandardCharsets.UTF_8).strip().toLowerCase(Locale.ROOT).split(" ");
+        String[] words = new String(request, StandardCharsets.UTF_8).strip().toLowerCase(Locale.ROOT).split(" ", -1);
         try {
-            switch (words[0]) {
+            return switch (words[0]) {
                 case "notice" -> {
                     boolean german = words.length == 2 && words[1].equals("de");
                     if (words.length != 2 || !(german || words[1].equals("en"))) {
-                        return "error bad-request";
+                        yield "error bad-request";
                     }
-                    return "ok\n" + TrackingNotice.text(german, config.controller(), config.retentionDays());
+                    yield "ok\n" + TrackingNotice.text(german, config.controller(), config.retentionDays());
                 }
-                case "status" -> {
-                    return "ok\n" + (store.consented(player) ? "consented" : "not-consented");
-                }
+                case "status" -> "ok\n" + (store.consented(player) ? "consented" : "not-consented");
                 case "grant" -> {
                     store.grant(player, name, mode);
-                    return "ok";
+                    yield "ok";
                 }
                 case "revoke" -> {
                     store.revoke(player);
-                    return "ok";
+                    yield "ok";
                 }
                 case "data" -> {
                     Optional<TrackedPlayer> record = store.find(player);
-                    return record.isPresent()
+                    yield record.isPresent()
                             ? "ok\n" + new String(TrackingStore.encodeOne(record.get()), StandardCharsets.UTF_8)
                             : "ok\nnot-consented";
                 }
-                default -> {
-                    return "error bad-request";
-                }
-            }
+                default -> "error bad-request";
+            };
         } catch (IOException | TrackingStore.FullException e) {
             return "error unavailable";
         } catch (IllegalArgumentException e) {

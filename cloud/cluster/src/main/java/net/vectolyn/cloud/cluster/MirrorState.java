@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.TreeMap;
 import java.util.regex.Matcher;
@@ -46,6 +47,7 @@ final class MirrorState {
      * @param revision the revision
      * @param digest   32 bytes
      */
+    @SuppressWarnings("ArrayRecordComponent") // raw bytes of the wire format; a List<Byte> would only cost memory
     record Revision(long revision, byte[] digest) {
 
         Revision {
@@ -88,7 +90,7 @@ final class MirrorState {
         if (text.isEmpty()) {
             return templates;
         }
-        for (String line : text.get().split("\n")) {
+        for (String line : text.get().split("\n", -1)) {
             if (line.isEmpty()) {
                 continue;
             }
@@ -120,7 +122,7 @@ final class MirrorState {
     }
 
     private static void write(Path file, String text) throws IOException {
-        RegularPaths.requireDirectoryOrMissing(file.getParent());
+        RegularPaths.requireDirectoryOrMissing(Objects.requireNonNull(file.getParent(), "file has a parent folder"));
         RegularPaths.requireFileOrMissing(file);
         new AtomicFileWriter().write(file, text.getBytes(StandardCharsets.US_ASCII));
     }

@@ -18,4 +18,14 @@ public final class ArtifactNotAvailableException extends DownloadException {
     public ArtifactNotAvailableException(String message) {
         super(message);
     }
+
+    /**
+     * Creates the exception with the failure behind it.
+     *
+     * @param message what could not be found
+     * @param cause   the failure behind it
+     */
+    public ArtifactNotAvailableException(String message, Throwable cause) {
+        super(message, cause);
+    }
 }

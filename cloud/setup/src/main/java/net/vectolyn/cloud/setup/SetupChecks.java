@@ -16,6 +16,7 @@ import net.vectolyn.cloud.config.model.MemorySize;
 import net.vectolyn.cloud.config.validation.ConfigNames;
 import net.vectolyn.cloud.config.validation.ConfigValidator;
 import net.vectolyn.cloud.console.Text;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The checks every set of answers goes through, from the console and from a setup file alike. The
@@ -31,38 +32,38 @@ public final class SetupChecks {
     }
 
     /** A network name for {@code cloud.yml}, or a problem. */
-    public static Text networkName(String value) {
+    public static @Nullable Text networkName(@Nullable String value) {
         return value != null && value.matches(ConfigNames.NETWORK_NAME) ? null : SetupMessages.CHECK_NETWORK_NAME;
     }
 
     /** A Minecraft version the bridges support ({@link MinecraftVersions#supported}), or a problem. */
-    public static Text minecraftVersion(String value) {
+    public static @Nullable Text minecraftVersion(String value) {
         return MinecraftVersions.supported(value) ? null
                 : SetupMessages.fill(SetupMessages.CHECK_MINECRAFT_VERSION, MinecraftVersions.OLDEST, NetworkServer.MINECRAFT_VERSION);
     }
 
     /** A name for the first administrator ({@code [a-z0-9][a-z0-9_-]{0,31}}, like a token name), or a problem. */
-    public static Text adminName(String value) {
+    public static @Nullable Text adminName(@Nullable String value) {
         return value != null && ConfigNames.isValidName(value) ? null : SetupMessages.CHECK_ADMIN_NAME;
     }
 
     /** A bind address or host name, or a problem. */
-    public static Text host(String value) {
+    public static @Nullable Text host(@Nullable String value) {
         return value != null && value.matches(ConfigNames.HOST) ? null : SetupMessages.CHECK_HOST;
     }
 
     /** A database or user name, or a problem. */
-    public static Text identifier(String value) {
+    public static @Nullable Text identifier(@Nullable String value) {
         return value != null && value.matches(ConfigNames.DATABASE_IDENTIFIER) ? null : SetupMessages.CHECK_IDENTIFIER;
     }
 
     /** A port, or a problem. */
-    public static Text port(int value) {
+    public static @Nullable Text port(int value) {
         return value >= ConfigValidator.MIN_PORT && value <= ConfigValidator.MAX_PORT ? null : SetupMessages.CHECK_PORT;
     }
 
     /** A heap size for one service, or a problem. */
-    public static Text heap(MemorySize value) {
+    public static @Nullable Text heap(@Nullable MemorySize value) {
         return value != null && value.megabytes() >= SetupPlan.MIN_HEAP.megabytes() ? null : SetupMessages.CHECK_HEAP;
     }
 
@@ -140,7 +141,7 @@ public final class SetupChecks {
         return List.copyOf(problems);
     }
 
-    private static void add(List<Text> problems, Text problem) {
+    private static void add(List<Text> problems, @Nullable Text problem) {
         if (problem != null && !problems.contains(problem)) {
             problems.add(problem);
         }

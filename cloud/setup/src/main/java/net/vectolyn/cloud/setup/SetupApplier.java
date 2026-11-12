@@ -20,6 +20,7 @@ import net.vectolyn.cloud.config.secret.Secret;
 import net.vectolyn.cloud.config.secret.SecretGenerator;
 import net.vectolyn.cloud.config.secret.SecretStore;
 import net.vectolyn.cloud.console.Text;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Writes a set of answers, the same way for the console and for a setup file.
@@ -66,7 +67,7 @@ final class SetupApplier {
      * @throws SetupException if a check fails; nothing was written
      * @throws IOException    if a file cannot be written
      */
-    static SetupResult apply(ConfigService config, SecretStore secrets, SetupAnswers answered, SetupAnswers shown,
+    static SetupResult apply(ConfigService config, SecretStore secrets, SetupAnswers answered, @Nullable SetupAnswers shown,
                              SetupEnvironment env) throws SetupException, IOException {
         ConfigSnapshot current = config.snapshot();
         SetupAnswers answers = shown == null ? answered : SetupPlan.rebase(answered, shown, SetupPlan.defaults(current, env));
@@ -75,7 +76,7 @@ final class SetupApplier {
         try {
             stored = secrets.load().hasValue(GeneratedSecret.DB_PASSWORD.key());
         } catch (EnvFormatException e) {
-            throw new SetupException(List.of(SetupMessages.fill(SetupMessages.SECRETS_UNREADABLE, e.line())));
+            throw new SetupException(List.of(SetupMessages.fill(SetupMessages.SECRETS_UNREADABLE, e.line())), e);
         }
         List<Text> problems = new ArrayList<>();
         if (!answers.eulaAccepted()) {
@@ -91,7 +92,7 @@ final class SetupApplier {
         try {
             previousPassword = secrets.load().get(GeneratedSecret.DB_PASSWORD.key());
         } catch (EnvFormatException e) {
-            throw new SetupException(List.of(SetupMessages.fill(SetupMessages.SECRETS_UNREADABLE, e.line())));
+            throw new SetupException(List.of(SetupMessages.fill(SetupMessages.SECRETS_UNREADABLE, e.line())), e);
         }
         // 1. The configuration. If it fails, nothing at all has been written yet.
         boolean configWritten = false;
@@ -125,18 +126,15 @@ final class SetupApplier {
             if (!finish.isEmpty()) {
                 files.addAll(config.apply(finish).files());
             }
-        } catch (IOException | EnvFormatException | ConfigException | RuntimeException e) {
-            rollBack(config, configWritten ? current : null, secrets, passwordWritten ? previousPassword : null, e);
-            if (e instanceof EnvFormatException format) {
-                throw new SetupException(List.of(SetupMessages.fill(SetupMessages.SECRETS_UNREADABLE, format.line())));
-            }
-            if (e instanceof ConfigException configProblem) {
-                throw SetupException.of(configProblem);
-            }
-            if (e instanceof IOException io) {
-                throw io;
-            }
-            throw (RuntimeException) e;
+        } catch (EnvFormatException e) {
+            rollBack(config, configWritten ? current : null, secrets, passwordWritten ? previousPassword : Optional.empty(), e);
+            throw new SetupException(List.of(SetupMessages.fill(SetupMessages.SECRETS_UNREADABLE, e.line())), e);
+        } catch (ConfigException e) {
+            rollBack(config, configWritten ? current : null, secrets, passwordWritten ? previousPassword : Optional.empty(), e);
+            throw SetupException.of(e);
+        } catch (IOException | RuntimeException e) {
+            rollBack(config, configWritten ? current : null, secrets, passwordWritten ? previousPassword : Optional.empty(), e);
+            throw e;
         }
         if (first) {
             return new SetupResult(SetupResult.Status.COMPLETED, files, answers.adminName());
@@ -154,7 +152,7 @@ final class SetupApplier {
      * @param previousPassword the password before, or null if the setup did not write one; empty if
      *                         there was none (it cannot be removed, but the setup stays open then)
      */
-    private static void rollBack(ConfigService config, ConfigSnapshot before, SecretStore secrets,
+    private static void rollBack(ConfigService config, @Nullable ConfigSnapshot before, SecretStore secrets,
                                  Optional<Secret> previousPassword, Exception cause) {
         if (before != null) {
             try {
@@ -163,7 +161,7 @@ final class SetupApplier {
                 cause.addSuppressed(e);
             }
         }
-        if (previousPassword != null && previousPassword.isPresent()) {
+        if (previousPassword.isPresent()) {
             try {
                 secrets.put(GeneratedSecret.DB_PASSWORD.key(), previousPassword.get(), PASSWORD_COMMENT);
             } catch (IOException | EnvFormatException | RuntimeException e) {

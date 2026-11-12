@@ -130,7 +130,7 @@ class EventStreamLoadTest {
 
             // 3. Everything closes cleanly.
             for (WebSocket socket : open) {
-                socket.sendClose(WebSocket.NORMAL_CLOSURE, "done");
+                socket.sendClose(WebSocket.NORMAL_CLOSURE, "done").orTimeout(10, TimeUnit.SECONDS).join();
             }
             EventStreamTest.waitForStreams(api, 0);
             assertEquals(200, api.get("/api/v1/node", api.admin).statusCode());

@@ -17,6 +17,9 @@ plugins {
 vectolyn {
     // Jar and manifest name from before the repository layout change.
     artifactName = "Vectolyn-PortalBridge"
+    // Line coverage of the unit tests: 0.261 measured (issue #223). Lower than the default of
+    // 0.70 because Bukkit event handlers; there is no server in the unit tests yet.
+    minimumLineCoverage = 0.25
 }
 
 base {

@@ -136,7 +136,7 @@ class PanelApiTest {
             int q = path.indexOf('?');
             Map<String, String> query = new LinkedHashMap<>();
             if (q >= 0) {
-                for (String pair : path.substring(q + 1).split("&")) {
+                for (String pair : path.substring(q + 1).split("&", -1)) {
                     int eq = pair.indexOf('=');
                     query.put(pair.substring(0, eq), pair.substring(eq + 1));
                 }
@@ -516,7 +516,7 @@ class PanelApiTest {
         }
         Map<String, String> query = new LinkedHashMap<>();
         if (!rawQuery.isEmpty()) {
-            for (String pair : rawQuery.split("&")) {
+            for (String pair : rawQuery.split("&", -1)) {
                 query.put(pair.substring(0, pair.indexOf('=')), pair.substring(pair.indexOf('=') + 1));
             }
         }
@@ -540,7 +540,7 @@ class PanelApiTest {
     }
 
     private static String query(String url, String key) {
-        for (String pair : url.substring(url.indexOf('?') + 1).split("&")) {
+        for (String pair : url.substring(url.indexOf('?') + 1).split("&", -1)) {
             if (pair.startsWith(key + "=")) {
                 return pair.substring(key.length() + 1);
             }

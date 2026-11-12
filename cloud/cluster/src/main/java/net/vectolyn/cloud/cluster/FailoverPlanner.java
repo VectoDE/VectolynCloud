@@ -111,7 +111,7 @@ public final class FailoverPlanner {
             for (int i = 0; i < moved.size(); i++) {
                 if (moved.get(i) instanceof PlacementPlanner.Placed placed) {
                     ServiceRequest request = dynamic.get(i);
-                    planned.put(placed.node(), planned.get(placed.node()).with(new RunningService(request.id(),
+                    planned.put(placed.node(), PlacementPlanner.status(planned, placed.node()).with(new RunningService(request.id(),
                             request.task(), true, PlacementPlanner.heapBytes(snapshot, request.task()))));
                 }
             }

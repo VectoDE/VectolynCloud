@@ -3,6 +3,7 @@
 package net.vectolyn.cloud.api.http;
 
 import java.util.Map;
+import org.jspecify.annotations.Nullable;
 
 /**
  * A successful answer.
@@ -11,11 +12,26 @@ import java.util.Map;
  * @param body    JSON body, or null for none (204)
  * @param headers extra headers, for example {@code ETag}
  */
-public record ApiResponse(int status, byte[] body, Map<String, String> headers) {
+// The body is the encoded JSON; copying it into a List would cost every response, so the array stays.
+@SuppressWarnings("ArrayRecordComponent")
+public record ApiResponse(int status, byte @Nullable [] body, Map<String, String> headers) {
 
-    /** Copies the headers. */
-    public ApiResponse {
-        headers = headers == null ? Map.of() : Map.copyOf(headers);
+    /**
+     * Copies the headers.
+     *
+     * <p>Written out instead of a compact constructor: for a compact one javac copies the
+     * {@code @Nullable} of the component onto the constructor with target type FIELD, which PMD
+     * cannot read ("Invalid target type of type annotation"), so PMD lost the types of every
+     * {@code new ApiResponse(...)}.
+     *
+     * @param status  HTTP status
+     * @param body    JSON body, or null for none (204)
+     * @param headers extra headers, for example {@code ETag}
+     */
+    public ApiResponse(int status, byte @Nullable [] body, Map<String, String> headers) {
+        this.status = status;
+        this.body = body;
+        this.headers = headers == null ? Map.of() : Map.copyOf(headers);
     }
 
     /**

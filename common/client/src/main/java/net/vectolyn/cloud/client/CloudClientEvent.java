@@ -5,6 +5,7 @@ package net.vectolyn.cloud.client;
 import net.vectolyn.protocol.message.AuthResult;
 import net.vectolyn.protocol.message.Disconnect;
 import net.vectolyn.protocol.message.Message;
+import org.jspecify.annotations.Nullable;
 
 /**
  * A connection event or a message from the cloud, as passed to
@@ -29,7 +30,7 @@ public sealed interface CloudClientEvent {
      *
      * @param reason the reason the cloud gave, or {@code null} if the connection broke without one
      */
-    record Disconnected(Disconnect.Reason reason) implements CloudClientEvent {
+    record Disconnected(Disconnect.@Nullable Reason reason) implements CloudClientEvent {
     }
 
     /**

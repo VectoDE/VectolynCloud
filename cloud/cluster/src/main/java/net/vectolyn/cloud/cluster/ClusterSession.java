@@ -117,6 +117,7 @@ public final class ClusterSession {
      * @param timeout how long to wait for the answer
      * @return the answer's payload, or a failure with a {@link ClusterRpcException}
      */
+    @SuppressWarnings("FutureReturnValueIgnored") // the callback cleans up; the future it hangs on is the one returned
     public CompletableFuture<byte[]> request(ChannelName channel, byte[] payload, Duration timeout) {
         Request request = new Request(channel, payload);
         CompletableFuture<byte[]> future = new CompletableFuture<>();
@@ -159,13 +160,14 @@ public final class ClusterSession {
             return request(channel, payload, timeout).get();
         } catch (ExecutionException e) {
             if (e.getCause() instanceof ClusterRpcException rpc) {
+                rpc.addSuppressed(e);
                 throw rpc;
             }
             throw new ClusterRpcException(e.getCause() instanceof TimeoutException ? ClusterRpcException.TIMEOUT
-                    : ClusterRpcException.FAILED);
+                    : ClusterRpcException.FAILED, e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new ClusterRpcException(ClusterRpcException.CLOSED);
+            throw new ClusterRpcException(ClusterRpcException.CLOSED, e);
         }
     }
 

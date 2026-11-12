@@ -32,6 +32,7 @@ import net.vectolyn.protocol.message.Ping;
 import net.vectolyn.protocol.message.Pong;
 import net.vectolyn.protocol.message.Request;
 import net.vectolyn.protocol.message.Response;
+import org.jspecify.annotations.Nullable;
 
 /**
  * A member's connection to the head: mutual TLS 1.3 with its node certificate, a hello with its
@@ -119,15 +120,15 @@ public final class ClusterLink implements AutoCloseable {
     private final Listener listener;
     private final ClusterHandlers handlers;
     private final AtomicBoolean closed = new AtomicBoolean();
-    private volatile ClusterSession rpc;
+    private volatile @Nullable ClusterSession rpc;
     private final ScheduledExecutorService timer;
     private final Object wait = new Object();
     private volatile State state = State.CONNECTING;
-    private volatile HelloOutcome lastRefusal;
-    private volatile String lastHeadVersion;
-    private volatile SSLSocket current;
-    private volatile FrameStream currentStream;
-    private Thread thread;
+    private volatile @Nullable HelloOutcome lastRefusal;
+    private volatile @Nullable String lastHeadVersion;
+    private volatile @Nullable SSLSocket current;
+    private volatile @Nullable FrameStream currentStream;
+    private @Nullable Thread thread;
 
     /**
      * Creates the link; it connects after {@link #start()}.
@@ -172,12 +173,12 @@ public final class ClusterLink implements AutoCloseable {
     }
 
     /** Why the head refused this node last, if it did. */
-    public HelloOutcome lastRefusal() {
+    public @Nullable HelloOutcome lastRefusal() {
         return lastRefusal;
     }
 
     /** The head's version from its last answer, if any. */
-    public String lastHeadVersion() {
+    public @Nullable String lastHeadVersion() {
         return lastHeadVersion;
     }
 
@@ -326,15 +327,20 @@ public final class ClusterLink implements AutoCloseable {
     }
 
     private void sleep(Duration duration) {
+        long end = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(Math.max(1, duration.toMillis()));
         synchronized (wait) {
-            if (closed.get()) {
-                return;
-            }
-            try {
-                wait.wait(Math.max(1, duration.toMillis()));
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                closed.set(true);
+            // close() notifies; a spurious wake-up goes back to waiting for the rest of the time.
+            while (!closed.get()) {
+                long left = TimeUnit.NANOSECONDS.toMillis(end - System.nanoTime());
+                if (left <= 0) {
+                    return;
+                }
+                try {
+                    wait.wait(left);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    closed.set(true);
+                }
             }
         }
     }

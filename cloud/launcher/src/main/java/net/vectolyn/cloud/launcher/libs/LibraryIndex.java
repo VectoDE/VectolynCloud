@@ -53,7 +53,7 @@ public final class LibraryIndex {
     public static LibraryIndex parse(String text) throws LibraryException {
         List<LibraryEntry> entries = new ArrayList<>();
         Set<String> names = new HashSet<>();
-        for (String rawLine : text.split("\\R")) {
+        for (String rawLine : text.split("\\R", -1)) {
             String line = rawLine.strip();
             if (line.isEmpty() || line.startsWith("#")) {
                 continue;

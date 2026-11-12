@@ -59,6 +59,7 @@ import net.vectolyn.cloud.config.operation.SetServerWanted;
 import net.vectolyn.cloud.config.template.TemplateFiles;
 import net.vectolyn.cloud.config.validation.ConfigNames;
 import net.vectolyn.cloud.config.validation.JvmFlagPolicy;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The REST endpoints under {@value #PREFIX}. Every write is a {@link ConfigOperation} for
@@ -99,9 +100,9 @@ public final class ApiRoutes {
     private final ConfigService config;
     private final ApiBackend backend;
     private final BooleanSupplier shuttingDown;
-    private final ApiTokens tokens;
+    private final @Nullable ApiTokens tokens;
     private final TemplateFiles templateFiles;
-    private Handler graphql;
+    private @Nullable Handler graphql;
 
     /**
      * Creates the endpoints.
@@ -122,7 +123,8 @@ public final class ApiRoutes {
      * @param shuttingDown whether start and reload must be refused
      * @param tokens       the token store, or null if the admin endpoints answer 501
      */
-    public ApiRoutes(ConfigService config, ApiBackend backend, BooleanSupplier shuttingDown, ApiTokens tokens) {
+    public ApiRoutes(ConfigService config, ApiBackend backend, BooleanSupplier shuttingDown,
+            @Nullable ApiTokens tokens) {
         this.config = config;
         this.backend = backend;
         this.shuttingDown = shuttingDown;
@@ -217,7 +219,7 @@ public final class ApiRoutes {
             try {
                 change = config.reload();
             } catch (ConfigException e) {
-                throw ApiException.invalidConfig(e.errors());
+                throw ApiException.invalidConfig(e.errors(), e);
             }
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("changed", change.isPresent());
@@ -280,7 +282,7 @@ public final class ApiRoutes {
         r.add("GET", PREFIX + "/admin/tokens", Scope.ADMIN, q -> {
             Instant now = tokens().clock().instant();
             return Page.list(q, PREFIX + "/admin/tokens",
-                    tokens().list().stream().map(t -> describe(t, now)).toList(), t -> (String) t.get("id"));
+                    tokens().list().stream().map(t -> describe(t, now)).toList(), t -> String.valueOf(t.get("id")));
         });
         r.add("POST", PREFIX + "/admin/tokens", Scope.ADMIN, this::createToken);
         r.add("DELETE", PREFIX + "/admin/tokens/{id}", Scope.ADMIN, q -> {
@@ -292,10 +294,11 @@ public final class ApiRoutes {
         // GraphQL runs the routes above with the caller's token, so every field checks its own
         // scope; the endpoint itself needs none.
         r.add("POST", GRAPHQL, null, q -> {
-            if (graphql == null) {
+            Handler handler = graphql;
+            if (handler == null) {
                 throw new ApiException(501, "not-available", "GraphQL is not available on this server.");
             }
-            return graphql.handle(q);
+            return handler.handle(q);
         });
         r.add("GET", GRAPHQL, null, q -> {
             throw new ApiException(426, "upgrade-required",
@@ -338,7 +341,7 @@ public final class ApiRoutes {
                 lifetime = ApiTokens.parseLifetime(body.expiresIn());
             } catch (IllegalArgumentException e) {
                 throw ApiException.badRequest("invalid-value",
-                        "\"expires-in\" must be 1h to 3650d, written " + ApiTokens.LIFETIME_FORMAT + ".");
+                        "\"expires-in\" must be 1h to 3650d, written " + ApiTokens.LIFETIME_FORMAT + ".", e);
             }
         }
         ApiTokens store = tokens();
@@ -352,7 +355,7 @@ public final class ApiRoutes {
         try {
             created = store.create(body.name(), scopes, lifetime);
         } catch (IllegalArgumentException e) {
-            throw new ApiException(409, "conflict", "The token could not be created (name taken or limit reached).");
+            throw new ApiException(409, "conflict", "The token could not be created (name taken or limit reached).", e);
         }
         Map<String, Object> answer = describe(created.info(), store.clock().instant());
         answer.put("token", created.token().reveal());
@@ -373,7 +376,7 @@ public final class ApiRoutes {
     /** {@code GET /templates/{template}/files}: every file the API hands out, by path. */
     private ApiResponse templateFiles(ApiRequest q) throws ApiException, IOException {
         String template = q.param("template");
-        TemplateFiles.Listing listing = templateCall(template, null, () -> templates().files(template));
+        TemplateFiles.Listing listing = templateCall(null, () -> templates().files(template));
         List<Map<String, Object>> files = new ArrayList<>();
         for (TemplateFiles.FileInfo file : listing.files()) {
             Map<String, Object> item = new LinkedHashMap<>();
@@ -396,7 +399,7 @@ public final class ApiRoutes {
     private ApiResponse templateFile(ApiRequest q) throws ApiException, IOException {
         String template = q.param("template");
         String path = q.param("path");
-        byte[] content = templateCall(template, path, () -> templates().file(template, path));
+        byte[] content = templateCall(path, () -> templates().file(template, path));
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("template", template);
         body.put("path", path);
@@ -433,7 +436,7 @@ public final class ApiRoutes {
             throw ApiException.badRequest("invalid-value", "\"encoding\" must be utf-8.");
         }
         byte[] content = body.content().getBytes(StandardCharsets.UTF_8);
-        TemplateFiles.Outcome outcome = templateCall(template, path,
+        TemplateFiles.Outcome outcome = templateCall(path,
                 () -> templates().write(template, path, content, q.ifMatch()));
         String etag = TemplateFiles.etag(content);
         Map<String, Object> answer = new LinkedHashMap<>();
@@ -446,33 +449,38 @@ public final class ApiRoutes {
     }
 
     /** One call of {@link TemplateFiles}; maps its failures to answers. */
-    private static <T> T templateCall(String template, String path, TemplateCall<T> call)
+    private static <T> T templateCall(@Nullable String path, TemplateCall<T> call)
             throws ApiException, IOException {
         try {
             return call.run();
         } catch (TemplateFiles.RefusedException e) {
-            throw switch (e.reason()) {
-                case NOT_EDITABLE -> new ApiException(422, "file-not-editable", "Only text configuration (.yml, .yaml,"
-                        + " .toml, .json, .properties, .txt, .conf) outside plugins/, mods/, libraries/, versions/,"
-                        + " bundler/ and cache/ can be written.");
-                case NOT_TEXT -> new ApiException(422, "binary-content", "Only UTF-8 text without NUL can be written.");
-                case SECRET_PLACEHOLDER -> new ApiException(422, "secret-placeholder",
-                        "The content adds a secret placeholder the file did not have.");
+            String code = switch (e.reason()) {
+                case NOT_EDITABLE -> "file-not-editable";
+                case NOT_TEXT -> "binary-content";
+                case SECRET_PLACEHOLDER -> "secret-placeholder";
             };
+            String message = switch (e.reason()) {
+                case NOT_EDITABLE -> "Only text configuration (.yml, .yaml, .toml, .json, .properties, .txt, .conf)"
+                        + " outside plugins/, mods/, libraries/, versions/, bundler/ and cache/ can be written.";
+                case NOT_TEXT -> "Only UTF-8 text without NUL can be written.";
+                case SECRET_PLACEHOLDER -> "The content adds a secret placeholder the file did not have.";
+            };
+            throw new ApiException(422, code, message, e);
         } catch (IllegalArgumentException e) {
             throw ApiException.badRequest("invalid-path", path == null
                     ? "This is no template name."
-                    : "This path is not handed out: it breaks the path rules or looks like a secret.");
+                    : "This path is not handed out: it breaks the path rules or looks like a secret.", e);
         } catch (NoSuchFileException e) {
-            throw ApiException.notFound(path == null ? "Template" : "File");
+            throw ApiException.notFound(path == null ? "Template" : "File", e);
         } catch (TemplateFiles.TooLargeException e) {
-            throw new ApiException(413, "file-too-large", "The file is larger than " + e.limit() + " bytes.");
+            throw new ApiException(413, "file-too-large", "The file is larger than " + e.limit() + " bytes.", e);
         } catch (TemplateFiles.PreconditionException e) {
-            throw e.required() ? new ApiException(428, "precondition-required", e.getMessage())
-                    : new ApiException(412, "precondition-failed", e.getMessage());
+            String message = Objects.requireNonNullElse(e.getMessage(), "The If-Match condition does not fit.");
+            throw e.required() ? new ApiException(428, "precondition-required", message, e)
+                    : new ApiException(412, "precondition-failed", message, e);
         } catch (FileSystemException e) {
             throw new ApiException(409, "not-a-regular-file",
-                    "A link, junction, special file or file is in the way of this path.");
+                    "A link, junction, special file or file is in the way of this path.", e);
         }
     }
 
@@ -483,7 +491,7 @@ public final class ApiRoutes {
     }
 
     /** The text of a file if it is valid UTF-8 without NUL, else null. */
-    private static String utf8(byte[] content) {
+    private static @Nullable String utf8(byte[] content) {
         for (byte b : content) {
             if (b == 0) {
                 return null;
@@ -535,7 +543,8 @@ public final class ApiRoutes {
             existed.set(current.isPresent());
             return current;
         }, new PutGroup(name, next));
-        return ApiResponse.document(existed.get() ? 200 : 201, after.groups().get(name));
+        return ApiResponse.document(existed.get() ? 200 : 201,
+                Objects.requireNonNull(after.groups().get(name), name));
     }
 
     private ApiResponse putTask(ApiRequest q) throws Exception {
@@ -549,7 +558,8 @@ public final class ApiRoutes {
             existed.set(current.isPresent());
             return current;
         }, new PutTask(name, next));
-        return ApiResponse.document(existed.get() ? 200 : 201, after.tasks().get(name));
+        return ApiResponse.document(existed.get() ? 200 : 201,
+                Objects.requireNonNull(after.tasks().get(name), name));
     }
 
     /**
@@ -590,7 +600,7 @@ public final class ApiRoutes {
             return after;
         });
         ConfigSnapshot snapshot = result.get();
-        GroupConfig group = snapshot.groups().get(name);
+        GroupConfig group = Objects.requireNonNull(snapshot.groups().get(name), name);
         Optional<ServerKind> kind = switchOf(group);
         boolean kindWanted = kind.map(k -> k != ServerKind.DATABASE && kindSwitch(snapshot.cloud(), k)).orElse(true);
         Map<String, Object> body = new LinkedHashMap<>();
@@ -646,7 +656,7 @@ public final class ApiRoutes {
                 return after;
             });
         } catch (ConfigException e) {
-            throw ApiException.invalidConfig(e.errors());
+            throw ApiException.invalidConfig(e.errors(), e);
         }
     }
 
@@ -692,7 +702,7 @@ public final class ApiRoutes {
         try {
             return UUID.fromString(text);
         } catch (IllegalArgumentException e) {
-            throw ApiException.badRequest("invalid-value", "The player must be given as a UUID.");
+            throw ApiException.badRequest("invalid-value", "The player must be given as a UUID.", e);
         }
     }
 
@@ -737,7 +747,7 @@ public final class ApiRoutes {
                 return after;
             });
         } catch (Refused refused) {
-            throw refused.error;
+            throw refused.error; // NOPMD - Refused only carries the stackless ApiException out of the lambda
         }
         return result.get();
     }
@@ -815,7 +825,7 @@ public final class ApiRoutes {
      * @param now     the time its expiry is judged against
      * @return 201 with id, name, scopes, created-at and token
      */
-    public static ApiResponse claimed(net.vectolyn.cloud.api.auth.ApiTokens.Created created, Instant now) {
+    public static ApiResponse claimed(ApiTokens.Created created, Instant now) {
         Map<String, Object> body = describe(created.info(), now);
         body.put("token", created.token().reveal());
         return ApiResponse.of(201, body);
@@ -827,8 +837,9 @@ public final class ApiRoutes {
         body.put("name", token.name());
         body.put("scopes", token.scopes().stream().map(Scope::id).sorted().toList());
         body.put("created-at", token.createdAt().toString());
-        if (token.expiresAt() != null) {
-            body.put("expires-at", token.expiresAt().toString());
+        Instant expiresAt = token.expiresAt();
+        if (expiresAt != null) {
+            body.put("expires-at", expiresAt.toString());
         }
         body.put("expired", token.isExpired(now));
         return body;

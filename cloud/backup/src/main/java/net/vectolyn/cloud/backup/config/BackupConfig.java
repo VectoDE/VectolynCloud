@@ -58,7 +58,8 @@ public record BackupConfig(int schemaVersion, String directory, ScheduleConfig s
 
     /** No schedule, {@code backups/}, {@link RetentionConfig#defaults()}, 60 s save timeout, level 6, database on. */
     public static BackupConfig defaults() {
-        return new BackupConfig(SCHEMA_VERSION, null, null, null, null, null, null);
+        return new BackupConfig(SCHEMA_VERSION, DEFAULT_DIRECTORY, ScheduleConfig.disabled(), RetentionConfig.defaults(),
+                TimeSpan.ofSeconds(60), 6, DatabaseBackupConfig.defaults());
     }
 
     /** A copy with another schedule. */

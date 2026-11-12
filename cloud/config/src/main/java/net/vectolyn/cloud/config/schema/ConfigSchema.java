@@ -31,6 +31,7 @@ import net.vectolyn.cloud.config.model.JavaSelection;
 import net.vectolyn.cloud.config.model.MemorySize;
 import net.vectolyn.cloud.config.model.TimeOfDay;
 import net.vectolyn.cloud.config.model.TimeSpan;
+import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.JsonNodeFactory;
@@ -84,7 +85,7 @@ public final class ConfigSchema {
      *                   {@code groups/lobby.yml}
      * @return the schema file name, for example {@code group.schema.json}; null if there is none
      */
-    public static String schemaFile(String configFile) {
+    public static @Nullable String schemaFile(String configFile) {
         if (configFile.equals(CloudHome.CLOUD_FILE)) {
             return "cloud.schema.json";
         }
@@ -108,7 +109,7 @@ public final class ConfigSchema {
      * @param configFile file name relative to {@code config/}
      * @return the reference, or null if the file has no schema
      */
-    public static String reference(String configFile) {
+    public static @Nullable String reference(String configFile) {
         String schema = schemaFile(configFile);
         if (schema == null) {
             return null;
@@ -332,7 +333,7 @@ public final class ConfigSchema {
         return result;
     }
 
-    private static JsonProperty annotation(Class<?> type, RecordComponent component) {
+    private static @Nullable JsonProperty annotation(Class<?> type, RecordComponent component) {
         try {
             Field field = type.getDeclaredField(component.getName());
             return field.getAnnotation(JsonProperty.class);

@@ -35,6 +35,7 @@ import net.vectolyn.cloud.cluster.MirrorMessages.TemplateEntry;
 import net.vectolyn.cloud.cluster.MirrorMessages.TemplateList;
 import net.vectolyn.cloud.config.io.RegularPaths;
 import net.vectolyn.protocol.PacketReader;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The head's side of the template sync: every folder directly under {@code local/templates/} is a
@@ -62,6 +63,7 @@ final class TemplateSource {
      * @param bytes   their total size
      * @param byPath  the same files by path
      */
+    @SuppressWarnings("ArrayRecordComponent") // raw bytes of the wire format; a List<Byte> would only cost memory
     record Template(String name, Path root, byte[] digest, List<FileEntry> entries, long bytes,
                     Map<String, FileEntry> byPath) {
 
@@ -69,11 +71,12 @@ final class TemplateSource {
             return new TemplateEntry(name, digest, entries.size(), bytes);
         }
 
-        FileEntry find(String path) {
+        @Nullable FileEntry find(String path) {
             return byPath.get(path);
         }
     }
 
+    @SuppressWarnings("ArrayRecordComponent") // raw bytes of the wire format; a List<Byte> would only cost memory
     private record Cached(long size, FileTime modified, byte[] sha256) {
     }
 
@@ -87,7 +90,7 @@ final class TemplateSource {
      * has no templates, and they would remove the ones they synced.
      */
     private volatile boolean ready;
-    private volatile String problem;
+    private volatile @Nullable String problem;
 
     /**
      * Creates the source; nothing is offered until {@link #rescan()} finished once.
@@ -137,7 +140,7 @@ final class TemplateSource {
             }
             folders.sort(null);
             for (Path folder : folders) {
-                String name = folder.getFileName().toString();
+                String name = Objects.requireNonNull(folder.getFileName(), "file name").toString();
                 if (RegularPaths.kind(folder) != RegularPaths.Kind.DIRECTORY) {
                     continue;
                 }
@@ -205,7 +208,7 @@ final class TemplateSource {
     }
 
     /** One template, or null if it breaks a limit. */
-    private Template scan(String name, Path root, Set<Path> seen) throws IOException {
+    private @Nullable Template scan(String name, Path root, Set<Path> seen) throws IOException {
         List<FileEntry> entries = new ArrayList<>();
         long[] bytes = {0};
         int[] skipped = {0};
@@ -220,7 +223,7 @@ final class TemplateSource {
                         }
                         String relative = relative(root, dir);
                         // A Windows junction can report itself as a folder that is also "other".
-                        if (MirrorPaths.isSecretFolder(dir.getFileName().toString())
+                        if (MirrorPaths.isSecretFolder(Objects.requireNonNull(dir.getFileName(), "file name").toString())
                                 || !attributes.isDirectory() || attributes.isSymbolicLink() || attributes.isOther()
                                 || !MirrorPaths.isSafePath(relative)) {
                             skipped[0]++;
@@ -295,7 +298,7 @@ final class TemplateSource {
         return new Template(name, root, MirrorMessages.digest(entries), List.copyOf(entries), size, Map.copyOf(byPath));
     }
 
-    private byte[] hash(Path file, BasicFileAttributes attributes) {
+    private byte @Nullable [] hash(Path file, BasicFileAttributes attributes) {
         Cached cached = hashes.get(file);
         if (cached != null && cached.size() == attributes.size() && cached.modified().equals(attributes.lastModifiedTime())) {
             return cached.sha256();
@@ -389,7 +392,7 @@ final class TemplateSource {
         } catch (IOException e) {
             LOG.log(System.Logger.Level.DEBUG, "Cluster: template file {0}/{1} not served: {2}", template.name(),
                     entry.path(), e.getMessage());
-            throw new ClusterRpcException(ClusterRpcException.CHANGED);
+            throw new ClusterRpcException(ClusterRpcException.CHANGED, e);
         }
     }
 
@@ -399,7 +402,7 @@ final class TemplateSource {
      */
     static byte[] read(Path root, FileEntry entry, long offset, int length) throws IOException {
         Path file = root;
-        String[] segments = entry.path().split("/");
+        String[] segments = entry.path().split("/", -1);
         for (int i = 0; i < segments.length; i++) {
             file = file.resolve(segments[i]);
             RegularPaths.Kind kind = RegularPaths.kind(file);

@@ -21,6 +21,7 @@ import java.util.Optional;
 import java.util.TreeMap;
 import java.util.UUID;
 import net.vectolyn.cloud.config.io.AtomicFileWriter;
+import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -83,17 +84,17 @@ public final class TrackingStore {
     }
 
     private static final class Entry {
-        String name;
-        Instant consentAt;
+        @Nullable String name;
+        @Nullable Instant consentAt;
         int noticeVersion;
-        Instant firstSeen;
-        Instant lastSeen;
+        @Nullable Instant firstSeen;
+        @Nullable Instant lastSeen;
         long logins;
         long playtime;
         final Map<String, long[]> modes = new TreeMap<>();
         // Running visit: in memory only, counted into the totals when it ends.
-        String sessionMode;
-        Instant sessionSince;
+        @Nullable String sessionMode;
+        @Nullable Instant sessionSince;
     }
 
     private TrackingStore(Path file, int retentionDays, Clock clock) {
@@ -160,7 +161,7 @@ public final class TrackingStore {
      * @throws IOException if the file cannot be written
      * @throws FullException if the store is full
      */
-    public synchronized void grant(UUID player, String name, String mode) throws IOException {
+    public synchronized void grant(UUID player, String name, @Nullable String mode) throws IOException {
         Instant now = clock.instant();
         Entry e = entries.get(player);
         if (e == null || due(e, now)) {
@@ -299,7 +300,8 @@ public final class TrackingStore {
 
     private boolean due(Entry e, Instant now) {
         // A player who is online right now is never due.
-        return e.sessionMode == null && !e.lastSeen.plus(Duration.ofDays(retentionDays)).isAfter(now);
+        Instant seen = Objects.requireNonNull(e.lastSeen, "lastSeen");
+        return e.sessionMode == null && !seen.plus(Duration.ofDays(retentionDays)).isAfter(now);
     }
 
     private static void checkName(String name) {
@@ -319,7 +321,7 @@ public final class TrackingStore {
         if (e.sessionMode == null) {
             return;
         }
-        long seconds = Math.max(0, Duration.between(e.sessionSince, now).getSeconds());
+        long seconds = Math.max(0, Duration.between(e.sessionSince, now).toSeconds());
         e.playtime += seconds;
         long[] mode = e.modes.get(e.sessionMode);
         if (mode != null) {
@@ -330,12 +332,14 @@ public final class TrackingStore {
     }
 
     private static TrackedPlayer view(UUID uuid, Entry e, Instant now) {
-        long running = e.sessionMode == null ? 0 : Math.max(0, Duration.between(e.sessionSince, now).getSeconds());
+        long running = e.sessionMode == null ? 0 : Math.max(0, Duration.between(e.sessionSince, now).toSeconds());
         List<TrackedPlayer.ModeTotals> modes = new ArrayList<>();
         e.modes.forEach((mode, v) -> modes.add(new TrackedPlayer.ModeTotals(mode, v[0],
                 v[1] + (mode.equals(e.sessionMode) ? running : 0))));
         modes.sort(Comparator.comparing(TrackedPlayer.ModeTotals::mode));
-        return new TrackedPlayer(uuid, e.name, e.consentAt, e.noticeVersion, e.firstSeen, e.lastSeen, e.logins,
+        return new TrackedPlayer(uuid, Objects.requireNonNull(e.name, "name"),
+                Objects.requireNonNull(e.consentAt, "consentAt"), e.noticeVersion,
+                Objects.requireNonNull(e.firstSeen, "firstSeen"), Objects.requireNonNull(e.lastSeen, "lastSeen"), e.logins,
                 e.playtime + running, modes);
     }
 

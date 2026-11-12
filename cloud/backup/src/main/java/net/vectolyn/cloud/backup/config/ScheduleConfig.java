@@ -4,6 +4,7 @@ package net.vectolyn.cloud.backup.config;
 
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import net.vectolyn.cloud.config.model.TimeSpan;
+import org.jspecify.annotations.Nullable;
 
 /**
  * When automatic backups run. With {@code enabled: true} exactly one of {@code cron} and
@@ -14,7 +15,7 @@ import net.vectolyn.cloud.config.model.TimeSpan;
  * @param interval fixed distance between two scheduled backups, 5m to 7 days
  */
 @JsonPropertyOrder({"enabled", "cron", "interval"})
-public record ScheduleConfig(boolean enabled, String cron, TimeSpan interval) {
+public record ScheduleConfig(boolean enabled, @Nullable String cron, @Nullable TimeSpan interval) {
 
     /** No automatic backups. */
     public static ScheduleConfig disabled() {

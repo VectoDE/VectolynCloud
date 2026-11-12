@@ -17,6 +17,7 @@ import javax.net.ssl.SSLException;
 import net.vectolyn.cloud.monitor.alert.Alert;
 import net.vectolyn.cloud.monitor.alert.AlertEvent;
 import net.vectolyn.cloud.monitor.config.MonitorConfig.WebhookFormat;
+import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
 
@@ -63,7 +64,8 @@ public final class WebhookNotifier implements Notifier {
     }
 
     /** Same, with a custom TLS context (tests trust a self-signed certificate). */
-    WebhookNotifier(WebhookUrl url, WebhookFormat format, Duration timeout, String origin, SSLContext tls) {
+    WebhookNotifier(WebhookUrl url, WebhookFormat format, Duration timeout, String origin,
+            @Nullable SSLContext tls) {
         this.url = Objects.requireNonNull(url, "url");
         this.format = Objects.requireNonNull(format, "format");
         this.timeout = Objects.requireNonNull(timeout, "timeout");
@@ -98,19 +100,19 @@ public final class WebhookNotifier implements Notifier {
         try {
             response = client.send(request, HttpResponse.BodyHandlers.discarding());
         } catch (HttpConnectTimeoutException e) {
-            throw new IOException("webhook: no connection within " + timeout.toSeconds() + " s");
+            throw new IOException("webhook: no connection within " + timeout.toSeconds() + " s"); // NOPMD - the JDK message and cause can name the host or the webhook URL, which is a secret
         } catch (HttpTimeoutException e) {
-            throw new IOException("webhook: no answer within " + timeout.toSeconds() + " s");
+            throw new IOException("webhook: no answer within " + timeout.toSeconds() + " s"); // NOPMD - the JDK message and cause can name the host or the webhook URL, which is a secret
         } catch (SSLException e) {
-            throw new IOException("webhook: TLS handshake failed (certificate not trusted or protocol mismatch)");
+            throw new IOException("webhook: TLS handshake failed (certificate not trusted or protocol mismatch)"); // NOPMD - the JDK message and cause can name the host or the webhook URL, which is a secret
         } catch (ConnectException e) {
-            throw new IOException("webhook: connection refused or host unreachable");
+            throw new IOException("webhook: connection refused or host unreachable"); // NOPMD - the JDK message and cause can name the host or the webhook URL, which is a secret
         } catch (IOException e) {
             // The JDK's message may contain the host or the URL; only the type is passed on.
-            throw new IOException("webhook: network error (" + e.getClass().getSimpleName() + ")");
+            throw new IOException("webhook: network error (" + e.getClass().getSimpleName() + ")"); // NOPMD - the JDK message and cause can name the host or the webhook URL, which is a secret
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new IOException("webhook: interrupted");
+            throw new IOException("webhook: interrupted", e);
         }
         int status = response.statusCode();
         if (status >= 300 && status < 400) {

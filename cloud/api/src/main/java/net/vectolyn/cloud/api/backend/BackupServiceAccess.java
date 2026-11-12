@@ -67,7 +67,7 @@ public final class BackupServiceAccess implements BackupAccess {
             }
             request = request.withDatabase(order.database()).withNote(order.note());
         } catch (IllegalArgumentException e) {
-            throw new ApiBackendException(ApiBackendException.Reason.INVALID, "The backup request is not valid.");
+            throw new ApiBackendException(ApiBackendException.Reason.INVALID, "The backup request is not valid.", e);
         }
         try {
             return view(backups.create(request));

@@ -131,7 +131,8 @@ public final class StatisticsCollector {
         Map<String, long[]> copy = new HashMap<>();
         totals.forEach((mode, values) -> copy.put(mode, values.clone()));
         for (Session session : sessions.values()) {
-            copy.get(session.mode())[1] += seconds(session.since(), now);
+            // A session exists only for a mode that has totals (startSession).
+            Objects.requireNonNull(copy.get(session.mode()), "mode")[1] += seconds(session.since(), now);
         }
         List<ModeStatistics> result = new ArrayList<>();
         copy.forEach((mode, v) -> result.add(new ModeStatistics(mode, v[0], v[1], (int) v[2])));
@@ -167,12 +168,12 @@ public final class StatisticsCollector {
         if (session == null) {
             return;
         }
-        totals.get(session.mode())[1] += seconds(session.since(), clock.instant());
+        Objects.requireNonNull(totals.get(session.mode()), "mode")[1] += seconds(session.since(), clock.instant());
         online.merge(session.mode(), -1, Integer::sum);
     }
 
     private static long seconds(Instant from, Instant to) {
-        return Math.max(0, Duration.between(from, to).getSeconds());
+        return Math.max(0, Duration.between(from, to).toSeconds());
     }
 
     static byte[] encode(List<ModeStatistics> list) {

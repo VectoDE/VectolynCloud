@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import net.vectolyn.cloud.database.DatabaseProcesses;
 import net.vectolyn.protocol.ServiceEnvironment;
@@ -76,7 +77,7 @@ public final class NodeDatabaseProcesses implements DatabaseProcesses {
             throw new IOException("program must be an absolute path: " + programName(command));
         }
         Path log = command.logFile().toAbsolutePath();
-        Files.createDirectories(log.getParent());
+        Files.createDirectories(Objects.requireNonNull(log.getParent(), "log directory"));
         // nosemgrep: java.lang.security.audit.command-injection-process-builder.command-injection-process-builder -- the program path must be absolute (checked above) and the arguments are a list, no shell
         ProcessBuilder builder = new ProcessBuilder(command.arguments())
                 .directory(command.workingDirectory().toFile())

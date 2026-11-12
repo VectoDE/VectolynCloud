@@ -50,7 +50,7 @@ public final class H2Dumper {
 
         /** The JDBC URL: the file without {@code .mv.db}, read-only, never created. */
         public String url() {
-            String name = databaseFile.getFileName().toString();
+            String name = Objects.requireNonNull(databaseFile.getFileName(), "file name of the database file").toString();
             String base = name.substring(0, name.length() - ".mv.db".length());
             return "jdbc:h2:file:" + databaseFile.resolveSibling(base).toAbsolutePath()
                     + ";IFEXISTS=TRUE;ACCESS_MODE_DATA=r";
@@ -93,7 +93,8 @@ public final class H2Dumper {
         Path luckPerms = null;
         try (DirectoryStream<Path> children = Files.newDirectoryStream(plugins)) {
             for (Path child : children) {
-                if (child.getFileName().toString().equalsIgnoreCase("luckperms")
+                if (Objects.requireNonNull(child.getFileName(), "file name of a plugin entry").toString()
+                        .equalsIgnoreCase("luckperms")
                         && Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)) {
                     luckPerms = child;
                     break;
@@ -144,7 +145,8 @@ public final class H2Dumper {
             Files.deleteIfExists(resultFile);
             result = runner.run(arguments(database, resultFile), workDirectory, timeout);
         } catch (IllegalArgumentException e) {
-            throw new BackupException(BackupException.Reason.DATABASE, e.getMessage());
+            throw new BackupException(BackupException.Reason.DATABASE, Objects.requireNonNullElse(e.getMessage(),
+                    e.toString()), e);
         } catch (IOException e) {
             throw new BackupException(BackupException.Reason.DATABASE, "H2 script tool could not run: "
                     + e.getMessage(), e);
@@ -162,7 +164,8 @@ public final class H2Dumper {
         List<Path> matches = new ArrayList<>();
         try (DirectoryStream<Path> children = Files.newDirectoryStream(folder)) {
             for (Path child : children) {
-                String name = child.getFileName().toString().toLowerCase(Locale.ROOT);
+                String name = Objects.requireNonNull(child.getFileName(), "file name of a directory entry").toString()
+                        .toLowerCase(Locale.ROOT);
                 if (name.startsWith(prefix) && name.endsWith(suffix)
                         && Files.isRegularFile(child, LinkOption.NOFOLLOW_LINKS)) {
                     matches.add(child);
@@ -170,6 +173,6 @@ public final class H2Dumper {
             }
         }
         // The highest version sorts last for names like h2-driver-2.1.214.jar and luckperms-h2-v2.mv.db.
-        return matches.stream().max(Comparator.comparing(p -> p.getFileName().toString()));
+        return matches.stream().max(Comparator.comparing(p -> Objects.requireNonNull(p.getFileName(), "file name of a match").toString()));
     }
 }

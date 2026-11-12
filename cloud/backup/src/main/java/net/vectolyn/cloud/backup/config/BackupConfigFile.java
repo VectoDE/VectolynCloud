@@ -181,7 +181,8 @@ public final class BackupConfigFile {
         range(errors, "compression-level", config.compressionLevel(), 0, 9);
         DatabaseBackupConfig database = config.database();
         span(errors, "database.timeout", database.timeout(), MIN_DUMP_TIMEOUT, MAX_DUMP_TIMEOUT);
-        if (database.dumpExecutable() != null && !isAbsolutePath(database.dumpExecutable())) {
+        String dumpExecutable = database.dumpExecutable();
+        if (dumpExecutable != null && !isAbsolutePath(dumpExecutable)) {
             errors.add(ConfigError.of(FILE, "database.dump-executable", ErrorCode.INVALID_VALUE,
                     "an absolute path to mariadb-dump or mysqldump"));
         }
@@ -211,15 +212,17 @@ public final class BackupConfigFile {
         if (schedule.enabled() && schedule.cron() == null && schedule.interval() == null) {
             errors.add(ConfigError.of(FILE, "schedule.cron", ErrorCode.REQUIRED));
         }
-        if (schedule.cron() != null) {
+        String cron = schedule.cron();
+        if (cron != null) {
             try {
-                CronExpression.parse(schedule.cron());
+                CronExpression.parse(cron);
             } catch (IllegalArgumentException e) {
                 errors.add(ConfigError.of(FILE, "schedule.cron", ErrorCode.INVALID_VALUE, CronExpression.FORMAT));
             }
         }
-        if (schedule.interval() != null) {
-            span(errors, "schedule.interval", schedule.interval(), MIN_INTERVAL, TimeSpan.MAX);
+        TimeSpan interval = schedule.interval();
+        if (interval != null) {
+            span(errors, "schedule.interval", interval, MIN_INTERVAL, TimeSpan.MAX);
         }
     }
 

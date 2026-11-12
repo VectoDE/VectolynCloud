@@ -7,8 +7,10 @@ import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import net.vectolyn.cloud.config.secret.EnvFile;
 import net.vectolyn.cloud.config.secret.Secret;
 import net.vectolyn.cloud.template.ServerPlatform;
@@ -71,7 +73,7 @@ public final class ServiceSecrets {
      * @return the placeholder names
      */
     public static List<String> placeholdersOf(ServerPlatform platform) {
-        return PLACEHOLDERS.get(platform);
+        return Objects.requireNonNull(PLACEHOLDERS.get(platform), "every platform has placeholders");
     }
 
     /**
@@ -134,7 +136,7 @@ public final class ServiceSecrets {
 
     /** Every secret name any platform may see; {@value #DB_ROOT_PASSWORD} is never among them. */
     static Set<String> allPlaceholders() {
-        java.util.Set<String> all = new java.util.TreeSet<>();
+        Set<String> all = new TreeSet<>();
         PLACEHOLDERS.values().forEach(all::addAll);
         return Collections.unmodifiableSet(all);
     }

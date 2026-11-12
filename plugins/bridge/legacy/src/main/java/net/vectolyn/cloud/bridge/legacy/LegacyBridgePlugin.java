@@ -42,6 +42,7 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.server.RemoteServerCommandEvent;
 import org.bukkit.event.server.ServerCommandEvent;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.jspecify.annotations.Nullable;
 
 /**
  * VectolynCloud bridge for PandaSpigot 1.8.8. Thin adapter: the token check lives in
@@ -74,10 +75,10 @@ public final class LegacyBridgePlugin extends JavaPlugin implements Listener {
 
     private final TickMeter ticks = new TickMeter();
     private final KickCommandWatch kicks = new KickCommandWatch();
-    private BridgeSender sender;
-    private ServiceId service;
+    private @Nullable BridgeSender sender;
+    private @Nullable ServiceId service;
     /** The server's kick command, for selectors; {@code null} until replaced. */
-    private Command vanillaKick;
+    private @Nullable Command vanillaKick;
     /** The kick {@link #networkKick} carries out right now; reported once its event went through. */
     private final OwnKick own = new OwnKick();
 
@@ -223,10 +224,9 @@ public final class LegacyBridgePlugin extends JavaPlugin implements Listener {
     private void replaceKick() {
         try {
             CommandMap map = getServer().getCommandMap();
-            if (!(map instanceof SimpleCommandMap)) {
+            if (!(map instanceof SimpleCommandMap simple)) {
                 throw new IllegalStateException("Unknown command map " + map.getClass().getName());
             }
-            SimpleCommandMap simple = (SimpleCommandMap) map;
             Map<String, Command> known = NetworkKickCommand.knownCommands(simple);
             NetworkKickCommand command = new NetworkKickCommand(getServer()::getPlayerExact, this::networkKick,
                     this::selectorKick);
@@ -262,8 +262,8 @@ public final class LegacyBridgePlugin extends JavaPlugin implements Listener {
      * @return the console, RCON, a player, or {@code OTHER} for command blocks and the rest
      */
     static KickCommandWatch.Source source(CommandSender sender) {
-        if (sender instanceof ProxiedCommandSender) {
-            return source(((ProxiedCommandSender) sender).getCaller());
+        if (sender instanceof ProxiedCommandSender proxied) {
+            return source(proxied.getCaller());
         }
         if (sender instanceof RemoteConsoleCommandSender) {
             return KickCommandWatch.Source.REMOTE_CONSOLE;
@@ -284,8 +284,8 @@ public final class LegacyBridgePlugin extends JavaPlugin implements Listener {
      * @return see {@link KickCommandWatch#entitled}
      */
     static boolean entitled(CommandSender sender) {
-        if (sender instanceof ProxiedCommandSender) {
-            return entitled(((ProxiedCommandSender) sender).getCaller());
+        if (sender instanceof ProxiedCommandSender proxied) {
+            return entitled(proxied.getCaller());
         }
         KickCommandWatch.Source source = source(sender);
         return KickCommandWatch.entitled(source,

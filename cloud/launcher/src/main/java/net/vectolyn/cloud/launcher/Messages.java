@@ -4,6 +4,7 @@ package net.vectolyn.cloud.launcher;
 
 import net.vectolyn.cloud.launcher.libs.LibraryException;
 import net.vectolyn.cloud.launcher.platform.OperatingSystem;
+import org.jspecify.annotations.Nullable;
 
 /**
  * All texts the launcher prints, in German and English. Kept in code rather than in resource
@@ -262,7 +263,7 @@ public final class Messages {
         };
     }
 
-    private static String describe(Throwable cause) {
+    private static String describe(@Nullable Throwable cause) {
         return cause == null ? "?" : cause.toString();
     }
 }

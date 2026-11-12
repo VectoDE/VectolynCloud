@@ -30,19 +30,21 @@ final class StartupReport {
     /** The steps, in their order. */
     enum Step {
         /** Configuration files read and checked. */
-        CONFIGURATION("Configuration"),
+        CONFIGURATION(1, "Configuration"),
         /** The database set up. */
-        DATABASE("Database"),
+        DATABASE(2, "Database"),
         /** Server software in place. */
-        SOFTWARE("Software"),
+        SOFTWARE(3, "Software"),
         /** Templates of the wanted servers in place. */
-        TEMPLATES("Templates"),
+        TEMPLATES(4, "Templates"),
         /** The configured services started. */
-        SERVICES("Services");
+        SERVICES(5, "Services");
 
+        private final int number;
         private final String title;
 
-        Step(String title) {
+        Step(int number, String title) {
+            this.number = number;
             this.title = title;
         }
     }
@@ -142,7 +144,7 @@ final class StartupReport {
      * @param detail what it found or did, in a few words
      */
     static void step(Step step, Status status, String detail) {
-        String line = String.format(Locale.ROOT, "[%d/%d] %-14s %-8s %s", step.ordinal() + 1, Step.values().length,
+        String line = String.format(Locale.ROOT, "[%d/%d] %-14s %-8s %s", step.number, Step.values().length,
                 step.title, status.word, detail);
         System.Logger.Level level = switch (status) {
             case OK, SKIPPED -> System.Logger.Level.INFO;

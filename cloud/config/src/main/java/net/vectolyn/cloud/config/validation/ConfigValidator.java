@@ -38,6 +38,7 @@ import net.vectolyn.cloud.config.model.ServerSoftware;
 import net.vectolyn.cloud.config.model.TaskConfig;
 import net.vectolyn.cloud.config.model.TimeSpan;
 import net.vectolyn.cloud.config.model.Weekday;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Checks a whole {@link ConfigSnapshot}: value ranges, patterns, references between files and port
@@ -171,8 +172,9 @@ public final class ConfigValidator {
             }
             c.pattern(f, p + ".host", node.host(), ConfigNames.HOST);
             c.port(f, p + ".port", node.port());
-            if (node.maxMemory() != null) {
-                c.range(f, p + ".max-memory", node.maxMemory().megabytes(), MIN_NODE_MEMORY_MEGABYTES, MemorySize.MAX_MEGABYTES);
+            MemorySize maxMemory = node.maxMemory();
+            if (maxMemory != null) {
+                c.range(f, p + ".max-memory", maxMemory.megabytes(), MIN_NODE_MEMORY_MEGABYTES, MemorySize.MAX_MEGABYTES);
             }
             MemoryReserve reserve = node.reserve();
             if (reserve != null) {
@@ -192,7 +194,7 @@ public final class ConfigValidator {
     }
 
     /** One field of {@code memory-reserve}: missing is fine (default), otherwise at most 64G. */
-    private static void reserveField(Checks c, String f, String path, MemorySize value) {
+    private static void reserveField(Checks c, String f, String path, @Nullable MemorySize value) {
         if (value != null && value.megabytes() > MemoryReserve.MAX_MEGABYTES) {
             c.add(ConfigError.of(f, path, ErrorCode.OUT_OF_RANGE, MemorySize.ofMegabytes(1),
                     MemorySize.ofMegabytes(MemoryReserve.MAX_MEGABYTES)));
@@ -243,8 +245,9 @@ public final class ConfigValidator {
             }
         }
         validateProcess(c, f, group.process());
-        if (group.drainTimeout() != null) {
-            long seconds = group.drainTimeout().duration().getSeconds();
+        TimeSpan drainTimeout = group.drainTimeout();
+        if (drainTimeout != null) {
+            long seconds = drainTimeout.duration().toSeconds();
             if (seconds < GroupConfig.MIN_DRAIN_TIMEOUT_SECONDS || seconds > GroupConfig.MAX_DRAIN_TIMEOUT_SECONDS) {
                 c.add(ConfigError.of(f, "drain-timeout", ErrorCode.OUT_OF_RANGE,
                         TimeSpan.ofSeconds(GroupConfig.MIN_DRAIN_TIMEOUT_SECONDS),
@@ -253,7 +256,7 @@ public final class ConfigValidator {
         }
     }
 
-    private static void validateProcess(Checks c, String f, ProcessConfig process) {
+    private static void validateProcess(Checks c, String f, @Nullable ProcessConfig process) {
         if (process == null) {
             return;
         }
@@ -269,7 +272,7 @@ public final class ConfigValidator {
         if (process.stopCommand() != null) {
             c.pattern(f, "process.stop-command", process.stopCommand(), ProcessConfig.STOP_COMMAND);
         }
-        c.range(f, "process.stop-timeout", process.stopTimeout().duration().getSeconds(),
+        c.range(f, "process.stop-timeout", process.stopTimeout().duration().toSeconds(),
                 ProcessConfig.MIN_STOP_TIMEOUT_SECONDS, ProcessConfig.MAX_STOP_TIMEOUT_SECONDS);
         RestartConfig restart = process.restart();
         c.range(f, "process.restart.max-attempts", restart.maxAttempts(), 1, RestartConfig.MAX_ATTEMPTS);
@@ -283,7 +286,7 @@ public final class ConfigValidator {
     }
 
     /** {@code scaling.scale-up-on}: each value that is set lies in its range. */
-    private static void validateTriggers(Checks c, String f, ScaleUpTriggers triggers) {
+    private static void validateTriggers(Checks c, String f, @Nullable ScaleUpTriggers triggers) {
         if (triggers == null) {
             return;
         }
@@ -450,7 +453,7 @@ public final class ConfigValidator {
     }
 
     private static String lower(Enum<?> value) {
-        return value.name().toLowerCase(java.util.Locale.ROOT);
+        return value.name().toLowerCase(Locale.ROOT);
     }
 
     /** Collects errors; each check returns whether the value passed. */
@@ -476,8 +479,9 @@ public final class ConfigValidator {
             return true;
         }
 
-        boolean pattern(String file, String path, String value, String regex) {
-            if (!required(file, path, value)) {
+        boolean pattern(String file, String path, @Nullable String value, String regex) {
+            if (value == null) {
+                add(ConfigError.of(file, path, ErrorCode.REQUIRED));
                 return false;
             }
             if (!PATTERNS.computeIfAbsent(regex, Pattern::compile).matcher(value).matches()) {

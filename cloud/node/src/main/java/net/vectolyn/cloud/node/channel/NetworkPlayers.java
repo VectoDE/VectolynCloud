@@ -76,45 +76,43 @@ public final class NetworkPlayers {
      * @return what happened
      */
     public synchronized Outcome apply(ServiceId proxy, Message message) {
-        switch (message) {
+        return switch (message) {
             case PlayerJoin join -> {
                 Optional<ServiceId> to = resolver.apply(proxy, join.service());
                 if (to.isEmpty()) {
-                    return Outcome.UNKNOWN_SERVER;
+                    yield Outcome.UNKNOWN_SERVER;
                 }
                 Player known = players.get(join.uuid());
                 if (known != null && !known.proxy().equals(proxy)) {
-                    return Outcome.INCONSISTENT;
+                    yield Outcome.INCONSISTENT;
                 }
                 players.put(join.uuid(), new Player(join.uuid(), join.name(), proxy, to.get(), join.bedrock()));
-                return Outcome.APPLIED;
+                yield Outcome.APPLIED;
             }
             case PlayerSwitch change -> {
                 Optional<ServiceId> from = resolver.apply(proxy, change.from());
                 Optional<ServiceId> to = resolver.apply(proxy, change.to());
                 if (to.isEmpty()) {
-                    return Outcome.UNKNOWN_SERVER;
+                    yield Outcome.UNKNOWN_SERVER;
                 }
                 Player known = players.get(change.uuid());
                 if (known == null || !known.proxy().equals(proxy) || from.isEmpty()
                         || !known.service().equals(from.get())) {
-                    return Outcome.INCONSISTENT;
+                    yield Outcome.INCONSISTENT;
                 }
                 players.put(change.uuid(), new Player(known.uuid(), known.name(), proxy, to.get(), known.bedrock()));
-                return Outcome.APPLIED;
+                yield Outcome.APPLIED;
             }
             case PlayerQuit quit -> {
                 Player known = players.get(quit.uuid());
                 if (known == null || !known.proxy().equals(proxy)) {
-                    return Outcome.INCONSISTENT;
+                    yield Outcome.INCONSISTENT;
                 }
                 players.remove(quit.uuid());
-                return Outcome.APPLIED;
+                yield Outcome.APPLIED;
             }
-            default -> {
-                return Outcome.NOT_A_PLAYER_EVENT;
-            }
-        }
+            default -> Outcome.NOT_A_PLAYER_EVENT;
+        };
     }
 
     /**

@@ -50,7 +50,7 @@ Jede Anfrage muss das Panel im `Host`-Header nennen (`localhost`, `127.0.0.1`, `
 
 **Schutz:** Sitzungs-Cookie `__Host-vectolyn-session` (`HttpOnly`, `Secure`, `SameSite=Strict`), 30 Minuten Leerlauf, höchstens 12 Stunden. Jede ändernde Anfrage braucht den eigenen Origin und das CSRF-Token im Header `X-Vectolyn-CSRF`. Fünf Fehlversuche sperren ein Konto für 15 Minuten.
 
-**Audit-Log:** `logs/panel-audit.jsonl`, eine Zeile je Anmeldung, Fehlversuch, Sperre, Abmeldung und Änderung an Konten, Faktoren und Rollen, ohne Passwörter oder Codes. Lesbar mit dem Recht `audit:read`.
+**Audit-Log:** `logs/panel-audit.jsonl`, eine Zeile je Anmeldung, Fehlversuch, Sperre, Abmeldung und Änderung an Konten, Faktoren und Rollen, ohne Passwörter oder Codes. Lesbar mit dem Recht `audit:read`. Das Ereignis `user.updated` nennt in `details`, was geändert wurde: `roles`, `disabled` und `reset`. `reset` ist eine Liste dessen, was für diesen Benutzer zurückgesetzt wurde: `password` (ein neues Passwort wurde gesetzt) und `factors` (mit `reset-factors` angefordert: TOTP, Passkeys und Single-Sign-on-Verknüpfungen wurden entfernt, damit der Benutzer sie neu einrichten kann; seine Sitzungen enden); wurde nichts zurückgesetzt, fehlt das Feld.
 
 ## Dienste, Konsole und Dateien
 
