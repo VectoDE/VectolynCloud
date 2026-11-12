@@ -14,11 +14,6 @@ on:
   schedule:
     - cron: '41 5 * * 1'
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Release tag to verify (default: the newest release, pre-releases included)'
-        required: false
-        default: ''
   pull_request:
     branches: [main]
     paths:
@@ -63,15 +58,10 @@ jobs:
         id: pick
         env:
           GH_TOKEN: ${{ github.token }}
-          INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
           set -euo pipefail
-          if [ -n "${INPUT_TAG:-}" ]; then
-            tag=$INPUT_TAG
-          else
-            tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=20" \
-              --jq '[.[] | select(.draft == false)][0].tag_name')
-          fi
+          tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=20" \
+            --jq '[.[] | select(.draft == false)][0].tag_name')
           case "$tag" in v[0-9]*) ;; *) echo "::error::no release tag found: $tag"; exit 1 ;; esac
           case "$tag" in *[!0-9A-Za-z.+-]*) echo "::error::invalid tag: $tag"; exit 1 ;; esac
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
@@ -128,7 +118,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.pick.outputs.tag }}
-          INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
           set -euo pipefail
           owner=${GITHUB_REPOSITORY_OWNER,,}
@@ -154,7 +143,7 @@ jobs:
               dev=$(docker buildx imagetools inspect "ghcr.io/${owner}/vectolyn-cloud:dev" --format '{{ .Manifest.Digest }}')
               ver=$(docker buildx imagetools inspect "$image" --format '{{ .Manifest.Digest }}')
               echo "dev $dev, $image $ver"
-              # Without an explicit tag the newest release is checked, so "dev" must be that image.
-              if [ -z "$INPUT_TAG" ]; then test "$dev" = "$ver"; fi
+              # The newest release is checked, so "dev" must be that image.
+              test "$dev" = "$ver"
               ;;
           esac

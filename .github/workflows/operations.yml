@@ -180,9 +180,9 @@ jobs:
           (cd ops-dist && sha256sum -- *.jar *.zip *.tar.gz *.yml | tee SHA256SUMS)
           tar -tzvf ops-dist/VectolynCloud-0.0.0-ci-linux-macos.tar.gz
           unzip -l ops-dist/VectolynCloud-0.0.0-ci-windows.zip
-          tar -tzvf ops-dist/VectolynCloud-0.0.0-ci-templates.tar.gz | head -n 20
+          tar -tzvf ops-dist/VectolynCloud-0.0.0-ci-templates.tar.gz | sed -n '1,20p'
           # Exactly the files release.yml lists in SHA256SUMS (plus the banners it adds later).
-          test "$(cd ops-dist && ls | grep -v '^SHA256SUMS$' | LC_ALL=C sort | tr '\n' ' ')" = \
+          test "$(find ops-dist -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\n' | LC_ALL=C sort | tr '\n' ' ')" = \
             "VectolynCloud-0.0.0-ci-linux-macos.tar.gz VectolynCloud-0.0.0-ci-templates.tar.gz VectolynCloud-0.0.0-ci-windows.zip VectolynCloud.jar setup.example.yml "
           # Every server template of the repository is in the templates archive.
           for dir in templates/*/; do
