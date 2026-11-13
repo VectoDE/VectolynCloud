@@ -62,8 +62,8 @@ class ClusterCommandsTest {
         assertEquals(List.of(), CommandDispatcher.complete(standalone, "cluster remove "));
         assertEquals(List.of("7011"), CommandDispatcher.complete(standalone, "cluster init 10.0.0.1 "));
 
-        int port = TestNode.freePort();
-        head.cluster.init("127.0.0.1", port, null);
+        head.cluster.init("127.0.0.1", 0, null);
+        int port = head.clusterPort();
         String open = head.cluster.createToken(new NodeId("node-3"), Duration.ofMinutes(10)).info().id();
         String join = head.cluster.createToken(new NodeId("node-2"), Duration.ofMinutes(10)).token().reveal();
         CommandRegistry onHead = registry(head.cluster);

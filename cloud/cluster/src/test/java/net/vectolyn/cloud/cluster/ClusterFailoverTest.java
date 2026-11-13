@@ -50,7 +50,6 @@ class ClusterFailoverTest {
     void setUp() throws Exception {
         head = new TestNode(dir.resolve("head"), "node-1", "1.0.0");
         member = new TestNode(dir.resolve("member"), "node-2", "1.0.0");
-        port = TestNode.freePort();
         head.config.apply(List.of(new PutGroup("lobby", ClusterMirrorTest.group("1G")),
                 new PutTask("lobby", ClusterMirrorTest.task().withNodes(List.of()))));
         head.cluster.failoverTimings(Duration.ofMillis(500), Duration.ofMillis(100));
@@ -80,7 +79,8 @@ class ClusterFailoverTest {
                 back.add(node);
             }
         });
-        head.cluster.init("127.0.0.1", port, null);
+        head.cluster.init("127.0.0.1", 0, null);
+        port = head.clusterPort();
         head.cluster.statusSource(() -> new NodeStatus(true, 8 * GB, 8 * GB, List.of()));
         // Two dynamic lobbies and a static one on the member.
         member.cluster.statusSource(() -> new NodeStatus(true, 8 * GB, 5 * GB, List.of(

@@ -58,8 +58,8 @@ class ClusterPortTest {
     void setUp() throws Exception {
         head = new TestNode(dir.resolve("head"), "node-1", "1.0.0");
         member = new TestNode(dir.resolve("member"), "node-2", "1.0.0");
-        port = TestNode.freePort();
-        head.cluster.init("127.0.0.1", port, null);
+        head.cluster.init("127.0.0.1", 0, null);
+        port = head.clusterPort();
         String token = head.cluster.createToken(new NodeId("node-2"), Duration.ofMinutes(5)).token().reveal();
         member.cluster.join("127.0.0.1", port, new NodeId("node-1"), token,
                 head.cluster.status().pin().orElseThrow().toString());
@@ -159,7 +159,7 @@ class ClusterPortTest {
     @Test
     void aCertificateOfAnotherCaIsRefusedInTheHandshake() throws Exception {
         try (TestNode other = new TestNode(dir.resolve("other"), "node-2", "1.0.0")) {
-            other.cluster.init("127.0.0.1", TestNode.freePort(), null);
+            other.cluster.init("127.0.0.1", 0, null);
             NodeIdentity foreign = NodeIdentity.open(other.paths.nodeKeystore(),
                     ClusterPaths.readPassword(other.paths.nodePassword()));
             SSLContext context = ClusterTls.context(foreign.keyManagers().getKeyManagers(), trustCa());

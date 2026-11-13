@@ -48,8 +48,8 @@ class ClusterJoinTest {
     void setUp() throws Exception {
         head = new TestNode(dir.resolve("head"), "node-1", "1.0.0");
         member = new TestNode(dir.resolve("member"), "node-2", "1.0.0");
-        port = TestNode.freePort();
-        head.cluster.init("127.0.0.1", port, null);
+        head.cluster.init("127.0.0.1", 0, null);
+        port = head.clusterPort();
     }
 
     @AfterEach
@@ -71,6 +71,16 @@ class ClusterJoinTest {
                 throw new AssertionError("condition not reached in time");
             }
             Thread.sleep(50);
+        }
+    }
+
+    @Test
+    void portZeroBindsAFreePortAndWritesItToTheClusterFile() throws Exception {
+        assertTrue(port > 0 && port <= 65535, "bound port " + port);
+        assertEquals(port, ClusterFile.read(head.paths.clusterFile()).orElseThrow().head().port());
+        // The head accepts on the port it reported.
+        try (java.net.Socket socket = new java.net.Socket(java.net.InetAddress.getLoopbackAddress(), port)) {
+            assertTrue(socket.isConnected());
         }
     }
 
@@ -255,7 +265,7 @@ class ClusterJoinTest {
     @Test
     void aHeadCannotJoinAnotherCluster() throws Exception {
         try (TestNode other = new TestNode(dir.resolve("other"), "node-9", "1.0.0")) {
-            other.cluster.init("127.0.0.1", TestNode.freePort(), null);
+            other.cluster.init("127.0.0.1", 0, null);
             String[] t = token("node-9");
             assertThrows(ClusterException.class, () -> other.cluster.join("127.0.0.1", port, HEAD,t[0], t[1]));
         }

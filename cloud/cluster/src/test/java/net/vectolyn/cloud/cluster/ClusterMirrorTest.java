@@ -78,10 +78,10 @@ class ClusterMirrorTest {
     void setUp() throws Exception {
         head = new TestNode(dir.resolve("head"), "node-1", "1.0.0");
         member = new TestNode(dir.resolve("member"), "node-2", "1.0.0");
-        port = TestNode.freePort();
         head.config.apply(List.of(new PutGroup("lobby", group("768M")), new PutTask("lobby", task()),
                 new SetNetworkName("HeadNetwork")));
-        head.cluster.init("127.0.0.1", port, null);
+        head.cluster.init("127.0.0.1", 0, null);
+        port = head.clusterPort();
     }
 
     @AfterEach

@@ -50,11 +50,11 @@ class ClusterPlacementTest {
     void setUp() throws Exception {
         head = new TestNode(dir.resolve("head"), "node-1", "1.0.0");
         member = new TestNode(dir.resolve("member"), "node-2", "1.0.0");
-        port = TestNode.freePort();
         // A task without a node list may run on every node of nodes.yml.
         head.config.apply(List.of(new PutGroup("lobby", ClusterMirrorTest.group("1G")),
                 new PutTask("lobby", ClusterMirrorTest.task().withNodes(List.of()))));
-        head.cluster.init("127.0.0.1", port, null);
+        head.cluster.init("127.0.0.1", 0, null);
+        port = head.clusterPort();
         // The head runs a lobby already and has little room left.
         head.cluster.statusSource(() -> new NodeStatus(true, 2 * GB, 4 * GB,
                 List.of(new RunningService(new ServiceId("lobby-1"), "lobby", true, GB))));

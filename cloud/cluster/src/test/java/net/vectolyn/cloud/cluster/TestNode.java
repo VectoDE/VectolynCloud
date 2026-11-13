@@ -94,11 +94,9 @@ final class TestNode implements AutoCloseable {
         });
     }
 
-    /** A port that was free a moment ago. */
-    static int freePort() throws IOException {
-        try (java.net.ServerSocket socket = new java.net.ServerSocket(0, 1, java.net.InetAddress.getLoopbackAddress())) {
-            return socket.getLocalPort();
-        }
+    /** The cluster port this head bound; with port 0 at init the one the system picked. */
+    int clusterPort() {
+        return cluster.cluster().orElseThrow().head().port();
     }
 
     void database(DatabaseMode mode, String host) throws Exception {
