@@ -294,6 +294,7 @@
   "nav.activity": "Aktivität",
   "activity.title": "Aktivität",
   "activity.statistics": "Statistik je Spielmodus",
+  "activity.statistics-figures": "Zahlen je Spielmodus",
   "activity.statistics-lede": "Anmeldungen, Spielzeit und die meisten Spieler gleichzeitig je Spielmodus, so wie der Knoten sie nach seinen Datenschutz-Einstellungen zählt.",
   "activity.no-statistics": "Noch keine Statistik. Sie erscheint, sobald Spieler beigetreten sind und die Statistik in privacy.yml eingeschaltet ist.",
   "activity.mode": "Spielmodus",

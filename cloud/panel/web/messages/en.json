@@ -294,6 +294,7 @@
   "nav.activity": "Activity",
   "activity.title": "Activity",
   "activity.statistics": "Statistics per game mode",
+  "activity.statistics-figures": "Figures per game mode",
   "activity.statistics-lede": "Logins, playtime and the highest number of players at once, per game mode, as the node counts them under its privacy settings.",
   "activity.no-statistics": "No statistics yet. They appear once players have joined, provided statistics are switched on in privacy.yml.",
   "activity.mode": "Game mode",

@@ -50,35 +50,40 @@ function Statistics() {
     <Panel id="activity-statistics" title={t("activity.statistics")}>
       <p className="text-muted">{t("activity.statistics-lede")}</p>
       {error && <Notice kind="error">{error}</Notice>}
-      {modes === null ? (
-        <p role="status" className="text-muted">{t("start.loading")}</p>
-      ) : modes.length === 0 ? (
-        <p>{t("activity.no-statistics")}</p>
-      ) : (
-        <div className="overflow-x-auto border border-line">
-          <table className="w-full border-collapse text-left">
-            <caption className="sr-only">{t("activity.statistics")}</caption>
-            <thead className="bg-raised">
-              <tr>
-                <th scope="col" className="px-3 py-2">{t("activity.mode")}</th>
-                <th scope="col" className="px-3 py-2 text-right">{t("activity.logins")}</th>
-                <th scope="col" className="px-3 py-2 text-right">{t("activity.playtime")}</th>
-                <th scope="col" className="px-3 py-2 text-right">{t("activity.peak")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {modes.map((m) => (
-                <tr key={m.mode} className="border-t border-line">
-                  <th scope="row" className="px-3 py-2 font-mono font-normal">{m.mode}</th>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatNumber(m.logins)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{hours(m["playtime-seconds"])}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatNumber(m["peak-players"])}</td>
+      {/* The same height while loading, when empty and with the table (it scrolls past that height),
+          so the audit log and the log search below do not move when the figures arrive. */}
+      <div className="min-h-48">
+        {modes === null ? (
+          <p role="status" className="text-muted">{t("start.loading")}</p>
+        ) : modes.length === 0 ? (
+          <p>{t("activity.no-statistics")}</p>
+        ) : (
+          <div className="max-h-48 overflow-auto border border-line" tabIndex={0} role="region"
+            aria-label={t("activity.statistics-figures")}>
+            <table className="w-full border-collapse text-left">
+              <caption className="sr-only">{t("activity.statistics")}</caption>
+              <thead className="sticky top-0 bg-raised">
+                <tr>
+                  <th scope="col" className="px-3 py-2">{t("activity.mode")}</th>
+                  <th scope="col" className="px-3 py-2 text-right">{t("activity.logins")}</th>
+                  <th scope="col" className="px-3 py-2 text-right">{t("activity.playtime")}</th>
+                  <th scope="col" className="px-3 py-2 text-right">{t("activity.peak")}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              </thead>
+              <tbody>
+                {modes.map((m) => (
+                  <tr key={m.mode} className="border-t border-line">
+                    <th scope="row" className="px-3 py-2 font-mono font-normal">{m.mode}</th>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatNumber(m.logins)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{hours(m["playtime-seconds"])}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatNumber(m["peak-players"])}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </Panel>
   );
 }
