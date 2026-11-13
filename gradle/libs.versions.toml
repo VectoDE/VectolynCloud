@@ -23,7 +23,7 @@ jackson = "3.2.4"
 mariadb-java-client = "4.0.0"
 postgresql = "42.7.14"
 # The version pgjdbc 42.7.14 itself depends on at runtime (MIT); keep both in step.
-checker-qual = "3.55.1"
+checker-qual = "4.4.0"
 # GraphQL endpoint of cloud/api (MIT; java-dataloader Apache-2.0, reactive-streams MIT-0, jspecify Apache-2.0).
 graphql-java = "26.1"
 # Fuzz tests (test scope only), see build-logic/src/main/kotlin/vectolyn.fuzz-conventions.gradle.kts.
