@@ -145,13 +145,22 @@ public final class NodePanelBridge implements PanelNode {
         String number = m.group(3);
         if (date != null) {
             // A later date and a higher number sort first, so every digit is inverted.
-            int n = datedNumber == null ? 0 : Integer.parseInt(datedNumber);
+            int n = datedNumber == null ? 0 : number(datedNumber);
             return "1" + invert(date.replace("-", "")) + invert(String.format(Locale.ROOT, "%05d", n));
         }
         if (number != null) {
-            return "2" + String.format(Locale.ROOT, "%05d", Integer.parseInt(number));
+            return "2" + String.format(Locale.ROOT, "%05d", number(number));
         }
         return "0";
+    }
+
+    /** Parses a log file number; the pattern allows at most five digits, so this only guards the parse. */
+    private static int number(String digits) {
+        try {
+            return Integer.parseInt(digits);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     private static String invert(String digits) {
