@@ -380,12 +380,17 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
      * Makes this node the head of a new cluster: creates the CA and this node's certificate, writes
      * {@code cluster.yml} and opens the cluster port.
      *
+     * <p>Port 0 lets the system pick a free port: it is bound before {@code cluster.yml} is
+     * written, so no other process can take it in between, and the file then holds the bound port.
+     * {@link #cluster()} reports it ({@code head().port()}).
+     *
      * @param host address the members connect to
-     * @param port cluster port
+     * @param port cluster port, or 0 for a free port the system picks
      * @param bind address to listen on, or null for {@code host}
      * @return the CA pin for the join commands
      * @throws ClusterException if the node is in a cluster already or the address is invalid
-     * @throws IOException      if keytool or the files fail; what was created is removed again
+     * @throws IOException      if keytool or the files fail, or port 0 cannot be bound; what was
+     *                          created is removed again
      */
     public synchronized CaPin init(String host, int port, @Nullable String bind) throws ClusterException, IOException {
         requireOpen();
@@ -393,7 +398,9 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
             throw new ClusterException("This node is in a cluster already.", "Dieser Node ist schon in einem Cluster.");
         }
         ClusterConfig.Head head = new ClusterConfig.Head(self.value(), host, port, bind);
-        List<String> problems = new ClusterConfig(ClusterConfig.SCHEMA_VERSION, head, List.of(), List.of()).problems();
+        // Port 0 is checked like a valid port; the bound port replaces it before the file is written.
+        ClusterConfig.Head checked = port == 0 ? new ClusterConfig.Head(self.value(), host, 1, bind) : head;
+        List<String> problems = new ClusterConfig(ClusterConfig.SCHEMA_VERSION, checked, List.of(), List.of()).problems();
         if (!problems.isEmpty()) {
             throw new ClusterException("Invalid address: " + String.join("; ", problems),
                     "Ungültige Adresse: " + String.join("; ", problems));
@@ -405,13 +412,19 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
         }
         paths.ensureDir();
         boolean done = false;
+        OpenedServer opened = null;
         try {
             Secret caPassword = ClusterPaths.newPassword(paths.caPassword());
             ClusterCa ca = ClusterCa.create(paths.caKeystore(), caPassword, config.snapshot().cloud().networkName());
             NodeIdentity identity = NodeIdentity.generate(paths.nodeKeystore(), ClusterPaths.newPassword(paths.nodePassword()));
             X509Certificate certificate = ca.issue(identity.certificationRequest(paths.workDir()), self, paths.workDir());
             identity.install(certificate, ca.certificate());
-            ClusterConfig created = new ClusterConfig(ClusterConfig.SCHEMA_VERSION, head,
+            ClusterConfig.Head stored = head;
+            if (port == 0) {
+                opened = openServer(head);
+                stored = new ClusterConfig.Head(head.id(), head.host(), opened.port(), head.bind());
+            }
+            ClusterConfig created = new ClusterConfig(ClusterConfig.SCHEMA_VERSION, stored,
                     List.of(new ClusterConfig.Member(self.value(), NodeCertificates.fingerprint(certificate),
                             clock.instant().toString())), List.of());
             ClusterFile.write(paths.clusterFile(), created);
@@ -419,10 +432,13 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
             done = true;
             LOG.log(System.Logger.Level.INFO, "Cluster: this node is the head now; CA pin {0}", ca.pin());
             warnAboutDatabase();
-            startServer();
+            startServer(opened == null ? null : opened.server());
             return ca.pin();
         } finally {
             if (!done) {
+                if (opened != null) {
+                    opened.server().close();
+                }
                 for (Path file : List.of(paths.caKeystore(), paths.caPassword(), paths.nodeKeystore(),
                         paths.nodePassword(), paths.clusterFile())) {
                     Files.deleteIfExists(file);
@@ -656,23 +672,47 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
         return identity;
     }
 
-    private void startServer() throws IOException {
-        if (server != null) {
-            return;
-        }
+    /** A cluster port that is bound and accepts, with the port it got (the one asked for, or a free one for 0). */
+    private record OpenedServer(ClusterServer server, int port) {
+    }
+
+    /** Binds the cluster port of {@code head} and starts accepting; the mirror is not started yet. */
+    private OpenedServer openServer(ClusterConfig.Head head) throws IOException {
         NodeIdentity identity = identity();
         X509Certificate ca = identity.caCertificate().orElseThrow();
         // The membership and revocation checks happen at the hello, where the peer gets a clear
         // answer; the TLS layer checks the chain to the CA and that it is a node certificate.
         SSLContext context = ClusterTls.context(identity.keyManagers().getKeyManagers(),
                 ClusterTrust.peers(ca, (node, fingerprint) -> { }));
-        ClusterConfig.Head head = Objects.requireNonNull(cluster, "the node is in a cluster").head();
         ClusterServer created = new ClusterServer(ClusterServer.Settings.of(head.bindAddress(), head.port(), self, version),
                 context, this, headHandlers);
-        InetSocketAddress bound = created.start();
-        server = created;
+        InetSocketAddress bound;
+        try {
+            bound = created.start();
+        } catch (IOException | RuntimeException e) {
+            created.close();
+            throw e;
+        }
         LOG.log(System.Logger.Level.INFO, "Cluster: head, cluster port {0}:{1,number,#} (mutual TLS 1.3)",
                 bound.getHostString(), bound.getPort());
+        return new OpenedServer(created, bound.getPort());
+    }
+
+    private void startServer() throws IOException {
+        startServer(null);
+    }
+
+    /**
+     * Opens the cluster port and starts the mirror.
+     *
+     * @param opened the port {@link #init} bound already, or null to bind the one in {@code cluster.yml}
+     */
+    private void startServer(@Nullable ClusterServer opened) throws IOException {
+        if (server != null) {
+            return;
+        }
+        server = opened != null ? opened
+                : openServer(Objects.requireNonNull(cluster, "the node is in a cluster").head()).server();
         // The mirror: the first render and scan off this thread (hashing large templates takes a
         // while); every change of the config and every rescan that finds a change is pushed. Until
         // the first scan is done the template list is refused (not-ready), so a member that asked
