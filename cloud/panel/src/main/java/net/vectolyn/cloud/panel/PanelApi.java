@@ -1264,7 +1264,7 @@ public final class PanelApi {
      * Checks a text that goes into a console line: no control characters (a line break would start
      * a second command), at most {@value #MAX_PLAYER_TEXT} characters.
      */
-    static String consoleText(String text) throws Refusal {
+    static String consoleText(@Nullable String text) throws Refusal {
         String value = text == null ? "" : text.strip();
         if (value.length() > MAX_PLAYER_TEXT || value.chars().anyMatch(c -> Character.isISOControl(c)
                 || c == 0x2028 || c == 0x2029 || c == 0x85)) {
@@ -1380,12 +1380,13 @@ public final class PanelApi {
                     confirm.getBytes(StandardCharsets.US_ASCII), digest.getBytes(StandardCharsets.US_ASCII))) {
                 throw new Refusal(409, "preview-required", "Preview this archive first and confirm that preview.");
             }
-            java.util.Set<String> written = current.applyImport(archive);
+            Set<String> written = current.applyImport(archive);
             audit.record("config.imported", session.user(), "config", call.client(),
                     Map.of("files", written.size(), "sha256", digest));
             return Responses.json(200, Map.of("files", new java.util.TreeSet<>(written)), secure());
         } catch (PanelNode.InvalidImport e) {
-            throw new Refusal(422, "invalid-import", e.getMessage());
+            throw new Refusal(422, "invalid-import",
+                    Objects.requireNonNullElse(e.getMessage(), "The archive cannot be imported."), e);
         }
     }
 

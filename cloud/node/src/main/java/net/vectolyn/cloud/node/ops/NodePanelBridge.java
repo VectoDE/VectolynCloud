@@ -48,7 +48,9 @@ public final class NodePanelBridge implements PanelNode {
     static final long MAX_SEARCH_BYTES = 64L * 1024 * 1024;
     /** Longest line a search returns. */
     static final int MAX_LINE = 2000;
-    private static final Pattern LOG_FILE = Pattern.compile("cloud(?:\\.(\\d{1,4}))?\\.log");
+    /** {@code cloud.log}, rotated {@code cloud-<yyyy-MM-dd>[.<n>].log} and the former {@code cloud.<n>.log}. */
+    private static final Pattern LOG_FILE =
+            Pattern.compile("cloud(?:-(\\d{4}-\\d{2}-\\d{2})(?:\\.(\\d{1,5}))?|\\.(\\d{1,5}))?\\.log");
 
     /**
      * Creates the bridge.
@@ -102,7 +104,7 @@ public final class NodePanelBridge implements PanelNode {
                         if (hits.size() >= limit) {
                             return new LogSearch(hits, true);
                         }
-                        hits.add(new LogHit(file.getFileName().toString(), number,
+                        hits.add(new LogHit(String.valueOf(file.getFileName()), number,
                                 line.length() > MAX_LINE ? line.substring(0, MAX_LINE) : line));
                     }
                 }
@@ -111,21 +113,53 @@ public final class NodePanelBridge implements PanelNode {
         return new LogSearch(hits, false);
     }
 
-    /** {@code cloud.log}, then {@code cloud.1.log}, {@code cloud.2.log} ...: newest first; never a link. */
+    /**
+     * The node's log files, newest first, never a link: {@code cloud.log}, then the rotated
+     * {@code cloud-<yyyy-MM-dd>[.<n>].log} by date and number (see RotatingLogFile), then the files
+     * of the former scheme {@code cloud.1.log}, {@code cloud.2.log} ...
+     */
     private List<Path> logFiles() throws IOException {
-        if (logs == null || !Files.isDirectory(logs)) {
+        if (!Files.isDirectory(logs)) {
             return List.of();
         }
-        TreeMap<Integer, Path> files = new TreeMap<>();
+        TreeMap<String, Path> files = new TreeMap<>();
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(logs)) {
             for (Path file : stream) {
-                Matcher m = LOG_FILE.matcher(file.getFileName().toString());
+                Path name = file.getFileName();
+                if (name == null) {
+                    continue;
+                }
+                Matcher m = LOG_FILE.matcher(name.toString());
                 if (m.matches() && Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) {
-                    files.put(m.group(1) == null ? 0 : Integer.parseInt(m.group(1)), file);
+                    files.put(order(m), file);
                 }
             }
         }
         return new ArrayList<>(files.values());
+    }
+
+    /** Sort key of {@link #logFiles()}: the current file, dated files newest first, then the former numbered files. */
+    private static String order(Matcher m) {
+        String date = m.group(1);
+        String datedNumber = m.group(2);
+        String number = m.group(3);
+        if (date != null) {
+            // A later date and a higher number sort first, so every digit is inverted.
+            int n = datedNumber == null ? 0 : Integer.parseInt(datedNumber);
+            return "1" + invert(date.replace("-", "")) + invert(String.format(Locale.ROOT, "%05d", n));
+        }
+        if (number != null) {
+            return "2" + String.format(Locale.ROOT, "%05d", Integer.parseInt(number));
+        }
+        return "0";
+    }
+
+    private static String invert(String digits) {
+        StringBuilder out = new StringBuilder(digits.length());
+        for (int i = 0; i < digits.length(); i++) {
+            out.append((char) ('9' - digits.charAt(i) + '0'));
+        }
+        return out.toString();
     }
 
     @Override
@@ -182,7 +216,7 @@ public final class NodePanelBridge implements PanelNode {
         try {
             return archive.apply(plan);
         } catch (ConfigException e) {
-            throw new InvalidImport(e.getMessage());
+            throw new InvalidImport(String.valueOf(e.getMessage()), e);
         }
     }
 
@@ -190,9 +224,9 @@ public final class NodePanelBridge implements PanelNode {
         try {
             return archive.read(content);
         } catch (ConfigException e) {
-            throw new InvalidImport(e.getMessage());
+            throw new InvalidImport(String.valueOf(e.getMessage()), e);
         } catch (java.util.zip.ZipException e) {
-            throw new InvalidImport("The file is not a valid zip archive.");
+            throw new InvalidImport("The file is not a valid zip archive.", e);
         }
     }
 }

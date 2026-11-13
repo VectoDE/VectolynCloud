@@ -5,6 +5,7 @@ package net.vectolyn.cloud.panel;
 import java.io.IOException;
 import java.util.List;
 import java.util.Set;
+import org.jspecify.annotations.Nullable;
 
 /**
  * What the panel needs from the node beyond the REST API: the players online, a console line for a
@@ -17,11 +18,11 @@ public interface PanelNode {
      *
      * @param uuid    the player's UUID
      * @param name    the name
-     * @param proxy   the proxy service the player is on
+     * @param proxy   the proxy service the player is on, or null if unknown
      * @param service the backend service, or null while between servers
      * @param bedrock whether the player joined through Geyser
      */
-    record Player(String uuid, String name, String proxy, String service, boolean bedrock) {
+    record Player(String uuid, String name, @Nullable String proxy, @Nullable String service, boolean bedrock) {
     }
 
     /**
@@ -55,6 +56,16 @@ public interface PanelNode {
         public InvalidImport(String message) {
             super(message);
         }
+
+        /**
+         * Creates the failure with its cause.
+         *
+         * @param message what is wrong
+         * @param cause   the error behind it
+         */
+        public InvalidImport(String message, Throwable cause) {
+            super(message, cause);
+        }
     }
 
     /**
@@ -71,7 +82,7 @@ public interface PanelNode {
     /**
      * A line of the node's log that matches a search.
      *
-     * @param file the log file, for example {@code cloud.1.log}
+     * @param file the log file, for example {@code cloud-2026-11-12.log}
      * @param line its line number, from 1
      * @param text the line, at most 2000 characters
      */
@@ -87,7 +98,7 @@ public interface PanelNode {
     record LogSearch(List<LogHit> hits, boolean truncated) {
     }
 
-    /** @return the statistics per game mode, by mode */
+    /** Returns the statistics per game mode, by mode. */
     default List<ModeStatistics> statistics() {
         return List.of();
     }
@@ -105,7 +116,7 @@ public interface PanelNode {
         return new LogSearch(List.of(), false);
     }
 
-    /** @return every player online, by name */
+    /** Returns every player online, by name. */
     List<Player> players();
 
     /**
