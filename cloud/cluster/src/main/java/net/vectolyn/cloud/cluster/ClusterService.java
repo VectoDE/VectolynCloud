@@ -83,6 +83,8 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
     static final Duration TEMPLATE_RESCAN = Duration.ofSeconds(60);
     /** How often a member reports its {@link NodeStatus} to the head. */
     static final Duration STATUS_INTERVAL = Duration.ofSeconds(10);
+    /** How long {@link #close()} waits for a running mirror task, before and after an interrupt. */
+    static final Duration MIRROR_STOP_WAIT = Duration.ofSeconds(5);
     /** A status older than this does not count for the placement (three missed reports). */
     static final Duration STATUS_STALE = Duration.ofSeconds(30);
     /** A member without a session for this long is lost (on top of the 30 s idle timeout of its session). */
@@ -1023,6 +1025,9 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
     private void runMirror(Runnable task) {
         try {
             mirrorWorker.execute(() -> {
+                if (closed) {
+                    return; // queued before close(): dropped, close() waits only for the running task
+                }
                 try {
                     task.run();
                 } catch (RuntimeException e) {
@@ -1096,6 +1101,11 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
                 mirrorWorker.execute(() -> {
                     synchronized (syncLock) {
                         queuedSync = null;
+                    }
+                    if (closed) {
+                        // queued before close(): dropped, close() waits only for the running task
+                        next.completeExceptionally(new IOException("the node is shutting down"));
+                        return;
                     }
                     try {
                         memberSync();
@@ -1408,7 +1418,9 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
         config.removeListener(configListener);
         mirrorTimer.shutdownNow();
         plans.clear();
-        mirrorWorker.shutdownNow();
+        // No interrupt: a sync interrupted in the middle of a file write ends with a
+        // ClosedByInterruptException ("sync with the head failed: null") after close() returned.
+        mirrorWorker.shutdown();
         ClusterServer runningServer = server;
         if (runningServer != null) {
             runningServer.close();
@@ -1416,6 +1428,27 @@ public final class ClusterService implements AutoCloseable, ClusterServer.Handle
         ClusterLink runningLink = link;
         if (runningLink != null) {
             runningLink.close();
+            // If the link thread did not end in time, its session is still open: close it, so a
+            // running sync fails at once instead of waiting for its call timeout.
+            runningLink.session().ifPresent(ClusterSession::close);
+        }
+        // The session is closed now, so a running sync fails at its next call; wait for it, so
+        // nothing writes into the home once close() returned (a deleted home would be recreated).
+        awaitMirror();
+    }
+
+    private void awaitMirror() {
+        try {
+            if (!mirrorWorker.awaitTermination(MIRROR_STOP_WAIT.toMillis(), TimeUnit.MILLISECONDS)) {
+                mirrorWorker.shutdownNow();
+                if (!mirrorWorker.awaitTermination(MIRROR_STOP_WAIT.toMillis(), TimeUnit.MILLISECONDS)) {
+                    LOG.log(System.Logger.Level.WARNING, "Cluster: the mirror did not stop in time");
+                }
+            }
+            mirrorTimer.awaitTermination(MIRROR_STOP_WAIT.toMillis(), TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            mirrorWorker.shutdownNow();
+            Thread.currentThread().interrupt();
         }
     }
 }
