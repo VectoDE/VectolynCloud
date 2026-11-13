@@ -71,6 +71,19 @@ Everything is vendored into the repository; the website loads nothing from other
 
 The subsets were made with fontTools (`pyftsubset`, Latin-1 plus punctuation, € and arrows). The OFL allows modified versions under the same license; none of the three fonts declares a Reserved Font Name. Each license text sits next to the file (`site/assets/fonts/OFL-*.txt`).
 
+## Browser tests of the web panel (npm, `cloud/panel/e2e`, not shipped)
+
+Exakte Versionen in `cloud/panel/e2e/package-lock.json`, installiert mit `npm ci --ignore-scripts`. Die Werkzeuge laufen nur in CI und lokal gegen die Panel-Vorschau; nichts davon kommt ins Jar oder ins Release. Jede Version war beim Festlegen mindestens zwei Wochen veröffentlicht. Lizenzen laut npm-Registry und `package-lock.json` (Stand 2026-11-12), `osv-scanner` ohne Befund.
+
+| Package | Version | Use | License | Free |
+|---|---|---|---|---|
+| @playwright/test | 1.64.1 | test only | Apache-2.0 | yes |
+| @axe-core/playwright, axe-core | 4.14.0 | test only | MPL-2.0 | yes |
+| lighthouse | 13.5.0 | test only | Apache-2.0 | yes |
+| alle übrigen (119 Pakete im Lockfile insgesamt) | lockfile | test only | MIT, Apache-2.0, ISC, BSD-2-Clause, BSD-3-Clause, 0BSD, MIT OR CC0-1.0 | yes |
+
+MPL-2.0 ist eine Datei-Copyleft-Lizenz und mit GPL-3.0-or-later vereinbar; axe-core wird unverändert genutzt und nicht weitergegeben. `@lhci/cli` wurde bewusst nicht genommen: 0.15.1 zieht bekannte Schwachstellen nach (`tmp`, `uuid`, `zod`, `basic-ftp`), 0.16.1 war jünger als zwei Wochen. Lighthouse läuft deshalb direkt aus Playwright.
+
 ## Build tooling (not shipped)
 
 | Component | License | Note |

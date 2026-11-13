@@ -508,6 +508,155 @@ class PanelApiTest {
         assertFalse(channel.isOpen(), "signing out ends the stream");
     }
 
+    /** Players, consoles and an archive that remembers what was sent and imported. */
+    static final class FakePanelNode implements PanelNode {
+
+        final List<String> commands = new java.util.concurrent.CopyOnWriteArrayList<>();
+        final List<PanelNode.Player> online = new java.util.concurrent.CopyOnWriteArrayList<>();
+        byte[] imported;
+
+        @Override
+        public List<PanelNode.Player> players() {
+            return online;
+        }
+
+        @Override
+        public boolean command(String serviceId, String line) {
+            commands.add(serviceId + ": " + line);
+            return true;
+        }
+
+        @Override
+        public byte[] exportConfig() {
+            return "PK-export".getBytes(StandardCharsets.UTF_8);
+        }
+
+        @Override
+        public PanelNode.ImportPlan planImport(byte[] archive) throws PanelNode.InvalidImport {
+            if (archive.length == 0) {
+                throw new PanelNode.InvalidImport("empty archive");
+            }
+            return new PanelNode.ImportPlan(List.of(new PanelNode.FileChange("cloud.yml", "changed")), "+language: de");
+        }
+
+        @Override
+        public java.util.Set<String> applyImport(byte[] archive) throws PanelNode.InvalidImport {
+            planImport(archive);
+            imported = archive;
+            return java.util.Set.of("cloud.yml");
+        }
+
+        String searched;
+
+        @Override
+        public List<PanelNode.ModeStatistics> statistics() {
+            return List.of(new PanelNode.ModeStatistics("lobby", 12, 3600, 5));
+        }
+
+        @Override
+        public PanelNode.LogSearch searchLog(String text, int limit) {
+            searched = text + "/" + limit;
+            return new PanelNode.LogSearch(List.of(new PanelNode.LogHit("cloud.log", 7, "WARN disk")), false);
+        }
+    }
+
+    @Test
+    void statisticsNeedNodeReadAndTheLogSearchNeedsAdmin() throws Exception {
+        start(null);
+        FakePanelNode fake = new FakePanelNode();
+        api.node(fake);
+        Browser owner = owner();
+        assertEquals(200, owner.post("/api/panel/users", Map.of("name", "vic", "password", PASSWORD,
+                "roles", List.of("viewer"))).status());
+        Browser viewer = new Browser();
+        assertEquals(200, viewer.post("/api/panel/login", Map.of("name", "vic", "password", PASSWORD)).status());
+        Reply stats = viewer.get("/api/panel/statistics");
+        assertEquals(200, stats.status());
+        assertTrue(stats.body().contains("\"playtime-seconds\":3600"), stats.body());
+        assertEquals(403, viewer.get("/api/panel/logs?q=disk").status(), "the log is for admins");
+        assertEquals(403, viewer.get("/api/panel/audit").status(), "the audit log needs audit:read");
+
+        Reply hits = owner.get("/api/panel/logs?q=disk%20full&limit=20");
+        assertEquals(200, hits.status(), hits.body());
+        assertEquals("disk full/20", fake.searched);
+        assertTrue(hits.body().contains("\"line\":7"));
+        for (String bad : List.of("q=a", "q=" + "x".repeat(201), "q=a%0Ab", "q=disk&limit=0", "q=disk&limit=501",
+                "q=disk&limit=x")) {
+            assertEquals(400, owner.get("/api/panel/logs?" + bad).status(), bad);
+        }
+        assertTrue(Files.readString(home.resolve("logs").resolve(AuditLog.FILE_NAME)).contains("\"event\":\"log.searched\""));
+    }
+
+    @Test
+    void playersAreKickedBannedAndMessagedThroughTheirServerOnly() throws Exception {
+        start(null);
+        FakePanelNode fake = new FakePanelNode();
+        api.node(fake);
+        String steve = "11111111-2222-3333-4444-555555555555";
+        fake.online.add(new PanelNode.Player(steve, "Steve", "proxy-1", "lobby-1", false));
+        fake.online.add(new PanelNode.Player("99999999-2222-3333-4444-555555555555", "Odd;Name", "proxy-1", "lobby-1", false));
+        Browser owner = owner();
+        assertEquals(200, owner.post("/api/panel/users", Map.of("name", "vic", "password", PASSWORD,
+                "roles", List.of("viewer"))).status());
+        Browser viewer = new Browser();
+        assertEquals(200, viewer.post("/api/panel/login", Map.of("name", "vic", "password", PASSWORD)).status());
+
+        Reply list = viewer.get("/api/panel/players");
+        assertEquals(200, list.status());
+        assertTrue(list.body().contains("\"name\":\"Steve\""), list.body());
+        assertEquals(403, viewer.post("/api/panel/players/kick", Map.of("uuid", steve)).status(), "no players:manage");
+
+        assertEquals(200, owner.post("/api/panel/players/kick", Map.of("uuid", steve, "reason", "AFK")).status());
+        assertEquals(200, owner.post("/api/panel/players/ban", Map.of("uuid", steve, "reason", "griefing")).status());
+        assertEquals(200, owner.post("/api/panel/players/message", Map.of("uuid", steve, "text", "Restart in 5 minutes")).status());
+        assertEquals(List.of("lobby-1: kick Steve AFK", "lobby-1: ban Steve griefing",
+                "lobby-1: tell Steve Restart in 5 minutes"), fake.commands);
+
+        assertEquals(400, owner.post("/api/panel/players/kick", Map.of("uuid", steve, "reason", "x\nstop")).status(),
+                "a line break would start a second command");
+        assertEquals(400, owner.post("/api/panel/players/message", Map.of("uuid", steve, "text", "a stop")).status());
+        assertEquals(400, owner.post("/api/panel/players/message", Map.of("uuid", steve, "text", "x".repeat(257))).status());
+        assertEquals(400, owner.post("/api/panel/players/message", Map.of("uuid", steve)).status());
+        assertEquals(404, owner.post("/api/panel/players/kick", Map.of("uuid", "00000000-0000-0000-0000-000000000000")).status());
+        assertEquals(409, owner.post("/api/panel/players/kick", Map.of("uuid", "99999999-2222-3333-4444-555555555555")).status(),
+                "a name that is not a plain name never reaches a console");
+        assertEquals(3, fake.commands.size());
+        String log = Files.readString(home.resolve("logs").resolve(AuditLog.FILE_NAME));
+        assertTrue(log.contains("\"event\":\"player.ban\"") && log.contains(steve), log);
+    }
+
+    @Test
+    void anImportRunsOnlyAfterItsPreview() throws Exception {
+        start(null);
+        FakePanelNode fake = new FakePanelNode();
+        api.node(fake);
+        Browser owner = owner();
+        assertEquals(200, owner.post("/api/panel/users", Map.of("name", "vic", "password", PASSWORD,
+                "roles", List.of("viewer"))).status());
+        Browser viewer = new Browser();
+        assertEquals(200, viewer.post("/api/panel/login", Map.of("name", "vic", "password", PASSWORD)).status());
+
+        Reply export = viewer.get("/api/panel/config/export");
+        assertEquals(200, export.status(), "config:read exports");
+        assertEquals("application/zip", viewer.lastHeaders.get("Content-Type"));
+        byte[] zip = "PK-import".getBytes(StandardCharsets.UTF_8);
+        assertEquals(403, viewer.upload("/api/panel/config/import/preview", zip).status(), "no config:write");
+
+        assertEquals(409, owner.upload("/api/panel/config/import?confirm=00", zip).status(), "no preview, no import");
+        Reply preview = owner.upload("/api/panel/config/import/preview", zip);
+        assertEquals(200, preview.status(), preview.body());
+        assertTrue(preview.body().contains("+language: de"));
+        String confirm = (String) preview.json().get("confirm");
+        assertEquals(409, owner.upload("/api/panel/config/import?confirm=" + confirm,
+                "PK-other".getBytes(StandardCharsets.UTF_8)).status(), "another archive than the previewed one");
+        assertEquals(null, fake.imported);
+        assertEquals(200, owner.upload("/api/panel/config/import?confirm=" + confirm, zip).status());
+        assertEquals("PK-import", new String(fake.imported, StandardCharsets.UTF_8));
+        assertEquals(422, owner.upload("/api/panel/config/import/preview", new byte[0]).status());
+        String log = Files.readString(home.resolve("logs").resolve(AuditLog.FILE_NAME));
+        assertTrue(log.contains("\"event\":\"config.imported\"") && log.contains("\"event\":\"config.exported\""), log);
+    }
+
     private PanelApi.Call upgrade(String session, String origin, String rawQuery) {
         HttpHeaders headers = new DefaultHttpHeaders();
         headers.set("Host", HOST);

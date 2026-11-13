@@ -47,6 +47,7 @@ import net.vectolyn.cloud.privacy.PrivacyRuntime;
 import net.vectolyn.cloud.privacy.StatisticsCollector;
 import net.vectolyn.cloud.privacy.TrackingStore;
 import net.vectolyn.cloud.node.ops.NodeApi;
+import net.vectolyn.cloud.node.ops.NodePanelBridge;
 import net.vectolyn.cloud.node.ops.NodeBackups;
 import net.vectolyn.cloud.node.ops.NodeMonitoring;
 import net.vectolyn.cloud.node.ops.NodePanel;
@@ -149,6 +150,12 @@ public final class CloudNode implements AutoCloseable {
 
     private final NodeSettings settings;
     private final HomeLock homeLock;
+    /** The files of {@code config/} besides the core ones that export and import carry. */
+    private static final List<ConfigArchive.ExtraFile> CONFIG_EXTRAS = List.of(
+            new ConfigArchive.ExtraFile(CloudHome.MONITOR_FILE, MonitorConfigLoader::parse),
+            new ConfigArchive.ExtraFile(CloudHome.PRIVACY_FILE, PrivacyConfigLoader::parse),
+            new ConfigArchive.ExtraFile(CloudHome.BACKUP_FILE, BackupConfigFile::parse));
+
     private final ConfigService config;
     private final SecretStore secrets;
     private final ServiceManager services;
@@ -724,7 +731,10 @@ public final class CloudNode implements AutoCloseable {
             } catch (IOException e) {
                 LOG.log(System.Logger.Level.ERROR, "The API cannot start ({0}); the node runs without it.", e.getMessage());
             }
-            panelServer = NodePanel.start(settings.home(), apiServer, settings.launcherVersion(), secrets).orElse(null);
+            panelServer = NodePanel.start(settings.home(), apiServer, settings.launcherVersion(), secrets,
+                    new NodePanelBridge(channel.players(), services, new ConfigArchive(config, CONFIG_EXTRAS),
+                            ops.privacy().statistics()::snapshot, settings.home().resolve(CloudHome.LOGS_DIR)))
+                    .orElse(null);
         }
         // The questions read the terminal on this thread, so the console's own read loop starts
         // only afterwards.
@@ -1028,10 +1038,7 @@ public final class CloudNode implements AutoCloseable {
             }
             root.addHandler(logHandler);
         }
-        BuiltinCommands.register(console, config, this::close, List.of(
-                new ConfigArchive.ExtraFile(CloudHome.MONITOR_FILE, MonitorConfigLoader::parse),
-                new ConfigArchive.ExtraFile(CloudHome.PRIVACY_FILE, PrivacyConfigLoader::parse),
-                new ConfigArchive.ExtraFile(CloudHome.BACKUP_FILE, BackupConfigFile::parse)),
+        BuiltinCommands.register(console, config, this::close, CONFIG_EXTRAS,
                 List.of(NodeStatusCommand.command(ops.api()::status)));
         serviceCommands = new ServiceCommands(services, config, channel::status, console.output());
         services.addListener(serviceCommands);

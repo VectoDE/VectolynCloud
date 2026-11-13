@@ -18,11 +18,14 @@ jobs:
         uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: block
+          # api.deps.dev: the action looks up each added or changed package there (OpenSSF
+          # Scorecard of its source). It is only called when a pull request changes dependencies.
           allowed-endpoints: >
             github.com:443
             api.github.com:443
             api.securityscorecards.dev:443
             api.scorecard.dev:443
+            api.deps.dev:443
 
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

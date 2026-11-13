@@ -82,6 +82,7 @@ public final class PanelApi {
     private final Clock clock;
     private final RateLimiter<String> signInLimiter;
     private final @Nullable ServiceFiles files;
+    private volatile @Nullable PanelNode node;
     private final Map<Channel, String> streams = new ConcurrentHashMap<>();
     private final java.security.SecureRandom random = new java.security.SecureRandom();
     private @Nullable PanelServer server;
@@ -253,6 +254,22 @@ public final class PanelApi {
                     require(session, PanelRight.FILES_READ);
                     yield readFile(call);
                 }
+                case "/api/panel/players" -> {
+                    require(session, PanelRight.SERVICES_READ);
+                    yield listPlayers();
+                }
+                case "/api/panel/statistics" -> {
+                    require(session, PanelRight.NODE_READ);
+                    yield statistics();
+                }
+                case "/api/panel/logs" -> {
+                    require(session, PanelRight.ADMIN);
+                    yield searchLog(call, session);
+                }
+                case "/api/panel/config/export" -> {
+                    require(session, PanelRight.CONFIG_READ);
+                    yield exportConfig(call, session);
+                }
                 default -> throw notFound();
             };
         }
@@ -269,6 +286,14 @@ public final class PanelApi {
             }
             require(session, PanelRight.FILES_WRITE);
             return writeFile(call, session);
+        }
+        if (path.equals("/api/panel/config/import/preview") || path.equals("/api/panel/config/import")) {
+            Sessions.Session session = session(call).orElseThrow(Refusal401::new);
+            if (!Sessions.csrfMatches(session, csrf)) {
+                throw new Refusal(403, "csrf", "The CSRF token does not belong to this session.");
+            }
+            require(session, PanelRight.CONFIG_WRITE);
+            return importConfig(call, session, path.endsWith("/preview"));
         }
         if (call.body() != null && call.body().length > MAX_JSON_BODY) {
             throw new Refusal(413, "body-too-large", "The body is larger than " + MAX_JSON_BODY / 1024 + " KiB.");
@@ -341,6 +366,10 @@ public final class PanelApi {
             case "/api/panel/files/delete" -> {
                 require(session, PanelRight.FILES_WRITE);
                 yield deleteFile(call, session, body);
+            }
+            case "/api/panel/players/kick", "/api/panel/players/ban", "/api/panel/players/message" -> {
+                require(session, PanelRight.PLAYERS_MANAGE);
+                yield playerAction(call, session, body, path.substring(path.lastIndexOf('/') + 1));
             }
             default -> throw notFound();
         };
@@ -1190,6 +1219,183 @@ public final class PanelApi {
                         .addListener(f -> channel.close());
             }
         });
+    }
+
+    /**
+     * Connects the node: players, service consoles and the configuration archive. Without it those
+     * endpoints answer {@code 404}.
+     *
+     * @param node the node side
+     */
+    public void node(PanelNode node) {
+        this.node = node;
+    }
+
+    private PanelNode requireNode() throws Refusal {
+        PanelNode current = node;
+        if (current == null) {
+            throw notFound();
+        }
+        return current;
+    }
+
+    // ---- players --------------------------------------------------------------------------
+
+    /** A Java name (3 to 16 of letters, digits, underscore) or a Bedrock name with the Floodgate dot. */
+    private static final java.util.regex.Pattern PLAYER_NAME = java.util.regex.Pattern.compile("\\.?[A-Za-z0-9_]{1,16}");
+    /** Longest kick, ban or message text, as the protocol's kick reason. */
+    static final int MAX_PLAYER_TEXT = 256;
+
+    private FullHttpResponse listPlayers() throws Refusal {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (PanelNode.Player p : requireNode().players()) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("uuid", p.uuid());
+            item.put("name", p.name());
+            item.put("proxy", p.proxy());
+            item.put("service", p.service());
+            item.put("bedrock", p.bedrock());
+            out.add(item);
+        }
+        return Responses.json(200, Map.of("players", out), secure());
+    }
+
+    /**
+     * Checks a text that goes into a console line: no control characters (a line break would start
+     * a second command), at most {@value #MAX_PLAYER_TEXT} characters.
+     */
+    static String consoleText(@Nullable String text) throws Refusal {
+        String value = text == null ? "" : text.strip();
+        if (value.length() > MAX_PLAYER_TEXT || value.chars().anyMatch(c -> Character.isISOControl(c)
+                || c == 0x2028 || c == 0x2029 || c == 0x85)) {
+            throw new Refusal(400, "invalid-text", "The text may have at most " + MAX_PLAYER_TEXT
+                    + " characters and no line breaks or control characters.");
+        }
+        return value;
+    }
+
+    private FullHttpResponse playerAction(Call call, Sessions.Session session, Map<String, Object> body, String action)
+            throws Refusal {
+        PanelNode current = requireNode();
+        String uuid = text(body, "uuid", 36);
+        String text = consoleText(optionalText(body, action.equals("message") ? "text" : "reason", MAX_PLAYER_TEXT));
+        if (action.equals("message") && text.isEmpty()) {
+            throw new Refusal(400, "missing-field", "\"text\" is missing.");
+        }
+        PanelNode.Player player = current.players().stream().filter(p -> p.uuid().equalsIgnoreCase(uuid)).findFirst()
+                .orElseThrow(() -> new Refusal(404, "no-such-player", "This player is not online."));
+        if (player.service() == null) {
+            throw new Refusal(409, "player-between-servers", "The player is switching servers; try again in a moment.");
+        }
+        if (!PLAYER_NAME.matcher(player.name()).matches()) {
+            throw new Refusal(409, "unusual-name", "The player's name cannot be used in a console command.");
+        }
+        String line = switch (action) {
+            case "kick" -> "kick " + player.name() + (text.isEmpty() ? "" : " " + text);
+            case "ban" -> "ban " + player.name() + (text.isEmpty() ? "" : " " + text);
+            default -> "tell " + player.name() + " " + text;
+        };
+        if (!current.command(player.service(), line)) {
+            throw new Refusal(409, "service-not-running", "The player's server does not take commands right now.");
+        }
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("service", player.service());
+        details.put("name", player.name());
+        audit.record("player." + action, session.user(), player.uuid(), call.client(), details);
+        return Responses.json(200, Map.of("sent", true, "service", player.service()), secure());
+    }
+
+    // ---- statistics and log search --------------------------------------------------------
+
+    /** Most hits of one log search. */
+    static final int MAX_LOG_HITS = 500;
+
+    private FullHttpResponse statistics() throws Refusal {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (PanelNode.ModeStatistics m : requireNode().statistics()) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("mode", m.mode());
+            item.put("logins", m.logins());
+            item.put("playtime-seconds", m.playtimeSeconds());
+            item.put("peak-players", m.peakPlayers());
+            out.add(item);
+        }
+        return Responses.json(200, Map.of("modes", out), secure());
+    }
+
+    private FullHttpResponse searchLog(Call call, Sessions.Session session) throws Refusal, IOException {
+        String text = queryText(call, "q").strip();
+        if (text.length() < 2 || text.length() > 200 || text.chars().anyMatch(Character::isISOControl)) {
+            throw new Refusal(400, "invalid-query", "Search for 2 to 200 characters without control characters.");
+        }
+        int limit = MAX_LOG_HITS;
+        String raw = call.query().get("limit");
+        if (raw != null) {
+            try {
+                limit = Integer.parseInt(raw);
+            } catch (NumberFormatException e) {
+                limit = -1;
+            }
+            if (limit < 1 || limit > MAX_LOG_HITS) {
+                throw new Refusal(400, "invalid-query", "\"limit\" must be 1 to " + MAX_LOG_HITS + ".");
+            }
+        }
+        PanelNode.LogSearch result = requireNode().searchLog(text, limit);
+        List<Map<String, Object>> hits = new ArrayList<>();
+        result.hits().forEach(h -> hits.add(Map.of("file", h.file(), "line", h.line(), "text", h.text())));
+        audit.record("log.searched", session.user(), "logs", call.client(), Map.of("hits", hits.size()));
+        return Responses.json(200, Map.of("hits", hits, "truncated", result.truncated()), secure());
+    }
+
+    // ---- configuration archive ------------------------------------------------------------
+
+    private FullHttpResponse exportConfig(Call call, Sessions.Session session) throws Refusal, IOException {
+        byte[] zip = requireNode().exportConfig();
+        audit.record("config.exported", session.user(), "config", call.client(), Map.of("bytes", zip.length));
+        FullHttpResponse response = Responses.jsonBytes(200, zip, secure());
+        response.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/zip");
+        response.headers().set(HttpHeaderNames.CONTENT_DISPOSITION, "attachment; filename=\"vectolyn-config.zip\"");
+        return response;
+    }
+
+    private FullHttpResponse importConfig(Call call, Sessions.Session session, boolean preview)
+            throws Refusal, IOException {
+        PanelNode current = requireNode();
+        byte[] archive = call.body() == null ? new byte[0] : call.body();
+        String digest = java.util.HexFormat.of().formatHex(sha256(archive));
+        try {
+            if (preview) {
+                PanelNode.ImportPlan plan = current.planImport(archive);
+                List<Map<String, Object>> files = new ArrayList<>();
+                plan.files().forEach(f -> files.add(Map.of("file", f.file(), "kind", f.kind())));
+                Map<String, Object> out = new LinkedHashMap<>();
+                out.put("files", files);
+                out.put("diff", plan.diff());
+                out.put("confirm", digest);
+                return Responses.json(200, out, secure());
+            }
+            // The import that runs is the one that was previewed: the client sends its digest back.
+            String confirm = call.query().get("confirm");
+            if (confirm == null || !java.security.MessageDigest.isEqual(
+                    confirm.getBytes(StandardCharsets.US_ASCII), digest.getBytes(StandardCharsets.US_ASCII))) {
+                throw new Refusal(409, "preview-required", "Preview this archive first and confirm that preview.");
+            }
+            Set<String> written = current.applyImport(archive);
+            audit.record("config.imported", session.user(), "config", call.client(),
+                    Map.of("files", written.size(), "sha256", digest));
+            return Responses.json(200, Map.of("files", new java.util.TreeSet<>(written)), secure());
+        } catch (PanelNode.InvalidImport e) {
+            throw new Refusal(422, "invalid-import",
+                    Objects.requireNonNullElse(e.getMessage(), "The archive cannot be imported."), e);
+        }
+    }
+
+    private static byte[] sha256(byte[] data) {
+        try {
+            return java.security.MessageDigest.getInstance("SHA-256").digest(data);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is missing", e);
+        }
     }
 
     // ---- file manager ---------------------------------------------------------------------

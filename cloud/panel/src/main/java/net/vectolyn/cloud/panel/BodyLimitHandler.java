@@ -19,7 +19,8 @@ import net.vectolyn.cloud.panel.http.Responses;
 /**
  * Limits request bodies before they are collected in memory: {@value #SMALL} bytes for every
  * request, {@value PanelServer#MAX_BODY_BYTES} bytes for a file upload
- * ({@code POST /api/panel/files/write}), and at most {@value #UPLOADS} uploads at a time on the
+ * ({@code POST /api/panel/files/write}) or a configuration archive ({@code POST /api/panel/config/import}
+ * and its preview), and at most {@value #UPLOADS} uploads at a time on the
  * whole server. A body over its limit is answered with {@code 413}, a fifth upload with
  * {@code 503}; both close the connection.
  */
@@ -78,7 +79,9 @@ final class BodyLimitHandler extends ChannelInboundHandlerAdapter {
 
     static boolean isUpload(String uri) {
         int q = uri.indexOf('?');
-        return (q < 0 ? uri : uri.substring(0, q)).equals("/api/panel/files/write");
+        String path = q < 0 ? uri : uri.substring(0, q);
+        return path.equals("/api/panel/files/write") || path.equals("/api/panel/config/import")
+                || path.equals("/api/panel/config/import/preview");
     }
 
     private void refuse(ChannelHandlerContext ctx, Object msg, int status, String code, String message) {

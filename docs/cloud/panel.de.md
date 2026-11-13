@@ -62,6 +62,16 @@ Jede Anfrage muss das Panel im `Host`-Header nennen (`localhost`, `127.0.0.1`, `
 
 **Dateien** öffnet den Ordner eines Dienstes (`temp/services/<id>` oder `local/services/<id>`). Lesen braucht `files:read`, Schreiben, Hochladen, neue Ordner und Löschen brauchen `files:write`. Pfade sind relativ, ohne `.`, `..`, `\ : * ? " < > |`, Steuerzeichen und Windows-Gerätenamen, höchstens 512 Zeichen. Verknüpfungen werden nie verfolgt. Dateien werden atomar ersetzt, Downloads immer als Anhang ausgeliefert, jede Änderung landet im Audit-Log. Uploads bis 8 MiB, höchstens vier gleichzeitig; alle anderen Anfragen bis 256 KiB. Details in [panel.md](panel.md#services-console-and-files).
 
+## Spieler und Konfiguration
+
+**Spieler** zeigt alle Spieler im Netzwerk mit Server und Proxy (`services:read`). Mit `players:manage` lassen sie sich anschreiben, kicken oder bannen. Jede Aktion ist eine Konsolenzeile auf dem Backend-Server des Spielers (`tell`, `kick`, `ban`, der Bann steht in der Bann-Liste dieses Servers). Der Name kommt aus der Spielerliste des Knotens. Der Text hat höchstens 256 Zeichen und keine Zeilenumbrüche, damit nie ein zweiter Befehl entsteht. Jede Aktion steht im Audit-Log.
+
+**Konfiguration** bearbeitet Gruppen und Aufgaben als JSON und Textdateien von Vorlagen über die REST-Routen der API, mit derselben Validierung (`422` mit Feld) und `If-Match`, damit keine fremde Änderung überschrieben wird. **Export** liefert die Konfiguration als Zip, ohne Secrets. Ein **Import** zeigt zuerst Dateien und Diff und wird nur mit der Prüfsumme genau dieser Vorschau angewendet. Details in [panel.md](panel.md#players-and-configuration).
+
+## Aktivität
+
+**Aktivität** zeigt, je nach Recht, die Statistik je Spielmodus (`node:read`), das Audit-Log mit Filter (`audit:read`, die letzten 500 Einträge) und eine Suche in den Log-Dateien des Knotens (`admin`, 2 bis 200 Zeichen, neueste zuerst, höchstens 64 MiB gelesen). Jede Log-Suche steht im Audit-Log. Module und Store kommen hinzu, sobald das Modulsystem (E7) und der Store (E12) fertig sind. Details in [panel.md](panel.md#activity).
+
 ## Oberfläche bauen
 
 ```sh
@@ -74,6 +84,8 @@ Braucht Node.js 20.9 oder neuer. Gradle führt `npm ci --ignore-scripts` (exakte
 
 Ziel ist WCAG 2.2 AA, AAA wo erreichbar: Sprunglink zum Inhalt, sichtbarer Fokus (3 px), Ziele von mindestens 44 × 44 px, Seitensprache nach Wahl, Live-Regionen, keine Bewegung bei reduzierter Bewegung.
 
+WCAG 2.2 AA ist auf jeder Seite in beiden Sprachen erfüllt und wird von axe-core in den Browser-Tests geprüft (bricht den Build) sowie von Lighthouse (Barrierefreiheit 100). AAA-Kontrast (7:1) erreicht das dunkle Schema; im hellen Schema hat die Markenfarbe Primär `#00707F` 5,3:1. Die AAA-Treffer stehen als Hinweis im Playwright-Bericht. Einzelheiten in [panel.md](panel.md#accessibility).
+
 ## Tests
 
-`PanelServerTest`, `PanelConfigLoaderTest`, `ServiceFilesTest`, `BodyLimitHandlerTest`, `PanelStreamTest` (echter WebSocket, Ereignisse unter einer Sekunde) und die Fuzz-Ziele in `PanelInputFuzzTest` (Anfrageziele, `panel.yml`, öffentliche URLs, Dateipfade). Der Job **Panel frontend** in `ci.yml` prüft die Sprachkataloge, die Typen und den statischen Export.
+`PanelServerTest`, `PanelConfigLoaderTest`, `ServiceFilesTest`, `BodyLimitHandlerTest`, `PanelStreamTest` (echter WebSocket, Ereignisse unter einer Sekunde) und die Fuzz-Ziele in `PanelInputFuzzTest` (Anfrageziele, `panel.yml`, öffentliche URLs, Dateipfade). Der Job **Panel frontend** in `ci.yml` prüft die Sprachkataloge, die Typen und den statischen Export. Die **Browser-Tests** in `cloud/panel/e2e` (Job **Panel end-to-end and accessibility**) führen Chrome mit Playwright durch Einrichtung, alle Seiten auf Deutsch und Englisch, Konsole, Dateien, Log-Suche, Sprachwechsel und Sprunglink, prüfen jede Seite mit axe-core (WCAG 2.2 AA) und verlangen in Lighthouse Barrierefreiheit 100, Best Practices 100 und eine Layoutverschiebung unter 0,1. Lokal: `cd cloud/panel/e2e && npm ci --ignore-scripts && npx playwright test`.

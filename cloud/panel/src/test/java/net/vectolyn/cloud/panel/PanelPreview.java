@@ -99,7 +99,10 @@ public final class PanelPreview {
         Path home = Files.createTempDirectory("vectolyn-panel-preview");
         byte[] random = new byte[16];
         new SecureRandom().nextBytes(random);
-        String token = "vcs_preview" + HexFormat.of().formatHex(random);
+        // The end-to-end tests set the token themselves, so it never has to be read from the output.
+        String fixed = System.getenv("VECTOLYN_PREVIEW_SETUP_TOKEN");
+        String token = fixed != null && fixed.matches("vcs_[A-Za-z0-9]{16,64}")
+                ? fixed : "vcs_preview" + HexFormat.of().formatHex(random);
         PanelApi api = new PanelApi(PanelUsers.load(home.resolve("secrets").resolve(PanelUsers.FILE_NAME)),
                 new AuditLog(home.resolve("logs").resolve(AuditLog.FILE_NAME), Clock.systemUTC()),
                 new PreviewNode(token), null, Clock.systemUTC(), System::nanoTime,
@@ -107,10 +110,53 @@ public final class PanelPreview {
         Path lobby = Files.createDirectories(home.resolve("temp/services/lobby-1/plugins"));
         Files.writeString(lobby.getParent().resolve("server.properties"), "motd=Preview\nmax-players=50\n");
         Files.writeString(lobby.resolve("config.yml"), "greeting: hello\n");
+        api.node(new PanelNode() {
+            @Override
+            public java.util.List<Player> players() {
+                return java.util.List.of(new Player("6f1c0a1e-0000-4000-8000-000000000001", "Alex", "proxy-1", "lobby-1", false),
+                        new Player("6f1c0a1e-0000-4000-8000-000000000002", ".Kiri", "proxy-1", "survival-1", true));
+            }
+
+            @Override
+            public boolean command(String serviceId, String line) {
+                System.out.println("[preview] " + serviceId + ": " + line);
+                return true;
+            }
+
+            @Override
+            public byte[] exportConfig() {
+                return new byte[] {'P', 'K', 5, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+            }
+
+            @Override
+            public ImportPlan planImport(byte[] archive) {
+                return new ImportPlan(java.util.List.of(new FileChange("cloud.yml", "changed"),
+                        new FileChange("groups/lobby.yml", "added")), "--- cloud.yml\n+++ cloud.yml\n-language: en\n+language: de\n");
+            }
+
+            @Override
+            public java.util.Set<String> applyImport(byte[] archive) {
+                return java.util.Set.of("cloud.yml", "groups/lobby.yml");
+            }
+
+            @Override
+            public java.util.List<ModeStatistics> statistics() {
+                return java.util.List.of(new ModeStatistics("bedwars", 1284, 512_400, 87),
+                        new ModeStatistics("skywars", 642, 190_800, 41));
+            }
+
+            @Override
+            public LogSearch searchLog(String text, int limit) {
+                return new LogSearch(java.util.List.of(
+                        new LogHit("cloud.log", 812, "[INFO] Service lobby-1 started (" + text + ")"),
+                        new LogHit("cloud.1.log", 77, "[WARN] Service bedwars-2 stopped (" + text + ")")), false);
+            }
+        });
         PanelServer server = PanelServer.builder(settings).version("preview").api(api).build();
         InetSocketAddress address = server.start();
         System.out.println("Panel preview on http://localhost:" + address.getPort() + "/");
-        System.out.println("Setup token (preview only): " + token);
+        System.out.println(fixed != null ? "Setup token: the one from VECTOLYN_PREVIEW_SETUP_TOKEN"
+                : "Setup token (preview only): " + token);
         Runtime.getRuntime().addShutdownHook(new Thread(server::close));
         new CountDownLatch(1).await();
     }
