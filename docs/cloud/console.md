@@ -28,7 +28,7 @@ Every line that reaches the console has one format: `HH:mm:ss LEVEL message`, wi
 ### On a terminal (JLine)
 
 - Prompt `vectolyn> `, colored only if the terminal reports at least 8 colors and `NO_COLOR` is not set. Errors are red, warnings yellow, success green.
-- Line editing, tab completion of commands, subcommands and values (keys of `config/cloud.yml`, group and task names, enum values).
+- Line editing, tab completion of commands, subcommands and values: keys of `config/cloud.yml`, service ids, group, task and node names, join token ids and cluster members, enum values and fixed choices (`on`/`off`, `--yes`). Completion reads the current state on every Tab and never fails; where nothing fits it offers nothing.
 - Log lines appear above the prompt; the line being typed stays.
 - History in `<home>/state/console.history`, at most 500 lines, restricted to the owner. Not stored: answers to questions, secrets, lines of commands marked sensitive, lines that start with a space. If the file is a symbolic link, the history stays in memory.
 - History expansion (`!!`) is off, so a `!` in a value stays as typed.
@@ -88,6 +88,7 @@ Clears the screen. Without an ANSI terminal it says so and does nothing.
 | `config set <key> <value> --dry-run` | Checks the change like `config set` and prints the line diff of `cloud.yml`, but writes nothing ([preview](config.md#preview-of-a-change)). |
 | `config export <file.zip>` | Writes the whole configuration (`cloud.yml`, `nodes.yml`, groups, tasks, `monitor.yml`, `privacy.yml`, `backup.yml`) into a new zip file, never secrets. A relative path starts at the cloud home; an existing file is never overwritten ([import and export](config.md#import-and-export)). |
 | `config import <file.zip> [--dry-run]` | Checks every file of the archive, prints the diff of every file that changes and then applies it; with `--dry-run` it stops after the diff. On a cluster member an archive that changes the head's files is refused. |
+| `config warnings` | Lists what loads but is risky, for example a JVM flag in a group file outside the allowlist ([config.md](config.md)). Same list as `GET /api/v1/config/warnings`. |
 
 Keys: `network-name`, `language`, `eula-accepted`, `setup-complete`, `node-id`, `fallback-group`, `servers.<proxy|lobby|survival|creative|mod|end|database|minigame|legacy-server>`, `proxy.bind`, `proxy.port`, `proxy.bedrock-port`, `legacy-proxy.enabled`, `legacy-proxy.port`, `database.mode`, `database.host`, `database.port`, `database.name`, `database.user`, `database.docker-image`, `api.enabled`, `api.bind`, `api.port`, `api.grpc-port`, `api.tls.enabled`, `api.tls.keystore`, `api.cors-origins`, `api.graphql-introspection`, `branding.powered-by`, `logs.retention-days`, `logs.max-file-size`.
 
@@ -104,7 +105,7 @@ Runs the setup assistant again. The current values are the defaults, and only wh
 | `group list` | Every group with template, software, version and whether its server kind is wanted. |
 | `group info <name>` | All fields of one group. |
 | `group create <name> <template> <software> <minecraft-version>` | New `groups/<name>.yml` with `java: auto`, heap 512M to 1G, combat `legacy` for `pandaspigot`, otherwise `modern`. Fails if the group exists. |
-| `group set <name> <field> <value>` | Fields: `template`, `software`, `minecraft-version`, `java`, `heap.min`, `heap.max`, `combat`, `drain-timeout` (5s to 10m, `default` removes it and 30s applies), for example `group set lobby drain-timeout 45s`. |
+| `group set <name> <field> <value>` | Fields: `template`, `software`, `minecraft-version`, `java`, `heap.min`, `heap.max`, `combat`, `drain-timeout` (5s to 10m, `default` removes it and 30s applies), for example `group set lobby drain-timeout 45s`, and `wanted` (`on` or `off`, the group's own switch, for example one minigame out of several; `on` removes the entry because it is the default). |
 | `group delete <name> [--yes]`, `group remove <name> [--yes]` | Deletes the file after asking. Fails while a task uses the group. |
 | `group wanted <name> <on\|off>` | Switches the server kind of the group in `cloud.yml` (`servers:`). |
 
@@ -121,7 +122,7 @@ Runs the setup assistant again. The current values are the defaults, and only wh
 
 Before deleting, the console checks the deletion with the same rules as `ConfigService.apply` and then asks `Really delete groups/<name>.yml? [y/N]`. Enter, `n` or Ctrl+C keep the file. Without a terminal the next line of stdin is the answer. Scripts skip the question with `--yes` or `-y` after the name.
 
-`wanted` is stored per server kind, not per group: a group belongs to the kind whose template folder it uses (`Lobby-Server` is `lobby`). Switching it affects every group with that template. A group with another template has no switch; the command says so.
+There are two switches, and a group runs only if both are on. `group wanted` and `task wanted` switch the server kind in `cloud.yml`: a group belongs to the kind whose template folder it uses (`Lobby-Server` is `lobby`), so this affects every group with that template; a group with another template has no such switch, and the command says so. `group set <name> wanted off` switches off one group alone (`wanted: false` in its file). `group info` shows both: `wanted` (the group's own switch) and `server kind`.
 
 The catalog of a group (plugins and mods) is edited in the file for now.
 
@@ -133,9 +134,12 @@ Service commands (`start`, `stop`, `screen`, ...) come from cloud-node, which re
 |---|---|
 | `node list` | Every node of `nodes.yml` with host, channel port, `max-memory` and which one is this node. |
 | `node info <id>` | All fields of one node, with the memory reserve; a field that is not set shows its default and `(default)`. |
-| `node set <id> <field> <value>` | Fields: `max-memory` (at least 512M, `auto` removes it and the node works it out), `memory-reserve.system`, `memory-reserve.node-overhead`, `memory-reserve.database` (each 1M to 64G, `default` removes it and the default applies: 1G, 256M, 512M). For example `node set node-1 memory-reserve.system 2G`. |
+| `node status` | The running node: version, Java, operating system, uptime, heap and how many services run. Added by cloud-node; the same values as `GET /api/v1/node`. |
+| `node create <id> <host> <port> <service-ports>` | Adds a node to `nodes.yml`, for example `node create node-2 10.0.0.2 7010 30000-30999`. Memory settings start at their defaults. Fails if the id exists. |
+| `node set <id> <field> <value>` | Fields: `host`, `port` (cloud channel), `service-ports` (`first-last`), `max-memory` (at least 512M, `auto` removes it and the node works it out), `memory-reserve.system`, `memory-reserve.node-overhead`, `memory-reserve.database` (each 1M to 64G, `default` removes it and the default applies: 1G, 256M, 512M). For example `node set node-1 memory-reserve.system 2G`. |
+| `node delete <id> [--yes]`, `node remove <id> [--yes]` | Removes the node from `nodes.yml` after asking, like `group delete`. Fails while `cloud.yml` (`node-id`) or a task (`nodes`) names it. |
 
-Host, ports and adding or removing nodes stay in `nodes.yml`. See [config.md](config.md#nodesyml).
+Every change is checked like a hand edit of `nodes.yml` (ports 1 to 65535, `first` not above `last`, the channel port outside the service ports, valid host). On an error nothing is written. See [config.md](config.md#nodesyml).
 
 ### `api`
 
@@ -148,6 +152,74 @@ Comes from `cloud/api` ([api.md](api.md)). The whole command is sensitive: no li
 | `api token revoke <id\|name>` | Revokes it at once; open event streams of the token are closed. Aliases: `delete`, `remove`. |
 | `api token setup [name]` | Makes a new one-time setup token for the first administrator (default `admin`), valid 24 hours, and prints it once; it replaces an earlier one. See [setup](setup.md#first-administrator). |
 | `api scopes` | Lists the scopes. |
+
+### `template`
+
+Registered by the node. Same rules as `/api/v1/templates`: only folders under `local/templates` with a valid name, no secrets, no links or special files.
+
+| Subcommand | Effect |
+|---|---|
+| `template list` | The template folders. |
+| `template files <template>` | Every file of a template with its size; secret files and links are left out. |
+| `template show <template> <path>` | Prints a text file (at most 1 MiB); for another file only its size. |
+| `template put <template> <path> <source>` | Writes a text file into the template from a file on this machine (relative paths start at the cloud home), at most 48 KiB. Refused like the API: paths that are not editable, content that is no UTF-8 text, a new secret placeholder. |
+
+### `privacy`
+
+Registered by the node; the same as `GET` and `DELETE /api/v1/admin/privacy/players/{uuid}` ([privacy](privacy.md)).
+
+| Subcommand | Effect |
+|---|---|
+| `privacy show <uuid>` | Prints as JSON what the tracking stored about a player who agreed to it. |
+| `privacy delete <uuid> [--yes]` | Deletes all of it, the consent included, after asking. |
+
+### `cluster`
+
+Comes from `cloud/cluster`; the subcommands are in [cluster.md](cluster.md). Tab completes the ids of open join tokens after `cluster token revoke` and the members after `cluster remove`, both only on the head.
+
+## Console and REST API
+
+Every read and write of the [REST API](api.md) has a console command. `ConsoleParityTest` in cloud-node reads the endpoint list of `ApiRoutes` and fails when an endpoint has no entry in this table or the command does not exist.
+
+| Endpoint | Console |
+|---|---|
+| `GET /services` | `service list` |
+| `POST /services` | `service start <task>` |
+| `GET /services/{id}` | `service info <id>` |
+| `POST /services/{id}/stop` | `service stop <id>` |
+| `POST /services/{id}/restart` | `service restart <id>` |
+| `POST /services/{id}/command` | `service command <id> <line>` |
+| `GET /groups`, `GET /groups/{name}` | `group list`, `group info <name>` |
+| `PUT /groups/{name}` | `group create`, then `group set` per field |
+| `DELETE /groups/{name}` | `group delete <name>` |
+| `PUT /groups/{name}/wanted` | `group set <name> wanted on\|off` |
+| `GET /tasks`, `GET /tasks/{name}` | `task list`, `task info <name>` |
+| `PUT /tasks/{name}` | `task create`, then `task set` per field |
+| `DELETE /tasks/{name}` | `task delete <name>` |
+| `PUT /tasks/{name}/wanted` | `group set <group of the task> wanted on\|off` |
+| `GET /nodes`, `GET /nodes/{name}` | `node list`, `node info <id>` |
+| `PUT /nodes/{name}` | `node create`, then `node set` per field |
+| `GET /servers`, `PUT /servers/{kind}` | `config get servers.<kind>`, `config set servers.<kind> true\|false` |
+| `GET /config`, `PUT /config` | `config list`, `config get`, `config set` |
+| `POST /config/reload` | `config reload` |
+| `GET /config/warnings` | `config warnings` |
+| `GET /node` | `node status` |
+| `GET /setup` | `config get setup-complete`, `config get eula-accepted`; `setup` runs the assistant |
+| `GET /backups`, `POST /backups` | `backup list`, `backup create` |
+| `GET /tokens/self` | `api token list` (the console sees every token) |
+| `GET /admin/tokens`, `POST /admin/tokens`, `DELETE /admin/tokens/{id}` | `api token list`, `api token create`, `api token revoke` |
+| `GET /admin/privacy/players/{uuid}`, `DELETE /admin/privacy/players/{uuid}` | `privacy show <uuid>`, `privacy delete <uuid>` |
+| `GET /templates` | `template list` |
+| `GET /templates/{template}/files` | `template files <template>` |
+| `GET /templates/{template}/files/{path}` | `template show <template> <path>` |
+| `PUT /templates/{template}/files/{path}` | `template put <template> <path> <source>` |
+| `POST /setup/claim` | `setup` (the panel claims the one-time setup token; the console runs the assistant directly) |
+| `GET /graphql`, `POST /graphql` | no command of its own: GraphQL runs the routes above with the caller's token, so their commands apply (the test maps it to `help`) |
+| `GET /events` (WebSocket) | the log lines above the prompt and `service screen <id>` |
+
+The console also has commands the API does not offer: `node delete`, `config export` and `config import`, `backup restore` and `backup delete`, `cluster ...`, `monitor`, `alerts`, `setup`, `shutdown`.
+
+Still edited in the files, because no write operation exists for them yet in the cloud at all: the plugin and mod catalog of a group, `monitor.yml` and `backup.yml` (they travel with `config export|import`). Templates take single text files through `template put`; binary files and folders stay in the file system. Functions the cloud does not have yet (updates, maintenance mode, placement rules) get their console commands together with the function, in their own issues.
 
 ## Adding commands
 

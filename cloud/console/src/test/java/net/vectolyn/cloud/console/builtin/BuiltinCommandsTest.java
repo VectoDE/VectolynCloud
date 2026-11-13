@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import net.vectolyn.cloud.config.CloudHome;
@@ -16,12 +17,18 @@ import net.vectolyn.cloud.config.ConfigService;
 import net.vectolyn.cloud.config.model.Language;
 import net.vectolyn.cloud.config.model.MemoryReserve;
 import net.vectolyn.cloud.config.model.MemorySize;
+import net.vectolyn.cloud.config.model.NodeConfig;
+import net.vectolyn.cloud.config.model.PortRange;
+import net.vectolyn.cloud.config.model.ProcessConfig;
 import net.vectolyn.cloud.config.model.ServerKind;
 import net.vectolyn.cloud.config.model.ServerSoftware;
 import net.vectolyn.cloud.console.Console;
 import net.vectolyn.cloud.console.FakeTerminal;
+import net.vectolyn.cloud.console.command.Argument;
+import net.vectolyn.cloud.console.command.Command;
 import net.vectolyn.cloud.console.command.CommandDispatcher;
 import net.vectolyn.cloud.console.command.CommandDispatcher.Outcome;
+import net.vectolyn.cloud.console.command.CommandRegistry;
 import net.vectolyn.cloud.console.terminal.ConsoleTerminal.LineKind;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -243,7 +250,7 @@ class BuiltinCommandsTest {
         assertEquals(Outcome.FAILED, run("node set node-1 memory-reserve.system lots"));
         assertEquals(Outcome.FAILED, run("node set node-9 max-memory 8G"));
         assertTrue(terminal.output().contains("Node \"node-9\" does not exist."), terminal.output());
-        assertEquals(Outcome.FAILED, run("node set node-1 port 7011"), "only memory fields");
+        assertEquals(Outcome.FAILED, run("node set node-1 colour red"), "only known fields");
         assertEquals(MemorySize.parse("8G"), node().maxMemory(), "unchanged after the errors");
 
         // Counter-check: auto and default remove the values again, the file is as before.
@@ -419,6 +426,134 @@ class BuiltinCommandsTest {
         assertTrue(printed.contains("x?]0;owned?.yml"), printed);
         assertFalse(printed.replace("\u001b[31m", "").replace("\u001b[0m", "").contains("\u001b"),
                 "only the console's own color codes reach the terminal");
+    }
+
+    @Test
+    void nodeCreateSetAddressAndPortsAndDelete() throws Exception {
+        assertEquals(Outcome.DONE, run("node create node-2 10.0.0.2 7010 31000-31999"));
+        NodeConfig created = config.snapshot().nodes().find("node-2").orElseThrow();
+        assertEquals("10.0.0.2", created.host());
+        assertEquals(new PortRange(31000, 31999), created.servicePorts());
+        assertEquals(null, created.maxMemory(), "memory settings start at their defaults");
+        assertTrue(Files.readString(home.resolve("config/nodes.yml")).contains("10.0.0.2"));
+        assertEquals(Outcome.FAILED, run("node create node-2 10.0.0.9 7010 32000-32999"));
+        assertTrue(terminal.output().contains("\"node-2\" already exists."), terminal.output());
+
+        assertEquals(Outcome.DONE, run("node set node-2 host node2.example.net"));
+        assertEquals(Outcome.DONE, run("node set node-2 port 7012"));
+        assertEquals(Outcome.DONE, run("node set node-2 service-ports 32000-32999"));
+        NodeConfig changed = config.snapshot().nodes().find("node-2").orElseThrow();
+        assertEquals("node2.example.net", changed.host());
+        assertEquals(7012, changed.port());
+        assertEquals(new PortRange(32000, 32999), changed.servicePorts());
+
+        // Refused like a hand edit, and nothing is written.
+        String before = Files.readString(home.resolve("config/nodes.yml"));
+        assertEquals(Outcome.FAILED, run("node set node-2 port 70000"));
+        assertEquals(Outcome.FAILED, run("node set node-2 port seven"));
+        assertEquals(Outcome.FAILED, run("node set node-2 service-ports 32999-32000"), "first above last");
+        assertEquals(Outcome.FAILED, run("node set node-2 service-ports 32000"));
+        assertTrue(terminal.output().contains("first-last"), terminal.output());
+        assertEquals(Outcome.FAILED, run("node set node-2 host 'bad host'"));
+        assertEquals(Outcome.FAILED, run("node create node-3 10.0.0.3 7010 -5-10"));
+        assertEquals(before, Files.readString(home.resolve("config/nodes.yml")));
+
+        // Delete asks like group delete; the node of cloud.yml cannot be removed.
+        terminal.type("n");
+        assertEquals(Outcome.DONE, run("node delete node-2"));
+        assertTrue(config.snapshot().nodes().find("node-2").isPresent(), "no keeps it");
+        assertEquals(Outcome.FAILED, run("node delete node-1 --yes"), "cloud.yml names node-1");
+        assertEquals(Outcome.FAILED, run("node remove node-9 --yes"));
+        assertEquals(Outcome.DONE, run("node remove node-2 -y"));
+        assertTrue(config.snapshot().nodes().find("node-2").isEmpty());
+        assertTrue(terminal.output().contains("Deleted: nodes.yml node-2"), terminal.output());
+    }
+
+    @Test
+    void groupSetWantedIsTheGroupsOwnSwitch() throws Exception {
+        run("group create lobby Lobby-Server paper 26.3");
+        assertEquals(Outcome.DONE, run("group set lobby wanted off"));
+        assertFalse(config.snapshot().groups().get("lobby").wantedOrDefault());
+        assertTrue(config.snapshot().cloud().servers().isWanted(ServerKind.LOBBY), "the server kind stays on");
+        assertTrue(Files.readString(home.resolve("config/groups/lobby.yml")).contains("wanted: false"));
+        terminal.clearOutput();
+        run("group info lobby");
+        assertTrue(terminal.output().contains("wanted            = off"), terminal.output());
+        assertTrue(terminal.output().contains("server kind       = wanted"), terminal.output());
+        assertEquals(Outcome.FAILED, run("group set lobby wanted maybe"));
+        assertEquals(Outcome.DONE, run("group set lobby wanted on"));
+        assertTrue(config.snapshot().groups().get("lobby").wantedOrDefault());
+        assertFalse(Files.readString(home.resolve("config/groups/lobby.yml")).contains("wanted"), "on is the default");
+        assertEquals(List.of("off", "on"), CommandDispatcher.complete(console.commands(), "group set lobby wanted "));
+        assertEquals(List.of(), CommandDispatcher.complete(console.commands(), "group set lobby heap.max "));
+    }
+
+    @Test
+    void configWarningsListsRiskyButAllowedFlags() throws Exception {
+        assertEquals(Outcome.DONE, run("config warnings"));
+        assertTrue(terminal.output().contains("No warnings."), terminal.output());
+        run("group create lobby Lobby-Server paper 26.3");
+        config.apply(snapshot -> snapshot.withGroup("lobby", snapshot.groups().get("lobby").withProcess(
+                new ProcessConfig(List.of("-Dmyplugin.debug=true"), null, null, null))));
+        terminal.clearOutput();
+        assertEquals(Outcome.DONE, run("config warnings"));
+        assertTrue(terminal.output().contains("groups/lobby.yml"), terminal.output());
+        assertFalse(terminal.output().contains("No warnings."), terminal.output());
+    }
+
+    @Test
+    void tabCompletionKnowsCommandsGroupsTasksAndNodes() throws Exception {
+        run("group create lobby Lobby-Server paper 26.3");
+        run("group create bedwars Minigame-Server paper 26.3");
+        run("task create lobby lobby");
+        run("node create node-2 10.0.0.2 7010 31000-31999");
+        CommandRegistry registry = console.commands();
+        assertEquals(List.of("clear", "cls", "config"), CommandDispatcher.complete(registry, "c"));
+        assertEquals(List.of("create", "delete", "info", "list", "remove", "set", "wanted"),
+                CommandDispatcher.complete(registry, "group "));
+        assertEquals(List.of("bedwars", "lobby"), CommandDispatcher.complete(registry, "group info "));
+        assertEquals(List.of("lobby"), CommandDispatcher.complete(registry, "group set l"));
+        assertEquals(List.of("drain-timeout"), CommandDispatcher.complete(registry, "group set lobby dr"));
+        assertEquals(List.of("--yes", "-y"), CommandDispatcher.complete(registry, "group delete lobby "));
+        assertEquals(List.of("lobby"), CommandDispatcher.complete(registry, "task wanted "));
+        assertEquals(List.of("bedwars", "lobby"), CommandDispatcher.complete(registry, "task create new "));
+        assertEquals(List.of("dynamic", "static"), CommandDispatcher.complete(registry, "task create new lobby "));
+        assertEquals(List.of("node-1", "node-2"), CommandDispatcher.complete(registry, "node info "));
+        assertEquals(List.of("node-2"), CommandDispatcher.complete(registry, "node delete node-2"));
+        assertEquals(List.of("host"), CommandDispatcher.complete(registry, "node set node-1 h"));
+        assertEquals(List.of("export", "get", "import", "list", "reload", "set", "warnings"),
+                CommandDispatcher.complete(registry, "config "));
+        assertEquals(List.of(), CommandDispatcher.complete(registry, "nope "), "unknown command: nothing");
+        assertEquals(List.of(), CommandDispatcher.complete(registry, "group info lobby "), "no argument left");
+    }
+
+    @Test
+    void everyCommandSubcommandAndArgumentHasHelpInBothLanguages() {
+        int checked = 0;
+        for (Command command : console.commands().commands()) {
+            checked += checkHelp(List.of(command.name()), command);
+        }
+        assertEquals(31, checked, "every command and subcommand of the basic set");
+    }
+
+    /** Asserts the help texts of a command and its subtree, and that {@code help <path>} explains it. */
+    private int checkHelp(List<String> path, Command command) {
+        for (Language language : Language.values()) {
+            assertFalse(command.description().get(language).isBlank(), path + " " + language);
+            for (Argument argument : command.arguments()) {
+                assertFalse(argument.description().get(language).isBlank(), path + " " + argument.name() + " " + language);
+            }
+        }
+        terminal.clearOutput();
+        assertEquals(Outcome.DONE, run("help " + String.join(" ", path)), String.join(" ", path));
+        assertTrue(terminal.output().contains(command.description().get(Language.EN)), terminal.output());
+        int count = 1;
+        for (Command sub : command.subcommands()) {
+            List<String> next = new ArrayList<>(path);
+            next.add(sub.name());
+            count += checkHelp(next, sub);
+        }
+        return count;
     }
 
     @Test

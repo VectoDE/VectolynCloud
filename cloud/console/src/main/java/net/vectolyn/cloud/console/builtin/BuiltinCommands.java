@@ -12,6 +12,7 @@ import java.util.Set;
 import net.vectolyn.cloud.config.ConfigChanged;
 import net.vectolyn.cloud.config.ConfigPreview;
 import net.vectolyn.cloud.config.ConfigService;
+import net.vectolyn.cloud.config.error.ConfigError;
 import net.vectolyn.cloud.config.operation.ConfigOperation;
 import net.vectolyn.cloud.config.transfer.ConfigArchive;
 import net.vectolyn.cloud.console.Console;
@@ -58,7 +59,23 @@ public final class BuiltinCommands {
      */
     public static void register(Console console, ConfigService config, Runnable shutdown,
                                 List<ConfigArchive.ExtraFile> extras) {
+        register(console, config, shutdown, extras, List.of());
+    }
+
+    /**
+     * Registers every basic command, with extra subcommands of {@code node} that need the running
+     * node (cloud-node adds {@code node status}).
+     *
+     * @param shutdown        stops the cloud; runs for {@code shutdown}, {@code exit}, Ctrl+C and Ctrl+D.
+     *                        The console stops reading afterwards.
+     * @param extras          the other files of {@code config/} that {@code config export} and
+     *                        {@code config import} carry, with their checks
+     * @param nodeSubcommands more subcommands of {@code node}
+     */
+    public static void register(Console console, ConfigService config, Runnable shutdown,
+                                List<ConfigArchive.ExtraFile> extras, List<Command> nodeSubcommands) {
         Objects.requireNonNull(config, "config");
+        Objects.requireNonNull(nodeSubcommands, "nodeSubcommands");
         Objects.requireNonNull(shutdown, "shutdown");
         CommandRegistry registry = console.commands();
         registry.register(help(registry));
@@ -70,7 +87,7 @@ public final class BuiltinCommands {
         registry.register(config(config, new ConfigArchive(config, extras)));
         registry.register(GroupCommands.group(config));
         registry.register(GroupCommands.task(config));
-        registry.register(NodeCommands.node(config));
+        registry.register(NodeCommands.node(config, nodeSubcommands));
     }
 
     /** {@code help [command...]}. */
@@ -160,12 +177,12 @@ public final class BuiltinCommands {
                 .build();
     }
 
-    /** {@code config get|set|list|reload|export|import} without extra files. */
+    /** {@code config get|set|list|reload|warnings|export|import} without extra files. */
     public static Command config(ConfigService config) {
         return config(config, new ConfigArchive(config, List.of()));
     }
 
-    /** {@code config get|set|list|reload|export|import}. */
+    /** {@code config get|set|list|reload|warnings|export|import}. */
     public static Command config(ConfigService config, ConfigArchive archive) {
         Argument key = Argument.required("key", Text.of("Field in cloud.yml, for example proxy.port",
                 "Feld in cloud.yml, zum Beispiel proxy.port")).suggest(ConfigKeys.names());
@@ -215,6 +232,11 @@ public final class BuiltinCommands {
                                         String.join(", ", new java.util.TreeSet<>(change.get().files())));
                             }
                         }))
+                .subcommand(Command.builder("warnings")
+                        .description(Text.of("Shows what is allowed but risky in the configuration (JVM flags outside "
+                                + "the allowlist, ...).", "Zeigt, was in der Konfiguration erlaubt, aber riskant ist "
+                                + "(JVM-Flags außerhalb der Erlaubnisliste, ...)."))
+                        .executes(context -> warnings(context.out(), config.warnings())))
                 .subcommand(Command.builder("export")
                         .description(Text.of("Writes the whole configuration into a new zip file (no secrets).",
                                 "Schreibt die ganze Konfiguration in eine neue Zip-Datei (ohne Secrets)."))
@@ -249,6 +271,16 @@ public final class BuiltinCommands {
                                     String.join(", ", new java.util.TreeSet<>(written)));
                         }))
                 .build();
+    }
+
+    private static void warnings(ConsoleOutput out, List<ConfigError> warnings) {
+        if (warnings.isEmpty()) {
+            out.println(Text.of("No warnings.", "Keine Warnungen."));
+            return;
+        }
+        for (ConfigError warning : warnings) {
+            out.warning(warning.describe(out.language()));
+        }
     }
 
     /** The optional {@code --dry-run} switch: show what would change, write nothing. */

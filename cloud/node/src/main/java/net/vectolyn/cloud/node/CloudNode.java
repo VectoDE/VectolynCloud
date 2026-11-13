@@ -62,6 +62,7 @@ import net.vectolyn.cloud.config.secret.EnvFormatException;
 import net.vectolyn.cloud.config.secret.RedactingFilter;
 import net.vectolyn.cloud.config.secret.SecretGenerator;
 import net.vectolyn.cloud.config.secret.SecretStore;
+import net.vectolyn.cloud.config.template.TemplateFiles;
 import net.vectolyn.cloud.console.Console;
 import net.vectolyn.cloud.console.ConsoleLogHandler;
 import net.vectolyn.cloud.console.LogHandlers;
@@ -85,7 +86,10 @@ import net.vectolyn.cloud.download.provider.TargetPlatform;
 import net.vectolyn.cloud.network.CloudNetworkServer;
 import net.vectolyn.cloud.network.NetworkSettings;
 import net.vectolyn.cloud.node.channel.ChannelBridge;
+import net.vectolyn.cloud.node.console.NodeStatusCommand;
+import net.vectolyn.cloud.node.console.PrivacyCommands;
 import net.vectolyn.cloud.node.console.ServiceCommands;
+import net.vectolyn.cloud.node.console.TemplateCommands;
 import net.vectolyn.cloud.node.database.NodeDatabase;
 import net.vectolyn.cloud.node.database.NodeDatabaseProcesses;
 import net.vectolyn.cloud.node.jre.ManagedJavaRuntimes;
@@ -1027,7 +1031,8 @@ public final class CloudNode implements AutoCloseable {
         BuiltinCommands.register(console, config, this::close, List.of(
                 new ConfigArchive.ExtraFile(CloudHome.MONITOR_FILE, MonitorConfigLoader::parse),
                 new ConfigArchive.ExtraFile(CloudHome.PRIVACY_FILE, PrivacyConfigLoader::parse),
-                new ConfigArchive.ExtraFile(CloudHome.BACKUP_FILE, BackupConfigFile::parse)));
+                new ConfigArchive.ExtraFile(CloudHome.BACKUP_FILE, BackupConfigFile::parse)),
+                List.of(NodeStatusCommand.command(ops.api()::status)));
         serviceCommands = new ServiceCommands(services, config, channel::status, console.output());
         services.addListener(serviceCommands);
         console.commands().register(serviceCommands.command());
@@ -1039,6 +1044,8 @@ public final class CloudNode implements AutoCloseable {
         // the start is tried again by each command, which reports the problem until it is fixed.
         console.commands().register(new ApiCommands(ops.tokens()).command());
         console.commands().register(new ClusterCommands(ops.cluster()).command());
+        console.commands().register(TemplateCommands.command(config.home(), new TemplateFiles(config.home())));
+        console.commands().register(PrivacyCommands.command(ops.api()::privacy));
     }
 
     /** The cluster of the node; for tests. */
