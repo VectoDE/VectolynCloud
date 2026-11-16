@@ -19,7 +19,7 @@ snakeyaml = "2.7"
 # VectolynCloud runtime libraries, reasons in docs/cloud/architecture.md.
 netty = "4.2.20.Final"
 jline = "3.30.17"
-jackson = "3.2.4"
+jackson = "3.3.0"
 mariadb-java-client = "4.0.0"
 postgresql = "42.7.14"
 # The version pgjdbc 42.7.14 itself depends on at runtime (MIT); keep both in step.
