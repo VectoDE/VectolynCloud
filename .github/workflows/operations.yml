@@ -6,10 +6,15 @@ name: Operations
 # unit on a real systemd, the container image (built from source and through the release path
 # with the jar as named context, both without push), compose.yml and the Pterodactyl egg.
 # Nothing here has write permissions or secrets.
+#
+# Pull requests run the platform jobs on Linux x64 only. The full platform matrix (Linux arm64,
+# macOS arm64 and x64, Windows x64) runs on main, on manual runs and on pull requests with the
+# label "volle-matrix"; adding that label starts the run again.
 
 on:
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, labeled]
     paths:
       - 'cloud/**'
       - 'plugins/bridge/**'
@@ -52,7 +57,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: operations-${{ github.ref }}
+  # Adding any other label must not cancel a running check: that event gets its own group, and the
+  # jobs below skip it.
+  group: >-
+    operations-${{ github.ref }}${{ github.event.action == 'labeled'
+    && github.event.label.name != 'volle-matrix' && format('-{0}', github.run_id) || '' }}
   cancel-in-progress: true
 
 env:
@@ -61,6 +70,7 @@ env:
 jobs:
   lint:
     name: Lint scripts, workflows, egg and compose
+    if: github.event.action != 'labeled' || github.event.label.name == 'volle-matrix'
     runs-on: ubuntu-latest
     steps:
       - name: Harden runner
@@ -136,6 +146,7 @@ jobs:
 
   jar:
     name: Build VectolynCloud.jar and release archives
+    if: github.event.action != 'labeled' || github.event.label.name == 'volle-matrix'
     runs-on: ubuntu-latest
     steps:
       - name: Harden runner
@@ -319,6 +330,42 @@ jobs:
           - { os: ubuntu-latest, label: Linux x64, java: '21' }
           - { os: ubuntu-latest, label: Linux x64, java: '25' }
           - { os: ubuntu-latest, label: Linux x64, java: '27' }
+    steps:
+      # The jobs above run with egress blocking; the harden-runner agent only exists for Linux
+      # x64 runners, so these jobs go without it. They have no secrets and read-only permissions.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ops-dist
+          path: ops-dist
+
+      - name: Set up JDK ${{ matrix.java }}
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+
+      - name: java -jar VectolynCloud.jar
+        shell: bash
+        run: bash .github/scripts/smoke-jar-runtime.sh ops-dist/VectolynCloud.jar
+
+  # The other platforms: on main, manual runs and pull requests labelled "volle-matrix".
+  runtime-platforms:
+    name: Jar on Java ${{ matrix.java }} (${{ matrix.label }})
+    needs: jar
+    if: >-
+      github.event_name != 'pull_request'
+      || contains(github.event.pull_request.labels.*.name, 'volle-matrix')
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
           - { os: ubuntu-24.04-arm, label: Linux arm64, java: '21' }
           - { os: ubuntu-24.04-arm, label: Linux arm64, java: '25' }
           - { os: ubuntu-24.04-arm, label: Linux arm64, java: '27' }
@@ -362,6 +409,7 @@ jobs:
   # what only a panel shows is listed in docs/cloud/operations.md.
   eggs:
     name: Egg installation (${{ matrix.panel }})
+    if: github.event.action != 'labeled' || github.event.label.name == 'volle-matrix'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -471,6 +519,7 @@ jobs:
   # of this repository's milestones. release.yml runs the same scripts on a real tag.
   release-process:
     name: Release gate and changelog
+    if: github.event.action != 'labeled' || github.event.label.name == 'volle-matrix'
     runs-on: ubuntu-latest
     steps:
       - name: Harden runner
@@ -569,7 +618,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-26, windows-latest]
+        # Linux on every pull request; macOS and Windows as in runtime-platforms.
+        os: >-
+          ${{ fromJSON((github.event_name != 'pull_request'
+          || contains(github.event.pull_request.labels.*.name, 'volle-matrix'))
+          && '["ubuntu-latest", "macos-26", "windows-latest"]' || '["ubuntu-latest"]') }}
     steps:
       # On Windows harden-runner's agent only becomes active about a minute into the job and
       # then cuts off downloads already running (seen with Gradle), so Windows only audits.
