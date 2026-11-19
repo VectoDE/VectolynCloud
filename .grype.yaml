@@ -15,3 +15,12 @@ ignore:
     package:
       name: guava
       version: 32.1.2-jre
+  - vulnerability: CVE-2026-114938
+    reason: >-
+      Temporary, see issue #376. Temurin 25.0.5+8 in the eclipse-temurin:25-jre-noble base image. The
+      fixed build jdk-25.0.5.1+2 (18 November 2026) exists for x64 only, and the official image has not
+      been rebuilt with it yet (adoptium/containers#1133). Remove this entry together with the digest
+      update of both base images in cloud/dist/docker/Dockerfile to an image with jdk-25.0.5.1+2 or newer.
+    package:
+      name: openjdk
+      version: 25.0.5+8-LTS
