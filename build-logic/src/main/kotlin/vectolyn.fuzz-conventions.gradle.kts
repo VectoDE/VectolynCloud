@@ -35,6 +35,10 @@ tasks.withType<Test>().configureEach {
         systemProperty("jazzer.max_duration", fuzzMaxDuration.get())
         // Jazzer attaches its agent at runtime; Java 21+ warns about that unless allowed.
         jvmArgs("-XX:+EnableDynamicAgentLoading")
+        // A fuzz run lasts fuzzMaxDuration by design. The five-minute JUnit default from
+        // vectolyn.java-conventions would fail every run longer than that after it finished, so
+        // it is off here; the workflow's timeout-minutes still stops a hanging job.
+        systemProperty("junit.jupiter.execution.timeout.mode", "disabled")
         // A fuzz run must never be skipped as up to date or taken from the build cache.
         outputs.upToDateWhen { false }
         outputs.cacheIf { false }
