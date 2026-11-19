@@ -8,6 +8,11 @@ name: Fuzz (nightly)
 # A finding fails the job. The crashing input is uploaded as an artifact; commit it under
 # src/test/resources/<package>/<TestClass>Inputs/<method>/ together with the fix, so the normal
 # test run keeps replaying it.
+#
+# The targets are split into FUZZ_SHARDS shards (.github/scripts/list-fuzz-targets.py), and each
+# night fuzzes one of them in turn, so every target is fuzzed every FUZZ_SHARDS nights. One job
+# per target for all 97 targets every night took about 1,100 runner minutes a day and up to 97
+# jobs at once; max-parallel keeps runners free for the other workflows of the account.
 
 on:
   schedule:
@@ -19,9 +24,16 @@ on:
         description: Fuzzing time per target (Jazzer duration, e.g. 30s, 10m, 1h)
         required: false
         default: 10m
+      shard:
+        description: Shard to fuzz (0 to FUZZ_SHARDS - 1), or "all" for every target
+        required: false
+        default: all
 
 permissions:
   contents: read
+
+env:
+  FUZZ_SHARDS: 2
 
 concurrency:
   group: fuzz-nightly
@@ -49,8 +61,19 @@ jobs:
 
       - name: Find @FuzzTest methods
         id: list
+        env:
+          SHARD: ${{ inputs.shard || 'night' }}
         run: |
-          matrix=$(python3 .github/scripts/list-fuzz-targets.py)
+          if [ "$SHARD" = all ]; then
+            matrix=$(python3 .github/scripts/list-fuzz-targets.py)
+          else
+            if [ "$SHARD" = night ]; then
+              # Rotate through the shards by day, independent of month and week length.
+              SHARD=$(( $(date -u +%s) / 86400 % FUZZ_SHARDS ))
+            fi
+            matrix=$(python3 .github/scripts/list-fuzz-targets.py \
+              --shards "$FUZZ_SHARDS" --shard "$SHARD")
+          fi
           echo "$matrix"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
@@ -62,6 +85,7 @@ jobs:
     timeout-minutes: 45
     strategy:
       fail-fast: false
+      max-parallel: 8
       matrix:
         target: ${{ fromJSON(needs.targets.outputs.matrix) }}
     steps:

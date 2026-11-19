@@ -12,10 +12,17 @@ on:
 permissions:
   contents: read
 
+# A new push to a pull request cancels the analysis of the previous one. Runs on main, the
+# schedule and manual runs each get their own group and are never cancelled.
+concurrency:
+  group: codeql-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: read
       security-events: write

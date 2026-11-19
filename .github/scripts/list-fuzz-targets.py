@@ -7,13 +7,19 @@ Output (stdout): JSON list of {"project", "test", "name"}:
   test     test filter for --tests, e.g. "net.vectolyn.protocol.VarIntsFuzzTest.roundTrip"
   name     short label for the job name
 
+Optional arguments: --shards N --shard I keeps only the targets of shard I (0 <= I < N).
+A target's shard is the CRC-32 of its name modulo N, so it stays in the same shard when
+other targets are added or removed. Every target is in exactly one shard.
+
 Only reads source files; the build is not run.
 """
 
+import argparse
 import json
 import pathlib
 import re
 import sys
+import zlib
 
 FUZZ_TEST = re.compile(r"@FuzzTest\b")
 METHOD = re.compile(r"\bvoid\s+(\w+)\s*\(")
@@ -21,6 +27,13 @@ PACKAGE = re.compile(r"^\s*package\s+([\w.]+)\s*;", re.MULTILINE)
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--shards", type=int, default=1)
+    parser.add_argument("--shard", type=int, default=0)
+    args = parser.parse_args()
+    if args.shards < 1 or not 0 <= args.shard < args.shards:
+        print(f"invalid shard {args.shard} of {args.shards}", file=sys.stderr)
+        return 1
     root = pathlib.Path(".").resolve()
     targets = []
     for source in sorted(root.glob("**/src/test/java/**/*.java")):
@@ -54,7 +67,16 @@ def main() -> int:
     if not targets:
         print("no fuzz targets found", file=sys.stderr)
         return 1
-    print(json.dumps(targets))
+    selected = [
+        target for target in targets
+        if zlib.crc32(target["name"].encode("utf-8")) % args.shards == args.shard
+    ]
+    print(f"{len(selected)} of {len(targets)} fuzz targets in shard {args.shard} of {args.shards}",
+          file=sys.stderr)
+    if not selected:
+        print("shard is empty", file=sys.stderr)
+        return 1
+    print(json.dumps(selected))
     return 0
 
 
